@@ -1,0 +1,29 @@
+# secrets
+.env
+*.env.local
+credentials/
+*.service-account.json
+
+# python
+__pycache__/
+.venv/
+venv/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# node
+node_modules/
+dist/
+build/
+.vercel/
+
+# audio dataset (binary bloat — references.csv stays in git)
+benchmark/dataset/audio/
+
+# n8n local state
+.n8n/
+
+# OS / IDE
+.DS_Store
+Thumbs.db

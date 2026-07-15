@@ -1,0 +1,31 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: pfe-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=Africa/Casablanca
+      - TZ=Africa/Casablanca
+      - N8N_DIAGNOSTICS_ENABLED=false
+      # webhook URLs registered with Meta must use the public tunnel/server URL
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
+    # dev-only quick public URL (n8n's own tunnel) — see n8n/README.md
+    # command: start --tunnel
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # ── Sprint 1: uncomment when api/ exists ──────────
+  # api:
+  #   build: ./api
+  #   container_name: pfe-api
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8000:8000"
+  #   env_file: .env
+  #   volumes:
+  #     - ./credentials:/app/credentials:ro
+
+volumes:
+  n8n_data:
