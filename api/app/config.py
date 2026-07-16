@@ -1,11 +1,16 @@
 """Runtime configuration. Reads environment variables (compose: env_file .env)."""
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# .env lives at the repo root (shared with docker-compose); anchor to this file
+# so the service finds it regardless of the process working directory.
+_ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(_ROOT_ENV, ".env"), extra="ignore")
 
     groq_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
