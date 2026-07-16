@@ -10,8 +10,8 @@
 | Branch | Decision |
 |---|---|
 | Scope | Hybrid: n8n orchestration (per cahier) + custom-coded AI service + web app (for PFE substance) |
-| Code boundary | **Option A** — you code: FastAPI AI service (STT + LLM extraction + French reformulation), React web form, manager dashboard. n8n does: WhatsApp reception, Sheets writes, notifications |
-| WhatsApp channel | Meta developer **test mode** (free, no approval, 5 registered recipient numbers — enough for pilot + defense demo). Reception designed channel-agnostic |
+| Code boundary | **Option A** — you code: FastAPI AI service (STT + LLM extraction + French reformulation), React web form, manager dashboard. n8n does: **Telegram** reception, Sheets writes, notifications |
+| Reception channel | **Telegram Bot API** (free, no approval, no recipient cap, no 24h reply window; BotFather token only). Switched from WhatsApp Jul 16 — Meta test-mode friction (24h-expiring tokens, webhook verify handshake, 5-number allowlist) was burning Week-0 time. Cahier §5 permits *"passerelle équivalente"*. Reception is channel-agnostic (n8n adapts the channel; `/process` API untouched); **WhatsApp Business API documented as production evolution** |
 | STT (Darija) | Week-1 **benchmark** via `TranscriptionProvider` adapter interface: Groq Whisper-large-v3, Gemini 2.5 Flash native audio, 1 HF Darija fine-tune. Benchmark picks the primary |
 | Test dataset | 15–20 **self-simulated** Darija voice notes + hand-written reference transcriptions. Wave 2 with real technician notes if director provides |
 | LLM | **Gemini 2.5 Flash** primary (structured JSON output, strong French) + **Groq Llama 3.3 70B** fallback adapter |
@@ -23,7 +23,7 @@
 1. PFE report written in **French** (EMSI standard); code/comments in English.
 2. Methodology: **Scrum-light** — 3 sprints × 2 weeks, backlog on GitHub Projects, sprint demo to director each cycle. Gives the report a methodology chapter.
 3. **Google Sheets = single source of truth** (per cahier). Dashboard reads Sheets API. PostgreSQL/Supabase documented as evolution path, not built.
-4. Notifications: **email (Gmail SMTP)** primary + WhatsApp confirmation reply inside the free 24h session window. Teams webhook documented as config option.
+4. Notifications: **email (Gmail SMTP)** primary + **Telegram** confirmation reply to the technician (no session-window limit, unlike WhatsApp's 24h rule). Teams webhook documented as config option.
 5. Dashboard behind simple password login (single manager account).
 6. Git repo (this one), conventional commits, README per module.
 
@@ -31,9 +31,9 @@
 
 ```
 Technician
-   │ voice note (Darija) / WhatsApp
+   │ voice note (Darija) / Telegram
    ▼
-Meta Cloud API (test mode) ──webhook──► n8n (Docker)
+Telegram Bot API ──webhook──► n8n (Docker)
                                           │ download media
                                           ▼
                              FastAPI AI Service  ◄──── React Web Form (text mode)
@@ -44,7 +44,7 @@ Meta Cloud API (test mode) ──webhook──► n8n (Docker)
                                           ▼
                                  n8n: append row → Google Sheets
                                           ├─ email to chef de chantier + resp. technique
-                                          └─ WhatsApp confirmation reply to technician
+                                          └─ Telegram confirmation reply to technician
                                           
 Manager Dashboard (React/Vercel) ◄─ reads ─ Google Sheets API
 ```
@@ -54,7 +54,7 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 ## 4. Timeline (Jul 15 → Aug 31)
 
 ### Week 0 — Setup & risk-kill (Jul 15–19)
-- [ ] Accounts: Meta dev + WhatsApp test number, Google Cloud (Sheets API), Groq, Gemini (AI Studio), HF, Cloudflare, Vercel
+- [ ] Accounts: **Telegram bot (BotFather)**, Google Cloud (Sheets API), Groq, Gemini (AI Studio), HF, Cloudflare, Vercel
 - [ ] Repo scaffold: `api/`, `web/`, `n8n/`, `docs/`, `benchmark/`
 - [ ] Docker Compose n8n up + Cloudflare tunnel + **E2E smoke test: send voice note → n8n receives media URL** (kills the biggest integration risk on day 3, not week 5)
 - [ ] Record dataset: 15–20 simulated Darija chantier voice notes + reference transcriptions
@@ -69,7 +69,7 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - Report in parallel: état de l'art (STT Darija, LLM extraction, outils)
 
 ### Sprint 2 — E2E pipeline + web app (Aug 3 – Aug 14)
-- [ ] Full n8n workflow: WhatsApp → media download → API call → Sheets append → email notif → WhatsApp confirmation reply
+- [ ] Full n8n workflow: Telegram → voice download → API call → Sheets append → email notif → Telegram confirmation reply
 - [ ] Google Sheet structured per cahier §6
 - [ ] React form (cahier §4 opt. 2) → same API text mode
 - [ ] Dashboard v1: report list, filters by chantier/technicien/date
@@ -92,16 +92,16 @@ Report polish, rehearsal, slack for slippage.
 
 | Risk | Mitigation |
 |---|---|
-| Darija WER too high on all engines | LLM prompt corrects STT noise using domain vocab (goulotte, câble, brassage...); WhatsApp reply asks technician to confirm summary; form fallback always works |
-| Meta test-mode limits | 5 numbers enough for pilot; production path (Meta business verification) documented as evolution, explicitly out of scope |
+| Darija WER too high on all engines | LLM prompt corrects STT noise using domain vocab (goulotte, câble, brassage...); Telegram reply asks technician to confirm summary; form fallback always works |
+| WhatsApp prod migration (post-PFE) | Telegram carries pilot + defense (no recipient cap, no token expiry); Meta business verification + message-template approval documented as evolution, explicitly out of scope |
 | Free-tier quotas | Volume tiny (~5–10 reports/day); adapter pattern swaps provider in minutes |
 | Timeline slip | Cut-line order: dashboard → benchmark wave 2 → Teams option. Core (voice→Sheet+notif, form) protected. Fallback = Option B scope |
 | Solo dev, report squeeze | Report written 2h/day in parallel from Sprint 1, not at the end |
 
 ## 6. Scope guard (MoSCoW)
 
-- **Must:** WhatsApp voice → transcription → extraction → French summary → Sheets → email notif; web form; install doc; user guide
-- **Should:** dashboard, STT benchmark chapter, WhatsApp confirmation reply, failure flagging
+- **Must:** Telegram voice → transcription → extraction → French summary → Sheets → email notif; web form; install doc; user guide
+- **Should:** dashboard, STT benchmark chapter, Telegram confirmation reply, failure flagging
 - **Could:** Teams webhook, PWA manifest, wave-2 benchmark, Supabase migration doc
 - **Won't (this PFE):** Meta production approval, Electron, multi-company tenancy, Slack
 

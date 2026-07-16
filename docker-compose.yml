@@ -9,7 +9,7 @@ services:
       - GENERIC_TIMEZONE=Africa/Casablanca
       - TZ=Africa/Casablanca
       - N8N_DIAGNOSTICS_ENABLED=false
-      # webhook URLs registered with Meta must use the public tunnel/server URL
+      # webhook URLs n8n auto-registers with Telegram must use the public tunnel/server URL
       - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
     # dev-only quick public URL (n8n's own tunnel) — see n8n/README.md
     # command: start --tunnel
