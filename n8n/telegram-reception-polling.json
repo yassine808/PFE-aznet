@@ -1,0 +1,97 @@
+{
+  "name": "Telegram reception (polling, localhost-only) -> /process",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "seconds", "secondsInterval": 15 }]
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "Every 15s",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads last processed update_id so we never re-handle old messages.\n// NOTE: static data persists only while the workflow is ACTIVE (production runs).\nconst s = $getWorkflowStaticData('global');\nconst offset = s.lastUpdateId ? s.lastUpdateId + 1 : 0;\nreturn [{ json: { offset, botToken: 'PASTE_YOUR_BOT_TOKEN_HERE' } }];"
+      },
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Offset + token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $json.botToken }}/getUpdates?offset={{ $json.offset }}&allowed_updates=[\"message\"]",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000003",
+      "name": "getUpdates (poll)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Advance offset past everything received; emit one item per VOICE message.\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  if (m?.voice) {\n    out.push({ json: { file_id: m.voice.file_id, chat_id: m.chat.id, technicien: m.from?.first_name ?? String(m.from?.id) } });\n  }\n}\nreturn out;"
+      },
+      "id": "b1000000-0000-4000-8000-000000000004",
+      "name": "Extract voice msgs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.file_id }}"
+      },
+      "id": "b1000000-0000-4000-8000-000000000005",
+      "name": "Get Voice File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1080, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/process",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "audio",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000006",
+      "name": "POST /process",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300]
+    }
+  ],
+  "connections": {
+    "Every 15s": { "main": [[{ "node": "Offset + token", "type": "main", "index": 0 }]] },
+    "Offset + token": { "main": [[{ "node": "getUpdates (poll)", "type": "main", "index": 0 }]] },
+    "getUpdates (poll)": { "main": [[{ "node": "Extract voice msgs", "type": "main", "index": 0 }]] },
+    "Extract voice msgs": { "main": [[{ "node": "Get Voice File", "type": "main", "index": 0 }]] },
+    "Get Voice File": { "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "active": false
+}

@@ -4,7 +4,11 @@ Role (per PLAN.md): **Telegram** reception → voice download → call FastAPI `
 
 > Channel note: reception is channel-agnostic. The API (`/process`) only ever sees an audio blob — it has no idea the channel is Telegram. WhatsApp Business API is the documented production-evolution path; Telegram carries the pilot + defense demo (free, no approval, no recipient cap, no token expiry). See PLAN.md §1.
 
-Workflow exports (`*.json`) live here — export after every meaningful change (n8n UI → workflow menu → Download). Import-ready skeleton: [`telegram-reception.json`](./telegram-reception.json).
+Workflow exports (`*.json`) live here — export after every meaningful change (n8n UI → workflow menu → Download).
+
+Two import-ready variants:
+- [`telegram-reception-polling.json`](./telegram-reception-polling.json) — **current dev approach.** Polls `getUpdates` every 15s; outbound-only so plain `localhost` works — no tunnel, no public URL. Paste the bot token in the "Offset + token" Code node + a Telegram credential on "Get Voice File", toggle Active. If `getUpdates` returns 409, clear a leftover webhook once via `https://api.telegram.org/bot<TOKEN>/deleteWebhook`.
+- [`telegram-reception.json`](./telegram-reception.json) — webhook variant (needs the public HTTPS tunnel below; n8n's built-in `start --tunnel` is dead in n8n 2.x — use cloudflared). Pilot/server target.
 
 ## Run
 

@@ -11,8 +11,7 @@ services:
       - N8N_DIAGNOSTICS_ENABLED=false
       # webhook URLs n8n auto-registers with Telegram must use the public tunnel/server URL
       - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
-    # dev-only quick public URL (n8n's own tunnel) — see n8n/README.md
-    # command: start --tunnel
+    # NOTE: n8n's built-in tunnel (start --tunnel) is dead in modern n8n (2.x ignores it) — use cloudflared, see n8n/README.md
     volumes:
       - n8n_data:/home/node/.n8n
 
