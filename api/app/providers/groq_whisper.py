@@ -20,7 +20,15 @@ class GroqWhisperProvider(TranscriptionProvider):
         from groq import Groq  # lazy: keeps unit tests dependency-free
 
         client = Groq(api_key=settings.groq_api_key)
-        ext = "ogg" if "ogg" in mime_type else mime_type.split("/")[-1]
+        # Groq gates uploads on filename extension before decoding the bytes,
+        # so the name must land in its accepted set. Telegram voice notes are
+        # ogg/opus ("audio/ogg" or ".oga"); n8n/curl may send octet-stream.
+        accepted = {"flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "opus", "wav", "webm"}
+        alias = {"oga": "ogg", "x-wav": "wav", "wave": "wav", "x-m4a": "m4a"}
+        raw = mime_type.split("/")[-1].split(";")[0].strip().lower()
+        ext = alias.get(raw, raw)
+        if ext not in accepted:
+            ext = "ogg"  # pipeline default (voice notes); Groq still rejects undecodable bytes
         buf = io.BytesIO(audio)
         start = time.perf_counter()
         try:

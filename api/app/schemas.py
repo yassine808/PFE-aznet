@@ -6,11 +6,20 @@ this service only returns what it can derive from the audio/text itself.
 """
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ExtractedReport(BaseModel):
     """Structured facts extracted from one daily report."""
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _null_strings_to_none(cls, v):
+        # LLM JSON mode (Groq/Llama) sometimes emits the *string* "null"
+        # for absent fields; the prompt means None, so normalize before parsing.
+        if isinstance(v, str) and v.strip().lower() in {"null", "none", ""}:
+            return None
+        return v
 
     chantier: Optional[str] = Field(None, description="Nom du chantier mentionné")
     client: Optional[str] = Field(None, description="Nom du client mentionné")

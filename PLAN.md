@@ -56,7 +56,7 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 ### Week 0 — Setup & risk-kill (Jul 15–19)
 - [ ] Accounts: **Telegram bot (BotFather)**, Google Cloud (Sheets API), Groq, Gemini (AI Studio), HF, Cloudflare, Vercel
 - [ ] Repo scaffold: `api/`, `web/`, `n8n/`, `docs/`, `benchmark/`
-- [ ] Docker Compose n8n up + Cloudflare tunnel + **E2E smoke test: send voice note → n8n receives media URL** (kills the biggest integration risk on day 3, not week 5)
+- [x] Docker Compose n8n up + **E2E smoke test PASSED (Jul 17): Telegram voice note → n8n polling workflow → binary audio downloaded** (biggest integration risk killed; localhost-only via getUpdates polling, no tunnel needed)
 - [ ] Record dataset: 15–20 simulated Darija chantier voice notes + reference transcriptions
 - [ ] Director sign-off on this plan + ask: aznet server? real technician recordings?
 
