@@ -18,8 +18,10 @@ class Settings(BaseSettings):
 
     # default engine until the week-1 benchmark decides (PLAN.md sprint 1)
     stt_provider: str = "groq"
-    # rolling alias — pinned "gemini-2.5-flash" got retired for new users (404, Jul 2026)
-    gemini_model: str = "gemini-flash-latest"
+    # rolling alias, lite pool — pinned "gemini-2.5-flash" got retired (404, Jul 2026)
+    # and the flagship "gemini-flash-latest" pool 503s under free-tier evening load;
+    # lite is verified live and plenty for structured extraction (benchmark revisits)
+    gemini_model: str = "gemini-flash-lite-latest"
     groq_whisper_model: str = "whisper-large-v3"
     groq_llm_model: str = "llama-3.3-70b-versatile"
 
