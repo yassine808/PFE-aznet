@@ -83,6 +83,24 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Extract voice msgs').item.json.chat_id }}",
+        "text": "=✅ Rapport enregistré\n\n{{ $json.report.resume }}",
+        "additionalFields": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000007",
+      "name": "Reply with summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1520, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
     }
   ],
   "connections": {
@@ -90,7 +108,8 @@
     "Offset + token": { "main": [[{ "node": "getUpdates (poll)", "type": "main", "index": 0 }]] },
     "getUpdates (poll)": { "main": [[{ "node": "Extract voice msgs", "type": "main", "index": 0 }]] },
     "Extract voice msgs": { "main": [[{ "node": "Get Voice File", "type": "main", "index": 0 }]] },
-    "Get Voice File": { "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]] }
+    "Get Voice File": { "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]] },
+    "POST /process": { "main": [[{ "node": "Reply with summary", "type": "main", "index": 0 }]] }
   },
   "settings": {},
   "active": false
