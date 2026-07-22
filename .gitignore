@@ -27,3 +27,4 @@ benchmark/dataset/audio/
 # OS / IDE
 .DS_Store
 Thumbs.db
+.vscode/
