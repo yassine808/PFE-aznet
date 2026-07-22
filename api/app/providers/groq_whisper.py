@@ -1,4 +1,5 @@
 import io
+import math
 import time
 
 from app.config import settings
@@ -6,6 +7,25 @@ from app.schemas import TranscriptionInfo
 
 from . import register
 from .base import TranscriptionError, TranscriptionProvider
+
+
+def _confidence_from_segments(segments) -> "float | None":
+    """Whisper doesn't expose a direct confidence score; avg_logprob per
+    segment is the closest proxy (log-probability the model assigned its
+    own output). exp(avg_logprob) rescales it into a rough 0-1 confidence.
+    Returns None if no segments are available (nothing to derive from).
+    """
+    if not segments:
+        return None
+    logprobs = []
+    for seg in segments:
+        val = seg.get("avg_logprob") if isinstance(seg, dict) else getattr(seg, "avg_logprob", None)
+        if val is not None:
+            logprobs.append(val)
+    if not logprobs:
+        return None
+    avg = sum(logprobs) / len(logprobs)
+    return max(0.0, min(1.0, math.exp(avg)))
 
 
 @register("groq")
@@ -37,10 +57,16 @@ class GroqWhisperProvider(TranscriptionProvider):
                 model=settings.groq_whisper_model,
                 # Darija has no ISO tag Whisper knows; 'ar' beats autodetect
                 language="ar",
-                response_format="text",
+                # verbose_json (vs plain "text") also returns per-segment
+                # avg_logprob, which we use to derive a confidence score.
+                response_format="verbose_json",
             )
         except Exception as exc:  # noqa: BLE001 — surface as domain error
             raise TranscriptionError(f"groq: {exc}") from exc
         latency = time.perf_counter() - start
         text = result if isinstance(result, str) else getattr(result, "text", str(result))
-        return TranscriptionInfo(text=text.strip(), provider=self.name, latency_s=latency)
+        segments = result.get("segments") if isinstance(result, dict) else getattr(result, "segments", None)
+        confidence = _confidence_from_segments(segments or [])
+        return TranscriptionInfo(
+            text=text.strip(), provider=self.name, latency_s=latency, confidence=confidence
+        )

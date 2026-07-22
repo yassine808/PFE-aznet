@@ -38,4 +38,6 @@ class HFDarijaProvider(TranscriptionProvider):
         text = payload.get("text") if isinstance(payload, dict) else None
         if not text:
             raise TranscriptionError(f"hf-darija: unexpected payload {payload!r:.200}")
+        # HF Inference API's ASR response has no confidence/logprob field
+        # -> confidence stays None (schema default), no fabricated score.
         return TranscriptionInfo(text=text.strip(), provider=self.name, latency_s=latency)

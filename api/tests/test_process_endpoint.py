@@ -96,6 +96,51 @@ def test_short_transcription_flagged(monkeypatch):
     assert "short_transcription" in r.json()["warnings"]
 
 
+def test_low_confidence_flagged(monkeypatch):
+    class LowConfidence(FakeProvider):
+        def transcribe(self, audio, mime_type):
+            return TranscriptionInfo(
+                text="نصبنا goulotte 150 متر", provider="fake", latency_s=0.1, confidence=0.3
+            )
+
+    monkeypatch.setattr(main, "get_provider", lambda name: LowConfidence())
+    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
+    assert r.status_code == 200
+    body = r.json()
+    assert "low_confidence_transcription" in body["warnings"]
+    assert body["transcription"]["confidence"] == 0.3
+
+
+def test_high_confidence_not_flagged(monkeypatch):
+    class HighConfidence(FakeProvider):
+        def transcribe(self, audio, mime_type):
+            return TranscriptionInfo(
+                text="نصبنا goulotte 150 متر وجرّينا 800 متر ديال الكابل",
+                provider="fake",
+                latency_s=0.1,
+                confidence=0.92,
+            )
+
+    monkeypatch.setattr(main, "get_provider", lambda name: HighConfidence())
+    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
+    assert r.status_code == 200
+    assert "low_confidence_transcription" not in r.json()["warnings"]
+
+
+def test_missing_confidence_not_flagged(monkeypatch):
+    """Providers with no confidence signal (gemini, hf-darija) must not be
+    falsely flagged — None means 'unknown', not 'low'."""
+    monkeypatch.setattr(main, "get_provider", lambda name: FakeProvider())
+    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["transcription"]["confidence"] is None
+    assert "low_confidence_transcription" not in body["warnings"]
+
+
 def test_unknown_provider_rejected(monkeypatch):
     r = client.post(
         "/process",

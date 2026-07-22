@@ -55,6 +55,16 @@ class TranscriptionInfo(BaseModel):
     text: str
     provider: str
     latency_s: float = Field(..., ge=0)
+    confidence: Optional[float] = Field(
+        None,
+        ge=0,
+        le=1,
+        description=(
+            "Confiance du moteur STT (0-1), quand le fournisseur l'expose. "
+            "None si le fournisseur ne renvoie aucun signal exploitable "
+            "(ex: gemini, hf-darija)."
+        ),
+    )
 
 
 class ProcessResponse(BaseModel):

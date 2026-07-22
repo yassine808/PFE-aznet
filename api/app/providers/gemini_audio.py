@@ -42,4 +42,7 @@ class GeminiAudioProvider(TranscriptionProvider):
         latency = time.perf_counter() - start
         if not resp.text:
             raise TranscriptionError("gemini: empty transcription")
+        # Gemini's generateContent response carries no per-token/segment
+        # logprob for audio transcription -> confidence stays None (schema
+        # default), no fabricated score.
         return TranscriptionInfo(text=resp.text.strip(), provider=self.name, latency_s=latency)

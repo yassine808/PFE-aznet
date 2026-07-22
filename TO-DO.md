@@ -14,3 +14,4 @@
 - Add manual correction in dashboard — let manager edit/fix an extracted field if the AI got it wrong, without touching the Sheet directly
 - Low-confidence STT → explicit flag for manual review in the dashboard (not just a backend log)
 - Show accuracy % on each transcription in the dashboard
+- Add a GitHub-style contribution heatmap in the admin dashboard — daily activity per technician (report count per day, colored by intensity) to visualize active/inactive days

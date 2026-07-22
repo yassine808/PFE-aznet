@@ -60,3 +60,7 @@ Metadata n8n adds later (not the API's job): `date`/`heure` = now; `technicien` 
 ## 4. Confirmation reply (no 24h window)
 
 To close the loop, add a **Telegram → Send Message** node after the pipeline, Chat ID = `={{ $json.message.chat.id }}`. Unlike WhatsApp's 24h session-window rule, Telegram bots can reply to a user any time.
+
+The polling workflow tags the confirmation as a **reply** to the original voice/audio message (`additionalFields.reply_to_message_id`), so the technician can see which report a confirmation belongs to in the chat thread. When the STT provider exposes a confidence score (currently Groq only — see `TranscriptionInfo.confidence` in `api/`), the reply also shows a `🎙️ Confiance transcription: NN%` line, and reports below 50% get flagged with `low_confidence_transcription` in `warnings` for manual review.
+
+Forwarded audio files (`message.audio`) are treated identically to native voice notes (`message.voice`) — both go through the same extraction + reply path.

@@ -16,6 +16,7 @@ app = FastAPI(
 )
 
 MIN_USABLE_CHARS = 10
+LOW_CONFIDENCE_THRESHOLD = 0.5  # below this, flag for manual review in the dashboard
 
 
 @app.get("/health")
@@ -51,6 +52,8 @@ async def process(
         rapport_complet = transcription.text
         if len(rapport_complet) < MIN_USABLE_CHARS:
             warnings.append("short_transcription")
+        if transcription.confidence is not None and transcription.confidence < LOW_CONFIDENCE_THRESHOLD:
+            warnings.append("low_confidence_transcription")
     else:
         rapport_complet = (text or "").strip()
         if not rapport_complet:

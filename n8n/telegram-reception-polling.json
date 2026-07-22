@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Advance offset past everything received; emit one item per VOICE message.\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  if (m?.voice) {\n    out.push({ json: { file_id: m.voice.file_id, chat_id: m.chat.id, technicien: m.from?.first_name ?? String(m.from?.id) } });\n  }\n}\nreturn out;"
+        "jsCode": "// Advance offset past everything received; emit one item per VOICE message.\n// message_id (either voice notes OR forwarded audio files) is kept so the\n// confirmation reply can reference/tag the original message.\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  // Treat a native voice note and a forwarded/uploaded audio file the same way\n  const media = m?.voice ?? m?.audio;\n  if (media) {\n    out.push({\n      json: {\n        file_id: media.file_id,\n        chat_id: m.chat.id,\n        message_id: m.message_id,\n        is_forwarded: Boolean(m.forward_date || m.forward_origin),\n        technicien: m.from?.first_name ?? String(m.from?.id),\n      },\n    });\n  }\n}\nreturn out;"
       },
       "id": "b1000000-0000-4000-8000-000000000004",
       "name": "Extract voice msgs",
@@ -50,7 +50,7 @@
         "fileId": "={{ $json.file_id }}"
       },
       "id": "b1000000-0000-4000-8000-000000000005",
-      "name": "Get Voice File",
+      "name": "Get Audio File",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [1080, 300],
@@ -87,8 +87,10 @@
     {
       "parameters": {
         "chatId": "={{ $('Extract voice msgs').item.json.chat_id }}",
-        "text": "=✅ Rapport enregistré\n\n{{ $json.report.resume }}",
-        "additionalFields": {}
+        "text": "=✅ Rapport enregistré\n\n{{ $json.report.resume }}{{ $json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($json.transcription.confidence * 100) + '%' : '' }}{{ $json.warnings?.includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Extract voice msgs').item.json.message_id }}"
+        }
       },
       "id": "b1000000-0000-4000-8000-000000000007",
       "name": "Reply with summary",
@@ -107,8 +109,8 @@
     "Every 15s": { "main": [[{ "node": "Offset + token", "type": "main", "index": 0 }]] },
     "Offset + token": { "main": [[{ "node": "getUpdates (poll)", "type": "main", "index": 0 }]] },
     "getUpdates (poll)": { "main": [[{ "node": "Extract voice msgs", "type": "main", "index": 0 }]] },
-    "Extract voice msgs": { "main": [[{ "node": "Get Voice File", "type": "main", "index": 0 }]] },
-    "Get Voice File": { "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]] },
+    "Extract voice msgs": { "main": [[{ "node": "Get Audio File", "type": "main", "index": 0 }]] },
+    "Get Audio File": { "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]] },
     "POST /process": { "main": [[{ "node": "Reply with summary", "type": "main", "index": 0 }]] }
   },
   "settings": {},
