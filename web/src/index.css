@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Palette as RGB channel triplets so Tailwind's `<alpha-value>` opacity
+  modifiers (bg-down/10, bg-panel/80, …) keep working. Light is the default;
+  the `.dark` class on <html> (set by ThemeProvider) swaps to dark.
+*/
+@layer base {
+  :root {
+    --bg: 247 248 250;
+    --panel: 255 255 255;
+    --card: 255 255 255;
+    --cardhi: 241 243 246;
+    --line: 226 230 235;
+    --ink: 15 23 42;
+    --muted: 100 116 139;
+    --faint: 148 163 184;
+    --accent: 79 70 229;
+    --up: 22 163 74;
+    --down: 220 38 38;
+    color-scheme: light;
+  }
+
+  .dark {
+    --bg: 9 9 11;
+    --panel: 12 12 14;
+    --card: 18 18 21;
+    --cardhi: 23 23 27;
+    --line: 35 35 39;
+    --ink: 250 250 250;
+    --muted: 139 139 147;
+    --faint: 90 90 98;
+    --accent: 99 102 241;
+    --up: 74 222 128;
+    --down: 248 113 113;
+    color-scheme: dark;
+  }
+
+  html, body, #root { height: 100%; }
+  body {
+    margin: 0;
+    background: rgb(var(--bg));
+    color: rgb(var(--ink));
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color .2s ease, color .2s ease;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--faint)); }
+}
+
+/* Glowing step lines — the "channel sales" effect from the reference. */
+@layer components {
+  .glow-line .recharts-line .recharts-curve.recharts-line-curve {
+    filter: drop-shadow(0 0 5px var(--glow, rgba(255,255,255,.35)));
+  }
+  .dark .glow-line .recharts-line .recharts-curve.recharts-line-curve {
+    filter: drop-shadow(0 0 7px rgba(255,255,255,.4));
+  }
+}
