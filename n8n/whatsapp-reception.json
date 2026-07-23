@@ -3,52 +3,30 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "GET",
-        "path": "whatsapp",
-        "responseMode": "responseNode",
-        "options": {}
+        "updates": ["messages"]
       },
       "id": "e1000000-0000-4000-8000-000000000001",
-      "name": "Webhook verify (GET)",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [200, 140],
-      "webhookId": "whatsapp-verify"
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "whatsapp-reception",
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "REPLACE_WITH_WA_OAUTH_CREDENTIAL_ID",
+          "name": "WhatsApp OAuth"
+        }
+      }
     },
     {
       "parameters": {
-        "respondWith": "text",
-        "responseBody": "={{ $json.query['hub.verify_token'] === $env.WHATSAPP_VERIFY_TOKEN ? $json.query['hub.challenge'] : 'forbidden' }}",
-        "options": {}
-      },
-      "id": "e1000000-0000-4000-8000-000000000002",
-      "name": "Echo hub.challenge",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [420, 140]
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "whatsapp",
-        "options": {}
-      },
-      "id": "e1000000-0000-4000-8000-000000000003",
-      "name": "Webhook messages (POST)",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [200, 400],
-      "webhookId": "whatsapp-messages"
-    },
-    {
-      "parameters": {
-        "jsCode": "// WhatsApp Cloud API payload -> one item per audio message.\n// Voice notes arrive as type 'audio' (audio.voice = true); forwarded/uploaded\n// audio files are type 'audio' too -> both treated the same, like Telegram.\nconst out = [];\nfor (const item of $input.all()) {\n  const entries = item.json.body?.entry ?? [];\n  for (const entry of entries) {\n    for (const change of entry.changes ?? []) {\n      const v = change.value;\n      const contactName = v?.contacts?.[0]?.profile?.name;\n      for (const m of v?.messages ?? []) {\n        if (m.type === 'audio' && m.audio?.id) {\n          out.push({\n            json: {\n              media_id: m.audio.id,\n              chat_id: m.from,           // wa_id = sender phone number\n              message_id: m.id,          // wamid, used as reply context\n              user_id: m.from,\n              is_forwarded: Boolean(m.context?.forwarded),\n              technicien: contactName ?? m.from,\n            },\n          });\n        }\n      }\n    }\n  }\n}\nreturn out;"
+        "jsCode": "// WhatsApp Cloud API payload -> one item per audio message.\n// Voice notes arrive as type 'audio' (audio.voice = true); forwarded/uploaded\n// audio files are type 'audio' too -> both treated the same, like Telegram.\nconst out = [];\nfor (const item of $input.all()) {\n  // Trigger emits the change value directly (contacts + messages)\n  const v = item.json;\n  const contactName = v?.contacts?.[0]?.profile?.name;\n  for (const m of v?.messages ?? []) {\n    if (m.type === 'audio' && m.audio?.id) {\n      out.push({\n        json: {\n          media_id: m.audio.id,\n          chat_id: m.from,           // wa_id = sender phone number\n          message_id: m.id,          // wamid, used as reply context\n          user_id: m.from,\n          is_forwarded: Boolean(m.context?.forwarded),\n          technicien: contactName ?? m.from,\n        },\n      });\n    }\n  }\n}\nreturn out;"
       },
       "id": "e1000000-0000-4000-8000-000000000004",
       "name": "Extract audio msgs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 400]
+      "position": [420, 300]
     },
     {
       "parameters": {
@@ -58,7 +36,7 @@
       "name": "Access control",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [640, 400]
+      "position": [640, 300]
     },
     {
       "parameters": {
@@ -79,68 +57,62 @@
       "name": "Authorized?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [860, 400]
+      "position": [860, 300]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://graph.facebook.com/v20.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.chat_id, type: 'text', text: { body: \"Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>\" } }) }}",
-        "options": {}
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $json.chat_id }}",
+        "textBody": "Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>",
+        "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000007",
       "name": "HR reply (outsider)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1080, 580],
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1080, 480],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_WITH_WA_BEARER_CREDENTIAL_ID",
-          "name": "WhatsApp Bearer token"
+        "whatsAppApi": {
+          "id": "REPLACE_WITH_WA_API_CREDENTIAL_ID",
+          "name": "WhatsApp API"
         }
       }
     },
     {
       "parameters": {
-        "url": "=https://graph.facebook.com/v20.0/{{ $json.media_id }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
+        "resource": "media",
+        "operation": "mediaUrlGet",
+        "mediaGetId": "={{ $json.media_id }}"
       },
       "id": "e1000000-0000-4000-8000-000000000008",
       "name": "Get media URL",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1080, 260],
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1080, 180],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_WITH_WA_BEARER_CREDENTIAL_ID",
-          "name": "WhatsApp Bearer token"
+        "whatsAppApi": {
+          "id": "REPLACE_WITH_WA_API_CREDENTIAL_ID",
+          "name": "WhatsApp API"
         }
       }
     },
     {
       "parameters": {
-        "url": "={{ $json.url }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {
-          "response": { "response": { "responseFormat": "file", "outputPropertyName": "data" } }
-        }
+        "resource": "media",
+        "operation": "mediaUrlGetDownload",
+        "mediaGetId": "={{ $('Access control').item.json.media_id }}"
       },
       "id": "e1000000-0000-4000-8000-000000000009",
       "name": "Download audio",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1300, 260],
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1300, 180],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_WITH_WA_BEARER_CREDENTIAL_ID",
-          "name": "WhatsApp Bearer token"
+        "whatsAppApi": {
+          "id": "REPLACE_WITH_WA_API_CREDENTIAL_ID",
+          "name": "WhatsApp API"
         }
       }
     },
@@ -165,7 +137,7 @@
       "name": "POST /process",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1520, 260]
+      "position": [1520, 180]
     },
     {
       "parameters": {
@@ -211,7 +183,7 @@
       "name": "Append Sheet row",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1740, 260],
+      "position": [1740, 180],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "REPLACE_WITH_YOUR_GOOGLE_CREDENTIAL_ID",
@@ -221,31 +193,28 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://graph.facebook.com/v20.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Access control').item.json.chat_id, type: 'text', context: { message_id: $('Access control').item.json.message_id }, text: { body: '✅ Rapport enregistré\\n\\n' + $('POST /process').item.json.report.resume + ($('POST /process').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('POST /process').item.json.transcription.confidence * 100) + '%' : '') + (($('POST /process').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '') } }) }}",
-        "options": {}
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $('Access control').item.json.chat_id }}",
+        "textBody": "=✅ Rapport enregistré\n\n{{ $('POST /process').item.json.report.resume }}{{ $('POST /process').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('POST /process').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('POST /process').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-00000000000c",
       "name": "Reply with summary",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1960, 260],
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1960, 180],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_WITH_WA_BEARER_CREDENTIAL_ID",
-          "name": "WhatsApp Bearer token"
+        "whatsAppApi": {
+          "id": "REPLACE_WITH_WA_API_CREDENTIAL_ID",
+          "name": "WhatsApp API"
         }
       }
     }
   ],
   "connections": {
-    "Webhook verify (GET)": { "main": [[{ "node": "Echo hub.challenge", "type": "main", "index": 0 }]] },
-    "Webhook messages (POST)": { "main": [[{ "node": "Extract audio msgs", "type": "main", "index": 0 }]] },
+    "WhatsApp Trigger": { "main": [[{ "node": "Extract audio msgs", "type": "main", "index": 0 }]] },
     "Extract audio msgs": { "main": [[{ "node": "Access control", "type": "main", "index": 0 }]] },
     "Access control": { "main": [[{ "node": "Authorized?", "type": "main", "index": 0 }]] },
     "Authorized?": {

@@ -84,13 +84,15 @@ Import [`error-workflow.json`](./error-workflow.json), then in each production w
 
 [`whatsapp-reception.json`](./whatsapp-reception.json) mirrors the Telegram pipeline on the WhatsApp Cloud API — same access control, same `/process` call, same Sheet row, so both channels coexist. Setup:
 
-1. **Credential**: n8n → Credentials → *Header Auth* → name `Authorization`, value `Bearer <WHATSAPP_TOKEN>`. Attach to the four Graph API nodes. ⚠️ Meta test-mode temporary tokens expire in 24h — a System User token (Business settings) is the durable option.
-2. **Env**: add `WHATSAPP_PHONE_NUMBER_ID=...` to `.env` (Meta dashboard → WhatsApp → API Setup) and pass it into the n8n container in `docker-compose.yml`.
-3. **Verify token**: set `WHATSAPP_VERIFY_TOKEN=<any secret string>` in `.env` (compose passes it to n8n; the *Echo hub.challenge* node reads `$env.WHATSAPP_VERIFY_TOKEN`); enter the same string in Meta dashboard → WhatsApp → Configuration → Webhook, URL = `<tunnel>/webhook/whatsapp`, subscribe to the `messages` field.
-4. Activate workflow **before** clicking *Verify and save* in Meta (the GET verification handshake must be live).
+Uses n8n's **native WhatsApp nodes** — two credentials:
+
+1. **WhatsApp OAuth** (for the *WhatsApp Trigger* node): App ID + App Secret — developers.facebook.com → your app → *App settings → Basic*. The trigger handles the webhook verify handshake AND validates Meta's `X-Hub-Signature-256` payload signatures automatically.
+2. **WhatsApp API** (for the *WhatsApp Business Cloud* send/media nodes): Access token + Business Account ID (WABA ID, from *WhatsApp → API Setup*). ⚠️ Test-mode temporary tokens expire in 24h — generate a durable one via *Business settings → System users → Generate token* (`whatsapp_business_messaging` + `whatsapp_business_management` scopes).
+3. **Env**: `WHATSAPP_PHONE_NUMBER_ID=...` in `.env` (compose passes it to the container; send nodes read `$env.WHATSAPP_PHONE_NUMBER_ID`). `WHATSAPP_VERIFY_TOKEN` no longer needed — the trigger node manages verification itself.
+4. Activate the workflow, then in Meta dashboard → *WhatsApp → Configuration → Webhook* paste the trigger's production webhook URL + verify string (the trigger node displays both) and subscribe to the `messages` field.
 5. Test-mode limits: recipient allowlist of 5 numbers; recipients must first message the number or be added in API Setup.
 
-Voice notes and forwarded audio both arrive as `type: "audio"` → treated identically. Media download is 2-step (`GET /{media_id}` → follow `url` with the same Bearer token).
+Voice notes and forwarded audio both arrive as `type: "audio"` → treated identically. If an imported WhatsApp node shows a red parameter, re-pick the operation in its dropdown (n8n version drift) — the flow is: media *Get URL* → media *Download* → `/process`.
 
 ## 9. End-of-day report cron
 
