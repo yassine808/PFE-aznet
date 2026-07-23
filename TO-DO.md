@@ -27,5 +27,10 @@ Hard deadline: Aug 31 2026. Most items need the admin dashboard (not built yet �
 - [ ] Daily stat: % spoken Darija words vs French (post-PFE, zero cahier value)
 - [ ] Image generation from report via free API (post-PFE or cut — burns free-tier quota)
 
+## Channels (2026-07-23: keep BOTH Telegram + WhatsApp as inputs)
+- [x] WhatsApp Cloud API reception workflow (`n8n/whatsapp-reception.json`) — same access control + Sheet row as Telegram
+- [ ] Test WhatsApp token validity + send (needs token; phone_number_id for send test)
+- [ ] Durable WhatsApp token: System User token (test-mode temp tokens die in 24h)
+
 ## Notes
 - "Add some solutions or critical things to be aware of" — captured in vault/roadmap.md cut-line + contradictions sections
