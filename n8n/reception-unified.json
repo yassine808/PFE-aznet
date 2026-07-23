@@ -1,0 +1,395 @@
+{
+  "name": "Reception unified (Telegram + WhatsApp) -> /process",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "seconds", "secondsInterval": 15 }] }
+      },
+      "id": "f1000000-0000-4000-8000-000000000001",
+      "name": "Every 15s",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [140, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads last processed update_id so we never re-handle old messages.\n// NOTE: static data persists only while the workflow is ACTIVE (production runs).\nconst s = $getWorkflowStaticData('global');\nconst offset = s.lastUpdateId ? s.lastUpdateId + 1 : 0;\nreturn [{ json: { offset, botToken: 'PASTE_YOUR_BOT_TOKEN_HERE' } }];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000002",
+      "name": "Offset + token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 140]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $json.botToken }}/getUpdates?offset={{ $json.offset }}&allowed_updates=[\"message\"]",
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000003",
+      "name": "getUpdates (poll)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [540, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Telegram: voice note OR forwarded/uploaded audio -> normalized item.\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  const media = m?.voice ?? m?.audio;\n  if (media) {\n    out.push({\n      json: {\n        channel: 'telegram',\n        file_ref: media.file_id,\n        chat_id: m.chat.id,\n        message_id: m.message_id,\n        user_id: String(m.from?.id),\n        is_forwarded: Boolean(m.forward_date || m.forward_origin),\n        technicien: m.from?.first_name ?? String(m.from?.id),\n      },\n    });\n  }\n}\nreturn out;"
+      },
+      "id": "f1000000-0000-4000-8000-000000000004",
+      "name": "Extract TG msgs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 140]
+    },
+    {
+      "parameters": {
+        "updates": ["messages"]
+      },
+      "id": "f1000000-0000-4000-8000-000000000005",
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [540, 420],
+      "webhookId": "whatsapp-reception-unified",
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "REPLACE_WITH_WA_OAUTH_CREDENTIAL_ID",
+          "name": "WhatsApp OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// WhatsApp: voice notes AND forwarded audio both arrive as type 'audio'.\nconst out = [];\nfor (const item of $input.all()) {\n  const v = item.json;\n  const contactName = v?.contacts?.[0]?.profile?.name;\n  for (const m of v?.messages ?? []) {\n    if (m.type === 'audio' && m.audio?.id) {\n      out.push({\n        json: {\n          channel: 'whatsapp',\n          file_ref: m.audio.id,\n          chat_id: m.from,\n          message_id: m.id,\n          user_id: String(m.from),\n          is_forwarded: Boolean(m.context?.forwarded),\n          technicien: contactName ?? m.from,\n        },\n      });\n    }\n  }\n}\nreturn out;"
+      },
+      "id": "f1000000-0000-4000-8000-000000000006",
+      "name": "Extract WA msgs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Access control — ONE allowlist for both channels.\n// Keys: Telegram numeric user IDs AND WhatsApp phone numbers (digits, no '+').\nconst ALLOWLIST = {\n  // '123456789': { name: 'Yassine', role: 'directeur' },      // Telegram ID\n  // '2126XXXXXXXX': { name: 'Yassine', role: 'directeur' },   // WhatsApp wa_id\n};\nconst s = $getWorkflowStaticData('global');\ns.hrRepliedTo = s.hrRepliedTo ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  const entry = ALLOWLIST[String(item.json.user_id)];\n  const dedupeKey = item.json.channel + ':' + item.json.chat_id;\n  if (entry) {\n    out.push({ json: { ...item.json, technicien: entry.name, role: entry.role, authorized: true } });\n  } else if (!s.hrRepliedTo[dedupeKey]) {\n    // Outsider: exactly ONE automated HR-contact reply per chat, then silence.\n    s.hrRepliedTo[dedupeKey] = true;\n    out.push({ json: { ...item.json, authorized: false } });\n  }\n}\nreturn out;"
+      },
+      "id": "f1000000-0000-4000-8000-000000000007",
+      "name": "Access control",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000008",
+      "name": "Authorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1160, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.channel }}",
+              "rightValue": "telegram",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000009",
+      "name": "TG or WA? (download)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1360, 180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.channel }}",
+              "rightValue": "telegram",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-00000000000a",
+      "name": "TG or WA? (HR)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1360, 480]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>",
+        "additionalFields": {}
+      },
+      "id": "f1000000-0000-4000-8000-00000000000b",
+      "name": "TG HR reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1580, 420],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Telegram bot" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $json.chat_id }}",
+        "textBody": "Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>",
+        "additionalFields": {}
+      },
+      "id": "f1000000-0000-4000-8000-00000000000c",
+      "name": "WA HR reply",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1580, 560],
+      "credentials": {
+        "whatsAppApi": { "id": "REPLACE_WITH_WA_API_CREDENTIAL_ID", "name": "WhatsApp API" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.file_ref }}"
+      },
+      "id": "f1000000-0000-4000-8000-00000000000d",
+      "name": "TG Get Voice File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1580, 100],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Telegram bot" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "operation": "mediaUrlGet",
+        "mediaGetId": "={{ $json.file_ref }}"
+      },
+      "id": "f1000000-0000-4000-8000-00000000000e",
+      "name": "WA Get media URL",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1580, 240],
+      "credentials": {
+        "whatsAppApi": { "id": "REPLACE_WITH_WA_API_CREDENTIAL_ID", "name": "WhatsApp API" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "operation": "mediaUrlGetDownload",
+        "mediaGetId": "={{ $('Access control').item.json.file_ref }}"
+      },
+      "id": "f1000000-0000-4000-8000-00000000000f",
+      "name": "WA Download audio",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1780, 240],
+      "credentials": {
+        "whatsAppApi": { "id": "REPLACE_WITH_WA_API_CREDENTIAL_ID", "name": "WhatsApp API" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/process",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "audio",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000010",
+      "name": "POST /process",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 170]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Rapports"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $now.toFormat('yyyy-MM-dd') }}",
+            "heure": "={{ $now.toFormat('HH:mm') }}",
+            "canal": "={{ $('Access control').item.json.channel }}",
+            "technicien": "={{ $('Access control').item.json.technicien }}",
+            "role": "={{ $('Access control').item.json.role }}",
+            "chantier": "={{ $json.report.chantier }}",
+            "client": "={{ $json.report.client }}",
+            "type_activite": "={{ $json.report.type_activite }}",
+            "goulottes_m": "={{ $json.report.goulottes_m }}",
+            "cables_m": "={{ $json.report.cables_m }}",
+            "bureaux_termines": "={{ $json.report.bureaux_termines }}",
+            "panneaux_raccordes": "={{ $json.report.panneaux_raccordes }}",
+            "autres_travaux": "={{ $json.report.autres_travaux }}",
+            "observations": "={{ $json.report.observations }}",
+            "resume": "={{ $json.report.resume }}",
+            "rapport_complet": "={{ $json.rapport_complet }}",
+            "confidence": "={{ $json.transcription?.confidence }}",
+            "flag_review": "={{ ($json.warnings ?? []).includes('low_confidence_transcription') || ($json.warnings ?? []).includes('short_transcription') }}",
+            "lien_audio": "={{ $('Access control').item.json.file_ref }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000011",
+      "name": "Append Sheet row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2180, 170],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Access control').item.json.channel }}",
+              "rightValue": "telegram",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000012",
+      "name": "TG or WA? (reply)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2380, 170]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Access control').item.json.chat_id }}",
+        "text": "=✅ Rapport enregistré\n\n{{ $('POST /process').item.json.report.resume }}{{ $('POST /process').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('POST /process').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('POST /process').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Access control').item.json.message_id }}"
+        }
+      },
+      "id": "f1000000-0000-4000-8000-000000000013",
+      "name": "TG reply summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2600, 100],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Telegram bot" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $('Access control').item.json.chat_id }}",
+        "textBody": "=✅ Rapport enregistré\n\n{{ $('POST /process').item.json.report.resume }}{{ $('POST /process').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('POST /process').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('POST /process').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "additionalFields": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000014",
+      "name": "WA reply summary",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [2600, 240],
+      "credentials": {
+        "whatsAppApi": { "id": "REPLACE_WITH_WA_API_CREDENTIAL_ID", "name": "WhatsApp API" }
+      }
+    }
+  ],
+  "connections": {
+    "Every 15s": { "main": [[{ "node": "Offset + token", "type": "main", "index": 0 }]] },
+    "Offset + token": { "main": [[{ "node": "getUpdates (poll)", "type": "main", "index": 0 }]] },
+    "getUpdates (poll)": { "main": [[{ "node": "Extract TG msgs", "type": "main", "index": 0 }]] },
+    "Extract TG msgs": { "main": [[{ "node": "Access control", "type": "main", "index": 0 }]] },
+    "WhatsApp Trigger": { "main": [[{ "node": "Extract WA msgs", "type": "main", "index": 0 }]] },
+    "Extract WA msgs": { "main": [[{ "node": "Access control", "type": "main", "index": 0 }]] },
+    "Access control": { "main": [[{ "node": "Authorized?", "type": "main", "index": 0 }]] },
+    "Authorized?": {
+      "main": [
+        [{ "node": "TG or WA? (download)", "type": "main", "index": 0 }],
+        [{ "node": "TG or WA? (HR)", "type": "main", "index": 0 }]
+      ]
+    },
+    "TG or WA? (download)": {
+      "main": [
+        [{ "node": "TG Get Voice File", "type": "main", "index": 0 }],
+        [{ "node": "WA Get media URL", "type": "main", "index": 0 }]
+      ]
+    },
+    "TG or WA? (HR)": {
+      "main": [
+        [{ "node": "TG HR reply", "type": "main", "index": 0 }],
+        [{ "node": "WA HR reply", "type": "main", "index": 0 }]
+      ]
+    },
+    "TG Get Voice File": { "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]] },
+    "WA Get media URL": { "main": [[{ "node": "WA Download audio", "type": "main", "index": 0 }]] },
+    "WA Download audio": { "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]] },
+    "POST /process": { "main": [[{ "node": "Append Sheet row", "type": "main", "index": 0 }]] },
+    "Append Sheet row": { "main": [[{ "node": "TG or WA? (reply)", "type": "main", "index": 0 }]] },
+    "TG or WA? (reply)": {
+      "main": [
+        [{ "node": "TG reply summary", "type": "main", "index": 0 }],
+        [{ "node": "WA reply summary", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "errorWorkflow": "" },
+  "active": false
+}
