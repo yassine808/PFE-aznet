@@ -35,13 +35,13 @@ Hard deadline: Aug 31 2026. Most items need the admin dashboard (not built yet �
 - [ ] Durable WhatsApp token: System User token (test-mode temp tokens die in 24h)
 
 ## Workflow improvements (discussed 2026-07-23, cheap → expensive)
-- [ ] Text-message input: technician TYPES report instead of voice → API `/process` already supports `text` mode, just extend extract nodes to catch `message.text` / `type: "text"` and post as form field
-- [ ] Failure reply to sender: on /process 502, tell technician "❌ Erreur, réessayez" (n8n error branch on HTTP node) instead of silence — pairs with Errors tab
+- [x] Text-message input: typed reports on both channels → `Audio or text?` fork, `POST /process (text)` with `text` form field (bot commands `/...` ignored)
+- [x] Failure reply to sender: both /process nodes `onError: continueErrorOutput` → channel-aware "❌ Erreur, réessayez" reply
+- [x] Dedupe guard: processed message keys in static data (`tg:chat:msgid` / `wa:wamid`) — survives poll restarts + Meta webhook retries
+- [x] "⏳ Traitement en cours..." ack sent right after authorization, before STT
 - [ ] Durable audio links: upload audio to Google Drive, store share link in `lien_audio` (file_id/media_id not durable; Meta media URLs expire ~5 min)
-- [ ] Caption support: voice/audio sent WITH caption text → append caption to transcription before extraction (extra context, free)
-- [ ] Dedupe guard: skip already-processed `message_id`s in static data (poll restart can re-deliver)
+- [ ] Caption support: audio sent WITH caption (mostly Telegram) → needs optional `caption` form field on `/process`, merged into text before extraction
 - [ ] Boss commands: `directeur` role sends "/rapport" text → bot replies with today's rollup on demand (reuses `/daily-report`)
-- [ ] "⏳ Traitement..." ack reply before STT (10s pipeline feels dead otherwise) — optional, adds 1 msg noise
 
 ## Notes
 - "Add some solutions or critical things to be aware of" — captured in vault/roadmap.md cut-line + contradictions sections
