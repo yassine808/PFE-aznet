@@ -8,11 +8,11 @@ Hard deadline: Aug 31 2026. Most items need the admin dashboard (not built yet �
 - [ ] Full n8n E2E: Telegram → /process → Sheets append → email notif
 
 ## Phase 1 — Pipeline (Sprint 2, no dashboard needed)
-- [ ] Treat voice messages and forwarded audios the same (n8n: match message.voice OR message.audio)
-- [ ] Access control: allowlist employees + director; outsider gets one automated HR-contact reply. Same table gets a role column so boss behavior differs from employees (both changeable in settings later)
-- [ ] Error logs: n8n error workflow → Errors sheet tab (timestamp, node, message, payload link)
-- [ ] Low-confidence STT → flag_review=true column in the Sheet (not just backend log)
-- [ ] End-of-day cron: assemble today's transcriptions + photos + messages → LLM report → email (+ .docx if possible)
+- [x] Treat voice messages and forwarded audios the same (n8n: match message.voice OR message.audio) — both workflows
+- [x] Access control: allowlist employees + director; outsider gets one automated HR-contact reply. Same table gets a role column so boss behavior differs from employees (both changeable in settings later) — `Access control` node in both workflows; fill ALLOWLIST with real user IDs
+- [x] Error logs: n8n error workflow → Errors sheet tab (timestamp, node, message, payload link) — `n8n/error-workflow.json`; set it as Error Workflow in each production workflow
+- [x] Low-confidence STT → flag_review=true column in the Sheet (not just backend log) — `Append Sheet row` node writes flag_review + confidence
+- [x] End-of-day cron: assemble today's transcriptions + messages → LLM report → email — `n8n/daily-report-cron.json` + `POST /daily-report` (photos + .docx still open)
 
 ## Phase 2 — Dashboard v1+ (Sprint 2, Aug 3–14)
 - [ ] Save + show each audio with its transcription per row

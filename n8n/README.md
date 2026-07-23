@@ -64,3 +64,22 @@ To close the loop, add a **Telegram → Send Message** node after the pipeline, 
 The polling workflow tags the confirmation as a **reply** to the original voice/audio message (`additionalFields.reply_to_message_id`), so the technician can see which report a confirmation belongs to in the chat thread. When the STT provider exposes a confidence score (currently Groq only — see `TranscriptionInfo.confidence` in `api/`), the reply also shows a `🎙️ Confiance transcription: NN%` line, and reports below 50% get flagged with `low_confidence_transcription` in `warnings` for manual review.
 
 Forwarded audio files (`message.audio`) are treated identically to native voice notes (`message.voice`) — both go through the same extraction + reply path.
+
+## 5. Access control (allowlist + roles)
+
+Both reception workflows now carry an **Access control** Code node: an `ALLOWLIST` map of Telegram user IDs → `{ name, role }` (`technicien` | `directeur`). Edit the map directly in the node (a settings panel replaces this post-PFE). To find someone's user ID, have them message the bot once and read `message.from.id` in the execution data.
+
+- Allowlisted senders proceed; `technicien` is taken from the allowlist name (stable, not the free-form Telegram first name) and `role` is written to the Sheet so boss-specific behavior can branch on it later.
+- Unknown senders get **exactly one** automated HR-contact reply per chat (tracked in workflow static data), then are dropped silently.
+
+## 6. Sheets append + flag_review
+
+The reception workflows append the full row to the `Rapports` tab (date, heure, technicien, role, all extracted fields, rapport_complet, confidence, `flag_review`, lien_audio). `flag_review` is `true` when the API returned `low_confidence_transcription` or `short_transcription` — the dashboard's review queue filters on it. Replace `REPLACE_WITH_SPREADSHEET_ID` and attach a Google Sheets credential.
+
+## 7. Error workflow
+
+Import [`error-workflow.json`](./error-workflow.json), then in each production workflow: **Settings → Error Workflow → "Error handler -> Errors sheet tab"**. Any failed execution appends `timestamp / workflow / node / message / execution_url` to the `Errors` tab.
+
+## 8. End-of-day report cron
+
+Import [`daily-report-cron.json`](./daily-report-cron.json): Mon–Sat 18:30 → reads today's `Rapports` rows → `POST /daily-report` (Gemini→Groq rollup, see `api/app/daily_report.py`) → Gmail to the manager. Zero rows today = the run ends quietly, no email. `.docx` attachment remains a stretch goal.

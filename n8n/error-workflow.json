@@ -1,0 +1,68 @@
+{
+  "name": "Error handler -> Errors sheet tab",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c1000000-0000-4000-8000-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten n8n's error payload into one Errors-tab row.\n// Payload shape: { workflow: {id,name}, execution: {id,url,error,lastNodeExecuted,...} }\nconst e = $input.first().json;\nconst err = e.execution?.error ?? {};\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    workflow: e.workflow?.name ?? '',\n    node: err.node?.name ?? e.execution?.lastNodeExecuted ?? '',\n    message: err.message ?? String(err),\n    execution_url: e.execution?.url ?? '',\n  },\n}];"
+      },
+      "id": "c1000000-0000-4000-8000-000000000002",
+      "name": "Format error row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Errors"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "workflow": "={{ $json.workflow }}",
+            "node": "={{ $json.node }}",
+            "message": "={{ $json.message }}",
+            "execution_url": "={{ $json.execution_url }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "c1000000-0000-4000-8000-000000000003",
+      "name": "Append error row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [640, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": { "main": [[{ "node": "Format error row", "type": "main", "index": 0 }]] },
+    "Format error row": { "main": [[{ "node": "Append error row", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "active": false
+}

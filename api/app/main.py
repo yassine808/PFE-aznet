@@ -2,8 +2,9 @@
 from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 
-from app import extraction
+from app import daily_report, extraction
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError
@@ -70,3 +71,20 @@ async def process(
         transcription=transcription,
         warnings=warnings,
     )
+
+
+class DailyReportRequest(BaseModel):
+    """Payload built by the n8n end-of-day cron from today's Sheet rows."""
+
+    date: str = Field(..., description="Date du jour (ex: 2026-07-23)")
+    rows: List[dict] = Field(..., description="Lignes du Sheet pour la date donnée")
+
+
+@app.post("/daily-report", response_model=daily_report.DailyReportContent)
+def daily_report_endpoint(payload: DailyReportRequest) -> daily_report.DailyReportContent:
+    if not payload.rows:
+        raise HTTPException(422, "No rows for the given date")
+    try:
+        return daily_report.generate_daily_report(payload.date, payload.rows)
+    except daily_report.DailyReportError as exc:
+        raise HTTPException(502, f"daily report failed: {exc}") from exc

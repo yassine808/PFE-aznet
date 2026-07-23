@@ -10,7 +10,7 @@
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1,
-      "position": [260, 300],
+      "position": [200, 300],
       "webhookId": "telegram-voice-reception",
       "credentials": {
         "telegramApi": {
@@ -21,14 +21,73 @@
     },
     {
       "parameters": {
+        "jsCode": "// Voice note OR forwarded/uploaded audio file — same pipeline.\n// Non-media messages are dropped.\nconst out = [];\nfor (const item of $input.all()) {\n  const m = item.json.message;\n  const media = m?.voice ?? m?.audio;\n  if (media) {\n    out.push({\n      json: {\n        file_id: media.file_id,\n        chat_id: m.chat.id,\n        message_id: m.message_id,\n        user_id: m.from?.id,\n        is_forwarded: Boolean(m.forward_date || m.forward_origin),\n        technicien: m.from?.first_name ?? String(m.from?.id),\n      },\n    });\n  }\n}\nreturn out;"
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Extract voice msgs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Access control: allowlist of Telegram user IDs with roles.\n// Edit this table when staff changes (moves to a settings panel post-PFE).\n// role: 'technicien' | 'directeur' — reply/report behavior can branch on it.\nconst ALLOWLIST = {\n  // '123456789': { name: 'Yassine', role: 'directeur' },\n  // '987654321': { name: 'Ahmed', role: 'technicien' },\n};\nconst s = $getWorkflowStaticData('global');\ns.hrRepliedTo = s.hrRepliedTo ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  const entry = ALLOWLIST[String(item.json.user_id)];\n  if (entry) {\n    out.push({ json: { ...item.json, technicien: entry.name, role: entry.role, authorized: true } });\n  } else if (!s.hrRepliedTo[item.json.chat_id]) {\n    // Outsider: exactly ONE automated HR-contact reply per chat, then silence.\n    s.hrRepliedTo[item.json.chat_id] = true;\n    out.push({ json: { ...item.json, authorized: false } });\n  }\n}\nreturn out;"
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Access control",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Authorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>",
+        "additionalFields": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "HR reply (outsider)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1080, 480],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
+    },
+    {
+      "parameters": {
         "resource": "file",
-        "fileId": "={{ $json.message.voice.file_id }}"
+        "fileId": "={{ $json.file_id }}"
       },
       "id": "a1000000-0000-4000-8000-000000000002",
       "name": "Get Voice File",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
-      "position": [520, 300],
+      "position": [1080, 180],
       "credentials": {
         "telegramApi": {
           "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
@@ -57,17 +116,95 @@
       "name": "POST /process",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [780, 300]
+      "position": [1300, 180]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Rapports"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $now.toFormat('yyyy-MM-dd') }}",
+            "heure": "={{ $now.toFormat('HH:mm') }}",
+            "technicien": "={{ $('Access control').item.json.technicien }}",
+            "role": "={{ $('Access control').item.json.role }}",
+            "chantier": "={{ $json.report.chantier }}",
+            "client": "={{ $json.report.client }}",
+            "type_activite": "={{ $json.report.type_activite }}",
+            "goulottes_m": "={{ $json.report.goulottes_m }}",
+            "cables_m": "={{ $json.report.cables_m }}",
+            "bureaux_termines": "={{ $json.report.bureaux_termines }}",
+            "panneaux_raccordes": "={{ $json.report.panneaux_raccordes }}",
+            "autres_travaux": "={{ $json.report.autres_travaux }}",
+            "observations": "={{ $json.report.observations }}",
+            "resume": "={{ $json.report.resume }}",
+            "rapport_complet": "={{ $json.rapport_complet }}",
+            "confidence": "={{ $json.transcription?.confidence }}",
+            "flag_review": "={{ ($json.warnings ?? []).includes('low_confidence_transcription') || ($json.warnings ?? []).includes('short_transcription') }}",
+            "lien_audio": "={{ $('Access control').item.json.file_id }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Append Sheet row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1520, 180],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Access control').item.json.chat_id }}",
+        "text": "=✅ Rapport enregistré\n\n{{ $('POST /process').item.json.report.resume }}{{ $('POST /process').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('POST /process').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('POST /process').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Access control').item.json.message_id }}"
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000009",
+      "name": "Reply with summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1740, 180],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
     }
   ],
   "connections": {
-    "Telegram Trigger": {
-      "main": [[{ "node": "Get Voice File", "type": "main", "index": 0 }]]
+    "Telegram Trigger": { "main": [[{ "node": "Extract voice msgs", "type": "main", "index": 0 }]] },
+    "Extract voice msgs": { "main": [[{ "node": "Access control", "type": "main", "index": 0 }]] },
+    "Access control": { "main": [[{ "node": "Authorized?", "type": "main", "index": 0 }]] },
+    "Authorized?": {
+      "main": [
+        [{ "node": "Get Voice File", "type": "main", "index": 0 }],
+        [{ "node": "HR reply (outsider)", "type": "main", "index": 0 }]
+      ]
     },
-    "Get Voice File": {
-      "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]]
-    }
+    "Get Voice File": { "main": [[{ "node": "POST /process", "type": "main", "index": 0 }]] },
+    "POST /process": { "main": [[{ "node": "Append Sheet row", "type": "main", "index": 0 }]] },
+    "Append Sheet row": { "main": [[{ "node": "Reply with summary", "type": "main", "index": 0 }]] }
   },
-  "settings": {},
+  "settings": { "errorWorkflow": "" },
   "active": false
 }
