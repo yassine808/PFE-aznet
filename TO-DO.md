@@ -33,9 +33,9 @@ Full config walkthrough: `docs/setup-guide.md`.
 - [x] **Unified reception workflow** (`n8n/reception-unified.json`) — one workflow, both triggers, shared allowlist/pipeline/Sheet (`canal` column), channel-aware replies. Fully patched: credential IDs, spreadsheet ID + column schema, allowlist (TG `<TELEGRAM_USER_ID>`, WA `<WHATSAPP_NUMBER>`), env-based tokens.
 - [x] n8n credentials created (Telegram, WhatsApp OAuth, WhatsApp API + WABA `<WABA_ID>`, Google service account `n8n-sheets@pfe-aznet`); env passthrough + `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` in compose
 - [x] Google Sheet `Rapports` created (headers split), shared with service account
-- [ ] Telegram E2E smoke test: voice → ⏳ → ✅ → Sheet row (was in progress at session end)
-- [ ] Register WhatsApp webhook in Meta (cloudflared tunnel → WEBHOOK_URL → re-enable WhatsApp Trigger node → Configuration → subscribe `messages`) → WA test
-- [ ] Durable WhatsApp token: System User token (test-mode temp tokens die in 24h)
+- [x] Telegram E2E smoke test: voice → ⏳ → ✅ → Sheet row
+- [x] WhatsApp E2E: webhook registered (manual GET-echo webhook — n8n WhatsApp Trigger fails Meta's challenge), app published (gist privacy policy), **app subscribed to WABA via `POST /subscribed_apps`** (root cause of silent non-delivery: only Meta's internal test app was subscribed), media download via HTTP node + predefined WhatsApp credential (native download op = Bad request)
+- [x] Durable WhatsApp token: System User token (never expires) in n8n `WhatsApp account` credential
 
 ## Workflow improvements (discussed 2026-07-23, cheap → expensive)
 - [x] Text-message input: typed reports on both channels → `Audio or text?` fork, `POST /process (text)` with `text` form field (bot commands `/...` ignored)
@@ -45,6 +45,7 @@ Full config walkthrough: `docs/setup-guide.md`.
 - [ ] Durable audio links: upload audio to Google Drive, store share link in `lien_audio` (file_id/media_id not durable; Meta media URLs expire ~5 min)
 - [ ] Caption support: audio sent WITH caption (mostly Telegram) → needs optional `caption` form field on `/process`, merged into text before extraction
 - [ ] Boss commands: `directeur` role sends "/rapport" text → bot replies with today's rollup on demand (reuses `/daily-report`)
+- [ ] Ack via emoji reaction instead of "⏳ Traitement en cours..." message: react on the sent voice note (TG `setMessageReaction`, WA `POST /messages type=reaction` on the wamid) — less chat noise, same signal
 
 ## Notes
 - "Add some solutions or critical things to be aware of" — captured in vault/roadmap.md cut-line + contradictions sections
