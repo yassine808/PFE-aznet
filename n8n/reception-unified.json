@@ -63,29 +63,7 @@
     },
     {
       "parameters": {
-        "updates": [
-          "messages"
-        ]
-      },
-      "id": "f1000000-0000-4000-8000-000000000005",
-      "name": "WhatsApp Trigger",
-      "type": "n8n-nodes-base.whatsAppTrigger",
-      "typeVersion": 1,
-      "position": [
-        500,
-        420
-      ],
-      "webhookId": "whatsapp-reception-unified",
-      "credentials": {
-        "whatsAppTriggerApi": {
-          "id": "b0ZOTKEXSgT8hyv0",
-          "name": "WhatsApp OAuth account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// WhatsApp: audio (voice + forwarded both type 'audio') OR typed text report.\n// Dedupe: Meta retries webhook deliveries on slow/failed responses.\nconst s = $getWorkflowStaticData('global');\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  const v = item.json;\n  const contactName = v?.contacts?.[0]?.profile?.name;\n  for (const m of v?.messages ?? []) {\n    const key = 'wa:' + m.id;\n    if (s.processedMsgs[key]) continue;\n    const base = {\n      channel: 'whatsapp',\n      chat_id: m.from,\n      message_id: m.id,\n      user_id: String(m.from),\n      is_forwarded: Boolean(m.context?.forwarded),\n      technicien: contactName ?? m.from,\n    };\n    if (m.type === 'audio' && m.audio?.id) {\n      s.processedMsgs[key] = true;\n      out.push({ json: { ...base, kind: 'audio', file_ref: m.audio.id } });\n    } else if (m.type === 'text' && m.text?.body) {\n      s.processedMsgs[key] = true;\n      out.push({ json: { ...base, kind: 'text', text_input: m.text.body, file_ref: null } });\n    }\n  }\n}\nreturn out;"
+        "jsCode": "// WhatsApp Cloud API webhook payload (manual webhook: wrapped in body).\n// Voice notes and forwarded audio both arrive as type 'audio'. Text reports supported.\n// Dedupe: Meta retries webhook deliveries on slow/failed responses.\nconst s = $getWorkflowStaticData('global');\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  for (const entry of item.json.body?.entry ?? []) {\n    for (const change of entry.changes ?? []) {\n      const v = change.value;\n      const contactName = v?.contacts?.[0]?.profile?.name;\n      for (const m of v?.messages ?? []) {\n        const key = 'wa:' + m.id;\n        if (s.processedMsgs[key]) continue;\n        const base = {\n          channel: 'whatsapp',\n          chat_id: m.from,\n          message_id: m.id,\n          user_id: String(m.from),\n          is_forwarded: Boolean(m.context?.forwarded),\n          technicien: contactName ?? m.from,\n        };\n        if (m.type === 'audio' && m.audio?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'audio', file_ref: m.audio.id } });\n        } else if (m.type === 'text' && m.text?.body) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'text', text_input: m.text.body, file_ref: null } });\n        }\n      }\n    }\n  }\n}\nreturn out;"
       },
       "id": "f1000000-0000-4000-8000-000000000006",
       "name": "Extract WA msgs",
@@ -324,14 +302,22 @@
     },
     {
       "parameters": {
-        "resource": "media",
-        "operation": "mediaUrlGetDownload",
-        "mediaGetId": "={{ $('Access control').item.json.file_ref }}"
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
       },
       "id": "f1000000-0000-4000-8000-00000000000f",
       "name": "WA Download audio",
-      "type": "n8n-nodes-base.whatsApp",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         2320,
         180
@@ -869,6 +855,54 @@
           "name": "WhatsApp account"
         }
       }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "whatsapp-unified",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-0000000000a1",
+      "name": "WA Webhook verify (GET)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        300,
+        560
+      ],
+      "webhookId": "wa-unified-verify"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.verify_token'] === 'pfe-aznet-verify' ? $json.query['hub.challenge'] : 'forbidden' }}",
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-0000000000a2",
+      "name": "WA Echo challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-unified",
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-0000000000a3",
+      "name": "WA Webhook messages (POST)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        300,
+        420
+      ],
+      "webhookId": "wa-unified-messages"
     }
   ],
   "connections": {
@@ -910,17 +944,6 @@
         [
           {
             "node": "Access control",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "WhatsApp Trigger": {
-      "main": [
-        [
-          {
-            "node": "Extract WA msgs",
             "type": "main",
             "index": 0
           }
@@ -1182,6 +1205,28 @@
         [
           {
             "node": "WA reply summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA Webhook verify (GET)": {
+      "main": [
+        [
+          {
+            "node": "WA Echo challenge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA Webhook messages (POST)": {
+      "main": [
+        [
+          {
+            "node": "Extract WA msgs",
             "type": "main",
             "index": 0
           }
