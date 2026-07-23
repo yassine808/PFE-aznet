@@ -2,204 +2,110 @@
 tags: [pfe, extraction, llm, gemini, groq, schemas]
 type: technical
 priority: high
-status: partial
+status: current
 ---
-
-> **Reality check (2026-07-23):** substantial parts of this doc describe an API contract, file layout, or tooling that was never built (e.g. JSON+base64 `/process` body with metadata in the request, `ExtractedReport` fields like `technicien`/`type_travail`/`cables_tires`, ngrok, CI workflows, `requirements-dev.txt`, `.vscode/` configs). The real `/process` contract is multipart file upload (`audio`/`text` form fields), metadata is added by n8n *after* the API responds, and the real schema is in `api/app/schemas.py`. Treat concrete claims here as aspirational/unverified unless they match the real source files in `api/app/`, `api/tests/`, and `n8n/`.
 
 # Extraction Pipeline
 
 ## Overview
 
-LLM-based structured extraction from Darija transcript → Professional French report (`ExtractedReport` schema).
+LLM-based structured extraction: raw transcript (Darija/French/mixed) → `ExtractedReport` (see [[API Schemas]]).
 
-**Primary:** Gemini 1.5 Flash (structured output)  
-**Fallback:** Groq Llama-3.1-70B (JSON mode)  
-**Never:** Silent fallback, invented data
+**Primary:** Gemini structured output (`gemini_model` setting, currently `gemini-flash-lite-latest`)
+**Fallback:** Groq Llama JSON mode (`groq_llm_model`, currently `llama-3.3-70b-versatile`)
+**Never:** silent fallback, invented data — both engines failing raises a combined `ExtractionError`
 
-## Pipeline Flow
+Implementation: `api/app/extraction.py`.
+
+## Pipeline flow
 
 ```
-Transcription (Darija text)
-         │
-         ▼
-┌─────────────────────┐
-│  Build Prompt       │
-│  - Schema context   │
-│  - Few-shot examples│
-│  - Null enforcement │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Gemini Structured  │──── Success ──▶ ExtractedReport
-│  Output             │
-└─────────┬───────────┘
-          │ Failure
-          ▼
-┌─────────────────────┐
-│  Groq JSON Mode     │──── Success ──▶ ExtractedReport
-└─────────┬───────────┘
-          │ Failure
-          ▼
-    ExtractionError (502)
+rapport_complet (text)
+     │
+     ▼
+_extract_gemini()  ── success ──▶ ExtractedReport
+     │ ExtractionError
+     ▼
+_extract_groq()    ── success ──▶ ExtractedReport
+     │ ExtractionError
+     ▼
+ExtractionError("extraction failed on both engines — gemini: ... | groq: ...")
 ```
 
-## Prompt Engineering
+`extract_report()` in `extraction.py` is the entry point; `api/app/main.py` catches `ExtractionError` and turns it into an HTTP 502.
 
-### System Prompt (Gemini)
+## Prompt
+
+Single shared instruction string (`_INSTRUCTIONS` in `extraction.py`), not a separate system/few-shot pair. It tells the model:
+- The text is a Moroccan cabling technician's daily report, possibly Darija/French/mixed, often from an imperfect voice transcription
+- Correct plausible STT errors using domain vocabulary (goulotte, câble réseau, panneau de brassage, prise RJ45, baie, bureau, étage, chantier)
+- Convert spoken numbers (in words, Arabic or French) to digits
+- Absent field → `null`, never invent
+- `resume`: 2-4 professional French sentences, third person, chef-de-chantier report style — always filled
+
+There are no separate few-shot examples embedded in code; the instructions above are the entire prompt, concatenated with the transcript.
+
+## Gemini path
 
 ```python
-SYSTEM_PROMPT = """Tu es un extracteur de rapports techniques pour techniciens câbleurs au Maroc.
-
-RÈGLES STRICTES:
-1. Extrais UNIQUEMENT ce qui est explicitement dit. Si absent → null.
-2. JAMAIS d'invention, JAMAIS de déduction.
-3. "resume" : français professionnel, style rapport d'intervention.
-4. Termes techniques en français : goulotte, câble, tirage, pose, chantier.
-5. Confiance extraction : "high"/"medium"/"low" selon clarté audio.
-
-SCHÉMA: ExtractedReport (tous champs optionnels)"""
+client.models.generate_content(
+    model=settings.gemini_model,
+    contents=_INSTRUCTIONS + text,
+    config={"response_mime_type": "application/json", "response_schema": ExtractedReport},
+)
 ```
+Uses `response.parsed`; raises `ExtractionError` if it isn't an `ExtractedReport` instance or the API call throws.
 
-### Few-Shot Examples (3)
+## Groq path (fallback)
+
+Builds a `schema_hint` from `ExtractedReport.model_json_schema()` and asks for `{"type": "json_object"}` mode:
 
 ```python
-EXAMPLES = [
-    {
-        "input": "Salam, aujourd'hui 23 juillet, chantier Hay Riad. On a tiré 150m goulotte, posé 5 boîtes. Problème: goulotte cassée à l'entrée.",
-        "output": {
-            "technicien": None, "date": "2026-07-23", "chantier": "Hay Riad",
-            "type_travail": "tirage", "goulottes_m": 150.0, "cables_tires": None,
-            "equipements_poses": 5, "problemes": ["goulotte cassée à l'entrée"],
-            "observations": None, "resume": "Tirage de 150m de goulotte et pose de 5 boîtes au chantier Hay Riad. Incident: goulotte endommagée à l'entrée.",
-            "stt_confidence_low": False, "extraction_confidence": "high"
-        }
-    },
-    # ... 2 more examples
-]
+client.chat.completions.create(
+    model=settings.groq_llm_model,
+    response_format={"type": "json_object"},
+    messages=[{"role": "system", "content": _INSTRUCTIONS + f"\nRéponds en JSON avec exactement ces clés: {schema_hint}"},
+              {"role": "user", "content": text}],
+)
 ```
+Parses the response content with `ExtractedReport.model_validate_json`.
 
-### User Prompt Template
+## Error handling
 
 ```python
-USER_PROMPT = f"""Transcription (Darija):
-{transcription}
-
-Extrais le rapport structuré. Champs absents = null."""
+class ExtractionError(RuntimeError):
+    pass
 ```
+No custom fields (`gemini_error`/`groq_error` attributes, `provider`, etc.) — the combined message string carries both underlying errors. No retry/backoff logic exists in `extraction.py` today; a call either succeeds or raises immediately.
 
-## Schema: ExtractedReport
+## Confidence
+
+There is no `extraction_confidence` field on `ExtractedReport` and no "high/medium/low" concept from the LLM. The only quality signals are:
+- `warnings: ["short_transcription"]` — set in `main.py` when `rapport_complet` < 10 chars
+- `warnings: ["low_confidence_transcription"]` — set when the STT `TranscriptionInfo.confidence` (Groq only) is below 0.5
+
+Both live on `ProcessResponse`, not on `ExtractedReport`.
+
+## Configuration (`api/app/config.py`)
 
 ```python
-class ExtractedReport(BaseModel):
-    # Identification (from metadata + extraction)
-    technicien: Optional[str] = None
-    date: Optional[str] = None          # YYYY-MM-DD
-    chantier: Optional[str] = None
-    
-    # Work performed
-    type_travail: Optional[str] = None  # "tirage" | "pose" | "maintenance" | "reparation"
-    goulottes_m: Optional[float] = None
-    cables_tires: Optional[int] = None
-    equipements_poses: Optional[int] = None
-    
-    # Issues & observations
-    problemes: List[str] = Field(default_factory=list)
-    observations: Optional[str] = None
-    
-    # Professional summary (French)
-    resume: Optional[str] = None
-    
-    # Confidence flags
-    stt_confidence_low: bool = False
-    extraction_confidence: Literal["high", "medium", "low"] = "medium"
+groq_api_key: Optional[str] = None
+gemini_api_key: Optional[str] = None
+gemini_model: str = "gemini-flash-lite-latest"
+groq_llm_model: str = "llama-3.3-70b-versatile"
 ```
+Keys optional at startup, checked at call time with a clear `ExtractionError` message (`"GEMINI_API_KEY not configured"` / `"GROQ_API_KEY not configured"`). No `EXTRACTION_TIMEOUT` or `EXTRACTION_MAX_RETRIES` settings exist.
 
-**Field Notes:**
-- All optional → LLM can return null
-- `problemes` = array (multiple issues possible)
-- `resume` = generated French paragraph
-- Confidence fields help downstream filtering
+## Testing
 
-## Error Handling
+`api/tests/` has no dedicated `test_extraction.py` file today — extraction is exercised indirectly through `test_process_endpoint.py` (mocking `app.extraction.genai`/`groq` at the import boundary) and validated for schema shape in `test_schemas.py`. There is no golden 20-transcription dataset yet; that's part of the Sprint-1 benchmark work (see [[STT Benchmark]], PLAN.md).
 
-### ExtractionError
-```python
-class ExtractionError(Exception):
-    def __init__(self, primary_error: str, fallback_error: str):
-        self.primary_error = primary_error    # Gemini error
-        self.fallback_error = fallback_error  # Groq error
-        super().__init__(f"Both providers failed. Gemini: {primary_error} | Groq: {fallback_error}")
-```
+## Not built yet
 
-### Retry Logic
-- Gemini: 2 retries, exponential backoff (1s, 2s)
-- Groq: 1 retry, 2s backoff
-- Total timeout: 30s
-
-## Confidence Scoring
-
-### STT Confidence (set by API)
-```python
-if len(transcription.strip()) < 10:
-    result.stt_confidence_low = True
-    result.metadata["stt_warning"] = "short_transcription"
-```
-
-### Extraction Confidence (set by LLM)
-- **high**: Clear transcription, all key fields extracted
-- **medium**: Some ambiguity, partial extraction
-- **low**: Noisy transcription, many nulls, contradictory info
-
-## Testing Strategy
-
-### Unit Tests (`tests/test_extraction.py`)
-- Mock Gemini & Groq clients
-- Test prompt construction
-- Test schema validation
-- Test error propagation
-
-### Integration Tests
-- Real API calls (optional, requires keys)
-- Golden dataset: 20 transcriptions → expected reports
-
-### Test Cases
-| Input Type | Expected Behavior |
-|------------|-------------------|
-| Clean, complete | All fields populated, high confidence |
-| Partial info | Present fields filled, rest null |
-| Noisy/garbled | Low confidence, minimal extraction |
-| Empty/short | stt_confidence_low=true, low extraction |
-| Technical terms | Correct French terminology |
-
-## Configuration
-
-```python
-# api/app/config.py
-class Settings(BaseSettings):
-    GEMINI_API_KEY: Optional[str] = None
-    GROQ_API_KEY: Optional[str] = None
-    
-    EXTRACTION_TIMEOUT: int = 30
-    GEMINI_MODEL: str = "gemini-1.5-flash"
-    GROQ_MODEL: str = "llama-3.1-70b-versatile"
-    
-    EXTRACTION_MAX_RETRIES: int = 2
-```
-
-## API Key Management
-
-- Keys optional at startup (checked at call time)
-- Clear error if missing: `"GEMINI_API_KEY not configured"`
-- No keys in logs, no keys in repo
-
-## Future Improvements
-
-1. **Fine-tuned Darija model** for extraction (if budget allows)
-2. **Confidence calibration** with human labels
-3. **Multi-pass extraction** for complex notes
-4. **Schema versioning** for backward compatibility
+- Golden-set extraction accuracy eval (PLAN.md Sprint 1 exit criterion)
+- Confidence calibration / "high/medium/low" bucketing on extraction
+- Retry/backoff on the LLM calls
+- Multi-pass or parallel sub-extraction
 
 ## Related Notes
 

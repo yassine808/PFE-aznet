@@ -5,7 +5,7 @@ priority: high
 status: partial
 ---
 
-> **Reality check (2026-07-23):** substantial parts of this doc describe an API contract, file layout, or tooling that was never built (e.g. JSON+base64 `/process` body with metadata in the request, `ExtractedReport` fields like `technicien`/`type_travail`/`cables_tires`, ngrok, CI workflows, `requirements-dev.txt`, `.vscode/` configs). The real `/process` contract is multipart file upload (`audio`/`text` form fields), metadata is added by n8n *after* the API responds, and the real schema is in `api/app/schemas.py`. Treat concrete claims here as aspirational/unverified unless they match the real source files in `api/app/`, `api/tests/`, and `n8n/`.
+> **Note on status:** the system-boundary, API, STT, and extraction sections below describe what's actually built (Week 1, Jul 23 2026). The deployment, monitoring and scaling sections at the bottom describe **plans**, not running infrastructure — Vercel/VPS deployment, Prometheus/Grafana, and CI/CD do not exist in this repo yet. See PLAN.md for the real sprint timeline.
 
 # Architecture Details
 
@@ -13,267 +13,101 @@ status: partial
 
 ### n8n (Orchestration Layer)
 **Responsibilities:**
-- Telegram message reception (polling/webhook)
-- Audio file download from Telegram
-- Base64 encoding of audio
-- Metadata extraction (date, technicien, audio URL)
-- HTTP call to API `/process`
-- Google Sheets row append
-- Email notification dispatch
-- Error handling & retry logic
-- Workflow versioning
+- Telegram message reception (polling for dev; webhook for pilot, per `n8n/README.md`)
+- Voice/audio file download from Telegram
+- HTTP call to API `/process` (multipart form, not JSON+base64)
+- Adding metadata (date, technicien, lien_audio) to the row *after* the API responds
+- (Planned, not yet built) Google Sheets row append, email notification, Telegram confirmation reply
 
-**NOT responsible for:**
-- STT processing
-- LLM extraction
-- Business logic validation
+**NOT responsible for:** STT processing, LLM extraction, business logic validation — that's the API's job.
 
-### API (AI Microservice)
+### API (AI Microservice — `api/`)
 **Responsibilities:**
-- Single endpoint: `POST /process`
-- STT provider selection & execution
-- LLM extraction (Gemini → Groq fallback)
-- Schema validation (ExtractedReport)
-- Error contract)
-- Returns structured data only
+- Single endpoint: `POST /process` (`api/app/main.py`)
+- STT provider selection & execution (strategy pattern, `api/app/providers/`)
+- LLM extraction: Gemini primary → Groq fallback (`api/app/extraction.py`)
+- Schema validation (`ExtractedReport`, `api/app/schemas.py`)
+- Structured error contract (422 / 502)
 
-**NOT responsible for:**
-- Telegram integration
-- Google Sheets
-- Email sending
-- Metadata enrichment
+**NOT responsible for:** Telegram integration, Google Sheets, email, metadata enrichment.
 
 ## API Design
 
-### Endpoint: `POST /process`
+### `POST /process`
+
+Multipart form data — exactly one of:
+```
+audio: <file upload>            # + optional `provider` field to override STT engine
+text: "<raw report text>"       # web form mode
+```
+No JSON body, no base64, no `metadata` object — n8n never sends metadata to the API.
+
+### Response: `ProcessResponse`
 
 ```python
-# Voice mode
-{
-  "audio": "base64_encoded_audio",
-  "metadata": {
-    "date": "2026-07-23",
-    "technicien": "Ahmed",
-    "lien_audio": "https://api.telegram.org/file/bot<token>/..."
-  }
-}
-
-# Text mode (web form)
-{
-  "text": "Transcribed text from technician...",
-  "metadata": { ... }
-}
+class ProcessResponse(BaseModel):
+    rapport_complet: str
+    report: ExtractedReport
+    transcription: Optional[TranscriptionInfo]
+    warnings: List[str] = []
 ```
-
-**Validation:** Exactly one of `audio` or `text` required (XOR).
-
-### Response: `ExtractedReport`
-
-```python
-class ExtractedReport(BaseModel):
-    # Identification
-    technicien: Optional[str] = None
-    date: Optional[str] = None
-    chantier: Optional[str] = None
-    
-    # Work details
-    type_travail: Optional[str] = None  # "tirage", "pose", "maintenance"
-    goulottes_m: Optional[float] = None
-    cables_tires: Optional[int] = None
-   'equipements_poses': Optional[int] = None
-    
-    # Issues & observations
-    problemes: List[str] = []
-    observations: Optional[str] = None
-    
-    # Summary (French)
-    resume: Optional[str] = None
-    
-    # Confidence flags
-    stt_confidence_low: bool = False
-    extraction_confidence: Literal["high", "medium", "low"] = "medium"
-```
+See [[API Schemas]] for the full field list — there is no `technicien`/`date`/`type_travail`/`cables_tires`/`stt_confidence_low`/`extraction_confidence` on `ExtractedReport`; those were fabricated in an earlier version of this doc.
 
 ## STT Provider Architecture
 
-### Strategy Pattern Implementation
+### Strategy pattern (`api/app/providers/`)
 
 ```
-TranscriptionProvider (ABC)
-    ├── transcribe(audio_bytes) -> TranscriptionResult
-    ├── name: str
-    └── supports_format(format) -> bool
+TranscriptionProvider (ABC, base.py)
+    └── transcribe(audio: bytes, mime_type: str) -> TranscriptionInfo
 
-Registry: @register("groq") / @register("gemini") / @register("hf-darija")
+Registry (__init__.py): @register("groq") / @register("gemini") / @register("hf-darija")
 ```
+Adapters (`groq_whisper.py`, `gemini_audio.py`, `hf_darija.py`) are imported at the bottom of `providers/__init__.py` purely to trigger their `@register` decorators.
 
-### Providers
+| Provider | Engine | Confidence | Notes |
+|---|---|---|---|
+| `groq` | Whisper-large-v3 (Groq free tier) | derived from `avg_logprob` | current default (`stt_provider` in config) |
+| `gemini` | Gemini native audio input | `None` (no logprob exposed) | |
+| `hf-darija` | HF Inference API Darija fine-tune | `None` | checkpoint provisional, benchmark pending |
 
-| Provider | Model | Cost | Darija Support | Latency |
-|----------|-------|------|----------------|---------|
-| **Groq** | Whisper-large-v3 | Free tier | Good | ~1-2s |
-| **Gemini** | Gemini-1.5-flash | Free tier | Good | ~2-3s |
-| **HF Darija** | custom-darija-model | Free tier | Best (specialized) | ~3-5s |
-
-### Selection Logic
-
-```python
-# config.py - DEFAULT_PROVIDER set after benchmark
-DEFAULT_PROVIDER = "groq"  # TBD after Week 1 benchmark
-
-# Runtime override via metadata
-metadata.get("stt_provider", DEFAULT_PROVIDER)
-```
+Selection: `settings.stt_provider` (default `"groq"`, pending the Week-1 benchmark per PLAN.md), overridable per-request via the `provider` form field.
 
 ## Extraction Pipeline
 
-### Primary: Gemini Structured Output
+See [[Extraction Pipeline]] for full detail. Primary Gemini structured output (`response_schema=ExtractedReport`), fallback Groq JSON mode. No retries, no confidence bucketing.
 
-```python
-model = genai.GenerativeModel(
-    "gemini-1.5-flash",
-    generation_config={
-        "response_mime_type": "application/json",
-        "response_schema": ExtractedReport,
-    }
-)
-```
+### Error contract
 
-**Prompt enforces:**
-- Null for absent fields (never invent)
-- French professional tone for `resume`
-- Confidence assessment
+| Error | HTTP | n8n handling (planned) |
+|---|---|---|
+| Bad input / unknown provider | 422 | Flag row |
+| STT engine failure | 502 | Flag row |
+| Extraction — both engines fail | 502 | Flag row |
+| Short transcription (<10 chars) | 200 + `warnings` | Process anyway, flag |
 
-### Fallback: Groq JSON Mode
+## n8n Workflow (actual)
 
-```python
-client.chat.completions.create(
-    model="llama-3.1-70b-versatile",
-    response_format={"type": "json_object"},
-    messages=[...]
-)
-```
-
-### Error Contract
-
-| Error | HTTP | n8n Handling |
-|-------|------|--------------|
-| Bad input / unknown provider | 422 | Flag row, alert |
-| STT engine failure | 502 | Retry (3x), then flag |
-| Extraction both fail | 502 | Flag row, alert |
-| Short transcription (<10 chars) | 200 + warning | Process anyway, flag |
-
-## n8n Workflow Design
-
-### Workflow 1: Telegram Reception (Polling)
-```
-Telegram Trigger (polling) 
-    → Download File 
-    → Extract Metadata 
-    → Base64 Encode Audio 
-    → HTTP Request to API 
-    → Google Sheets Append 
-    → Email Notification
-    → Error Handler (Slack/Email alert)
-```
-
-### Workflow 2: Telegram Reception (Webhook - Pilot)
-```
-Webhook (Telegram callback)
-    → Verify Signature
-    → Same as polling
-```
-
-### Workflow 3: Web Form (Manual)
-```
-Webhook (form submit)
-    → Validate
-    → HTTP Request (text mode)
-    → Sheets + Email
-```
+Only one reception path exists today: **Telegram polling** (`n8n/telegram-reception-polling.json`), plus a webhook variant (`n8n/telegram-reception.json`) targeted at the pilot. See [[n8n Workflows]] for the real node-by-node breakdown. Sheets append and email notification are **not implemented** — see TO-DO.md / PLAN.md Sprint 2.
 
 ## Data Models
 
-### Google Sheets Columns
+Google Sheets column layout does not exist yet — no sheet has been created, no n8n Sheets node configured. Do not treat any column table as current; see [[Google Sheets Integration]] for the honest plan.
 
-| Column | Source | Type |
-|--------|--------|------|
-| Date | metadata.date | Date |
-| Technicien | metadata.technicien | String |
-| Chantier | extracted.chantier | String |
-| Type Travail | extracted.type_travail | String |
-| Goulottes (m) | extracted.goulottes_m | Number |
-| Câbles Tirés | extracted.cables_tires | Number |
-| Équipements Posés | extracted.equipements_poses | Number |
-| Problèmes | extracted.problemes | String (JSON array) |
-| Observations | extracted.observations | String |
-| Résumé | extracted.resume | String |
-| Lien Audio | metadata.lien_audio | URL |
-| STT Confidence Low | extracted.stt_confidence_low | Boolean |
-| Extraction Confidence | extracted.extraction_confidence | Enum |
-| Created At | n8n execution time | DateTime |
+---
 
-## Deployment Architecture
+## Deployment Architecture (planned, not built)
 
-### Development
-```
-Local: n8n (Docker) → API (uvicorn :8000) → ngrok tunnel → Telegram webhook
-```
+Per PLAN.md: dev is Docker Compose (n8n) + local `uvicorn` for the API, with a Cloudflare tunnel (`cloudflared`) for webhook mode — **not ngrok**. Pilot target is the same Docker Compose stack on the aznet server if available, otherwise an Oracle Always Free VM. React dashboard, if built, targets Vercel free tier. None of this is provisioned yet; no `vercel.json`, no VPS, no CI/CD workflow exists in the repo.
 
-### Pilot / Production
-```
-Vercel: API (serverless functions)
-VPS: n8n (Docker, persistent)
-Telegram: Webhook → VPS n8n
-```
+## Security (planned)
 
-### Vercel Config (`vercel.json`)
-```json
-{
-  "builds": [{ "src": "api/app/main.py", "use": "@vercel/python" }],
-  "routes": [{ "src": "/(.*)", "dest": "api/app/main.py" }],
-  "functions": {
-    "api/app/main.py": { "maxDuration": 30 }
-  }
-}
-```
+- API keys in environment variables only (this part is real — see `api/app/config.py`)
+- Everything else (webhook secret verification, service-account scoping, VPS hardening) is design intent, not implemented — see [[Security Secrets]]
 
-## Error Handling Strategy
+## Monitoring & Observability (planned)
 
-### API Level
-- **Fail loud**: No silent fallbacks, no invented data
-- **Structured errors**: `TranscriptionError`, `ExtractionError` with provider context
-- **Timeouts**: 30s per provider, configurable
-
-### n8n Level
-- **Retry**: 3x with exponential backoff for 5xx
-- **Dead letter**: Failed executions → separate sheet + email alert
-- **Idempotency**: Telegram message ID as deduplication key
-
-## Security
-
-- API keys in environment variables only
-- Telegram webhook secret token verification
-- Google Sheets: Service account with minimal scope
-- Gmail: App password, not main password
-- No PII in logs (technician names OK, audio content not logged)
-
-## Monitoring & Observability
-
-### API (Vercel)
-- Function logs
-- Invocation count / duration / errors
-
-### n8n
-- Execution history (last 10k)
-- Workflow-level error rates
-- Custom webhook for alerts
-
-### Key Metrics
-- End-to-end latency (voice → sheet)
-- STT success rate by provider
-- Extraction confidence distribution
-- Failed executions / day
+No metrics, dashboards, or alerting exist. See [[Monitoring Observability]] for the honest plan.
 
 ## Related Notes
 
