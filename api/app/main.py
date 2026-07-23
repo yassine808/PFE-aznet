@@ -2,9 +2,10 @@
 from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import daily_report, extraction
+from app import daily_report, extraction, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError
@@ -14,6 +15,14 @@ app = FastAPI(
     title="AI Rapport Journalier — aznet",
     description="Voice/text daily report → structured JSON (PFE 2026)",
     version="0.1.0",
+)
+
+# Dashboard SPA calls from another origin (Vite dev :5173 / Vercel); Sheets creds stay server-side
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 MIN_USABLE_CHARS = 10
@@ -71,6 +80,32 @@ async def process(
         transcription=transcription,
         warnings=warnings,
     )
+
+
+# No auth: dashboard + API run only on the admin's machine (localhost), decided 2026-07-23.
+@app.get("/reports")
+def list_reports() -> dict:
+    try:
+        return {"reports": sheets.read_reports()}
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, f"sheets read failed: {exc}") from exc
+
+
+class ReportPatch(BaseModel):
+    field: str
+    value: Optional[str] = None
+
+
+@app.patch("/reports/{row}")
+def patch_report(row: int, payload: ReportPatch) -> dict:
+    if row < 2:
+        raise HTTPException(422, "row must be >= 2 (row 1 is the header)")
+    try:
+        sheets.update_report_field(row, payload.field, payload.value)
+    except sheets.SheetsError as exc:
+        detail = str(exc)
+        raise HTTPException(422 if "unknown column" in detail else 502, detail) from exc
+    return {"ok": True}
 
 
 class DailyReportRequest(BaseModel):
