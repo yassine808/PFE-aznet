@@ -12,8 +12,11 @@ services:
       # webhook URLs n8n auto-registers with Telegram must use the public tunnel/server URL
       - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
       # WhatsApp Cloud API (second reception channel, see n8n/README.md §8)
-      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN:-}
       - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID:-}
+      # Telegram polling (unified reception workflow reads $env.TELEGRAM_BOT_TOKEN)
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      # allow Code nodes / expressions to read $env.* (blocked by default in n8n 1.x+)
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     # NOTE: n8n's built-in tunnel (start --tunnel) is dead in modern n8n (2.x ignores it) — use cloudflared, see n8n/README.md
     volumes:
       - n8n_data:/home/node/.n8n

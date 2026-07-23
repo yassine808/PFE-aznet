@@ -5,16 +5,18 @@ priority: high
 status: partial
 ---
 
-> **Note on status:** Telegram reception (polling + webhook variants) is built and smoke-tested. Google Sheets append, email notification, and the manager dashboard read path are **not built yet** (PLAN.md Sprint 2). Treat those sections below as the plan, not current behavior.
+> **Status 2026-07-23:** channel decision changed — **both Telegram AND WhatsApp** are inputs now. The production workflow is `n8n/reception-unified.json` (dual-trigger), fully configured with credentials/allowlist/Sheet. Sheets append built (service account, `Rapports` tab). Companion workflows: `error-workflow.json` (Errors tab) and `daily-report-cron.json` (`POST /daily-report` → Gmail). Remaining: Telegram E2E smoke test, WhatsApp webhook registration (tunnel). **Full setup doc: `docs/setup-guide.md`.**
 
 # n8n Workflows
 
 ## Overview
 
-Two workflow files live in `n8n/`, both exported JSON, both covering the *same* reception job with different transport:
+Workflow files in `n8n/` (exported JSON):
 
-- `n8n/telegram-reception-polling.json` — **current dev approach.** Polls Telegram's `getUpdates` every 15s. Outbound-only, so plain `localhost` works — no tunnel needed.
-- `n8n/telegram-reception.json` — webhook variant, needs a public HTTPS tunnel (Cloudflare's `cloudflared`, not ngrok — n8n's built-in tunnel is dead in n8n 2.x). Targets the pilot.
+- `n8n/reception-unified.json` — **the one to run.** Telegram polling + WhatsApp webhook into one pipeline: extract (audio OR typed text, dedupe) → shared allowlist w/ roles (outsiders: one HR reply) → ⏳ ack → download per channel → `POST /process` (audio or text mode, error → ❌ reply) → Sheets append (`canal`, `confidence`, `flag_review`) → ✅ résumé reply on the originating channel.
+- `n8n/error-workflow.json` — Error Trigger → `Errors` sheet tab; set as Error Workflow on production workflows.
+- `n8n/daily-report-cron.json` — Mon–Sat 18:30, today's rows → `/daily-report` → email.
+- `n8n/telegram-reception-polling.json`, `n8n/telegram-reception.json`, `n8n/whatsapp-reception.json` — single-channel variants, superseded, kept as reference.
 
 ```
 Telegram (voice note / forwarded audio)

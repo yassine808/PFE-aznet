@@ -28,10 +28,13 @@ Hard deadline: Aug 31 2026. Most items need the admin dashboard (not built yet �
 - [ ] Image generation from report via free API (post-PFE or cut — burns free-tier quota)
 
 ## Channels (2026-07-23: keep BOTH Telegram + WhatsApp as inputs)
-- [x] WhatsApp Cloud API reception workflow (`n8n/whatsapp-reception.json`) — same access control + Sheet row as Telegram
-- [x] **Unified reception workflow** (`n8n/reception-unified.json`) — one workflow, both triggers (Telegram polling + WhatsApp webhook), shared allowlist/pipeline/Sheet (`canal` column), channel-aware replies (WA in → WA reply, TG in → TG reply). This is the one to run; single-channel JSONs kept as fallback.
-- [x] n8n credentials created (WhatsApp OAuth: App ID+Secret; WhatsApp API: token+WABA `<WABA_ID>`); `WHATSAPP_PHONE_NUMBER_ID` in .env
-- [ ] Register WhatsApp webhook in Meta (cloudflared tunnel + trigger URL → Configuration → subscribe `messages`) → send test voice note
+Full config walkthrough: `docs/setup-guide.md`.
+- [x] WhatsApp Cloud API reception workflow (`n8n/whatsapp-reception.json`) — superseded by unified
+- [x] **Unified reception workflow** (`n8n/reception-unified.json`) — one workflow, both triggers, shared allowlist/pipeline/Sheet (`canal` column), channel-aware replies. Fully patched: credential IDs, spreadsheet ID + column schema, allowlist (TG `<TELEGRAM_USER_ID>`, WA `<WHATSAPP_NUMBER>`), env-based tokens.
+- [x] n8n credentials created (Telegram, WhatsApp OAuth, WhatsApp API + WABA `<WABA_ID>`, Google service account `n8n-sheets@pfe-aznet`); env passthrough + `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` in compose
+- [x] Google Sheet `Rapports` created (headers split), shared with service account
+- [ ] Telegram E2E smoke test: voice → ⏳ → ✅ → Sheet row (was in progress at session end)
+- [ ] Register WhatsApp webhook in Meta (cloudflared tunnel → WEBHOOK_URL → re-enable WhatsApp Trigger node → Configuration → subscribe `messages`) → WA test
 - [ ] Durable WhatsApp token: System User token (test-mode temp tokens die in 24h)
 
 ## Workflow improvements (discussed 2026-07-23, cheap → expensive)
