@@ -1,15 +1,31 @@
-- Keep the 15s (cron/interval), and add another cron task that runs at the end of the day, assembling all transcriptions + photos + messages into a simple report (+ downloadable .docx if possible + sent to email as well)
-- Treat voice messages and forwarded audios the same
-- Save each audio with its specific transcription in the admin dashboard
-- Add error logs that log all kinds of errors
-- Add settings in the dashboard to change the timer of cron triggers + email, plus another panel just for APIs and their uptime/usage etc.
-- Add stats: for each day, give the % of spoken darija words vs french
-- Add another free API model able to generate images based on the report etc.
-- Add some solutions or critical things to be aware of
-- The chatbot should know the boss's WhatsApp number / Telegram account, so it acts differently than with employees, etc. (add in settings so this can be changed)
-- Add security so only employees and the director can use/talk with the assistant — if an outsider tries to talk to it, it should send one automated message pointing to HR numbers/info + contact
-- Add weekly/monthly rollup report — trends across chantiers (materials used, recurring issues), useful for chef de chantier
-- Add manual correction in dashboard — let manager edit/fix an extracted field if the AI got it wrong, without touching the Sheet directly
-- Low-confidence STT → explicit flag for manual review in the dashboard (not just a backend log)
-- Show accuracy % on each transcription in the dashboard
-- Add a GitHub-style contribution heatmap in the admin dashboard — daily activity per technician (report count per day, colored by intensity) to visualize active/inactive days
+# TO-DO
+
+Phased and dependency-ordered. Full rationale + cut-line in `vault/roadmap.md`.
+Hard deadline: Aug 31 2026. Most items need the admin dashboard (not built yet — `web/` empty).
+
+## Phase 0 — Prerequisites (now → Aug 1, close Sprint 1)
+- [ ] Finish STT benchmark → pick default provider (blocks everything downstream)
+- [ ] Full n8n E2E: Telegram → /process → Sheets append → email notif
+
+## Phase 1 — Pipeline (Sprint 2, no dashboard needed)
+- [ ] Treat voice messages and forwarded audios the same (n8n: match message.voice OR message.audio)
+- [ ] Access control: allowlist employees + director; outsider gets one automated HR-contact reply. Same table gets a role column so boss behavior differs from employees (both changeable in settings later)
+- [ ] Error logs: n8n error workflow → Errors sheet tab (timestamp, node, message, payload link)
+- [ ] Low-confidence STT → flag_review=true column in the Sheet (not just backend log)
+- [ ] End-of-day cron: assemble today's transcriptions + photos + messages → LLM report → email (+ .docx if possible)
+
+## Phase 2 — Dashboard v1+ (Sprint 2, Aug 3–14)
+- [ ] Save + show each audio with its transcription per row
+- [ ] Manual correction: edit an extracted field, write back via Sheets API (keeps Sheets as source of truth)
+- [ ] Review queue: filter view on flag_review rows
+- [ ] Show confidence % per transcription (model confidence proxy, labeled "confidence" not "accuracy")
+
+## Phase 3 — Nice-to-haves (Sprint 3 buffer, only if ahead)
+- [ ] GitHub-style contribution heatmap: report count/day/technician
+- [ ] Weekly/monthly rollup report: trends across chantiers (materials, recurring issues)
+- [ ] Settings panel: cron timers, emails, API uptime/usage (post-PFE unless time allows)
+- [ ] Daily stat: % spoken Darija words vs French (post-PFE, zero cahier value)
+- [ ] Image generation from report via free API (post-PFE or cut — burns free-tier quota)
+
+## Notes
+- "Add some solutions or critical things to be aware of" — captured in vault/roadmap.md cut-line + contradictions sections
