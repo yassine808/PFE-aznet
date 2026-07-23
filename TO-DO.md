@@ -1,5 +1,3 @@
-# TO-DO
-
 - Keep the 15s (cron/interval), and add another cron task that runs at the end of the day, assembling all transcriptions + photos + messages into a simple report (+ downloadable .docx if possible + sent to email as well)
 - Treat voice messages and forwarded audios the same
 - Save each audio with its specific transcription in the admin dashboard
