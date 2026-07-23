@@ -2,8 +2,10 @@
 tags: [pfe, architecture, api, fastapi, n8n]
 type: architecture
 priority: high
-status: current
+status: partial
 ---
+
+> **Reality check (2026-07-23):** substantial parts of this doc describe an API contract, file layout, or tooling that was never built (e.g. JSON+base64 `/process` body with metadata in the request, `ExtractedReport` fields like `technicien`/`type_travail`/`cables_tires`, ngrok, CI workflows, `requirements-dev.txt`, `.vscode/` configs). The real `/process` contract is multipart file upload (`audio`/`text` form fields), metadata is added by n8n *after* the API responds, and the real schema is in `api/app/schemas.py`. Treat concrete claims here as aspirational/unverified unless they match the real source files in `api/app/`, `api/tests/`, and `n8n/`.
 
 # Architecture Details
 

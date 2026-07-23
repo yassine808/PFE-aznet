@@ -16,7 +16,7 @@ Select default STT provider for production based on **Darija accuracy**, **laten
 | Provider | Model | API | Free Tier Limits |
 |----------|-------|-----|------------------|
 | **Groq** | Whisper-large-v3 | `groq` | 14,400 req/day, 6000 tokens/min |
-| **Gemini** | Gemini-1.5-flash | `gemini` | 15 RPM, 1M tokens/day |
+| **Gemini** | gemini-flash-lite-latest | `gemini` | 15 RPM, 1M tokens/day |
 | **HF Darija** | custom-darija-model | `hf-darija` | 30,000 req/month |
 
 ## Test Dataset
@@ -108,9 +108,7 @@ After benchmark, update `api/app/config.py`:
 
 ```python
 class Settings(BaseSettings):
-    DEFAULT_STT_PROVIDER: str = "groq"  # Updated post-benchmark
-    STT_TIMEOUT_SECONDS: int = 30
-    STT_MAX_RETRIES: int = 2
+    stt_provider: str = "groq"  # Updated post-benchmark (lowercase field, api/app/config.py)
 ```
 
 ## Related Notes

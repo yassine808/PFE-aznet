@@ -58,8 +58,8 @@ status: current
 
 1. Technician sends voice note via Telegram
 2. n8n receives (polling/webhook) → downloads audio
-3. n8n calls `POST /process` with `audio` (base64) + metadata
-4. API: STT → Extraction → Returns `ExtractedReport`
+3. n8n calls `POST /process` with `audio` as a multipart file upload (not base64) — metadata (date, technicien, lien_audio) is added by n8n *after* the API responds, not sent to it
+4. API: STT → Extraction → Returns `ProcessResponse` (wraps `ExtractedReport`)
 5. n8n appends to Google Sheets
 6. n8n sends manager notification (email)
 
@@ -67,16 +67,17 @@ status: current
 
 **Endpoint:** `POST /process`
 
-**Input (one of):**
-```json
+**Input (one of, multipart form):**
+```
 // Voice mode
-{ "audio": "base64...", "metadata": { "date": "...", "technicien": "...", "lien_audio": "..." } }
+audio: <file upload> (+ optional `provider` field to override STT engine)
 
 // Web form mode
-{ "text": "transcribed text...", "metadata": { ... } }
+text: "transcribed text..."
 ```
+n8n adds metadata (date, technicien, lien_audio) to the Sheets row itself — the API never sees it.
 
-**Output:** `ExtractedReport` (see schemas)
+**Output:** `ProcessResponse` — `{ rapport_complet, report: ExtractedReport, transcription, warnings }` (see schemas)
 
 ## Key Files
 
@@ -111,7 +112,7 @@ status: current
 - [x] STT provider abstraction (3 adapters registered)
 - [x] Extraction pipeline (Gemini primary, Groq fallback)
 - [x] Schemas defined (ExtractedReport)
-- [x] Tests passing (24 tests, no API keys needed)
+- [x] Tests passing (33 tests, no API keys needed)
 - [ ] STT benchmark to pick default provider
 - [ ] Google Sheets append in n8n
 - [ ] Manager notifications

@@ -2,38 +2,31 @@
 tags: [pfe, testing, pytest, ci, coverage, tdd]
 type: technical
 priority: high
-status: current
+status: partial
 ---
 
 # Testing Strategy
 
+> **Reality check (2026-07-23):** this doc previously described a test suite, mocking fixtures, and CI pipeline that were never built. Corrected below to match what actually exists: 3 test files, 33 tests, no `conftest.py`, no CI. The code blocks under "Key Test Patterns" / "Extraction Tests" / "Provider Tests" / "Schema Tests" / "CI Configuration" further down are **illustrative/aspirational only** — they reference modules, classes, and fixtures (`GroqProvider`, `ProcessVoiceRequest`, `conftest.py` fixtures, `.github/workflows/test.yml`) that do not exist in this repo. Treat them as a possible future direction, not documentation of current behavior.
+
 ## Overview
 
-All tests run **without API keys** — external SDKs are lazy-imported and mocked at boundaries. CI runs on every push.
+All tests run **without API keys** — external SDKs (`groq`, `google.genai`) are lazy-imported inside functions and mocked at their import boundary in tests (e.g. `unittest.mock.patch("app.extraction.genai")`). There is **no CI pipeline** configured (no `.github/workflows/` at all) — tests currently run manually / locally only.
 
 ---
 
-## Test Structure
+## Test Structure (actual)
 
 ```
 api/
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py              # Pytest fixtures, mock setup
-│   ├── test_process_endpoint.py # Main endpoint tests
-│   ├── test_extraction.py       # Extraction pipeline
-│   │   ├── test_extraction.py
-│   │   ├── test_prompts.py
-│   │   └── test_providers.py
-│   ├── test_providers/
-│   │   ├── test_groq.py
-│   │   ├── test_gemini.py
-│   │   └── test_hf_darija.py
-│   ├── test_schemas.py          # Schema validation
-│   └── test_config.py           # Config loading
-├── requirements-dev.txt         # pytest, pytest-mock, pytest-asyncio
-└── pyrightconfig.json           # Points to .venv
+└── tests/
+    ├── __init__.py
+    ├── test_process_endpoint.py  # /process endpoint, voice + text mode, error contract
+    ├── test_providers.py         # STT provider registry + adapters
+    └── test_schemas.py           # ExtractedReport / ProcessResponse validation
 ```
+
+No `conftest.py`, no `test_extraction.py`, no `test_config.py`, no `tests/test_providers/` subpackage, no `requirements-dev.txt` (dev deps live in `api/requirements.txt` alongside runtime deps) — none of that exists yet.
 
 ---
 
@@ -42,7 +35,7 @@ api/
 ```bash
 cd api
 
-# All tests (24 tests, ~3s)
+# All tests (33 tests, ~1s)
 .venv/Scripts/python.exe -m pytest
 
 # Single test file
@@ -62,11 +55,7 @@ cd api
 
 ## Test Categories
 
-| Category | Markers | Count | Purpose |
-|----------|---------|-------|---------|
-| **Unit** | `@pytest.mark.unit` | ~15 | Fast, isolated, no I/O |
-| **Integration** | `@pytest.mark.integration` | ~5 | Real HTTP (mocked), schema validation |
-| **Contract** | `@pytest.mark.contract` | ~4 | API request/response shapes |
+No pytest markers are used in this repo (no `@pytest.mark.unit` etc.) — tests are organized purely by file: endpoint tests, provider tests, schema tests. The table below (unit/integration/contract split with marker counts) does not reflect actual code and should be treated as aspirational.
 
 ---
 
@@ -318,14 +307,16 @@ jobs:
 
 ## Coverage Targets
 
+No coverage tooling (`pytest-cov`) is configured or run in this repo — the table below is aspirational, not a measured result.
+
 | Module | Target | Current |
 |--------|--------|---------|
-| `app/main.py` | 90% | ✅ |
-| `app/extraction.py` | 85% | ✅ |
-| `app/providers/` | 80% | ✅ |
-| `app/schemas.py` | 95% | ✅ |
-| `app/config.py` | 80% | ✅ |
-| **Overall** | **80%** | **✅ ~87%** |
+| `app/main.py` | 90% | not measured |
+| `app/extraction.py` | 85% | not measured |
+| `app/providers/` | 80% | not measured |
+| `app/schemas.py` | 95% | not measured |
+| `app/config.py` | 80% | not measured |
+| **Overall** | **80%** | **not measured** |
 
 ---
 
