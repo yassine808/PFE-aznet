@@ -28,3 +28,4 @@ benchmark/dataset/audio/
 .DS_Store
 Thumbs.db
 .vscode/
+.obsidian/
