@@ -11,7 +11,7 @@
 |---|---|
 | Scope | Hybrid: n8n orchestration (per cahier) + custom-coded AI service + web app (for PFE substance) |
 | Code boundary | **Option A** — you code: FastAPI AI service (STT + LLM extraction + French reformulation), React web form, manager dashboard. n8n does: **Telegram** reception, Sheets writes, notifications |
-| Reception channel | **Telegram Bot API** (free, no approval, no recipient cap, no 24h reply window; BotFather token only). Switched from WhatsApp Jul 16 — Meta test-mode friction (24h-expiring tokens, webhook verify handshake, 5-number allowlist) was burning Week-0 time. Cahier §5 permits *"passerelle équivalente"*. Reception is channel-agnostic (n8n adapts the channel; `/process` API untouched); **WhatsApp Business API documented as production evolution** |
+| Reception channel | **Telegram Bot API + WhatsApp Cloud API — both live** (unified n8n workflow `reception-unified.json`). Telegram first (no Meta friction); WhatsApp brought up E2E 2026-07-23 (System User token = no expiry, published app, WABA `subscribed_apps`, manual GET-echo webhook since n8n's WhatsApp Trigger fails Meta's challenge, media download via HTTP node). Cahier §5 *"passerelle équivalente"* satisfied and then some. Channel-agnostic: both feed one `/process` + one Sheet; reply goes back on the originating channel |
 | STT (Darija) | Week-1 **benchmark** via `TranscriptionProvider` adapter interface: Groq Whisper-large-v3, Gemini 2.5 Flash native audio, 1 HF Darija fine-tune. Benchmark picks the primary |
 | Test dataset | 15–20 **self-simulated** Darija voice notes + hand-written reference transcriptions. Wave 2 with real technician notes if director provides |
 | LLM | **Gemini 2.5 Flash** primary (structured JSON output, strong French) + **Groq Llama 3.3 70B** fallback adapter |
@@ -69,12 +69,12 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - Report in parallel: état de l'art (STT Darija, LLM extraction, outils)
 
 ### Sprint 2 — E2E pipeline + web app (Aug 3 – Aug 14)
-- [ ] Full n8n workflow: Telegram → voice download → API call → Sheets append → email notif → Telegram confirmation reply
-- [ ] Google Sheet structured per cahier §6
-- [ ] React form (cahier §4 opt. 2) → same API text mode
-- [ ] Dashboard v1: report list, filters by chantier/technicien/date
-- [ ] Failure path: low-confidence transcription → row flagged + raw audio link + manager notified
-- **Exit:** live demo to director — voice note to Sheet row + email in < 1 min
+- [x] Full n8n workflow (unified Telegram + WhatsApp): reception → media download → `/process` → Sheets append → ✅ reply on originating channel. Access control + roles, dedupe, text-input mode, failure replies, end-of-day report cron (`daily-report-cron.json`), error-tab workflow.
+- [x] Google Sheet `Rapports` structured per cahier §6 (+ `canal`, `confidence`, `flag_review`)
+- [x] Text mode via `/process` (typed reports on both channels); standalone React form still optional
+- [x] Dashboard v1: report list, filters (technicien/chantier/date), review queue on `flag_review`, confidence %, inline Sheet correction. Backend `/reports` + `/reports/{row}` (`api/app/sheets.py`).
+- [x] Failure path: low-confidence → `flag_review=true` row + confidence column, surfaced in dashboard review queue
+- [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director
 - Report in parallel: conception (UML: use cases, séquence, classes, déploiement)
 
 ### Sprint 3 — Pilot, docs, report (Aug 17 – Aug 28)

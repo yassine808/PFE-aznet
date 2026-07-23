@@ -4,23 +4,24 @@ Automated daily reporting for cabling technicians: voice note in Moroccan Darija
 
 **Full project plan:** [PLAN.md](PLAN.md) · **Spec:** [docs/cahier-des-charges.md](docs/cahier-des-charges.md)
 
-> **Reception channel note:** the cahier des charges specifies WhatsApp Business API. Development and pilot currently use **Telegram Bot API** instead (Meta's test-mode friction — expiring tokens, webhook verification, 5-number allowlist — was blocking progress; cahier §5 permits *"passerelle équivalente"*). Reception is channel-agnostic by design: only the n8n reception workflow changes, the `/process` API is untouched. WhatsApp migration is documented as a production evolution, not blocking this PFE.
+> **Reception channels:** the cahier des charges specifies WhatsApp Business API. The project now runs **both Telegram Bot API AND WhatsApp Cloud API** as live inputs (single unified n8n workflow, `n8n/reception-unified.json`). Telegram was added first (no Meta friction); WhatsApp was brought up end-to-end on 2026-07-23 (System User token, published app, WABA subscription). Reception is channel-agnostic by design: both feed the same `/process` API and the same Sheet; only the reception nodes differ per channel. A message received on a channel is replied to on that same channel.
 
 ## Architecture
 
 ```
-Telegram voice (Darija) → n8n (polling) ─→ FastAPI AI service ─→ n8n → Google Sheets
-Web form ─────────────────────────────────↗   (STT + LLM JSON)        ├→ email notif
-Dashboard (React) ← Google Sheets API                                 └→ Telegram reply
+Telegram voice/text (Darija) ─┐
+WhatsApp voice/text ──────────┤→ n8n (unified) → FastAPI AI service → n8n → Google Sheets
+Web form ─────────────────────┘        (STT + LLM JSON)     ├→ email notif (daily cron)
+Dashboard (React) ←─ FastAPI /reports ──→ Google Sheets      └→ ✅ reply on same channel
 ```
 
 ## Repository layout
 
 | Path | Content |
 |---|---|
-| `api/` | FastAPI AI service — STT adapters, LLM extraction, French reformulation (Sprint 1) |
-| `web/` | React (TS) — technician form + manager dashboard (Sprint 2) |
-| `n8n/` | Workflow exports + n8n setup/tunnel instructions |
+| `api/` | FastAPI AI service — STT adapters, LLM extraction, French reformulation, daily-report + dashboard endpoints |
+| `web/` | React (TS) — manager dashboard (report list, filters, review queue, inline Sheet correction) |
+| `n8n/` | Workflow exports (unified reception, error handler, daily cron) + setup guide |
 | `benchmark/` | Darija STT benchmark — dataset protocol, WER harness (Sprint 1) |
 | `docs/` | Cahier des charges, installation doc, user guide |
 
@@ -38,11 +39,12 @@ No Docker yet? Instant dev run: `npx n8n` (Node 20+). See `n8n/README.md` for we
 ## Status
 
 - [x] Week 0: plan + scaffold
-- [x] Week 0: reception channel switched to Telegram Bot API (WhatsApp blocked in Meta test mode)
-- [x] Week 0: E2E smoke test passed (Jul 17) — voice note → transcription → extraction → French summary → Telegram confirmation reply, live
-- [ ] Week 0: Darija test dataset (see `benchmark/README.md`)
-- [ ] Sprint 1: AI core + STT benchmark
-- [ ] Sprint 2: E2E pipeline (Sheets + email notif) + web app
+- [x] Week 0: E2E smoke test passed (Jul 17) — Telegram voice → transcription → extraction → French summary → reply, live
+- [x] Sprint 2: **full dual-channel E2E** (2026-07-23) — Telegram + WhatsApp voice/text → `/process` → Google Sheets row → ✅ reply on the originating channel. Unified n8n workflow, access control + roles, dedupe, failure replies, low-confidence flagging, error-tab workflow, end-of-day report cron.
+- [x] Sprint 2: **manager dashboard v1** — React (`web/`) + FastAPI `/reports` endpoints; report list, technicien/chantier/date filters, review queue on `flag_review`, confidence %, click-to-edit cells writing back to Sheets.
+- [ ] STT benchmark → pick default provider (`benchmark/`)
+- [ ] Dashboard redesign (efferd-style), durable Drive audio links, `/rapport` boss command
 - [ ] Sprint 3: pilot + docs + PFE report
 
-Draft PFE report (structure + 4 chapters written from project state): `Pres+report/Rapport-PFE.docx`.
+Setup walkthrough for the whole pipeline: [docs/setup-guide.md](docs/setup-guide.md).
+Draft PFE report: `Pres+report/Rapport-PFE.docx`.

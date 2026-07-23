@@ -8,7 +8,7 @@ PFE (end-of-studies project, deadline Aug 31 2026) at aznet.ma: voice notes in M
 
 Zero-budget constraint: free tiers only (Groq, Gemini AI Studio, HF Inference, Telegram Bot API, Gmail SMTP, Vercel).
 
-**Reception channel:** cahier des charges specifies WhatsApp Business API; switched to **Telegram Bot API** on 2026-07-16 (Meta test-mode friction — expiring tokens, webhook verify handshake, 5-number allowlist — was burning Week-0 time; cahier §5 permits *"passerelle équivalente"*). Design is channel-agnostic — only the n8n reception workflow changes, `/process` API untouched. WhatsApp documented as production evolution, not built.
+**Reception channels:** **both Telegram Bot API and WhatsApp Cloud API are live** (unified n8n workflow `n8n/reception-unified.json`, brought up E2E 2026-07-23). Telegram first (no Meta friction); WhatsApp needed a System User token (no expiry), a published app, a WABA `subscribed_apps` call, a manual GET-echo webhook (n8n's WhatsApp Trigger fails Meta's verification challenge), and media download via a plain HTTP node (native download op returns Bad request). Design is channel-agnostic — both feed one `/process` and one Sheet; the reply returns on the originating channel. Full walkthrough: `docs/setup-guide.md`.
 
 ## Commands
 
@@ -27,9 +27,9 @@ Tests must pass without any API keys — external SDKs are lazy-imported inside 
 
 ## Architecture
 
-Hybrid: **n8n** is the glue (Telegram reception → media download → HTTP call → Sheets append → notifications); **`api/`** is the custom AI microservice n8n calls. Metadata (date, technicien, lien_audio) is added by n8n, not the API.
+Hybrid: **n8n** is the glue (Telegram + WhatsApp reception → media download → HTTP call → Sheets append → notifications); **`api/`** is the custom AI microservice n8n calls. Metadata (date, technicien, canal, lien_audio) is added by n8n, not the API.
 
-The API has one real endpoint, `POST /process` (`api/app/main.py`), accepting exactly one of `audio` (voice mode) or `text` (web form mode):
+Endpoints in `api/app/main.py`: `POST /process` (core: audio or text → structured JSON), `POST /daily-report` (`app/daily_report.py`: today's Sheet rows → French manager email, same Gemini→Groq fallback), and the dashboard read/write pair `GET /reports` + `PATCH /reports/{row}` (`app/sheets.py`: service-account Sheets access, no auth — dashboard runs on the admin's PC only). `/process` accepts exactly one of `audio` (voice mode) or `text` (form/typed mode):
 
 - **STT providers** (`api/app/providers/`): Strategy pattern. `TranscriptionProvider` ABC + `@register("name")` decorator populating a registry; adapters imported at the bottom of `providers/__init__.py` to trigger registration. Three engines (groq, gemini, hf-darija) pending the week-1 benchmark (`benchmark/`) that picks the default in `config.py`.
 - **Extraction** (`api/app/extraction.py`): Gemini structured output (`response_schema=ExtractedReport`) primary → Groq Llama JSON-mode fallback. Both failing raises a combined `ExtractionError` — never silent fallbacks, never invented data (prompt enforces null for absent fields).
