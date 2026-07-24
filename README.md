@@ -20,7 +20,7 @@ Dashboard (React) ←─ FastAPI /reports ──→ Google Sheets      └→ �
 | Path | Content |
 |---|---|
 | `api/` | FastAPI AI service — STT adapters, LLM extraction, French reformulation, daily-report + dashboard endpoints |
-| `web/` | React (TS) — manager dashboard (report list, filters, review queue, inline Sheet correction) |
+| `web/` | React (TS) — manager dashboard: Efferd-style app-shell, light/dark + FR/EN/AR (RTL) i18n from JSON locales, KPI/production/quality/cadence metrics, charts, per-tech summary, review queue, inline Sheet correction |
 | `n8n/` | Workflow exports (unified reception, error handler, daily cron) + setup guide |
 | `benchmark/` | Darija STT benchmark — dataset protocol, WER harness (Sprint 1) |
 | `docs/` | Cahier des charges, installation doc, user guide |
@@ -42,8 +42,9 @@ No Docker yet? Instant dev run: `npx n8n` (Node 20+). See `n8n/README.md` for we
 - [x] Week 0: E2E smoke test passed (Jul 17) — Telegram voice → transcription → extraction → French summary → reply, live
 - [x] Sprint 2: **full dual-channel E2E** (2026-07-23) — Telegram + WhatsApp voice/text → `/process` → Google Sheets row → ✅ reply on the originating channel. Unified n8n workflow, access control + roles, dedupe, failure replies, low-confidence flagging, error-tab workflow, end-of-day report cron.
 - [x] Sprint 2: **manager dashboard v1** — React (`web/`) + FastAPI `/reports` endpoints; report list, technicien/chantier/date filters, review queue on `flag_review`, confidence %, click-to-edit cells writing back to Sheets.
+- [x] Sprint 2: **dashboard redesign v2** (2026-07-24) — neutral/monochrome Efferd-style app-shell (framed KPI panels, gradient bars + glowing channel step-line), light/dark theme + FR/EN/AR language switch (RTL) from JSON locales (`web/src/locales/`), 16 metrics across Activité/Production/Qualité/Cadence (incl. WoW deltas, Darija-voice share, API uptime from `/health`), per-technician summary, recent-reports/health/activity bottom row.
 - [ ] STT benchmark → pick default provider (`benchmark/`)
-- [ ] Dashboard redesign (efferd-style), durable Drive audio links, `/rapport` boss command
+- [ ] Durable Drive audio links, `/rapport` boss command
 - [ ] Sprint 3: pilot + docs + PFE report
 
 Setup walkthrough for the whole pipeline: [docs/setup-guide.md](docs/setup-guide.md).

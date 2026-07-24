@@ -29,7 +29,7 @@ Tests must pass without any API keys — external SDKs are lazy-imported inside 
 
 Hybrid: **n8n** is the glue (Telegram + WhatsApp reception → media download → HTTP call → Sheets append → notifications); **`api/`** is the custom AI microservice n8n calls. Metadata (date, technicien, canal, lien_audio) is added by n8n, not the API.
 
-Endpoints in `api/app/main.py`: `POST /process` (core: audio or text → structured JSON), `POST /daily-report` (`app/daily_report.py`: today's Sheet rows → French manager email, same Gemini→Groq fallback), and the dashboard read/write pair `GET /reports` + `PATCH /reports/{row}` (`app/sheets.py`: service-account Sheets access, no auth — dashboard runs on the admin's PC only). `/process` accepts exactly one of `audio` (voice mode) or `text` (form/typed mode):
+Endpoints in `api/app/main.py`: `POST /process` (core: audio or text → structured JSON), `POST /daily-report` (`app/daily_report.py`: today's Sheet rows → French manager email, same Gemini→Groq fallback), and the dashboard read/write pair `GET /reports` + `PATCH /reports/{row}` (`app/sheets.py`: service-account Sheets access, no auth — dashboard runs on the admin's PC only), and `GET /health` (status + process `uptime_seconds`, polled by the dashboard's API-uptime tile). `/process` accepts exactly one of `audio` (voice mode) or `text` (form/typed mode):
 
 - **STT providers** (`api/app/providers/`): Strategy pattern. `TranscriptionProvider` ABC + `@register("name")` decorator populating a registry; adapters imported at the bottom of `providers/__init__.py` to trigger registration. Three engines (groq, gemini, hf-darija) pending the week-1 benchmark (`benchmark/`) that picks the default in `config.py`.
 - **Extraction** (`api/app/extraction.py`): Gemini structured output (`response_schema=ExtractedReport`) primary → Groq Llama JSON-mode fallback. Both failing raises a combined `ExtractionError` — never silent fallbacks, never invented data (prompt enforces null for absent fields).
@@ -42,4 +42,5 @@ Config is env-driven via pydantic-settings (`api/app/config.py`, reads `.env`); 
 
 - Conventional commits (`feat(api): ...`)
 - French domain vocabulary in schemas/prompts (chantier, goulottes_m, resume) — it matches the cahier des charges and the Sheet; don't anglicize
+- Dashboard (`web/`): neutral/monochrome Efferd-style theme. **All UI copy lives in `web/src/locales/{fr,en,ar}.json`** (fr is the reference/fallback) — never hardcode strings in components; add a key to every locale file. Light/dark via `web/src/theme.tsx` (`.dark` class + RGB-triplet CSS vars in `index.css`); Arabic drives RTL. Recharts colors are duplicated per theme in `theme.tsx` (SVG can't read CSS vars). Metrics are computed client-side from `/reports`; only API uptime comes from `/health`.
 - Pyright: IDE may flag false positives if not using `api/.venv`; pytest is ground truth (`api/pyrightconfig.json` points at the venv)

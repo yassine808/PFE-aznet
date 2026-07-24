@@ -1,4 +1,5 @@
 """FastAPI entrypoint — the single endpoint n8n and the web form call."""
+import time
 from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -28,10 +29,21 @@ app.add_middleware(
 MIN_USABLE_CHARS = 10
 LOW_CONFIDENCE_THRESHOLD = 0.5  # below this, flag for manual review in the dashboard
 
+# Wall-clock start of this process — the dashboard reads uptime from /health to
+# show an "API online / uptime" status tile (ops visibility on the admin PC).
+_STARTED_AT = time.time()
+
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "stt_providers": available_providers(), "stt_default": settings.stt_provider}
+    return {
+        "status": "ok",
+        "version": app.version,
+        "uptime_seconds": round(time.time() - _STARTED_AT, 1),
+        "started_at": _STARTED_AT,
+        "stt_providers": available_providers(),
+        "stt_default": settings.stt_provider,
+    }
 
 
 @app.post("/process", response_model=ProcessResponse)

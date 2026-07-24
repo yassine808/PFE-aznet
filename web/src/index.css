@@ -3,38 +3,39 @@
 @tailwind utilities;
 
 /*
-  Palette as RGB channel triplets so Tailwind's `<alpha-value>` opacity
-  modifiers (bg-down/10, bg-panel/80, …) keep working. Light is the default;
-  the `.dark` class on <html> (set by ThemeProvider) swaps to dark.
+  Neutral (monochrome) palette to match the Efferd/shadcn reference — accent is
+  grayscale; color appears only in up/down deltas and the white chart line.
+  Values are RGB channel triplets so Tailwind `<alpha-value>` opacity modifiers
+  (bg-down/10, border-line/60, …) keep working. `.dark` on <html> swaps themes.
 */
 @layer base {
   :root {
-    --bg: 247 248 250;
+    --bg: 250 250 250;
     --panel: 255 255 255;
     --card: 255 255 255;
-    --cardhi: 241 243 246;
-    --line: 226 230 235;
-    --ink: 15 23 42;
-    --muted: 100 116 139;
-    --faint: 148 163 184;
-    --accent: 79 70 229;
-    --up: 22 163 74;
-    --down: 220 38 38;
+    --cardhi: 245 245 245;
+    --line: 229 229 229;
+    --ink: 10 10 10;
+    --muted: 115 115 115;
+    --faint: 160 160 160;
+    --accent: 23 23 23;
+    --up: 0 150 102;
+    --down: 220 60 60;
     color-scheme: light;
   }
 
   .dark {
-    --bg: 9 9 11;
-    --panel: 12 12 14;
-    --card: 18 18 21;
-    --cardhi: 23 23 27;
-    --line: 35 35 39;
+    --bg: 10 10 10;
+    --panel: 23 23 23;
+    --card: 23 23 23;
+    --cardhi: 38 38 38;
+    --line: 38 38 38;
     --ink: 250 250 250;
-    --muted: 139 139 147;
-    --faint: 90 90 98;
-    --accent: 99 102 241;
-    --up: 74 222 128;
-    --down: 248 113 113;
+    --muted: 115 115 115;
+    --faint: 90 90 90;
+    --accent: 229 229 229;
+    --up: 0 188 125;
+    --down: 255 100 103;
     color-scheme: dark;
   }
 
@@ -56,9 +57,9 @@
 /* Glowing step lines — the "channel sales" effect from the reference. */
 @layer components {
   .glow-line .recharts-line .recharts-curve.recharts-line-curve {
-    filter: drop-shadow(0 0 5px var(--glow, rgba(255,255,255,.35)));
+    filter: drop-shadow(0 0 4px rgba(0,0,0,.15));
   }
   .dark .glow-line .recharts-line .recharts-curve.recharts-line-curve {
-    filter: drop-shadow(0 0 7px rgba(255,255,255,.4));
+    filter: drop-shadow(0 0 7px rgba(255,255,255,.45));
   }
 }

@@ -24,7 +24,7 @@
 2. Methodology: **Scrum-light** — 3 sprints × 2 weeks, backlog on GitHub Projects, sprint demo to director each cycle. Gives the report a methodology chapter.
 3. **Google Sheets = single source of truth** (per cahier). Dashboard reads Sheets API. PostgreSQL/Supabase documented as evolution path, not built.
 4. Notifications: **email (Gmail SMTP)** primary + **Telegram** confirmation reply to the technician (no session-window limit, unlike WhatsApp's 24h rule). Teams webhook documented as config option.
-5. Dashboard behind simple password login (single manager account).
+5. Dashboard: **no auth** — runs on the admin's PC only (localhost), decided 2026-07-23. Redesigned 2026-07-24 to a neutral Efferd-style app-shell with light/dark + FR/EN/AR (RTL) i18n loaded from JSON locales (`web/src/locales/`).
 6. Git repo (this one), conventional commits, README per module.
 
 ## 3. Architecture
@@ -74,6 +74,7 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - [x] Text mode via `/process` (typed reports on both channels); standalone React form still optional
 - [x] Dashboard v1: report list, filters (technicien/chantier/date), review queue on `flag_review`, confidence %, inline Sheet correction. Backend `/reports` + `/reports/{row}` (`api/app/sheets.py`).
 - [x] Failure path: low-confidence → `flag_review=true` row + confidence column, surfaced in dashboard review queue
+- [x] Dashboard v2 redesign (2026-07-24): neutral Efferd-style framed panels, light/dark, FR/EN/AR (RTL) i18n from JSON, 16 metrics (Activité/Production/Qualité/Cadence incl. WoW, Darija-voice share, API uptime), per-tech summary, recent/health/activity row. Backend `GET /health` now returns uptime for the ops tile.
 - [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director
 - Report in parallel: conception (UML: use cases, séquence, classes, déploiement)
 

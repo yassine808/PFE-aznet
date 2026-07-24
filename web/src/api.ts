@@ -45,3 +45,17 @@ export async function patchReport(row: number, field: string, value: string): Pr
     body: JSON.stringify({ field, value }),
   });
 }
+
+export interface Health {
+  status: string;
+  version: string;
+  uptime_seconds: number;
+  started_at: number;
+  stt_providers: string[];
+  stt_default: string;
+}
+
+export async function fetchHealth(): Promise<Health> {
+  const r = await request("/health");
+  return r.json();
+}

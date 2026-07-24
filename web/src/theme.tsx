@@ -18,20 +18,22 @@ export interface ChartTheme {
   glow: string;      // drop-shadow color for the step lines
 }
 
+// Neutral / monochrome to match the reference: grayscale bars, white glow line,
+// channels distinguished by tone (white vs mid-gray) rather than hue.
 export const CHART: Record<Theme, ChartTheme> = {
   dark: {
-    grid: "#1c1c20", axis: "#5a5a62", axisStrong: "#8b8b93",
-    accent: "#6366f1", accentTop: "#a5b4fc",
-    wa: "#22c55e", tg: "#3b82f6",
-    tooltipBg: "#17171b", tooltipBorder: "#232327", tooltipInk: "#fafafa",
-    glow: "rgba(255,255,255,0.35)",
+    grid: "#222222", axis: "#737373", axisStrong: "#a1a1a1",
+    accent: "#a3a3a3", accentTop: "#ededed",
+    wa: "#fafafa", tg: "#737373",
+    tooltipBg: "#171717", tooltipBorder: "#2a2a2a", tooltipInk: "#fafafa",
+    glow: "rgba(255,255,255,0.45)",
   },
   light: {
-    grid: "#e6e9ee", axis: "#94a3b8", axisStrong: "#64748b",
-    accent: "#4f46e5", accentTop: "#818cf8",
-    wa: "#16a34a", tg: "#2563eb",
-    tooltipBg: "#ffffff", tooltipBorder: "#e2e8f0", tooltipInk: "#0f172a",
-    glow: "rgba(37,99,235,0.30)",
+    grid: "#e5e5e5", axis: "#737373", axisStrong: "#525252",
+    accent: "#525252", accentTop: "#171717",
+    wa: "#171717", tg: "#a3a3a3",
+    tooltipBg: "#ffffff", tooltipBorder: "#e5e5e5", tooltipInk: "#0a0a0a",
+    glow: "rgba(0,0,0,0.15)",
   },
 };
 
