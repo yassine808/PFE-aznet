@@ -16,6 +16,8 @@
   "topbar.lang": "Langue",
   "topbar.theme.toDark": "Passer en mode sombre",
   "topbar.theme.toLight": "Passer en mode clair",
+  "notif.title": "Notifications",
+  "notif.none": "Rien à vérifier.",
   "kpi.total": "Rapports totaux",
   "kpi.total.hint": "{n} jour(s) couverts",
   "kpi.week": "Cette semaine",

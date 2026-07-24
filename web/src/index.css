@@ -63,3 +63,38 @@
     filter: drop-shadow(0 0 7px rgba(255,255,255,.45));
   }
 }
+
+/* Motion + polish utilities. */
+@layer utilities {
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
+  @keyframes popIn { from { opacity: 0; transform: scale(.96) translateY(-4px); } to { opacity: 1; transform: none; } }
+
+  .reveal { animation: fadeUp .5s cubic-bezier(.2,.6,.2,1) both; }
+  .pop-in { animation: popIn .14s ease-out both; }
+
+  /* subtle raise on hover for standalone cards */
+  .hover-lift { transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+  .hover-lift:hover { transform: translateY(-2px); border-color: rgb(var(--faint) / .5); box-shadow: 0 8px 24px -12px rgb(0 0 0 / .35); }
+
+  /* shimmer skeleton block */
+  .skel { position: relative; overflow: hidden; background: rgb(var(--cardhi)); border-radius: .375rem; }
+  .skel::after {
+    content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(127 127 127 / .14), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+
+  /* soft radial glow behind the hero area */
+  .aura { position: relative; }
+  .aura::before {
+    content: ""; position: absolute; left: 50%; top: -80px; width: 640px; height: 220px;
+    transform: translateX(-50%); pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse at center, rgb(127 127 127 / .10), transparent 70%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .pop-in, .skel::after { animation: none; }
+  .hover-lift:hover { transform: none; }
+}

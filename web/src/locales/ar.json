@@ -16,6 +16,8 @@
   "topbar.lang": "اللغة",
   "topbar.theme.toDark": "التبديل إلى الوضع الداكن",
   "topbar.theme.toLight": "التبديل إلى الوضع الفاتح",
+  "notif.title": "الإشعارات",
+  "notif.none": "لا شيء للمراجعة.",
   "kpi.total": "إجمالي التقارير",
   "kpi.total.hint": "{n} يوم/أيام مُغطّاة",
   "kpi.week": "هذا الأسبوع",

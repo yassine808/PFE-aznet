@@ -16,6 +16,8 @@
   "topbar.lang": "Language",
   "topbar.theme.toDark": "Switch to dark mode",
   "topbar.theme.toLight": "Switch to light mode",
+  "notif.title": "Notifications",
+  "notif.none": "Nothing to review.",
   "kpi.total": "Total reports",
   "kpi.total.hint": "{n} day(s) covered",
   "kpi.week": "This week",

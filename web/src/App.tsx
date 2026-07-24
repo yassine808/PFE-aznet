@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, HardHat, AlertTriangle, Settings, RefreshCw,
   Search, TrendingUp, TrendingDown, FileText, CheckCircle2, Radio, Moon, Sun,
   Cable, Ruler, Building2, Network, Gauge, ShieldAlert, FileWarning,
-  Clock, Server, Send, Bell, CalendarDays, Mic,
+  Clock, Server, Bell, CalendarDays, Mic,
 } from "lucide-react";
 import { fetchReports, patchReport, fetchHealth, Report, Health } from "./api";
 import { useI18n, LANGS, type Lang } from "./i18n";
@@ -21,7 +21,7 @@ const EDITABLE = [
 
 const isFlagged = (r: Report) => String(r.flag_review).toLowerCase() === "true";
 const isVoice = (r: Report) => Boolean(r.lien_audio); // lien_audio set only for Darija voice notes
-const today = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+const today = () => new Date().toISOString().slice(0, 10);
 const num = (s: string) => { const n = parseFloat(String(s ?? "").replace(",", ".")); return isFinite(n) ? n : 0; };
 const tsOf = (r: Report) => {
   const t = Date.parse(`${r.date}T${(r.heure || "00:00").slice(0, 5)}:00`);
@@ -35,6 +35,10 @@ function fmtUptime(s: number): string {
   if (h < 24) return `${h}h ${m % 60}m`;
   return `${Math.floor(h / 24)}j ${h % 24}h`;
 }
+const go = (id?: string) => {
+  if (!id) window.scrollTo({ top: 0, behavior: "smooth" });
+  else document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
 
 export default function App() {
   return <Dashboard />;
@@ -63,7 +67,6 @@ function Dashboard() {
   };
   useEffect(load, []);
 
-  // poll /health for the API uptime / online status tile
   useEffect(() => {
     let alive = true;
     const poll = () => fetchHealth()
@@ -97,7 +100,8 @@ function Dashboard() {
   const kTotal = reports.length;
   const kToday = reports.filter((r) => r.date === today()).length;
   const kWeek = last7.length;
-  const kFlagged = reports.filter(isFlagged).length;
+  const flaggedReports = useMemo(() => reports.filter(isFlagged), [reports]);
+  const kFlagged = flaggedReports.length;
   const kTechs = techs.length;
 
   const pCables = Math.round(sumField(reports, "cables_m"));
@@ -114,7 +118,6 @@ function Dashboard() {
   const voiceN = reports.filter(isVoice).length;
   const pctVoice = kTotal ? Math.round((voiceN / kTotal) * 100) : 0;
 
-  // cadence
   const avgPerTech = kTechs ? (kTotal / kTechs) : 0;
   const busiest = useMemo(() => {
     const m = new Map<string, number>();
@@ -132,6 +135,7 @@ function Dashboard() {
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-7)
       .map(([date, count]) => ({ label: date.slice(5), count }));
   }, [reports]);
+  const spark = perDay.map((d) => d.count);
   const perChannel = useMemo(() => {
     const days = [...new Set(reports.map((r) => r.date).filter(Boolean))].sort().slice(-7);
     return days.map((d) => {
@@ -144,7 +148,6 @@ function Dashboard() {
     });
   }, [reports]);
 
-  // per-technician summary (production + Darija-voice share)
   const perTech = useMemo(() => {
     const m = new Map<string, { rapports: number; cables: number; goulottes: number; voice: number }>();
     reports.forEach((r) => {
@@ -160,11 +163,9 @@ function Dashboard() {
     })).sort((a, b) => b.rapports - a.rapports);
   }, [reports]);
 
-  // recent reports + activity feed
   const recent = useMemo(() => [...reports].sort((a, b) => tsOf(b) - tsOf(a)).slice(0, 5), [reports]);
   const activity = useMemo(() => [...reports].sort((a, b) => tsOf(b) - tsOf(a)).slice(0, 6), [reports]);
 
-  // ── filtered table rows ─────────────────────────────────────────────
   const filtered = reports.filter((r) => {
     if (fTech && r.technicien !== fTech) return false;
     if (fChantier && r.chantier !== fChantier) return false;
@@ -181,148 +182,193 @@ function Dashboard() {
     const current = (r as unknown as Record<string, string>)[field] ?? "";
     const next = window.prompt(t("prompt.edit", { field, row: r._row }), current);
     if (next === null || next === current) return;
-    try {
-      await patchReport(r._row, field, next);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+    try { await patchReport(r._row, field, next); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
+  const openReview = () => { setReviewOnly(true); go("reports"); };
   const dash = t("empty.dash");
 
   return (
     <div className="flex min-h-screen bg-bg text-ink font-sans">
       <Sidebar reviewOnly={reviewOnly} setReviewOnly={setReviewOnly} flagged={kFlagged}
-        online={online} uptime={health?.uptime_seconds} />
+        online={online} uptime={health?.uptime_seconds} onNav={go} />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <Topbar onRefresh={load} loading={loading} query={query} setQuery={setQuery} />
+        <Topbar onRefresh={load} loading={loading} query={query} setQuery={setQuery}
+          flagged={flaggedReports} onOpenReview={openReview} />
 
         <main className="flex-1 px-6 py-6 space-y-6">
           {error && (
-            <div className="rounded-lg border border-down/40 bg-down/10 px-4 py-3 text-sm text-down">
-              {error}
-            </div>
+            <div className="reveal rounded-lg border border-down/40 bg-down/10 px-4 py-3 text-sm text-down">{error}</div>
           )}
 
-          {/* Activité */}
-          <KpiSection title={t("section.activity")}>
-            <StatCell icon={<FileText size={16} />} label={t("kpi.total")} value={kTotal} delta={wowReports} />
-            <StatCell icon={<CalendarDays size={16} />} label={t("kpi.week")} value={kWeek} delta={wowReports} />
-            <StatCell icon={<TrendingUp size={16} />} label={t("kpi.today")} value={kToday} hint={today()} tone="up" />
-            <StatCell icon={<AlertTriangle size={16} />} label={t("kpi.review")} value={kFlagged}
-              hint={t("kpi.review.hint", { n: pctReview })} tone={kFlagged ? "down" : "up"} />
-          </KpiSection>
+          <Reveal i={0} className="aura">
+            <KpiSection title={t("section.activity")}>
+              <StatCell icon={<FileText size={16} />} label={t("kpi.total")} value={<CountUp n={kTotal} />}
+                hint={t("kpi.total.hint", { n: perDay.length })} tone="up" />
+              <StatCell icon={<CalendarDays size={16} />} label={t("kpi.week")} value={<CountUp n={kWeek} />}
+                delta={wowReports} spark={spark} />
+              <StatCell icon={<TrendingUp size={16} />} label={t("kpi.today")} value={<CountUp n={kToday} />}
+                hint={today()} tone="up" />
+              <StatCell icon={<AlertTriangle size={16} />} label={t("kpi.review")} value={<CountUp n={kFlagged} />}
+                hint={t("kpi.review.hint", { n: pctReview })} tone={kFlagged ? "down" : "up"} />
+            </KpiSection>
+          </Reveal>
 
-          {/* Production */}
-          <KpiSection title={t("section.production")}>
-            <StatCell icon={<Cable size={16} />} label={t("prod.cables")}
-              value={`${pCables.toLocaleString()} ${t("prod.unit.m")}`} delta={wowCables} />
-            <StatCell icon={<Ruler size={16} />} label={t("prod.goulottes")}
-              value={`${pGoulottes.toLocaleString()} ${t("prod.unit.m")}`} delta={wowGoulottes} />
-            <StatCell icon={<Building2 size={16} />} label={t("prod.bureaux")} value={pBureaux} delta={wowBureaux} />
-            <StatCell icon={<Network size={16} />} label={t("prod.panneaux")} value={pPanneaux} delta={wowPanneaux} />
-          </KpiSection>
+          <Reveal i={1}>
+            <KpiSection title={t("section.production")}>
+              <StatCell icon={<Cable size={16} />} label={t("prod.cables")}
+                value={<CountUp n={pCables} suffix={" " + t("prod.unit.m")} />} delta={wowCables} />
+              <StatCell icon={<Ruler size={16} />} label={t("prod.goulottes")}
+                value={<CountUp n={pGoulottes} suffix={" " + t("prod.unit.m")} />} delta={wowGoulottes} />
+              <StatCell icon={<Building2 size={16} />} label={t("prod.bureaux")} value={<CountUp n={pBureaux} />} delta={wowBureaux} />
+              <StatCell icon={<Network size={16} />} label={t("prod.panneaux")} value={<CountUp n={pPanneaux} />} delta={wowPanneaux} />
+            </KpiSection>
+          </Reveal>
 
-          {/* Qualité */}
-          <KpiSection title={t("section.quality")}>
-            <StatCell icon={<Gauge size={16} />} label={t("quality.confidence")} value={`${avgConf}%`}
-              hint={t("quality.confidence.hint", { n: scored.length })} tone={avgConf >= 70 ? "up" : "down"} />
-            <StatCell icon={<ShieldAlert size={16} />} label={t("quality.review")} value={`${pctReview}%`}
-              hint={t("quality.review.hint", { n: kFlagged })} tone={pctReview <= 15 ? "up" : "down"} />
-            <StatCell icon={<FileWarning size={16} />} label={t("quality.incomplete")} value={`${pctIncomplete}%`}
-              hint={t("quality.incomplete.hint")} tone={pctIncomplete <= 15 ? "up" : "down"} />
-            <StatCell icon={<Mic size={16} />} label={t("quality.voice")} value={`${pctVoice}%`}
-              hint={t("quality.voice.hint", { n: voiceN })} tone="up" />
-          </KpiSection>
+          <Reveal i={2}>
+            <KpiSection title={t("section.quality")}>
+              <StatCell icon={<Gauge size={16} />} label={t("quality.confidence")} value={<CountUp n={avgConf} suffix="%" />}
+                hint={t("quality.confidence.hint", { n: scored.length })} tone={avgConf >= 70 ? "up" : "down"} />
+              <StatCell icon={<ShieldAlert size={16} />} label={t("quality.review")} value={<CountUp n={pctReview} suffix="%" />}
+                hint={t("quality.review.hint", { n: kFlagged })} tone={pctReview <= 15 ? "up" : "down"} />
+              <StatCell icon={<FileWarning size={16} />} label={t("quality.incomplete")} value={<CountUp n={pctIncomplete} suffix="%" />}
+                hint={t("quality.incomplete.hint")} tone={pctIncomplete <= 15 ? "up" : "down"} />
+              <StatCell icon={<Mic size={16} />} label={t("quality.voice")} value={<CountUp n={pctVoice} suffix="%" />}
+                hint={t("quality.voice.hint", { n: voiceN })} tone="up" />
+            </KpiSection>
+          </Reveal>
 
-          {/* Cadence & système */}
-          <KpiSection title={t("section.system")}>
-            <StatCell icon={<Clock size={16} />} label={t("sys.lastReport")}
-              value={lastTs ? <RelTime ts={lastTs} /> : dash} hint={t("sys.lastReport.hint")} tone="up" />
-            <StatCell icon={<CalendarDays size={16} />} label={t("sys.busiestDay")}
-              value={busiest.date ? busiest.date.slice(5) : dash} hint={t("sys.busiestDay.hint", { n: busiest.n })} tone="up" />
-            <StatCell icon={<Users size={16} />} label={t("sys.avgPerTech")}
-              value={avgPerTech ? avgPerTech.toFixed(1) : dash} hint={t("sys.avgPerTech.hint")} tone="up" />
-            <StatCell icon={<Server size={16} />} label={t("sys.uptime")}
-              value={online && health && Number.isFinite(health.uptime_seconds)
-                ? fmtUptime(health.uptime_seconds) : (online ? t("sys.online") : dash)}
-              status={online ? "online" : "offline"} />
-          </KpiSection>
+          <Reveal i={3}>
+            <KpiSection title={t("section.system")}>
+              <StatCell icon={<Clock size={16} />} label={t("sys.lastReport")}
+                value={lastTs ? <RelTime ts={lastTs} /> : dash} hint={t("sys.lastReport.hint")} tone="up" />
+              <StatCell icon={<CalendarDays size={16} />} label={t("sys.busiestDay")}
+                value={busiest.date ? busiest.date.slice(5) : dash} hint={t("sys.busiestDay.hint", { n: busiest.n })} tone="up" />
+              <StatCell icon={<Users size={16} />} label={t("sys.avgPerTech")}
+                value={avgPerTech ? <CountUp n={avgPerTech} decimals={1} /> : dash} hint={t("sys.avgPerTech.hint")} tone="up" />
+              <StatCell icon={<Server size={16} />} label={t("sys.uptime")}
+                value={online && health && Number.isFinite(health.uptime_seconds)
+                  ? fmtUptime(health.uptime_seconds) : (online ? t("sys.online") : dash)}
+                status={online ? "online" : "offline"} />
+            </KpiSection>
+          </Reveal>
 
-          {/* charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard title={t("chart.perDay.title")} subtitle={t("chart.perDay.subtitle")} delta={wowReports}>
-              <PerDayChart data={perDay} />
-            </ChartCard>
-            <ChartCard title={t("chart.channel.title")} subtitle={t("chart.channel.subtitle")}>
-              <ChannelChart data={perChannel} />
-            </ChartCard>
-          </div>
-
-          {/* per-technician summary */}
-          <PerTechTable rows={perTech} />
-
-          {/* bottom row: recent reports · health · activity */}
-          <section className="rounded-xl border border-line bg-card overflow-hidden grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-line">
-            <RecentReports rows={recent} dash={dash} />
-            <HealthPanel flagged={kFlagged} />
-            <ActivityFeed rows={activity} />
-          </section>
-
-          {/* reports table */}
-          <section className="rounded-xl border border-line bg-card">
-            <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-line">
-              <h2 className="text-sm font-semibold mr-auto">{t("table.title")}</h2>
-              <Select value={fTech} onChange={setFTech} placeholder={t("filter.allTechs")} options={techs} />
-              <Select value={fChantier} onChange={setFChantier} placeholder={t("filter.allChantiers")} options={chantiers} />
-              <input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)}
-                className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink [color-scheme:light] dark:[color-scheme:dark]" />
-              <label className="flex items-center gap-2 text-sm text-muted select-none cursor-pointer">
-                <input type="checkbox" checked={reviewOnly} onChange={(e) => setReviewOnly(e.target.checked)}
-                  className="accent-[rgb(var(--ink))]" />
-                {t("filter.review")}
-              </label>
-              <span className="text-xs text-faint tabular-nums">{t("table.rows", { n: filtered.length })}</span>
+          <Reveal i={4} id="charts">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ChartCard title={t("chart.perDay.title")} subtitle={t("chart.perDay.subtitle")} delta={wowReports}>
+                <PerDayChart data={perDay} />
+              </ChartCard>
+              <ChartCard title={t("chart.channel.title")} subtitle={t("chart.channel.subtitle")}>
+                <ChannelChart data={perChannel} />
+              </ChartCard>
             </div>
+          </Reveal>
 
-            {loading ? (
-              <p className="px-5 py-10 text-center text-muted text-sm">{t("state.loading")}</p>
-            ) : filtered.length === 0 ? (
-              <p className="px-5 py-10 text-center text-muted text-sm">{t("state.empty")}</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-faint">
-                      {[t("th.date"), t("th.channel"), t("th.technician"), t("th.chantier"), t("th.activity"),
-                        t("th.goulottes"), t("th.cables"), t("th.bureaux"), t("th.panneaux"), t("th.resume"), t("th.confidence"), ""]
-                        .map((h, i) => <th key={i} className="px-4 py-3 font-medium whitespace-nowrap">{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((r) => (
-                      <Row key={r._row} r={r} edit={edit} dash={dash}
-                        expanded={expanded === r._row}
-                        toggle={() => setExpanded(expanded === r._row ? null : r._row)} />
-                    ))}
-                  </tbody>
-                </table>
+          <Reveal i={5} id="pertech"><PerTechTable rows={perTech} /></Reveal>
+
+          <Reveal i={6}>
+            <section className="rounded-xl border border-line bg-card overflow-hidden grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-line">
+              <RecentReports rows={recent} dash={dash} />
+              <HealthPanel flagged={kFlagged} onReview={openReview} />
+              <ActivityFeed rows={activity} />
+            </section>
+          </Reveal>
+
+          <Reveal i={7} id="reports">
+            <section className="rounded-xl border border-line bg-card">
+              <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-line">
+                <h2 className="text-sm font-semibold mr-auto">{t("table.title")}</h2>
+                <Select value={fTech} onChange={setFTech} placeholder={t("filter.allTechs")} options={techs} />
+                <Select value={fChantier} onChange={setFChantier} placeholder={t("filter.allChantiers")} options={chantiers} />
+                <input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)}
+                  className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink [color-scheme:light] dark:[color-scheme:dark]" />
+                <label className="flex items-center gap-2 text-sm text-muted select-none cursor-pointer">
+                  <input type="checkbox" checked={reviewOnly} onChange={(e) => setReviewOnly(e.target.checked)}
+                    className="accent-[rgb(var(--ink))]" />
+                  {t("filter.review")}
+                </label>
+                <span className="text-xs text-faint tabular-nums">{t("table.rows", { n: filtered.length })}</span>
               </div>
-            )}
 
-            <p className="px-5 py-3 border-t border-line text-xs text-faint">
-              {t("footer.editable", { cols: EDITABLE.join(", ") })}
-            </p>
-          </section>
+              {loading ? (
+                <TableSkeleton />
+              ) : filtered.length === 0 ? (
+                <p className="px-5 py-10 text-center text-muted text-sm">{t("state.empty")}</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase tracking-wide text-faint">
+                        {[t("th.date"), t("th.channel"), t("th.technician"), t("th.chantier"), t("th.activity"),
+                          t("th.goulottes"), t("th.cables"), t("th.bureaux"), t("th.panneaux"), t("th.resume"), t("th.confidence"), ""]
+                          .map((h, i) => <th key={i} className="px-4 py-3 font-medium whitespace-nowrap">{h}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((r) => (
+                        <Row key={r._row} r={r} edit={edit} dash={dash}
+                          expanded={expanded === r._row}
+                          toggle={() => setExpanded(expanded === r._row ? null : r._row)} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <p className="px-5 py-3 border-t border-line text-xs text-faint">
+                {t("footer.editable", { cols: EDITABLE.join(", ") })}
+              </p>
+            </section>
+          </Reveal>
         </main>
       </div>
     </div>
   );
 }
 
-// ── relative time ───────────────────────────────────────────────────────
+// ── small primitives ────────────────────────────────────────────────────
+function Reveal({ i = 0, id, className = "", children }: { i?: number; id?: string; className?: string; children: ReactNode }) {
+  return <div id={id} className={"reveal " + className} style={{ animationDelay: `${i * 60}ms` }}>{children}</div>;
+}
+
+function CountUp({ n, suffix = "", decimals = 0 }: { n: number; suffix?: string; decimals?: number }) {
+  const [v, setV] = useState(n);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setV(n); return; }
+    let raf = 0; const start = performance.now(); const dur = 700;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / dur);
+      setV(n * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [n]);
+  return <>{v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}</>;
+}
+
+function Sparkline({ data }: { data: number[] }) {
+  if (data.length < 2) return null;
+  const w = 66, h = 22, max = Math.max(...data, 1), min = Math.min(...data), rng = (max - min) || 1;
+  const pts = data.map((d, i) => `${(i / (data.length - 1)) * w},${h - ((d - min) / rng) * (h - 4) - 2}`).join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="text-faint shrink-0">
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PulseDot({ ok }: { ok: boolean }) {
+  return (
+    <span className="relative inline-flex w-2 h-2">
+      <span className={"absolute inline-flex w-full h-full rounded-full opacity-60 " + (ok ? "bg-up animate-ping" : "bg-down")} />
+      <span className={"relative inline-flex w-2 h-2 rounded-full " + (ok ? "bg-up" : "bg-down")} />
+    </span>
+  );
+}
+
 function RelTime({ ts }: { ts: number }) {
   const { t } = useI18n();
   const diff = Date.now() - ts;
@@ -377,44 +423,41 @@ function ChannelChart({ data }: { data: { label: string; wa: number; tg: number 
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────
-function Sidebar({ reviewOnly, setReviewOnly, flagged, online, uptime }: {
+function Sidebar({ reviewOnly, setReviewOnly, flagged, online, uptime, onNav }: {
   reviewOnly: boolean; setReviewOnly: (v: boolean) => void; flagged: number;
-  online: boolean; uptime?: number;
+  online: boolean; uptime?: number; onNav: (id?: string) => void;
 }) {
   const { t } = useI18n();
   return (
     <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-line bg-panel">
-      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-line">
+      <button onClick={() => onNav()} className="flex items-center gap-2.5 px-5 h-16 border-b border-line hover:bg-cardhi/40 transition-colors text-left">
         <img src="/az-bot.png" alt="aznet" className="w-9 h-9 rounded-full shadow-sm" />
         <div className="leading-tight">
           <div className="text-sm font-semibold">aznet</div>
           <div className="text-[11px] text-faint">{t("brand.subtitle")}</div>
         </div>
-      </div>
+      </button>
 
       <nav className="flex-1 px-3 py-4 space-y-1 text-sm">
         <p className="px-2 pb-1 text-[11px] uppercase tracking-wide text-faint">{t("nav.supervision")}</p>
         <NavItem icon={<LayoutDashboard size={16} />} label={t("nav.dashboard")}
-          active={!reviewOnly} onClick={() => setReviewOnly(false)} />
+          active={!reviewOnly} onClick={() => { setReviewOnly(false); onNav(); }} />
         <NavItem icon={<AlertTriangle size={16} />} label={t("nav.review")} badge={flagged || undefined}
-          active={reviewOnly} onClick={() => setReviewOnly(true)} />
+          active={reviewOnly} onClick={() => { setReviewOnly(true); onNav("reports"); }} />
 
         <p className="px-2 pt-4 pb-1 text-[11px] uppercase tracking-wide text-faint">{t("nav.reference")}</p>
-        <NavItem icon={<Users size={16} />} label={t("nav.technicians")} muted />
-        <NavItem icon={<HardHat size={16} />} label={t("nav.chantiers")} muted />
-        <NavItem icon={<Radio size={16} />} label={t("nav.channels")} muted />
+        <NavItem icon={<Users size={16} />} label={t("nav.technicians")} onClick={() => onNav("pertech")} />
+        <NavItem icon={<HardHat size={16} />} label={t("nav.chantiers")} onClick={() => onNav("reports")} />
+        <NavItem icon={<Radio size={16} />} label={t("nav.channels")} onClick={() => onNav("charts")} />
 
         <p className="px-2 pt-4 pb-1 text-[11px] uppercase tracking-wide text-faint">{t("nav.admin")}</p>
-        <NavItem icon={<Settings size={16} />} label={t("nav.settings")} muted />
+        <NavItem icon={<Settings size={16} />} label={t("nav.settings")} onClick={() => onNav()} />
       </nav>
 
       <div className="px-4 py-4 border-t border-line text-[11px] text-faint space-y-1.5">
-        <div className="flex items-center gap-1.5 text-up">
-          <CheckCircle2 size={13} /> {t("sidebar.status")}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className={"inline-block w-1.5 h-1.5 rounded-full " + (online ? "bg-up" : "bg-down")} />
-          {online ? t("sys.online") : t("sys.offline")}
+        <div className="flex items-center gap-1.5 text-up"><CheckCircle2 size={13} /> {t("sidebar.status")}</div>
+        <div className="flex items-center gap-2">
+          <PulseDot ok={online} /> {online ? t("sys.online") : t("sys.offline")}
           {online && uptime != null && Number.isFinite(uptime) && <span className="text-faint">· {fmtUptime(uptime)}</span>}
         </div>
         © 2026 aznet.ma
@@ -422,14 +465,13 @@ function Sidebar({ reviewOnly, setReviewOnly, flagged, online, uptime }: {
     </aside>
   );
 }
-function NavItem({ icon, label, active, muted, badge, onClick }: {
-  icon: ReactNode; label: string; active?: boolean; muted?: boolean; badge?: number; onClick?: () => void;
+function NavItem({ icon, label, active, badge, onClick }: {
+  icon: ReactNode; label: string; active?: boolean; badge?: number; onClick?: () => void;
 }) {
   return (
-    <button onClick={onClick} disabled={muted}
-      className={"w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors " +
-        (active ? "bg-cardhi text-ink font-medium"
-          : muted ? "text-faint cursor-default" : "text-muted hover:bg-cardhi hover:text-ink")}>
+    <button onClick={onClick}
+      className={"w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-faint " +
+        (active ? "bg-cardhi text-ink font-medium" : "text-muted hover:bg-cardhi hover:text-ink")}>
       {icon}
       <span className="flex-1 text-left">{label}</span>
       {badge != null && (
@@ -440,30 +482,72 @@ function NavItem({ icon, label, active, muted, badge, onClick }: {
 }
 
 // ── Topbar ────────────────────────────────────────────────────────────
-function Topbar({ onRefresh, loading, query, setQuery }: {
+function Topbar({ onRefresh, loading, query, setQuery, flagged, onOpenReview }: {
   onRefresh: () => void; loading: boolean; query: string; setQuery: (v: string) => void;
+  flagged: Report[]; onOpenReview: () => void;
 }) {
   const { t } = useI18n();
   return (
-    <header className="sticky top-0 z-10 flex items-center gap-3 h-16 px-6 border-b border-line bg-panel/80 backdrop-blur">
+    <header className="sticky top-0 z-20 flex items-center gap-3 h-16 px-6 border-b border-line bg-panel/80 backdrop-blur">
       <div className="flex items-center gap-2 text-sm text-muted">
         <LayoutDashboard size={16} /> {t("topbar.title")}
       </div>
       <div className="relative ml-auto w-full max-w-xs">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("topbar.search")}
-          className="w-full h-9 rounded-md border border-line bg-card pl-9 pr-3 text-sm text-ink placeholder:text-faint focus:outline-none focus:border-faint" />
+          className="w-full h-9 rounded-md border border-line bg-card pl-9 pr-3 text-sm text-ink placeholder:text-faint focus:outline-none focus:border-faint transition-colors" />
       </div>
-      <button className="hidden sm:grid place-items-center w-9 h-9 rounded-md text-muted hover:text-ink hover:bg-cardhi transition-colors"><Send size={16} /></button>
-      <button className="hidden sm:grid place-items-center w-9 h-9 rounded-md text-muted hover:text-ink hover:bg-cardhi transition-colors"><Bell size={16} /></button>
+      <NotificationsBell flagged={flagged} onOpenReview={onOpenReview} />
       <LanguageToggle />
       <ThemeToggle />
       <button onClick={onRefresh} title={t("topbar.refresh")}
-        className="flex items-center gap-2 h-9 px-3 rounded-md bg-ink text-bg text-sm font-medium hover:opacity-90 transition">
+        className="flex items-center gap-2 h-9 px-3 rounded-md bg-ink text-bg text-sm font-medium hover:opacity-90 active:scale-95 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-faint">
         <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
         <span className="hidden sm:inline">{t("topbar.refresh")}</span>
       </button>
     </header>
+  );
+}
+function NotificationsBell({ flagged, onOpenReview }: { flagged: Report[]; onOpenReview: () => void }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen((o) => !o)} title={t("notif.title")} aria-label={t("notif.title")}
+        className="relative grid place-items-center w-9 h-9 rounded-md border border-line bg-card text-muted hover:text-ink transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-faint">
+        <Bell size={16} />
+        {flagged.length > 0 && (
+          <span className="absolute -top-1 -right-1 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-down text-white text-[10px] font-semibold">{flagged.length}</span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="pop-in absolute right-0 mt-2 w-72 rounded-lg border border-line bg-panel shadow-xl z-30 overflow-hidden">
+            <div className="px-4 py-3 border-b border-line text-sm font-semibold">{t("notif.title")}</div>
+            {flagged.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-muted">{t("notif.none")}</p>
+            ) : (
+              <ul className="max-h-72 overflow-auto">
+                {flagged.slice(0, 8).map((r) => (
+                  <li key={r._row}>
+                    <button onClick={() => { setOpen(false); onOpenReview(); }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-cardhi transition-colors flex items-start gap-2">
+                      <AlertTriangle size={14} className="text-down shrink-0 mt-0.5" />
+                      <span className="min-w-0">
+                        <span className="text-sm text-ink">{r.technicien || "?"}</span>
+                        <span className="text-xs text-faint"> · {r.date}</span>
+                        <span className="block text-xs text-faint truncate">{r.chantier || r.resume}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 function LanguageToggle() {
@@ -486,13 +570,13 @@ function ThemeToggle() {
   const label = theme === "dark" ? t("topbar.theme.toLight") : t("topbar.theme.toDark");
   return (
     <button onClick={toggle} title={label} aria-label={label}
-      className="grid place-items-center w-9 h-9 rounded-md border border-line bg-card text-muted hover:text-ink transition-colors">
+      className="grid place-items-center w-9 h-9 rounded-md border border-line bg-card text-muted hover:text-ink transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-faint">
       {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
     </button>
   );
 }
 
-// ── KPI section (framed panel with internal dividers) ───────────────────
+// ── KPI section (framed panel with dividers) ────────────────────────────
 function KpiSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
@@ -503,63 +587,51 @@ function KpiSection({ title, children }: { title: string; children: ReactNode })
     </section>
   );
 }
-function StatCell({ icon, label, value, hint, tone, delta, status }: {
+function StatCell({ icon, label, value, hint, tone, delta, status, spark }: {
   icon: ReactNode; label: string; value: ReactNode;
-  hint?: string; tone?: "up" | "down"; delta?: number | null; status?: "online" | "offline";
+  hint?: string; tone?: "up" | "down"; delta?: number | null; status?: "online" | "offline"; spark?: number[];
 }) {
   const { t } = useI18n();
   let footer: ReactNode;
   if (status) {
     const on = status === "online";
-    footer = (
-      <span className={"flex items-center gap-1.5 " + (on ? "text-up" : "text-down")}>
-        <span className={"inline-block w-1.5 h-1.5 rounded-full " + (on ? "bg-up" : "bg-down")} />
-        {on ? t("sys.online") : t("sys.offline")}
-      </span>
-    );
+    footer = <span className={"flex items-center gap-1.5 " + (on ? "text-up" : "text-down")}><PulseDot ok={on} /> {on ? t("sys.online") : t("sys.offline")}</span>;
   } else if (delta !== undefined) {
     if (delta === null) footer = <span className="text-faint">{t("kpi.wow.na")}</span>;
     else {
       const up = delta >= 0; const Arrow = up ? TrendingUp : TrendingDown;
-      footer = (
-        <span className={"flex items-center gap-1.5 " + (up ? "text-up" : "text-down")}>
-          <Arrow size={13} /> {t("kpi.wow", { d: (up ? "+" : "") + delta })}
-        </span>
-      );
+      footer = <span className={"flex items-center gap-1.5 " + (up ? "text-up" : "text-down")}><Arrow size={13} /> {t("kpi.wow", { d: (up ? "+" : "") + delta })}</span>;
     }
   } else {
     const Arrow = tone === "down" ? TrendingDown : TrendingUp;
-    footer = (
-      <span className={"flex items-center gap-1.5 " + (tone === "down" ? "text-down" : "text-up")}>
-        <Arrow size={13} /> <span className="text-faint">{hint}</span>
-      </span>
-    );
+    footer = <span className={"flex items-center gap-1.5 " + (tone === "down" ? "text-down" : "text-up")}><Arrow size={13} /> <span className="text-faint">{hint}</span></span>;
   }
   return (
-    <div className="p-5 transition-colors">
+    <div className="p-5 hover:bg-cardhi/30 transition-colors">
       <div className="flex items-center gap-2 text-muted text-sm">
         <span className="text-faint">{icon}</span>{label}
       </div>
-      <div className="mt-3 text-3xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div className="text-3xl font-semibold tabular-nums leading-none">{value}</div>
+        {spark && <Sparkline data={spark} />}
+      </div>
       <div className="mt-3 text-xs">{footer}</div>
     </div>
   );
 }
 
-// ── Chart card (with optional WoW badge) ────────────────────────────────
+// ── Chart card ──────────────────────────────────────────────────────────
 function ChartCard({ title, subtitle, delta, children }: {
   title: string; subtitle: string; delta?: number | null; children: ReactNode;
 }) {
-  const { t } = useI18n();
   return (
-    <div className="rounded-xl border border-line bg-card p-5">
+    <div className="hover-lift rounded-xl border border-line bg-card p-5">
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-semibold">{title}</h3>
         {delta != null && (
           <span className={"inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium " +
             (delta >= 0 ? "bg-up/15 text-up" : "bg-down/15 text-down")}>
-            {delta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-            {(delta >= 0 ? "+" : "") + delta}%
+            {delta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}{(delta >= 0 ? "+" : "") + delta}%
           </span>
         )}
       </div>
@@ -574,7 +646,7 @@ function Select({ value, onChange, placeholder, options }: {
 }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)}
-      className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink max-w-[11rem]">
+      className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink max-w-[11rem] focus:outline-none focus:border-faint transition-colors">
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o} value={o}>{o}</option>)}
     </select>
@@ -606,7 +678,7 @@ function PerTechTable({ rows }: {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.tech} className="border-t border-line hover:bg-cardhi/50">
+              <tr key={r.tech} className="border-t border-line hover:bg-cardhi/50 transition-colors">
                 <td className="px-5 py-3 text-ink">{r.tech}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-muted">{r.rapports}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-muted">{r.cables.toLocaleString()}</td>
@@ -614,7 +686,7 @@ function PerTechTable({ rows }: {
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">
                     <div className="h-1.5 w-24 rounded-full bg-line overflow-hidden" title={t("techtable.darija")}>
-                      <div className="h-full rounded-full bg-ink" style={{ width: `${r.darija}%` }} />
+                      <div className="h-full rounded-full bg-ink transition-[width] duration-700 ease-out" style={{ width: `${r.darija}%` }} />
                     </div>
                     <span className="tabular-nums text-xs text-faint w-20">{r.darija}% / {100 - r.darija}%</span>
                   </div>
@@ -628,7 +700,7 @@ function PerTechTable({ rows }: {
   );
 }
 
-// ── Recent reports panel ────────────────────────────────────────────────
+// ── Recent reports ──────────────────────────────────────────────────────
 function RecentReports({ rows, dash }: { rows: Report[]; dash: string }) {
   const { t } = useI18n();
   return (
@@ -655,8 +727,8 @@ function RecentReports({ rows, dash }: { rows: Report[]; dash: string }) {
   );
 }
 
-// ── Health empty-state panel ────────────────────────────────────────────
-function HealthPanel({ flagged }: { flagged: number }) {
+// ── Health empty-state ──────────────────────────────────────────────────
+function HealthPanel({ flagged, onReview }: { flagged: number; onReview: () => void }) {
   const { t } = useI18n();
   const ok = flagged === 0;
   return (
@@ -668,12 +740,18 @@ function HealthPanel({ flagged }: { flagged: number }) {
         </span>
         <div className="text-base font-semibold">{ok ? t("health.caughtUp") : t("health.pending", { n: flagged })}</div>
         <p className="text-xs text-muted max-w-[16rem]">{ok ? t("health.caughtUp.sub") : t("health.pending.sub")}</p>
+        {!ok && (
+          <button onClick={onReview}
+            className="mt-1 h-8 px-3 rounded-md bg-ink text-bg text-xs font-medium hover:opacity-90 active:scale-95 transition">
+            {t("nav.review")}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Activity feed panel ─────────────────────────────────────────────────
+// ── Activity feed ───────────────────────────────────────────────────────
 function ActivityFeed({ rows }: { rows: Report[] }) {
   const { t } = useI18n();
   return (
@@ -708,6 +786,22 @@ function ActivityFeed({ rows }: { rows: Report[] }) {
   );
 }
 
+// ── Loading skeleton for the reports table ──────────────────────────────
+function TableSkeleton() {
+  return (
+    <div className="p-5 space-y-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex gap-3">
+          <div className="skel h-6 w-24" />
+          <div className="skel h-6 flex-1" />
+          <div className="skel h-6 w-16" />
+          <div className="skel h-6 w-16" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Reports table row ───────────────────────────────────────────────────
 function Row({ r, edit, dash, expanded, toggle }: {
   r: Report; edit: (r: Report, field: string) => void; dash: string; expanded: boolean; toggle: () => void;
@@ -715,10 +809,10 @@ function Row({ r, edit, dash, expanded, toggle }: {
   const { t } = useI18n();
   const flagged = isFlagged(r);
   const cell = "px-4 py-3 whitespace-nowrap";
-  const ed = cell + " cursor-pointer hover:text-ink";
+  const ed = cell + " cursor-pointer hover:text-ink transition-colors";
   return (
     <>
-      <tr className={"border-t border-line " + (flagged ? "bg-down/5" : "hover:bg-cardhi/50")}>
+      <tr className={"border-t border-line transition-colors " + (flagged ? "bg-down/5" : "hover:bg-cardhi/50")}>
         <td className={cell + " text-muted"}>{r.date}<span className="text-faint"> {r.heure}</span></td>
         <td className={cell}>{r.canal === "whatsapp" ? "🟢 WA" : "🔵 TG"}</td>
         <td className={ed + " text-ink"} onClick={() => edit(r, "technicien")}>{r.technicien}</td>
@@ -736,7 +830,7 @@ function Row({ r, edit, dash, expanded, toggle }: {
           </div>
         </td>
         <td className={cell}>
-          <button onClick={toggle} className="text-faint hover:text-ink">{expanded ? "▲" : "▼"}</button>
+          <button onClick={toggle} className="text-faint hover:text-ink transition-colors">{expanded ? "▲" : "▼"}</button>
         </td>
       </tr>
       {expanded && (
