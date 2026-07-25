@@ -69,7 +69,7 @@ n8n's own execution list (UI, `http://localhost:5678`) shows each polling cycle'
 ```bash
 curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 ```
-For the **polling** workflow this should show no webhook set (or you'll get 409s). For the **webhook** variant, confirm the URL matches your current `cloudflared` tunnel — it changes every run, so update `.env`'s `WEBHOOK_URL` and reactivate the workflow when it does.
+For the **polling** workflow this should show no webhook set (or you'll get 409s). For the **webhook** variant, confirm the URL matches the Tailscale Funnel hostname (`tailscale funnel status`). That hostname is stable, so a mismatch means `WEBHOOK_URL` is stale rather than rotated.
 
 ## What doesn't apply yet
 

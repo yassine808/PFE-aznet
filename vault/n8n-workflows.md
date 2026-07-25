@@ -5,7 +5,7 @@ priority: high
 status: partial
 ---
 
-> **Status 2026-07-25:** all four workflows are merged into **one importable file, `n8n/aznet-complete.json`** (63 nodes in four labelled bands: réception, maintenance, rapport quotidien, gestionnaire d'erreurs). **The reply now happens BEFORE the Sheet append** — a Google outage can no longer swallow a report; failed writes park in a Postgres retry queue drained every 5 min. Added: durable WhatsApp idempotency (was in-memory, wiped on restart), retries + timeouts on `/process`, and per-stage logging to `POST /logs` joined by `correlation_id`. The error workflow posts to `/logs` instead of an `Errors` sheet tab. `legacy-*.json` are the superseded single-channel flows — **never activate one alongside the unified flow** (double processing). **Full setup doc: `docs/setup-guide.md`, remise en service: `SETUP-REQUIRED.md`.**
+> **Status 2026-07-25:** all four workflows are merged into **one importable file, `n8n/aznet-complete.json`** (63 nodes in four labelled bands: réception, maintenance, rapport quotidien, gestionnaire d'erreurs). **The reply now happens BEFORE the Sheet append** — a Google outage can no longer swallow a report; failed writes park in a Postgres retry queue drained every 5 min. Added: durable WhatsApp idempotency (was in-memory, wiped on restart), retries + timeouts on `/process`, and per-stage logging to `POST /logs` joined by `correlation_id`. The error workflow posts to `/logs` instead of an `Errors` sheet tab. `legacy-*.json` are the superseded single-channel flows — **never activate one alongside the unified flow** (double processing). **Full setup doc: `docs/setup-guide.md`.**
 
 # n8n Workflows
 
@@ -58,9 +58,9 @@ A **Telegram → Send Message** node replies to the technician, tagged as a repl
 ## Webhook variant setup (pilot)
 
 ```bash
-cloudflared tunnel --url http://localhost:5678
+tailscale funnel --bg 5678
 ```
-Put the printed `https://<words>.trycloudflare.com` URL in `.env` as `WEBHOOK_URL`, then `docker compose up -d` to restart. Activating the workflow makes n8n call Telegram's `setWebhook` pointing at that URL — set it *before* activating.
+Put the resulting `https://<TAILSCALE_HOSTNAME>` in `.env` as `WEBHOOK_URL`, then `docker compose up -d` to restart. The hostname is stable, so this is a one-time step. Activating the workflow makes n8n call Telegram's `setWebhook` pointing at that URL — set it *before* activating.
 
 ## Google Sheets integration — planned
 

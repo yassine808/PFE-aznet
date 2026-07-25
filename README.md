@@ -4,8 +4,6 @@ Automated daily reporting for cabling technicians: voice note in Moroccan Darija
 
 **Full project plan:** [PLAN.md](PLAN.md) · **Spec:** [docs/cahier-des-charges.md](docs/cahier-des-charges.md)
 
-> ⚠️ **Service currently down** — the API and Postgres are not running and the webhook tunnel is dead. Recovery steps: [SETUP-REQUIRED.md](SETUP-REQUIRED.md).
-
 > **Reception channels:** the cahier des charges specifies WhatsApp Business API. The project now runs **both Telegram Bot API AND WhatsApp Cloud API** as live inputs (one n8n workflow, imported from `n8n/aznet-complete.json`). Telegram was added first (no Meta friction); WhatsApp was brought up end-to-end on 2026-07-23 (System User token, published app, WABA subscription). Reception is channel-agnostic by design: both feed the same `/process` API and the same Sheet; only the reception nodes differ per channel. A message received on a channel is replied to on that same channel.
 
 ## Architecture
@@ -36,9 +34,8 @@ Dashboard (React) ←─ FastAPI /reports ────────┤→ email n
 Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ```bash
-cp .env.example .env        # fill keys as you obtain them (see SETUP-REQUIRED.md)
-docker compose up -d        # n8n on :5678, Postgres (pipeline logs) on :5432
-cd api && .venv/Scripts/python.exe -m uvicorn app.main:app --reload   # API on :8000
+cp .env.example .env        # fill keys as you obtain them (see docs/setup-guide.md)
+docker compose up -d        # n8n :5678, API :8000, Postgres (pipeline logs) :5432
 ```
 
 Then import `n8n/aznet-complete.json` — one import covers all four workflows.

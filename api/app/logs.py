@@ -13,10 +13,11 @@ psycopg2 is imported lazily inside functions so the test suite keeps running
 with no database and no API keys (see CLAUDE.md).
 """
 import json
-import os
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
+
+from app.config import settings
 
 # Stages a message walks through. Free-form strings are accepted (the API logs
 # its own errors with stage="api"), this list documents the happy path.
@@ -82,7 +83,7 @@ class LogStoreError(RuntimeError):
 
 
 def database_url() -> str:
-    url = os.getenv("DATABASE_URL")
+    url = settings.database_url
     if not url:
         raise LogStoreError(
             "DATABASE_URL is not set — start the postgres service "

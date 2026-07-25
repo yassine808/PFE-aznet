@@ -34,9 +34,11 @@ certificate. Telegram polls, so it is immune.
 breaks WhatsApp *and* requires re-running Meta's verification. This has already caused one outage
 (2026-07-25: dead tunnel → WhatsApp totally silent, Telegram still working).
 
-A Cloudflare *named* tunnel would fix it but requires a domain in the account (none owned). Chosen free
-alternative: **ngrok's free static domain** (one per account, permanent hostname), so Meta is configured
-once. Steps in `SETUP-REQUIRED.md`.
+A Cloudflare *named* tunnel would fix it but requires a domain in the account (none owned). **Resolved
+2026-07-25 with Tailscale Funnel**: `tailscale funnel --bg 5678` publishes n8n at a permanent
+`https://<TAILSCALE_HOSTNAME>`, so Meta is configured once. The tailscaled service is `AUTO_START`
+and the funnel config persists, so the URL returns on its own after a reboot. ngrok's free static domain
+was the earlier candidate and is no longer used. Steps in `docs/setup-guide.md`.
 
 ## Telegram bot setup (real, dev)
 
@@ -50,7 +52,7 @@ No webhook, no `setWebhook` call, no secret token verification is needed for the
 ## Pilot deployment (planned, Sprint 3 per PLAN.md)
 
 - Deploy the same Docker Compose stack (n8n + containerized API) to the aznet server or an Oracle Always Free VM.
-- Switch to `n8n/telegram-reception.json` (webhook), tunneled via `cloudflared` if the host has no fixed public IP/HTTPS.
+- Switch to `n8n/telegram-reception.json` (webhook), published via Tailscale Funnel if the host has no fixed public IP/HTTPS.
 - Register 2-3 real phone numbers for the pilot.
 
 None of this exists yet. Do not follow any prior version of this document that specified `vercel.json`, Caddy, Prometheus, or GitHub Actions CI — those tools are not part of the current plan; see [[Monitoring Observability]] and [[n8n Advanced]] for the honest state of those areas.

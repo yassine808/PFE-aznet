@@ -116,7 +116,7 @@ Google Sheets column layout does not exist yet — no sheet has been created, no
 
 ## Deployment Architecture (planned, not built)
 
-Per PLAN.md: dev is Docker Compose (n8n) + local `uvicorn` for the API, with a Cloudflare tunnel (`cloudflared`) for webhook mode — **not ngrok**. Pilot target is the same Docker Compose stack on the aznet server if available, otherwise an Oracle Always Free VM. React dashboard, if built, targets Vercel free tier. None of this is provisioned yet; no `vercel.json`, no VPS, no CI/CD workflow exists in the repo.
+Dev is Docker Compose — n8n, Postgres **and the API** (containerised 2026-07-25 so the pipeline returns unattended after a reboot; a host-run `uvicorn --reload` is still the faster inner loop for API work). The public HTTPS URL for webhook mode is a **Tailscale Funnel**, not `cloudflared` and not ngrok. Pilot target is the same Docker Compose stack on the aznet server if available, otherwise an Oracle Always Free VM. React dashboard, if built, targets Vercel free tier. None of this is provisioned yet; no `vercel.json`, no VPS, no CI/CD workflow exists in the repo.
 
 ## Security (planned)
 

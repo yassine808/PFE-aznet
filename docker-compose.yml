@@ -40,25 +40,41 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       # allow Code nodes / expressions to read $env.* (blocked by default in n8n 1.x+)
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
-      # FastAPI runs on the host (uvicorn), not in this network — the workflow
-      # reads $env.API_BASE_URL for /process, /logs and /sheet-queue calls.
-      - API_BASE_URL=${API_BASE_URL:-http://host.docker.internal:8000}
+      # The workflow reads $env.API_BASE_URL for /process, /logs and /sheet-queue.
+      # Default targets the api service below; override to host.docker.internal:8000
+      # when running uvicorn on the host instead (dev with --reload).
+      - API_BASE_URL=${API_BASE_URL:-http://api:8000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # NOTE: n8n's built-in tunnel (start --tunnel) is dead in modern n8n (2.x ignores it) — use cloudflared, see n8n/README.md
+    # NOTE: n8n's built-in tunnel (start --tunnel) is dead in modern n8n (2.x ignores it) — use Tailscale Funnel, see n8n/README.md
     volumes:
       - n8n_data:/home/node/.n8n
 
-  # ── Sprint 1: uncomment when api/ exists ──────────
-  # api:
-  #   build: ./api
-  #   container_name: pfe-api
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8000:8000"
-  #   env_file: .env
-  #   volumes:
-  #     - ./credentials:/app/credentials:ro
+  # The AI microservice n8n calls. Containerised so the pipeline comes back on
+  # its own after a reboot — a host-run uvicorn does not, and WhatsApp then
+  # reaches n8n but every /process call fails (technician gets "❌ Erreur").
+  api:
+    build: ./api
+    container_name: pfe-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      # .env holds localhost:5432 for a host-run uvicorn; inside this network the
+      # host is the compose service name. `environment` wins over `env_file`, so
+      # both run modes work without editing .env.
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-pfe}:${POSTGRES_PASSWORD:-pfe}@postgres:5432/${POSTGRES_DB:-pfe_logs}
+      # Absolute on purpose: sheets.py anchors a *relative* key path to
+      # Path(__file__).parents[2], which is the repo root on the host but "/" in
+      # this image (api/app → /app/app). Absolute skips that resolution.
+      - GOOGLE_SERVICE_ACCOUNT_JSON=/app/credentials/service-account.json
+      - TZ=Africa/Casablanca
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./credentials:/app/credentials:ro
 
 volumes:
   n8n_data:

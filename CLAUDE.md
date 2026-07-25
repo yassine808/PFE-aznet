@@ -10,7 +10,7 @@ Zero-budget constraint: free tiers only (Groq, Gemini AI Studio, HF Inference, T
 
 **Reception channels:** **both Telegram Bot API and WhatsApp Cloud API are live** (one workflow, imported from `n8n/aznet-complete.json` — reception + maintenance + daily report + error handler merged into a single file; brought up E2E 2026-07-23).
 
-**Channel asymmetry — remember this when debugging:** Telegram *polls* (`getUpdates`, outbound, needs no tunnel); WhatsApp is *webhook-driven* and needs a public HTTPS URL. So "Telegram errors but WhatsApp is silent" means two different faults: an error reply proves the message reached the pipeline, silence means it never arrived. `SETUP-REQUIRED.md` holds the current recovery steps. Telegram first (no Meta friction); WhatsApp needed a System User token (no expiry), a published app, a WABA `subscribed_apps` call, a manual GET-echo webhook (n8n's WhatsApp Trigger fails Meta's verification challenge), and media download via a plain HTTP node (native download op returns Bad request). Design is channel-agnostic — both feed one `/process` and one Sheet; the reply returns on the originating channel. Full walkthrough: `docs/setup-guide.md`.
+**Channel asymmetry — remember this when debugging:** Telegram *polls* (`getUpdates`, outbound, needs no tunnel); WhatsApp is *webhook-driven* and needs a public HTTPS URL. So "Telegram errors but WhatsApp is silent" means two different faults: an error reply proves the message reached the pipeline, silence means it never arrived. The public URL is a **Tailscale Funnel** (`https://<TAILSCALE_HOSTNAME>` → `127.0.0.1:5678`) — a stable hostname, so Meta is configured once and survives reboots. Telegram first (no Meta friction); WhatsApp needed a System User token (no expiry), a published app, a WABA `subscribed_apps` call, a manual GET-echo webhook (n8n's WhatsApp Trigger fails Meta's verification challenge), and media download via a plain HTTP node (native download op returns Bad request). Design is channel-agnostic — both feed one `/process` and one Sheet; the reply returns on the originating channel. Full walkthrough: `docs/setup-guide.md`.
 
 ## Commands
 
@@ -23,7 +23,7 @@ cd api
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload   # dev server on :8000
 ```
 
-n8n (orchestration) + Postgres (pipeline logs): `docker compose up -d` at repo root → n8n on http://localhost:5678, Postgres on :5432. The API needs `DATABASE_URL` and n8n needs `API_BASE_URL` in `.env` — see `n8n/README.md` §7b. Telegram reception variants (polling for local dev, webhook for pilot) and smoke test: `n8n/README.md`.
+Whole stack: `docker compose up -d` at repo root → n8n on http://localhost:5678, API on :8000, Postgres on :5432. All three are `restart: unless-stopped`, so the pipeline comes back on its own after a reboot. The API image is built from `api/Dockerfile`; compose overrides two env values for it — `DATABASE_URL` (host `postgres`, not `localhost`) and `GOOGLE_SERVICE_ACCOUNT_JSON` (absolute, because `sheets.py` anchors relative paths to `__file__.parents[2]`, which is `/` in the image). For API work, run `uvicorn --reload` on the host instead and set `API_BASE_URL=http://host.docker.internal:8000` so n8n reaches it. See `n8n/README.md` §7b. Telegram reception variants (polling for local dev, webhook for pilot) and smoke test: `n8n/README.md`.
 
 Tests must pass without any API keys — external SDKs are lazy-imported inside functions and mocked at boundaries in tests. Keep it that way.
 

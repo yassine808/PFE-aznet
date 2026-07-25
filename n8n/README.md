@@ -8,7 +8,7 @@ Workflow exports (`*.json`) live here — export after every meaningful change (
 
 Two import-ready variants:
 - [`telegram-reception-polling.json`](./telegram-reception-polling.json) — **current dev approach.** Polls `getUpdates` every 15s; outbound-only so plain `localhost` works — no tunnel, no public URL. Paste the bot token in the "Offset + token" Code node + a Telegram credential on "Get Voice File", toggle Active. If `getUpdates` returns 409, clear a leftover webhook once via `https://api.telegram.org/bot<TOKEN>/deleteWebhook`.
-- [`telegram-reception.json`](./telegram-reception.json) — webhook variant (needs the public HTTPS tunnel below; n8n's built-in `start --tunnel` is dead in n8n 2.x — use cloudflared). Pilot/server target.
+- [`telegram-reception.json`](./telegram-reception.json) — webhook variant (needs the public HTTPS URL below; n8n's built-in `start --tunnel` is dead in n8n 2.x — use Tailscale Funnel). Pilot/server target.
 
 ## Import (one file)
 
@@ -44,16 +44,16 @@ docker compose up -d     # from repo root → http://localhost:5678
 
 Telegram only delivers updates to a **public HTTPS** URL with a valid certificate (ports 443/80/88/8443). `localhost` is unreachable to it — the tunnel is still required.
 
-**Cloudflare quick tunnel (recommended)**
+**Tailscale Funnel (current setup)**
 ```bash
-winget install Cloudflare.cloudflared          # once
-cloudflared tunnel --url http://localhost:5678
+tailscale funnel --bg 5678     # once; persists across reboots
+tailscale funnel status        # → https://<machine>.<tailnet>.ts.net → 127.0.0.1:5678
 ```
-Gives `https://<words>.trycloudflare.com`. Put it in `.env` as `WEBHOOK_URL` (with trailing `/`), then `docker compose up -d` to restart so n8n adopts it.
+Gives a **stable** `https://<TAILSCALE_HOSTNAME>`. Put it in `.env` as `WEBHOOK_URL` (with trailing `/`), then `docker compose up -d` so n8n adopts it. Because the hostname never changes, Meta and Telegram are pointed at it once — no reconfiguration after a reboot.
 
-> Why WEBHOOK_URL matters: when you **activate** a workflow, n8n calls Telegram's `setWebhook` for you, pointing Telegram at `WEBHOOK_URL` + the trigger's path. Set the tunnel URL *before* activating, or Telegram gets told to deliver to `localhost` and nothing arrives. The URL changes each `cloudflared` run → update `.env` and re-activate the workflow (fine for dev; pilot gets a stable server URL).
+> Why WEBHOOK_URL matters: when you **activate** a workflow, n8n calls Telegram's `setWebhook` for you, pointing Telegram at `WEBHOOK_URL` + the trigger's path. Set it *before* activating, or Telegram is told to deliver to `localhost` and nothing arrives.
 
-**Alternative — n8n built-in tunnel:** uncomment `command: start --tunnel` in `docker-compose.yml`, restart. Prints a `*.hooks.n8n.cloud` HTTPS URL n8n uses automatically. Dev only.
+**Alternative — cloudflared quick tunnel:** `cloudflared tunnel --url http://localhost:5678` gives a throwaway `*.trycloudflare.com` URL. Works, but the URL changes every run, so Meta must be reconfigured each time. Fallback only.
 
 ## 3. Telegram voice smoke test (Week 0 exit criterion)
 

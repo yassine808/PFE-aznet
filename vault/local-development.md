@@ -16,7 +16,7 @@ Telegram (phone) ──polling (getUpdates every 15s)──▶ n8n (Docker, loca
                                               FastAPI (uvicorn --reload, :8000)
 ```
 
-No tunnel is needed for dev: the polling workflow only makes outbound calls to Telegram, so plain `localhost` works. A tunnel is only needed for the webhook variant (pilot), and it's **Cloudflare's `cloudflared`**, not ngrok — see `n8n/README.md`.
+No tunnel is needed for Telegram in dev: the polling workflow only makes outbound calls, so plain `localhost` works. A public URL is needed for WhatsApp (webhook-driven) and for the webhook Telegram variant — that's **Tailscale Funnel**, `https://<TAILSCALE_HOSTNAME>` → `127.0.0.1:5678`. See `n8n/README.md`.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ No tunnel is needed for dev: the polling workflow only makes outbound calls to T
 | Git | any recent | |
 | Python | 3.9.x | pinned — `Optional[X]`, never `X \| None` in `api/` |
 | Docker | Desktop or Engine | for n8n |
-| cloudflared | latest | only needed for webhook-mode dev/pilot |
+| Tailscale | latest | provides the public HTTPS URL (Funnel) for WhatsApp + webhook-mode Telegram |
 
 There is no Node.js, VS Code extension list, `.vscode/` config, or `requirements-dev.txt` checked into this repo — those don't exist. Dev dependencies (if any) live alongside runtime deps in `api/requirements.txt`.
 
@@ -107,8 +107,9 @@ See `n8n/README.md` for the full recipe. Summary:
 
 For webhook-mode dev (only needed to exercise `telegram-reception.json`):
 ```bash
-cloudflared tunnel --url http://localhost:5678
-# put the printed https://<words>.trycloudflare.com URL in .env as WEBHOOK_URL, then:
+tailscale funnel --bg 5678     # once; persists across reboots
+tailscale funnel status        # → https://<TAILSCALE_HOSTNAME>
+# put that URL in .env as WEBHOOK_URL (trailing slash), then:
 docker compose up -d
 ```
 

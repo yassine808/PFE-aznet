@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # default engine until the week-1 benchmark decides (PLAN.md sprint 1)
     stt_provider: str = "groq"
 
+    # pipeline log store (app/logs.py). Read here rather than via os.getenv so the
+    # host-run uvicorn sees .env too — Docker's env_file only populates the real
+    # environment for the containerised api service.
+    database_url: Optional[str] = None
+
     # dashboard backend (Sheets read/write; no auth — runs on the admin's PC only)
     sheet_id: Optional[str] = None
     google_service_account_json: str = "./credentials/service-account.json"

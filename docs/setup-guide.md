@@ -56,10 +56,12 @@ n8n side — TWO credentials:
 Webhook registration (needed before the trigger can receive):
 
 ```bash
-winget install Cloudflare.cloudflared    # once
-cloudflared tunnel --url http://localhost:5678
+tailscale funnel --bg 5678       # once; survives reboots
+tailscale funnel status          # → https://<machine>.<tailnet>.ts.net
 ```
-→ copy `https://xxx.trycloudflare.com` → `.env` `WEBHOOK_URL=https://xxx.trycloudflare.com/` (trailing slash) → `docker compose up -d` → activate workflow → open WhatsApp Trigger node, copy its production webhook URL + verify token → Meta dashboard → WhatsApp → Configuration → Webhook → paste both → Verify and save → subscribe to **messages** field.
+The hostname is **stable** (currently `https://<TAILSCALE_HOSTNAME>`), so Meta is configured once and never again — unlike a cloudflared quick tunnel, whose URL changes on every run.
+
+→ `.env` `WEBHOOK_URL=https://<TAILSCALE_HOSTNAME>/` (trailing slash) → `docker compose up -d` → activate workflow → open WhatsApp Trigger node, copy its production webhook URL + verify token → Meta dashboard → WhatsApp → Configuration → Webhook → paste both → Verify and save → subscribe to **messages** field.
 
 Test-mode limits: 5 recipient numbers max, each must message the test number first or be added in Step 1 page. Temp tokens die in 24h.
 
