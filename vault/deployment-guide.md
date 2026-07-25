@@ -14,7 +14,7 @@ status: partial
 | Environment | API | n8n | Notes |
 |---|---|---|---|
 | **Dev (current)** | Local `uvicorn --reload`, :8000 | Docker Compose, `localhost:5678` | Telegram polling — no tunnel needed |
-| **Pilot (Sprint 3)** | Same Docker Compose stack on the aznet server if available, else Oracle Always Free VM | Same host | Telegram webhook + `cloudflared` tunnel if no fixed public IP |
+| **Pilot (Sprint 3)** | Same Docker Compose stack on the aznet server if available, else Oracle Always Free VM | Same host + `postgres` service | Telegram polls (no tunnel). **WhatsApp needs a public HTTPS webhook** |
 | **Front (if built)** | Vercel free tier (React dashboard) | — | Dashboard reads Google Sheets API directly, not the FastAPI service |
 
 The FastAPI service itself is not currently planned to run on Vercel — PLAN.md targets it running alongside n8n on the same host (Docker Compose, `api:` service already stubbed out commented-in `docker-compose.yml`). Any prior version of this doc describing a `vercel.json`, Vercel serverless functions for the API, or a `n8n.aznet.ma` domain was aspirational and has been removed — do not treat it as decided.
@@ -24,6 +24,19 @@ The FastAPI service itself is not currently planned to run on Vercel — PLAN.md
 - `docker-compose.yml` (repo root) runs n8n only, mapped to `5678:5678`, with a commented-out `api:` service block reserved for Sprint 1.
 - The API has no containerization yet — it's run directly via the venv.
 - No domain, no reverse proxy, no TLS termination is configured anywhere.
+
+## Webhook tunnel — the recurring outage
+
+WhatsApp is webhook-driven: Meta must reach n8n from the public internet over HTTPS with a valid CA
+certificate. Telegram polls, so it is immune.
+
+`trycloudflare` quick tunnels get a **new random hostname on every start**, so each reboot silently
+breaks WhatsApp *and* requires re-running Meta's verification. This has already caused one outage
+(2026-07-25: dead tunnel → WhatsApp totally silent, Telegram still working).
+
+A Cloudflare *named* tunnel would fix it but requires a domain in the account (none owned). Chosen free
+alternative: **ngrok's free static domain** (one per account, permanent hostname), so Meta is configured
+once. Steps in `SETUP-REQUIRED.md`.
 
 ## Telegram bot setup (real, dev)
 

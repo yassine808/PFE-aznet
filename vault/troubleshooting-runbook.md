@@ -9,10 +9,27 @@ status: partial
 
 # Troubleshooting (Current Dev Setup)
 
+## Read the asymmetry first
+
+When one channel misbehaves and the other doesn't, the *difference* is the diagnosis:
+
+- **Telegram works, WhatsApp silent** → almost always the tunnel. Telegram polls (outbound, no tunnel needed); WhatsApp needs Meta to reach in.
+- **Both fail with an error reply** → downstream of reception: API down, or an STT/LLM engine failing.
+- **Both silent** → n8n itself is down, or the workflow is deactivated.
+
+An error reply is *better news* than silence: it proves the message reached the pipeline and the failure branch fired.
+
+
 ## Quick reference
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| **Telegram replies "❌ Erreur lors du traitement"** | The API is not running (`/process` refused) | `curl localhost:8000/health`; start uvicorn. The error reply means the pipeline caught the failure correctly |
+| **WhatsApp does not reply at all** | Webhook tunnel dead — Meta cannot reach n8n, so *no node runs* | `curl <WEBHOOK_URL>`; restart the tunnel, then re-point Meta's webhook. See [[deployment-guide]] |
+| **Logs panel empty while reports still work** | `API_BASE_URL` missing from the n8n container (started before the compose change) | `docker exec pfe-n8n printenv \| grep API_BASE_URL`; `docker compose up -d` to recreate |
+| API logs `[logs] DISABLED — …` at startup | `DATABASE_URL` unset or Postgres not running | `docker compose up -d postgres`, set `DATABASE_URL` in `.env` |
+| Reports reply fine but no Sheet rows | Sheet writes failing into the retry queue | `curl localhost:8000/sheet-queue`; check the `sheet_failed` rows in the Logs panel |
+| Same report appears twice | Dedup claim unavailable, so it failed open | Confirm Postgres is up; the claim deliberately treats an unreachable store as "fresh" |
 | n8n `getUpdates` returns 409 | Leftover webhook registered from a previous test | `curl https://api.telegram.org/bot<TOKEN>/deleteWebhook` |
 | Bot never sees voice notes | Bot added to a group (privacy mode restricts groups) | Talk to the bot in a 1:1 chat |
 | API returns 422 on `/process` | Both or neither of `audio`/`text` provided, or empty | Send exactly one, multipart form, non-empty |

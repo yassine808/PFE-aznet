@@ -5,7 +5,7 @@ priority: high
 status: partial
 ---
 
-> **Status 2026-07-23:** channel decision changed — **both Telegram AND WhatsApp** are inputs now. The production workflow is `n8n/reception-unified.json` (dual-trigger), fully configured with credentials/allowlist/Sheet. Sheets append built (service account, `Rapports` tab). Companion workflows: `error-workflow.json` (Errors tab) and `daily-report-cron.json` (`POST /daily-report` → Gmail). Remaining: Telegram E2E smoke test, WhatsApp webhook registration (tunnel). **Full setup doc: `docs/setup-guide.md`.**
+> **Status 2026-07-25:** all four workflows are merged into **one importable file, `n8n/aznet-complete.json`** (63 nodes in four labelled bands: réception, maintenance, rapport quotidien, gestionnaire d'erreurs). **The reply now happens BEFORE the Sheet append** — a Google outage can no longer swallow a report; failed writes park in a Postgres retry queue drained every 5 min. Added: durable WhatsApp idempotency (was in-memory, wiped on restart), retries + timeouts on `/process`, and per-stage logging to `POST /logs` joined by `correlation_id`. The error workflow posts to `/logs` instead of an `Errors` sheet tab. `legacy-*.json` are the superseded single-channel flows — **never activate one alongside the unified flow** (double processing). **Full setup doc: `docs/setup-guide.md`, remise en service: `SETUP-REQUIRED.md`.**
 
 # n8n Workflows
 
@@ -13,8 +13,9 @@ status: partial
 
 Workflow files in `n8n/` (exported JSON):
 
-- `n8n/reception-unified.json` — **the one to run.** Telegram polling + WhatsApp webhook into one pipeline: extract (audio OR typed text, dedupe) → shared allowlist w/ roles (outsiders: one HR reply) → ⏳ ack → download per channel → `POST /process` (audio or text mode, error → ❌ reply) → Sheets append (`canal`, `confidence`, `flag_review`) → ✅ résumé reply on the originating channel.
-- `n8n/error-workflow.json` — Error Trigger → `Errors` sheet tab; set as Error Workflow on production workflows.
+- `n8n/aznet-complete.json` — **the one to import.** Merges everything below. Reception band: Telegram polling + WhatsApp webhook into one pipeline: extract (audio OR typed text, dedupe) → shared allowlist w/ roles (outsiders: one HR reply) → ⏳ ack → download per channel → `POST /process` (audio or text mode, error → ❌ reply) → ✅ résumé reply on the originating channel → **then** Sheets append (`canal`, `confidence`, `flag_review`); on write failure the report is queued for retry instead of lost. Seven `Log *` leaf nodes record each stage.
+- `n8n/error-workflow.json` — Error Trigger → `POST /logs` (`stage: workflow_error`); set as Error Workflow. No longer writes to an `Errors` sheet tab: an error handler that reports through Google cannot report Google failing.
+- `n8n/maintenance-cron.json` — every 5 min drains the Sheet retry queue; daily 03:00 prunes logs older than 30 days.
 - `n8n/daily-report-cron.json` — Mon–Sat 18:30, today's rows → `/daily-report` → email.
 - `n8n/telegram-reception-polling.json`, `n8n/telegram-reception.json`, `n8n/whatsapp-reception.json` — single-channel variants, superseded, kept as reference.
 

@@ -90,6 +90,24 @@ See [[Extraction Pipeline]] for full detail. Primary Gemini structured output (`
 
 Only one reception path exists today: **Telegram polling** (`n8n/telegram-reception-polling.json`), plus a webhook variant (`n8n/telegram-reception.json`) targeted at the pilot. See [[n8n Workflows]] for the real node-by-node breakdown. Sheets append and email notification are **not implemented** — see TO-DO.md / PLAN.md Sprint 2.
 
+## Observability layer (2026-07-25)
+
+PostgreSQL (`postgres` compose service) behind `api/app/logs.py`:
+
+| Table | Role |
+|---|---|
+| `pipeline_logs` | one row per stage, joined across processes by `correlation_id` |
+| `processed_messages` | WhatsApp idempotency, atomic `ON CONFLICT DO NOTHING` claim |
+| `failed_writes` | Sheet retry queue, capped at 10 attempts to avoid poison-pill loops |
+
+Endpoints: `POST|GET|DELETE /logs`, `POST /logs/claim`, `POST|GET /sheet-queue`, `PATCH /sheet-queue/{id}`.
+Connections are pooled (`ThreadedConnectionPool`) and every failure surfaces as a single `LogStoreError`.
+psycopg2 is lazy-imported, so the test suite still runs with no database. Log writes from the async
+`/process` handler go through `run_in_threadpool` to keep the event loop free.
+
+**Dependency direction changed:** Google Sheets moved from *upstream* of the technician's reply to
+*downstream* of it. Sheets is no longer on the critical path — see [[n8n-workflows]].
+
 ## Data Models
 
 Google Sheets column layout does not exist yet — no sheet has been created, no n8n Sheets node configured. Do not treat any column table as current; see [[Google Sheets Integration]] for the honest plan.

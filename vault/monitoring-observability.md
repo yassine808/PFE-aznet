@@ -2,28 +2,41 @@
 tags: [pfe, monitoring, observability, alerting]
 type: technical
 priority: medium
-status: partial
+status: built
 ---
 
-> **Note on status:** none of the tooling below is set up. No Prometheus, Grafana, Loki, Sentry, or uptime monitor is running anywhere in this project. This is a lightweight plan sized to a zero-budget solo-dev PFE, not a description of live infrastructure. A prior version of this doc described a full Prometheus/Grafana/Loki/Alertmanager stack, custom metrics endpoints, and pre-built dashboards — none of that exists or is realistically in scope for this project's timeline; it has been removed.
+> **Status (2026-07-25): a purpose-built observability layer now exists.** Still no Prometheus, Grafana, Loki or Sentry — deliberately. Instead of a generic metrics stack, the project logs its own pipeline events to Postgres and surfaces them in the manager dashboard. Sized to a zero-budget solo-dev PFE.
 
-# Monitoring & Observability (Plan)
+# Monitoring & Observability
 
 ## Reality check on scope
 
-This is a solo-developer PFE with a hard Aug 31 2026 deadline, zero budget, and a handful of daily reports (~5-10/day per PLAN.md). A Prometheus/Grafana/Loki stack is disproportionate. What's actually useful:
+Solo-developer PFE, hard Aug 31 2026 deadline, zero budget, a handful of daily reports (~5-10/day per PLAN.md). A Prometheus/Grafana/Loki stack is disproportionate. A domain-specific event log is not — and answers the only question that actually matters here: *what happened to this technician's voice note?*
 
 ## What exists today
 
-- `GET /health` on the API (`api/app/main.py`) returns `{"status": "ok", "stt_providers": [...], "stt_default": "..."}`. That's the only observability surface in the codebase right now.
-- n8n's own execution history (built into the n8n UI) is the only workflow-level visibility, once reception workflows are active.
-- No logs are shipped anywhere; no metrics are emitted; no error tracker is wired in.
+- **`pipeline_logs` in Postgres** (`api/app/logs.py`, compose service `postgres`). One row per stage — `received → authorized → transcribed → extracted → replied → sheet_written`, plus `denied`, `duplicate`, `sheet_failed`, `api`, `workflow_error`. Columns: `ts`, `correlation_id`, `channel`, `technicien`, `level`, `message`, `duration_ms`, `payload` JSONB.
+- **`correlation_id`** minted by the n8n `Correlate` node and threaded through `/process`, so n8n's stages and the API's own errors — two separate processes — join into one timeline.
+- **Logs n8n dashboard panel** (`web/src/components/logs-panel.tsx`): live tail polling `GET /logs` every 5 s with a pause toggle, filters (level/channel/stage), debounced search, expandable raw payload, and four 24-hour counters including pending Sheet writes.
+- **Global error workflow** wired to `POST /logs` — any unhandled node crash lands in the panel as `workflow_error`.
+- **`duration_ms` per stage**, which doubles as free data for the STT benchmark chapter.
+- **`GET /health`** — status, version, `uptime_seconds`, STT providers. Feeds the dashboard's API-uptime tile.
+- **Retention:** 30 days, pruned nightly at 03:00 by the maintenance workflow.
 
-## Planned, lightweight approach
+### Why Postgres and not the Google Sheet
 
-- **Errors:** rely on n8n's execution history + FastAPI's own uncaught-exception traceback in the terminal during dev. A hosted error tracker (e.g. free-tier Sentry) is a "could" per PLAN.md's MoSCoW, not committed.
+The single most important event to record is *"the Sheet write failed"*. A Sheets-backed log goes blind during exactly the outage it exists to report. Postgres is an independent failure domain. Same reasoning applies to the error workflow, which was rewritten to post to `/logs` instead of appending to an `Errors` sheet tab.
+
+### Known blind spot
+
+The log only sees what **reaches n8n**. A dead webhook tunnel means Meta never delivers the WhatsApp message, no node runs, and nothing appears in the panel — the failure is invisible silence. Telegram is immune because it polls. See [[troubleshooting-runbook]].
+
+## Still lightweight elsewhere
+
+- **Errors:** the Logs panel + n8n's execution history. A hosted error tracker (e.g. free-tier Sentry) remains a "could" per PLAN.md's MoSCoW, not committed.
 - **Uptime:** if/when a pilot server exists, a single free UptimeRobot monitor on `/health` would be proportionate. Not set up yet — there's no public URL to monitor.
-- **Business-level visibility:** the manager dashboard (planned, unbuilt) is meant to surface report volume, low-confidence flags, and per-technician activity directly from the Sheet — see TO-DO.md's list (heatmap, weekly/monthly rollups, dashboard-visible STT accuracy) rather than a separate metrics stack.
+- **Business-level visibility:** the manager dashboard surfaces report volume, low-confidence flags and per-technician activity directly from the Sheet — see [[to-do]] (heatmap, weekly/monthly rollups) rather than a separate metrics stack.
+- **Uptime of the tunnel:** currently unmonitored, and it is the project's most frequent real outage. A dead tunnel is silent by construction. Worth a startup check.
 
 ## Explicitly out of scope for this PFE
 

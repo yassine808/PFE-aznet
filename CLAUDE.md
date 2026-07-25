@@ -8,7 +8,9 @@ PFE (end-of-studies project, deadline Aug 31 2026) at aznet.ma: voice notes in M
 
 Zero-budget constraint: free tiers only (Groq, Gemini AI Studio, HF Inference, Telegram Bot API, Gmail SMTP, Vercel).
 
-**Reception channels:** **both Telegram Bot API and WhatsApp Cloud API are live** (unified n8n workflow `n8n/reception-unified.json`, brought up E2E 2026-07-23). Telegram first (no Meta friction); WhatsApp needed a System User token (no expiry), a published app, a WABA `subscribed_apps` call, a manual GET-echo webhook (n8n's WhatsApp Trigger fails Meta's verification challenge), and media download via a plain HTTP node (native download op returns Bad request). Design is channel-agnostic — both feed one `/process` and one Sheet; the reply returns on the originating channel. Full walkthrough: `docs/setup-guide.md`.
+**Reception channels:** **both Telegram Bot API and WhatsApp Cloud API are live** (one workflow, imported from `n8n/aznet-complete.json` — reception + maintenance + daily report + error handler merged into a single file; brought up E2E 2026-07-23).
+
+**Channel asymmetry — remember this when debugging:** Telegram *polls* (`getUpdates`, outbound, needs no tunnel); WhatsApp is *webhook-driven* and needs a public HTTPS URL. So "Telegram errors but WhatsApp is silent" means two different faults: an error reply proves the message reached the pipeline, silence means it never arrived. `SETUP-REQUIRED.md` holds the current recovery steps. Telegram first (no Meta friction); WhatsApp needed a System User token (no expiry), a published app, a WABA `subscribed_apps` call, a manual GET-echo webhook (n8n's WhatsApp Trigger fails Meta's verification challenge), and media download via a plain HTTP node (native download op returns Bad request). Design is channel-agnostic — both feed one `/process` and one Sheet; the reply returns on the originating channel. Full walkthrough: `docs/setup-guide.md`.
 
 ## Commands
 
