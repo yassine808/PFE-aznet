@@ -17,8 +17,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        100,
-        140
+        80,
+        175
       ]
     },
     {
@@ -30,8 +30,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        300,
-        140
+        440,
+        175
       ]
     },
     {
@@ -44,8 +44,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        500,
-        140
+        800,
+        365
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -60,8 +60,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        700,
-        140
+        1160,
+        365
       ]
     },
     {
@@ -73,8 +73,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        700,
-        420
+        440,
+        555
       ]
     },
     {
@@ -86,8 +86,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        920,
-        280
+        1520,
+        365
       ]
     },
     {
@@ -118,8 +118,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1120,
-        280
+        3320,
+        365
       ]
     },
     {
@@ -149,8 +149,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1320,
-        180
+        3680,
+        270
       ]
     },
     {
@@ -166,8 +166,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        1520,
-        100
+        4040,
+        80
       ],
       "credentials": {
         "telegramApi": {
@@ -190,8 +190,8 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        1520,
-        260
+        4040,
+        270
       ],
       "credentials": {
         "whatsAppApi": {
@@ -227,8 +227,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1720,
-        180
+        4400,
+        365
       ]
     },
     {
@@ -258,8 +258,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1920,
-        100
+        4760,
+        270
       ]
     },
     {
@@ -272,8 +272,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        2120,
-        40
+        5120,
+        270
       ],
       "credentials": {
         "telegramApi": {
@@ -296,8 +296,8 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        2120,
-        180
+        5120,
+        460
       ],
       "credentials": {
         "whatsAppApi": {
@@ -328,8 +328,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2320,
-        180
+        5480,
+        365
       ],
       "credentials": {
         "whatsAppApi": {
@@ -377,8 +377,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2520,
-        100
+        5840,
+        365
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -420,8 +420,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2520,
-        320
+        4760,
+        460
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -437,8 +437,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2740,
-        170
+        6200,
+        270
       ]
     },
     {
@@ -468,8 +468,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        2740,
-        480
+        6200,
+        460
       ]
     },
     {
@@ -485,8 +485,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        2960,
-        420
+        6560,
+        365
       ],
       "credentials": {
         "telegramApi": {
@@ -509,8 +509,8 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        2960,
-        560
+        6560,
+        555
       ],
       "credentials": {
         "whatsAppApi": {
@@ -546,8 +546,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1320,
-        520
+        3680,
+        460
       ]
     },
     {
@@ -561,7 +561,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        1520,
+        4040,
         460
       ],
       "credentials": {
@@ -585,8 +585,8 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        1520,
-        600
+        4040,
+        650
       ],
       "credentials": {
         "whatsAppApi": {
@@ -814,8 +814,8 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        3860,
-        170
+        7280,
+        365
       ],
       "credentials": {
         "googleApi": {
@@ -855,8 +855,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3160,
-        170
+        6560,
+        175
       ]
     },
     {
@@ -872,8 +872,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        3380,
-        100
+        6920,
+        270
       ],
       "credentials": {
         "telegramApi": {
@@ -896,8 +896,8 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        3380,
-        260
+        6920,
+        460
       ],
       "credentials": {
         "whatsAppApi": {
@@ -918,8 +918,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        300,
-        560
+        80,
+        365
       ],
       "webhookId": "wa-unified-verify"
     },
@@ -934,8 +934,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        500,
-        560
+        440,
+        365
       ]
     },
     {
@@ -949,8 +949,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        300,
-        420
+        80,
+        555
       ],
       "webhookId": "wa-unified-messages"
     },
@@ -960,8 +960,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1040,
-        280
+        1880,
+        365
       ],
       "parameters": {
         "jsCode": "// One trace id per message, threaded through every stage so the six\n// per-message log rows (and the API's own errors, logged from a\n// different process) join into one story in the dashboard.\nreturn $input.all().map(item => ({\n  json: {\n    ...item.json,\n    correlation_id: item.json.correlation_id\n      ?? `${item.json.channel}-${item.json.message_id ?? Date.now()}`,\n  },\n}));"
@@ -973,8 +973,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1160,
-        280
+        2240,
+        365
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -994,8 +994,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1280,
-        280
+        2960,
+        365
       ],
       "parameters": {
         "conditions": {
@@ -1027,8 +1027,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1400,
-        280
+        2600,
+        365
       ],
       "parameters": {
         "jsCode": "// The claim call replaced each payload with {fresh}; re-attach the original\n// message index-wise (an HTTP node emits one output per input, in order) and\n// carry the flag forward so the IF filters real messages, not bare booleans.\n// Explicit pairedItem keeps $('Access control').item resolvable for batches.\nconst src = $('Correlate').all();\nreturn $input.all().map((item, i) => ({\n  json: { ...src[i].json, fresh: item.json.fresh !== false },\n  pairedItem: { item: i },\n}));"
@@ -1040,8 +1040,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1280,
-        460
+        3320,
+        885
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1061,8 +1061,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        920,
-        120
+        2240,
+        885
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1082,8 +1082,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1700,
-        620
+        3680,
+        885
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1103,8 +1103,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3620,
-        170
+        7280,
+        885
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1124,8 +1124,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3980,
-        100
+        7640,
+        885
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1145,8 +1145,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3980,
-        300
+        8000,
+        885
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1166,8 +1166,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3060,
-        620
+        6200,
+        885
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1187,8 +1187,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3840,
-        300
+        7640,
+        365
       ],
       "onError": "continueRegularOutput",
       "parameters": {

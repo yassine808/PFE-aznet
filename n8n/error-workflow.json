@@ -7,7 +7,10 @@
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
-      "position": [200, 300]
+      "position": [
+        80,
+        80
+      ]
     },
     {
       "parameters": {
@@ -17,7 +20,10 @@
       "name": "Format error row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 300]
+      "position": [
+        440,
+        80
+      ]
     },
     {
       "parameters": {
@@ -26,19 +32,44 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": { "timeout": 5000 }
+        "options": {
+          "timeout": 5000
+        }
       },
       "id": "c1000000-0000-4000-8000-000000000003",
       "name": "POST /logs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [640, 300],
+      "position": [
+        800,
+        80
+      ],
       "onError": "continueRegularOutput"
     }
   ],
   "connections": {
-    "Error Trigger": { "main": [[{ "node": "Format error row", "type": "main", "index": 0 }]] },
-    "Format error row": { "main": [[{ "node": "POST /logs", "type": "main", "index": 0 }]] }
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format error row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format error row": {
+      "main": [
+        [
+          {
+            "node": "POST /logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {},
   "active": false

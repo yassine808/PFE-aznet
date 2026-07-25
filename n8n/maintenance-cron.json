@@ -17,8 +17,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        200,
-        300
+        80,
+        80
       ]
     },
     {
@@ -33,8 +33,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        420,
-        300
+        440,
+        80
       ],
       "onError": "continueRegularOutput"
     },
@@ -47,8 +47,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        640,
-        300
+        800,
+        175
       ]
     },
     {
@@ -98,8 +98,8 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        860,
-        300
+        1160,
+        175
       ],
       "onError": "continueErrorOutput",
       "credentials": {
@@ -125,8 +125,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1080,
-        200
+        1520,
+        80
       ],
       "onError": "continueRegularOutput"
     },
@@ -146,8 +146,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1080,
-        400
+        1520,
+        270
       ],
       "onError": "continueRegularOutput"
     },
@@ -167,8 +167,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        200,
-        600
+        80,
+        270
       ]
     },
     {
@@ -184,8 +184,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        420,
-        600
+        440,
+        270
       ],
       "onError": "continueRegularOutput"
     }
