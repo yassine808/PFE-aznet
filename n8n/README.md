@@ -10,6 +10,23 @@ Two import-ready variants:
 - [`telegram-reception-polling.json`](./telegram-reception-polling.json) — **current dev approach.** Polls `getUpdates` every 15s; outbound-only so plain `localhost` works — no tunnel, no public URL. Paste the bot token in the "Offset + token" Code node + a Telegram credential on "Get Voice File", toggle Active. If `getUpdates` returns 409, clear a leftover webhook once via `https://api.telegram.org/bot<TOKEN>/deleteWebhook`.
 - [`telegram-reception.json`](./telegram-reception.json) — webhook variant (needs the public HTTPS tunnel below; n8n's built-in `start --tunnel` is dead in n8n 2.x — use cloudflared). Pilot/server target.
 
+## Import (one file)
+
+**Import [`aznet-complete.json`](./aznet-complete.json) — that's it.** It merges all four production workflows into a single n8n workflow with independent trigger branches, laid out in four labelled bands:
+
+| Band | Triggers | Role |
+|---|---|---|
+| 1 — Réception | `Every 15s` (TG poll), 2 WA webhooks | voice/text → `/process` → reply → Sheet |
+| 2 — Maintenance | `Every 5 min`, `Daily 03:00` | drain the Sheet retry queue, prune logs >30 d |
+| 3 — Rapport quotidien | `18:30 Mon-Sat` | day's rows → manager email |
+| 4 — Gestionnaire d'erreurs | `Error Trigger` | any crash → `POST /logs` |
+
+After import: **Settings → Error Workflow → this same workflow** (a workflow can be its own error handler; the field ships empty because it needs the ID n8n assigns at import). Then attach credentials once — one Google service account, one Telegram, one WhatsApp, one Gmail — and activate.
+
+The individual files (`reception-unified.json`, `maintenance-cron.json`, `daily-report-cron.json`, `error-workflow.json`) remain as the per-concern sources; `aznet-complete.json` is generated from them. Edit the sources, then re-merge.
+
+⚠️ `legacy-*.json` are the pre-unification single-channel flows, kept for reference only. **Never activate one alongside the unified flow** — they poll the same bot token and subscribe to the same Meta webhook, so you would get double processing: two Sheet rows, two replies, doubled free-tier quota burn. They also predate the reply-first fix, the durable dedup and all logging.
+
 ## Run
 
 ```bash

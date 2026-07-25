@@ -1,0 +1,2223 @@
+{
+  "name": "aznet — pipeline complet (reception + maintenance + rapport quotidien + erreurs)",
+  "nodes": [
+    {
+      "id": "e1000000-0000-4000-8000-900000000000",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -220
+      ],
+      "parameters": {
+        "content": "## 1 — Réception (Telegram + WhatsApp)\nPoll TG toutes les 15s + webhooks WA → contrôle d'accès → dédup → /process →\n**réponse au technicien D'ABORD**, puis écriture Sheet (échec = file d'attente).\nLes nœuds `Log *` en bas sont des feuilles : ils n'altèrent jamais le flux.",
+        "height": 180,
+        "width": 900,
+        "color": 7
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-900000000001",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1180
+      ],
+      "parameters": {
+        "content": "## 2 — Maintenance\nToutes les 5 min : vide la file `failed_writes` vers le Sheet.\nChaque jour à 03:00 : purge les logs de plus de 30 jours.",
+        "height": 180,
+        "width": 900,
+        "color": 7
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-900000000002",
+      "name": "Note 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1780
+      ],
+      "parameters": {
+        "content": "## 3 — Rapport quotidien\nLun–Sam 18:30 : lignes du jour → /daily-report (Gemini→Groq) → email au responsable.\nAucune ligne aujourd'hui = fin silencieuse, pas d'email.",
+        "height": 180,
+        "width": 900,
+        "color": 7
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-900000000003",
+      "name": "Note 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2280
+      ],
+      "parameters": {
+        "content": "## 4 — Gestionnaire d'erreurs\nAttrape tout crash non géré → POST /logs (stage `workflow_error`).\n⚠️ Après import : Settings → Error Workflow → **ce workflow lui-même**.",
+        "height": 180,
+        "width": 900,
+        "color": 7
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000001",
+      "name": "Every 15s",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        80,
+        175
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads last processed update_id so we never re-handle old messages.\n// NOTE: static data persists only while the workflow is ACTIVE (production runs).\nconst s = $getWorkflowStaticData('global');\nconst offset = s.lastUpdateId ? s.lastUpdateId + 1 : 0;\nreturn [{ json: { offset, botToken: $env.TELEGRAM_BOT_TOKEN } }];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000002",
+      "name": "Offset + token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        175
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $json.botToken }}/getUpdates?offset={{ $json.offset }}&allowed_updates=[\"message\"]",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000003",
+      "name": "getUpdates (poll)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        365
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Telegram: voice note, forwarded/uploaded audio, OR typed text report.\n// Dedupe: processed message keys tracked in static data (poll restarts re-deliver).\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  if (!m) continue;\n  const key = 'tg:' + m.chat.id + ':' + m.message_id;\n  if (s.processedMsgs[key]) continue;\n  const media = m.voice ?? m.audio;\n  const base = {\n    channel: 'telegram',\n    chat_id: m.chat.id,\n    message_id: m.message_id,\n    user_id: String(m.from?.id),\n    is_forwarded: Boolean(m.forward_date || m.forward_origin),\n    technicien: m.from?.first_name ?? String(m.from?.id),\n  };\n  if (media) {\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'audio', file_ref: media.file_id } });\n  } else if (m.text && !m.text.startsWith('/')) {\n    // typed report (ignore bot commands like /start)\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'text', text_input: m.text, file_ref: null } });\n  }\n}\nreturn out;"
+      },
+      "id": "e1000000-0000-4000-8000-000000000004",
+      "name": "Extract TG msgs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        365
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// WhatsApp Cloud API webhook payload (manual webhook: wrapped in body).\n// Voice notes and forwarded audio both arrive as type 'audio'. Text reports supported.\n// Dedupe: Meta retries webhook deliveries on slow/failed responses.\nconst s = $getWorkflowStaticData('global');\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  for (const entry of item.json.body?.entry ?? []) {\n    for (const change of entry.changes ?? []) {\n      const v = change.value;\n      const contactName = v?.contacts?.[0]?.profile?.name;\n      for (const m of v?.messages ?? []) {\n        const key = 'wa:' + m.id;\n        if (s.processedMsgs[key]) continue;\n        const base = {\n          channel: 'whatsapp',\n          chat_id: m.from,\n          message_id: m.id,\n          user_id: String(m.from),\n          is_forwarded: Boolean(m.context?.forwarded),\n          technicien: contactName ?? m.from,\n        };\n        if (m.type === 'audio' && m.audio?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'audio', file_ref: m.audio.id } });\n        } else if (m.type === 'text' && m.text?.body) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'text', text_input: m.text.body, file_ref: null } });\n        }\n      }\n    }\n  }\n}\nreturn out;"
+      },
+      "id": "e1000000-0000-4000-8000-000000000005",
+      "name": "Extract WA msgs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        555
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Access control — ONE allowlist for both channels.\n// Keys: Telegram numeric user IDs AND WhatsApp phone numbers (digits, no '+').\nconst ALLOWLIST = {\n  '<TELEGRAM_USER_ID>': { name: 'Yassine', role: 'directeur' },           // Telegram ID\n  '<WHATSAPP_NUMBER>': { name: 'Yassine', role: 'directeur' },          // WhatsApp wa_id\n};\nconst s = $getWorkflowStaticData('global');\ns.hrRepliedTo = s.hrRepliedTo ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  const entry = ALLOWLIST[String(item.json.user_id)];\n  const dedupeKey = item.json.channel + ':' + item.json.chat_id;\n  if (entry) {\n    out.push({ json: { ...item.json, technicien: entry.name, role: entry.role, authorized: true } });\n  } else if (!s.hrRepliedTo[dedupeKey]) {\n    // Outsider: exactly ONE automated HR-contact reply per chat, then silence.\n    s.hrRepliedTo[dedupeKey] = true;\n    out.push({ json: { ...item.json, authorized: false } });\n  }\n}\nreturn out;"
+      },
+      "id": "e1000000-0000-4000-8000-000000000006",
+      "name": "Access control",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        365
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000007",
+      "name": "Authorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3320,
+        365
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.channel }}",
+              "rightValue": "telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000008",
+      "name": "TG or WA? (ack)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3680,
+        270
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Access control').item.json.chat_id }}",
+        "text": "⏳ Traitement en cours...",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Access control').item.json.message_id }}"
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000009",
+      "name": "TG ack",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        4040,
+        80
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "rGmQZPu47DQnfLi5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $('Access control').item.json.chat_id }}",
+        "textBody": "⏳ Traitement en cours...",
+        "additionalFields": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000010",
+      "name": "WA ack",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        4040,
+        270
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Access control').item.json.kind }}",
+              "rightValue": "audio",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000011",
+      "name": "Audio or text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        365
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Access control').item.json.channel }}",
+              "rightValue": "telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000012",
+      "name": "TG or WA? (download)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4760,
+        270
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $('Access control').item.json.file_ref }}"
+      },
+      "id": "e1000000-0000-4000-8000-000000000013",
+      "name": "TG Get Voice File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        5120,
+        270
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "rGmQZPu47DQnfLi5",
+          "name": "Telegram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "operation": "mediaUrlGet",
+        "mediaGetId": "={{ $('Access control').item.json.file_ref }}"
+      },
+      "id": "e1000000-0000-4000-8000-000000000014",
+      "name": "WA Get media URL",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        5120,
+        460
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000015",
+      "name": "WA Download audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5480,
+        365
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/process",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "audio",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{ $('Restore message').item.json.correlation_id }}"
+            },
+            {
+              "name": "channel",
+              "value": "={{ $('Access control').item.json.channel }}"
+            },
+            {
+              "name": "technicien",
+              "value": "={{ $('Access control').item.json.technicien }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000016",
+      "name": "POST /process (audio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5840,
+        365
+      ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/process",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $('Access control').item.json.text_input }}"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{ $('Restore message').item.json.correlation_id }}"
+            },
+            {
+              "name": "channel",
+              "value": "={{ $('Access control').item.json.channel }}"
+            },
+            {
+              "name": "technicien",
+              "value": "={{ $('Access control').item.json.technicien }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000017",
+      "name": "POST /process (text)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4760,
+        460
+      ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Stable reference point for downstream nodes regardless of audio/text path.\nreturn $input.all();"
+      },
+      "id": "e1000000-0000-4000-8000-000000000018",
+      "name": "Process output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6200,
+        270
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Access control').item.json.channel }}",
+              "rightValue": "telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000019",
+      "name": "TG or WA? (fail)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6200,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Access control').item.json.chat_id }}",
+        "text": "❌ Erreur lors du traitement de votre rapport. Merci de réessayer dans quelques minutes.",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Access control').item.json.message_id }}"
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000020",
+      "name": "TG fail reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        6560,
+        365
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "rGmQZPu47DQnfLi5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $('Access control').item.json.chat_id }}",
+        "textBody": "❌ Erreur lors du traitement de votre rapport. Merci de réessayer dans quelques minutes.",
+        "additionalFields": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000021",
+      "name": "WA fail reply",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        6560,
+        555
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.channel }}",
+              "rightValue": "telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000022",
+      "name": "TG or WA? (HR)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3680,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>",
+        "additionalFields": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000023",
+      "name": "TG HR reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        4040,
+        460
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "rGmQZPu47DQnfLi5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $json.chat_id }}",
+        "textBody": "Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>",
+        "additionalFields": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000024",
+      "name": "WA HR reply",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        4040,
+        650
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<GOOGLE_SHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Rapports"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $now.toFormat('yyyy-MM-dd') }}",
+            "heure": "={{ $now.toFormat('HH:mm') }}",
+            "canal": "={{ $('Access control').item.json.channel }}",
+            "technicien": "={{ $('Access control').item.json.technicien }}",
+            "role": "={{ $('Access control').item.json.role }}",
+            "chantier": "={{ $('Process output').item.json.report.chantier }}",
+            "client": "={{ $('Process output').item.json.report.client }}",
+            "type_activite": "={{ $('Process output').item.json.report.type_activite }}",
+            "goulottes_m": "={{ $('Process output').item.json.report.goulottes_m }}",
+            "cables_m": "={{ $('Process output').item.json.report.cables_m }}",
+            "bureaux_termines": "={{ $('Process output').item.json.report.bureaux_termines }}",
+            "panneaux_raccordes": "={{ $('Process output').item.json.report.panneaux_raccordes }}",
+            "autres_travaux": "={{ $('Process output').item.json.report.autres_travaux }}",
+            "observations": "={{ $('Process output').item.json.report.observations }}",
+            "resume": "={{ $('Process output').item.json.report.resume }}",
+            "rapport_complet": "={{ $('Process output').item.json.rapport_complet }}",
+            "confidence": "={{ $('Process output').item.json.transcription?.confidence }}",
+            "flag_review": "={{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') || ($('Process output').item.json.warnings ?? []).includes('short_transcription') }}",
+            "lien_audio": "={{ $('Access control').item.json.file_ref }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "heure",
+              "displayName": "heure",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "canal",
+              "displayName": "canal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "technicien",
+              "displayName": "technicien",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role",
+              "displayName": "role",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "chantier",
+              "displayName": "chantier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client",
+              "displayName": "client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type_activite",
+              "displayName": "type_activite",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "goulottes_m",
+              "displayName": "goulottes_m",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cables_m",
+              "displayName": "cables_m",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bureaux_termines",
+              "displayName": "bureaux_termines",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "panneaux_raccordes",
+              "displayName": "panneaux_raccordes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "autres_travaux",
+              "displayName": "autres_travaux",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "observations",
+              "displayName": "observations",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "resume",
+              "displayName": "resume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rapport_complet",
+              "displayName": "rapport_complet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "flag_review",
+              "displayName": "flag_review",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lien_audio",
+              "displayName": "lien_audio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "serviceAccount"
+      },
+      "id": "e1000000-0000-4000-8000-000000000025",
+      "name": "Append Sheet row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        7280,
+        365
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "zRwJLWyZJQXZRtsm",
+          "name": "Google Service Account account"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Access control').item.json.channel }}",
+              "rightValue": "telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000026",
+      "name": "TG or WA? (reply)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6560,
+        175
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Access control').item.json.chat_id }}",
+        "text": "=✅ Rapport enregistré\n\n{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Access control').item.json.message_id }}"
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000027",
+      "name": "TG reply summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        6920,
+        270
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "rGmQZPu47DQnfLi5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $('Access control').item.json.chat_id }}",
+        "textBody": "=✅ Rapport enregistré\n\n{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "additionalFields": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000028",
+      "name": "WA reply summary",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        6920,
+        460
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "whatsapp-unified",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000029",
+      "name": "WA Webhook verify (GET)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        365
+      ],
+      "webhookId": "wa-unified-verify"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.verify_token'] === 'pfe-aznet-verify' ? $json.query['hub.challenge'] : 'forbidden' }}",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000030",
+      "name": "WA Echo challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        365
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-unified",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000031",
+      "name": "WA Webhook messages (POST)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        555
+      ],
+      "webhookId": "wa-unified-messages"
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000032",
+      "name": "Correlate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        365
+      ],
+      "parameters": {
+        "jsCode": "// One trace id per message, threaded through every stage so the six\n// per-message log rows (and the API's own errors, logged from a\n// different process) join into one story in the dashboard.\nreturn $input.all().map(item => ({\n  json: {\n    ...item.json,\n    correlation_id: item.json.correlation_id\n      ?? `${item.json.channel}-${item.json.message_id ?? Date.now()}`,\n  },\n}));"
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000033",
+      "name": "Claim message (dedup)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        365
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs/claim",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({message_id: $json.channel + ':' + ($json.message_id ?? ''), channel: $json.channel}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000034",
+      "name": "Fresh?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        365
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "fresh-check",
+              "leftValue": "={{ $json.fresh }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000035",
+      "name": "Restore message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        365
+      ],
+      "parameters": {
+        "jsCode": "// The claim call replaced each payload with {fresh}; re-attach the original\n// message index-wise (an HTTP node emits one output per input, in order) and\n// carry the flag forward so the IF filters real messages, not bare booleans.\n// Explicit pairedItem keeps $('Access control').item resolvable for batches.\nconst src = $('Correlate').all();\nreturn $input.all().map((item, i) => ({\n  json: { ...src[i].json, fresh: item.json.fresh !== false },\n  pairedItem: { item: i },\n}));"
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000036",
+      "name": "Log duplicate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3320,
+        885
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"stage\":\"duplicate\",\"level\":\"warn\",\"message\":\"message ignored: already processed (webhook retry)\",\"correlation_id\": $json.correlation_id ?? null,\"channel\": $json.channel ?? null,\"technicien\": $json.technicien ?? null}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000037",
+      "name": "Log received",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        885
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"stage\":\"received\",\"level\":\"info\",\"message\":\"message received\",\"correlation_id\": $json.correlation_id ?? null,\"channel\": $json.channel ?? null,\"technicien\": $json.technicien ?? null}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000038",
+      "name": "Log denied",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3680,
+        885
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"stage\":\"denied\",\"level\":\"warn\",\"message\":\"unauthorized sender\",\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000039",
+      "name": "Log replied",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7280,
+        885
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"stage\":\"replied\",\"level\":\"info\",\"message\":\"summary sent to technician\",\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000040",
+      "name": "Log sheet OK",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7640,
+        885
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"stage\":\"sheet_written\",\"level\":\"info\",\"message\":\"row appended\",\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000041",
+      "name": "Log sheet failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8000,
+        885
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"stage\":\"sheet_failed\",\"level\":\"error\",\"message\":(\"Sheet write failed: \" + ($json.error?.message ?? $json.error ?? \"unknown\")),\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000042",
+      "name": "Log process failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6200,
+        885
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"stage\":\"api\",\"level\":\"error\",\"message\":(\"/process failed: \" + ($json.error?.message ?? JSON.stringify($json).slice(0,300))),\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "e1000000-0000-4000-8000-000000000043",
+      "name": "Queue failed write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7640,
+        365
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/sheet-queue",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({correlation_id: $('Restore message').item.json.correlation_id,error: 'sheet append failed',payload: {date: $now.toFormat('yyyy-MM-dd'),heure: $now.toFormat('HH:mm'),canal: $('Access control').item.json.channel,technicien: $('Access control').item.json.technicien,role: $('Access control').item.json.role,lien_audio: $('Access control').item.json.file_ref ?? '',report: $('Process output').item.json.report,warnings: $('Process output').item.json.warnings ?? [],confidence: $('Process output').item.json.transcription?.confidence ?? '',rapport_complet: $('Process output').item.json.rapport_complet}}) }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000044",
+      "name": "Every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        80,
+        1480
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.API_BASE_URL }}/sheet-queue",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000045",
+      "name": "GET pending writes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        1480
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan the queue out to one item per parked report so the Sheet node\n// appends them individually. Empty queue emits nothing (workflow ends).\nconst pending = $input.first().json.pending ?? [];\nreturn pending.map(p => ({ json: { queue_id: p.id, correlation_id: p.correlation_id, attempts: p.attempts, ...p.payload } }));"
+      },
+      "id": "e1000000-0000-4000-8000-000000000046",
+      "name": "Split queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        1575
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<GOOGLE_SHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Rapports"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $json.date }}",
+            "heure": "={{ $json.heure }}",
+            "canal": "={{ $json.canal }}",
+            "technicien": "={{ $json.technicien }}",
+            "role": "={{ $json.role }}",
+            "chantier": "={{ $json.report.chantier }}",
+            "client": "={{ $json.report.client }}",
+            "type_activite": "={{ $json.report.type_activite }}",
+            "goulottes_m": "={{ $json.report.goulottes_m }}",
+            "cables_m": "={{ $json.report.cables_m }}",
+            "bureaux_termines": "={{ $json.report.bureaux_termines }}",
+            "panneaux_raccordes": "={{ $json.report.panneaux_raccordes }}",
+            "autres_travaux": "={{ $json.report.autres_travaux }}",
+            "observations": "={{ $json.report.observations }}",
+            "resume": "={{ $json.report.resume }}",
+            "rapport_complet": "={{ $json.rapport_complet }}",
+            "confidence": "={{ $json.confidence }}",
+            "flag_review": "={{ ($json.warnings ?? []).includes('low_confidence_transcription') || ($json.warnings ?? []).includes('short_transcription') }}",
+            "lien_audio": "={{ $json.lien_audio }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {},
+        "authentication": "serviceAccount"
+      },
+      "id": "e1000000-0000-4000-8000-000000000047",
+      "name": "Retry Sheet append",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1160,
+        1575
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "googleApi": {
+          "id": "zRwJLWyZJQXZRtsm",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.API_BASE_URL }}/sheet-queue/{{ $('Split queue').all()[$itemIndex].json.queue_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ok: true}) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000048",
+      "name": "Mark resolved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        1480
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.API_BASE_URL }}/sheet-queue/{{ $('Split queue').all()[$itemIndex].json.queue_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ok: false, error: String($json.error?.message ?? 'retry failed')}) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000049",
+      "name": "Bump attempts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        1670
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000050",
+      "name": "Daily 03:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        80,
+        1670
+      ]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $env.API_BASE_URL }}/logs?days=30",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000051",
+      "name": "Prune logs (30d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        1670
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 18 * * 1-6"
+            }
+          ]
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000052",
+      "name": "18:30 Mon-Sat",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Rapports"
+        },
+        "options": {},
+        "authentication": "serviceAccount"
+      },
+      "id": "e1000000-0000-4000-8000-000000000053",
+      "name": "Read Rapports sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        420,
+        2300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "zRwJLWyZJQXZRtsm",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep only today's rows and build the /daily-report payload.\n// Emits nothing when the day had zero reports (cron ends quietly).\nconst today = $now.toFormat('yyyy-MM-dd');\nconst rows = $input.all().map(i => i.json).filter(r => r.date === today);\nif (!rows.length) return [];\nreturn [{ json: { date: today, rows } }];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000054",
+      "name": "Today's rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/daily-report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000055",
+      "name": "POST /daily-report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "REPLACE_WITH_MANAGER_EMAIL",
+        "subject": "={{ $json.objet }}",
+        "message": "={{ $json.corps.replaceAll('\\n', '<br>') }}",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000056",
+      "name": "Email manager",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1080,
+        2300
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "e1000000-0000-4000-8000-000000000057",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        80,
+        2580
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten n8n's error payload into one pipeline_logs row.\n// Payload shape: { workflow: {id,name}, execution: {id,url,error,lastNodeExecuted,...} }\n// Goes to Postgres, NOT the Sheet: an error handler that writes to Google\n// cannot report the failure of writing to Google.\nconst e = $input.first().json;\nconst err = e.execution?.error ?? {};\nreturn [{\n  json: {\n    stage: 'workflow_error',\n    level: 'error',\n    message: err.message ?? String(err),\n    correlation_id: null,\n    channel: null,\n    technicien: null,\n    payload: {\n      workflow: e.workflow?.name ?? '',\n      node: err.node?.name ?? e.execution?.lastNodeExecuted ?? '',\n      execution_url: e.execution?.url ?? '',\n      execution_id: e.execution?.id ?? '',\n    },\n  },\n}];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000058",
+      "name": "Format error row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        2580
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000059",
+      "name": "POST /logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        2580
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Every 15s": {
+      "main": [
+        [
+          {
+            "node": "Offset + token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offset + token": {
+      "main": [
+        [
+          {
+            "node": "getUpdates (poll)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getUpdates (poll)": {
+      "main": [
+        [
+          {
+            "node": "Extract TG msgs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract TG msgs": {
+      "main": [
+        [
+          {
+            "node": "Access control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract WA msgs": {
+      "main": [
+        [
+          {
+            "node": "Access control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Access control": {
+      "main": [
+        [
+          {
+            "node": "Correlate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?": {
+      "main": [
+        [
+          {
+            "node": "TG or WA? (ack)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TG or WA? (HR)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log denied",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG or WA? (ack)": {
+      "main": [
+        [
+          {
+            "node": "TG ack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WA ack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG ack": {
+      "main": [
+        [
+          {
+            "node": "Audio or text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA ack": {
+      "main": [
+        [
+          {
+            "node": "Audio or text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio or text?": {
+      "main": [
+        [
+          {
+            "node": "TG or WA? (download)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "POST /process (text)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG or WA? (download)": {
+      "main": [
+        [
+          {
+            "node": "TG Get Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WA Get media URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG or WA? (HR)": {
+      "main": [
+        [
+          {
+            "node": "TG HR reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WA HR reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG Get Voice File": {
+      "main": [
+        [
+          {
+            "node": "POST /process (audio)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA Get media URL": {
+      "main": [
+        [
+          {
+            "node": "WA Download audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA Download audio": {
+      "main": [
+        [
+          {
+            "node": "POST /process (audio)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /process (audio)": {
+      "main": [
+        [
+          {
+            "node": "Process output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TG or WA? (fail)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log process failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /process (text)": {
+      "main": [
+        [
+          {
+            "node": "Process output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TG or WA? (fail)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log process failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process output": {
+      "main": [
+        [
+          {
+            "node": "TG or WA? (reply)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG or WA? (fail)": {
+      "main": [
+        [
+          {
+            "node": "TG fail reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WA fail reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Sheet row": {
+      "main": [
+        [
+          {
+            "node": "Log sheet OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Queue failed write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG or WA? (reply)": {
+      "main": [
+        [
+          {
+            "node": "TG reply summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WA reply summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA Webhook verify (GET)": {
+      "main": [
+        [
+          {
+            "node": "WA Echo challenge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA Webhook messages (POST)": {
+      "main": [
+        [
+          {
+            "node": "Extract WA msgs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log received": {
+      "main": [
+        []
+      ]
+    },
+    "Correlate": {
+      "main": [
+        [
+          {
+            "node": "Claim message (dedup)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log received",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim message (dedup)": {
+      "main": [
+        [
+          {
+            "node": "Restore message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fresh?": {
+      "main": [
+        [
+          {
+            "node": "Authorized?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore message": {
+      "main": [
+        [
+          {
+            "node": "Fresh?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log duplicate": {
+      "main": [
+        []
+      ]
+    },
+    "Log denied": {
+      "main": [
+        []
+      ]
+    },
+    "TG reply summary": {
+      "main": [
+        [
+          {
+            "node": "Append Sheet row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log replied",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA reply summary": {
+      "main": [
+        [
+          {
+            "node": "Append Sheet row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log replied",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log replied": {
+      "main": [
+        []
+      ]
+    },
+    "Queue failed write": {
+      "main": [
+        [
+          {
+            "node": "Log sheet failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log sheet OK": {
+      "main": [
+        []
+      ]
+    },
+    "Log sheet failed": {
+      "main": [
+        []
+      ]
+    },
+    "Log process failed": {
+      "main": [
+        []
+      ]
+    },
+    "Every 5 min": {
+      "main": [
+        [
+          {
+            "node": "GET pending writes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET pending writes": {
+      "main": [
+        [
+          {
+            "node": "Split queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split queue": {
+      "main": [
+        [
+          {
+            "node": "Retry Sheet append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Sheet append": {
+      "main": [
+        [
+          {
+            "node": "Mark resolved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bump attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 03:00": {
+      "main": [
+        [
+          {
+            "node": "Prune logs (30d)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "18:30 Mon-Sat": {
+      "main": [
+        [
+          {
+            "node": "Read Rapports sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Rapports sheet": {
+      "main": [
+        [
+          {
+            "node": "Today's rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Today's rows": {
+      "main": [
+        [
+          {
+            "node": "POST /daily-report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /daily-report": {
+      "main": [
+        [
+          {
+            "node": "Email manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format error row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format error row": {
+      "main": [
+        [
+          {
+            "node": "POST /logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "errorWorkflow": ""
+  },
+  "active": false
+}
