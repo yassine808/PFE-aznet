@@ -78,7 +78,36 @@ The reception workflows append the full row to the `Rapports` tab (date, heure, 
 
 ## 7. Error workflow
 
-Import [`error-workflow.json`](./error-workflow.json), then in each production workflow: **Settings → Error Workflow → "Error handler -> Errors sheet tab"**. Any failed execution appends `timestamp / workflow / node / message / execution_url` to the `Errors` tab.
+Import [`error-workflow.json`](./error-workflow.json), then in each production workflow: **Settings → Error Workflow → "Error handler -> POST /logs"**. Any failed execution posts `stage: workflow_error` to the API with the workflow name, failing node and execution URL, and shows up in the dashboard's **Logs n8n** panel.
+
+It writes to Postgres, **not** the Sheet: an error handler that reports through Google Sheets cannot report the failure of writing to Google Sheets.
+
+## 7b. Pipeline logs (dashboard "Logs n8n" panel)
+
+`docker compose up -d postgres` starts the log store. The API creates its tables at startup; if `DATABASE_URL` is unset the API still runs and prints `[logs] DISABLED — ...` (the pipeline never stops because observability is down).
+
+Add to `.env` at the repo root:
+
+```bash
+DATABASE_URL=postgresql://pfe:pfe@localhost:5432/pfe_logs
+API_BASE_URL=http://host.docker.internal:8000   # how the n8n container reaches the host API
+# optional overrides, must match DATABASE_URL
+POSTGRES_USER=pfe
+POSTGRES_PASSWORD=pfe
+POSTGRES_DB=pfe_logs
+```
+
+The unified workflow posts one row per stage (`received → authorized → transcribed → extracted → replied → sheet_written`), plus `denied`, `duplicate`, `sheet_failed` and `api`. Every row carries a `correlation_id` minted by the **Correlate** node, so the n8n stages and the API's own errors — two separate processes — join into one timeline in the dashboard.
+
+Retention is 30 days, swept by the maintenance workflow.
+
+## 7c. Reply-first + Sheet retry queue
+
+**The Sheet write no longer blocks the technician's reply.** The chain is now `Process output → reply → Log replied → Append Sheet row`. When the append fails, the report is parked in the `failed_writes` table (`POST /sheet-queue`) instead of being lost, and the technician still receives their summary.
+
+Import [`maintenance-cron.json`](./maintenance-cron.json): every 5 min it drains the retry queue back into the `Rapports` tab, and daily at 03:00 it prunes logs older than 30 days. Replace `REPLACE_WITH_SPREADSHEET_ID` and attach the Google credential, same as the reception workflow.
+
+Idempotency: **Claim message (dedup)** calls `POST /logs/claim` before processing. Meta retries the WhatsApp webhook when it does not get a fast 200 — without the claim that means duplicate Sheet rows, duplicate replies and duplicate free-tier quota burn. If the claim store is unreachable the message is treated as fresh (a rare duplicate beats a silently dropped report).
 
 ## 8. WhatsApp reception (second input channel)
 

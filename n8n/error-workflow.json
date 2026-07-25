@@ -1,5 +1,5 @@
 {
-  "name": "Error handler -> Errors sheet tab",
+  "name": "Error handler -> POST /logs",
   "nodes": [
     {
       "parameters": {},
@@ -11,7 +11,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Flatten n8n's error payload into one Errors-tab row.\n// Payload shape: { workflow: {id,name}, execution: {id,url,error,lastNodeExecuted,...} }\nconst e = $input.first().json;\nconst err = e.execution?.error ?? {};\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    workflow: e.workflow?.name ?? '',\n    node: err.node?.name ?? e.execution?.lastNodeExecuted ?? '',\n    message: err.message ?? String(err),\n    execution_url: e.execution?.url ?? '',\n  },\n}];"
+        "jsCode": "// Flatten n8n's error payload into one pipeline_logs row.\n// Payload shape: { workflow: {id,name}, execution: {id,url,error,lastNodeExecuted,...} }\n// Goes to Postgres, NOT the Sheet: an error handler that writes to Google\n// cannot report the failure of writing to Google.\nconst e = $input.first().json;\nconst err = e.execution?.error ?? {};\nreturn [{\n  json: {\n    stage: 'workflow_error',\n    level: 'error',\n    message: err.message ?? String(err),\n    correlation_id: null,\n    channel: null,\n    technicien: null,\n    payload: {\n      workflow: e.workflow?.name ?? '',\n      node: err.node?.name ?? e.execution?.lastNodeExecuted ?? '',\n      execution_url: e.execution?.url ?? '',\n      execution_id: e.execution?.id ?? '',\n    },\n  },\n}];"
       },
       "id": "c1000000-0000-4000-8000-000000000002",
       "name": "Format error row",
@@ -21,47 +21,24 @@
     },
     {
       "parameters": {
-        "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "REPLACE_WITH_SPREADSHEET_ID"
-        },
-        "sheetName": {
-          "__rl": true,
-          "mode": "name",
-          "value": "Errors"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "timestamp": "={{ $json.timestamp }}",
-            "workflow": "={{ $json.workflow }}",
-            "node": "={{ $json.node }}",
-            "message": "={{ $json.message }}",
-            "execution_url": "={{ $json.execution_url }}"
-          },
-          "matchingColumns": [],
-          "schema": []
-        },
-        "options": {}
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 5000 }
       },
       "id": "c1000000-0000-4000-8000-000000000003",
-      "name": "Append error row",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
+      "name": "POST /logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [640, 300],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_YOUR_GOOGLE_CREDENTIAL_ID",
-          "name": "Google Sheets"
-        }
-      }
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
     "Error Trigger": { "main": [[{ "node": "Format error row", "type": "main", "index": 0 }]] },
-    "Format error row": { "main": [[{ "node": "Append error row", "type": "main", "index": 0 }]] }
+    "Format error row": { "main": [[{ "node": "POST /logs", "type": "main", "index": 0 }]] }
   },
   "settings": {},
   "active": false

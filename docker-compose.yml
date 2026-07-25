@@ -1,4 +1,27 @@
 services:
+  # Pipeline event log + idempotency + Sheet retry queue (read by the dashboard
+  # "Logs" panel). Deliberately NOT the Google Sheet: the most important event
+  # to record is "the Sheet write failed", and a Sheets-backed log goes blind
+  # during exactly that outage.
+  postgres:
+    image: postgres:16-alpine
+    container_name: pfe-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-pfe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-pfe}
+      - POSTGRES_DB=${POSTGRES_DB:-pfe_logs}
+      - TZ=Africa/Casablanca
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pfe} -d ${POSTGRES_DB:-pfe_logs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
     container_name: pfe-n8n
@@ -17,6 +40,11 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       # allow Code nodes / expressions to read $env.* (blocked by default in n8n 1.x+)
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      # FastAPI runs on the host (uvicorn), not in this network — the workflow
+      # reads $env.API_BASE_URL for /process, /logs and /sheet-queue calls.
+      - API_BASE_URL=${API_BASE_URL:-http://host.docker.internal:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # NOTE: n8n's built-in tunnel (start --tunnel) is dead in modern n8n (2.x ignores it) — use cloudflared, see n8n/README.md
     volumes:
       - n8n_data:/home/node/.n8n
@@ -34,3 +62,4 @@ services:
 
 volumes:
   n8n_data:
+  pg_data:

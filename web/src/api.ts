@@ -59,3 +59,44 @@ export async function fetchHealth(): Promise<Health> {
   const r = await request("/health");
   return r.json();
 }
+
+// ── Pipeline logs (Postgres-backed, written by n8n at every stage) ─────────
+
+export interface LogEntry {
+  id: number;
+  ts: string;
+  correlation_id: string | null;
+  channel: string | null;
+  technicien: string | null;
+  stage: string;
+  level: "info" | "warn" | "error";
+  message: string | null;
+  duration_ms: number | null;
+  payload: Record<string, unknown> | null;
+}
+
+export interface LogsResponse {
+  logs: LogEntry[];
+  stats: {
+    last_24h: Record<string, number>;
+    pending_sheet_writes: number;
+    retention_days: number;
+  };
+}
+
+export interface LogFilters {
+  level?: string;
+  channel?: string;
+  stage?: string;
+  search?: string;
+  limit?: number;
+}
+
+export async function fetchLogs(f: LogFilters = {}): Promise<LogsResponse> {
+  const qs = new URLSearchParams();
+  Object.entries(f).forEach(([k, v]) => {
+    if (v !== undefined && v !== "") qs.set(k, String(v));
+  });
+  const r = await request(`/logs?${qs.toString()}`);
+  return r.json();
+}

@@ -7,9 +7,10 @@ import {
   LayoutDashboard, Users, HardHat, AlertTriangle, Settings, RefreshCw,
   Search, TrendingUp, TrendingDown, FileText, CheckCircle2, Radio, Moon, Sun,
   Cable, Ruler, Building2, Network, Gauge, ShieldAlert, FileWarning,
-  Clock, Server, Bell, CalendarDays, Mic,
+  Clock, Server, Bell, CalendarDays, Mic, ScrollText,
 } from "lucide-react";
 import { fetchReports, patchReport, fetchHealth, Report, Health } from "./api";
+import { LogsPanel } from "./components/logs-panel";
 import { useI18n, LANGS, type Lang } from "./i18n";
 import { useTheme, type ChartTheme } from "./theme";
 
@@ -322,6 +323,8 @@ function Dashboard() {
               </p>
             </section>
           </Reveal>
+
+          <Reveal i={8} id="logs"><LogsPanel /></Reveal>
         </main>
       </div>
     </div>
@@ -429,7 +432,7 @@ function Sidebar({ reviewOnly, setReviewOnly, flagged, online, uptime, onNav }: 
 }) {
   const { t } = useI18n();
   return (
-    <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-line bg-panel">
+    <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-line bg-panel sticky top-0 h-screen self-start overflow-y-auto">
       <button onClick={() => onNav()} className="flex items-center gap-2.5 px-5 h-16 border-b border-line hover:bg-cardhi/40 transition-colors text-left">
         <img src="/az-bot.png" alt="aznet" className="w-9 h-9 rounded-full shadow-sm" />
         <div className="leading-tight">
@@ -451,6 +454,7 @@ function Sidebar({ reviewOnly, setReviewOnly, flagged, online, uptime, onNav }: 
         <NavItem icon={<Radio size={16} />} label={t("nav.channels")} onClick={() => onNav("charts")} />
 
         <p className="px-2 pt-4 pb-1 text-[11px] uppercase tracking-wide text-faint">{t("nav.admin")}</p>
+        <NavItem icon={<ScrollText size={16} />} label={t("nav.logs")} onClick={() => onNav("logs")} />
         <NavItem icon={<Settings size={16} />} label={t("nav.settings")} onClick={() => onNav()} />
       </nav>
 
