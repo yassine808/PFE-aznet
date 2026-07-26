@@ -84,7 +84,25 @@ Flat by default. Depth is expressed through tonal steps in the neutral ramp and 
 
 ## 5. Components
 
-Omitted. No components exist yet; this section is populated by the next scan-mode run of `$impeccable document`.
+### Masthead (signature)
+
+The one **Committed** surface in an otherwise Restrained system: a full-bleed slab at the top of the overview carrying the day's headline number, the system state, and four supporting figures. Ink-on-slate at rest; it takes the warning colour when rows need review and goes red edge to edge when the API is unreachable. Its `layout` transition means a state change is felt, not just seen. One slab per screen, never repeated.
+
+### Day Ribbon (signature)
+
+A 24-hour axis with one tick per report, hairline hour gridlines behind it. Flagged reports draw full height in the warning colour; normal ones draw two-thirds height in the accent. Ticks position with `insetInlineStart` and the axis reverses under RTL, so the day reads right-to-left in Arabic. When the current day has no data the ribbon falls back to the most recent day that does and labels itself as such, rather than showing a dead axis.
+
+### Ledger
+
+Reports as a dense hairline table: no card, no zebra striping, one 1px rule per row. Date, time, quantities and confidence are mono and tabular. Confidence renders as a short bar rather than a percentage, tinted to the warning colour below 0.7. Horizontally scrollable inside its own container so the page body never scrolls sideways.
+
+### Bands
+
+Grouping is done with a label plus a top rule, not a container. A band is a heading, an optional right-aligned aside, and content. Boxes are used only where elevation is functionally required.
+
+### States
+
+Skeletons match the shape of what is loading. Errors render in a bordered warning block with the API's own message and a retry control, and never collapse into the empty state.
 
 ## 6. Do's and Don'ts
 

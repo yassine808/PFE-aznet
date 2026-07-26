@@ -40,7 +40,9 @@
 
   /* Status band: pipeline state only, never emphasis. Always paired with a label or icon. */
   --color-ok: oklch(0.596 0.118 152);
-  --color-warn: oklch(0.686 0.132 72);
+  /* Attention state carries no hue: it signals through contrast against muted ink,
+     and every use is paired with a flag icon or a label. */
+  --color-warn: oklch(0.262 0.008 245);
   --color-fail: oklch(0.564 0.182 26);
   --color-queued: oklch(0.606 0.062 262);
 
@@ -78,7 +80,7 @@
   --ink-faint: var(--color-slate-500);
   --accent: var(--color-accent-600);
   --status-ok: var(--color-ok);
-  --status-warn: oklch(0.556 0.126 72);
+  --status-warn: var(--color-warn);
   --status-fail: var(--color-fail);
   --status-queued: var(--color-queued);
 
@@ -99,7 +101,7 @@
   --ink-faint: var(--color-slate-500);
   --accent: var(--color-accent-400);
   --status-ok: oklch(0.724 0.132 152);
-  --status-warn: oklch(0.798 0.136 72);
+  --status-warn: oklch(0.968 0.004 245);
   --status-fail: oklch(0.688 0.168 26);
   --status-queued: oklch(0.716 0.062 262);
 

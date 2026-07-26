@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { motion } from 'motion/react'
 
-type Tone = 'ok' | 'warn' | 'fail' | 'queued' | 'idle'
+type Tone = 'ok' | 'warn' | 'fail' | 'queued' | 'idle' | 'ink'
 
 const TONE_CLASS: Record<Tone, string> = {
   ok: 'bg-status-ok',
@@ -9,6 +9,9 @@ const TONE_CLASS: Record<Tone, string> = {
   fail: 'bg-status-fail',
   queued: 'bg-status-queued',
   idle: 'bg-ink-faint',
+  // Inherits the surrounding text colour: for use on inverted slabs, where a
+  // fixed status colour can land invisible against the slab.
+  ink: 'bg-current',
 }
 
 /**

@@ -24,9 +24,12 @@ export default function App() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 100, damping: 20 }}
       >
-        <header className="border-line border-b pb-6">
-          <h1 className="text-ink text-3xl font-semibold tracking-tighter">{t(TITLE_KEY[route])}</h1>
-        </header>
+        {/* Overview has no h1: the masthead is the page header, and two would compete. */}
+        {route !== 'overview' && (
+          <header className="border-line border-b pb-6">
+            <h1 className="text-ink text-3xl font-semibold tracking-tighter">{t(TITLE_KEY[route])}</h1>
+          </header>
+        )}
 
         {route === 'overview' ? (
           <OverviewPage />

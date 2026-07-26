@@ -45,6 +45,16 @@ export interface Totals {
   panneaux: number
 }
 
+/** "20:15" -> 1215 minutes past midnight. Returns null when the cell is unusable. */
+export function minutesOf(heure?: string): number | null {
+  const m = (heure ?? '').trim().match(/^(\d{1,2})[:h.](\d{2})/)
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h > 23 || min > 59) return null
+  return h * 60 + min
+}
+
 export interface Metrics {
   today: number
   week: number
@@ -58,6 +68,12 @@ export interface Metrics {
   byChantier: { name: string; count: number; goulottes: number }[]
   byTechnicien: { name: string; count: number }[]
   recent: ReportRow[]
+  /** Rows for the most recent day that actually has data, plus that day's ISO date. */
+  dayRows: ReportRow[]
+  dayISO: string | null
+  /** True when the ribbon is showing an older day because nothing arrived today. */
+  dayIsStale: boolean
+  ledger: ReportRow[]
 }
 
 function totals(rows: ReportRow[]): Totals {
@@ -94,6 +110,12 @@ export function computeMetrics(rows: ReportRow[]): Metrics {
   const withChannel = rows.filter((r) => (r.canal ?? '').trim())
   const voice = withChannel.filter((r) => (r.lien_audio ?? '').trim()).length
 
+  // The ribbon shows today when today has data, otherwise the newest day that does.
+  // Showing an empty axis when reports exist would read as "the pipeline is dead".
+  const knownDays = [...new Set(dated.map((d) => d.iso).filter((d): d is string => d !== null))].sort()
+  const dayISO = todayRows.length ? today : (knownDays.at(-1) ?? null)
+  const dayRows = dayISO ? dated.filter((d) => d.iso === dayISO).map((d) => d.row) : []
+
   return {
     today: todayRows.length,
     week: weekRows.length,
@@ -102,11 +124,16 @@ export function computeMetrics(rows: ReportRow[]): Metrics {
     flagged: rows.filter((r) => isFlagged(r.flag_review)).length,
     techniciens: new Set(rows.map((r) => (r.technicien ?? '').trim()).filter(Boolean)).size,
     voiceShare: rows.length ? Math.round((voice / rows.length) * 100) : null,
-    totalsToday: totals(todayRows),
+    // Totals follow the day the ribbon shows, so the numbers and the shape agree.
+    totalsToday: totals(dayRows),
     byChantier: tally(rows, (r) => r.chantier).slice(0, 6),
     byTechnicien: tally(rows, (r) => r.technicien).slice(0, 6),
     // The Sheet appends, so the tail is the newest.
     recent: [...rows].reverse().slice(0, 6),
+    dayRows,
+    dayISO,
+    dayIsStale: dayISO !== null && dayISO !== today,
+    ledger: [...rows].reverse(),
   }
 }
 
