@@ -75,8 +75,51 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export interface N8nWorkflow {
+  id: string
+  name: string
+  active: boolean
+  isArchived?: boolean
+}
+
+/**
+ * Picks the workflow whose state the nav pill reports.
+ *
+ * This instance holds a dozen archived duplicates named "Reception unified ...",
+ * all inactive, alongside the live "aznet — pipeline complet ..." workflow.
+ * Taking the first name match would report the pipeline as disabled while it is
+ * running, so: ignore archived, prefer an active reception workflow, and only
+ * then fall back to a name match.
+ */
+export function pickReceptionWorkflow(workflows: N8nWorkflow[]): N8nWorkflow | undefined {
+  const live = workflows.filter((w) => !w.isArchived)
+  const matches = (w: N8nWorkflow) => /r[ée]ception|pipeline complet/i.test(w.name)
+  return live.find((w) => w.active && matches(w)) ?? live.find(matches) ?? live.find((w) => w.active) ?? live[0]
+}
+
+/**
+ * n8n's public API, reached through the dev proxy which attaches the API key.
+ * A reachable server with every workflow deactivated is a real and dangerous
+ * state, so server health and workflow activation are reported separately.
+ */
+export async function n8nStatus(
+  signal?: AbortSignal,
+): Promise<{ reachable: boolean; workflows: N8nWorkflow[]; authError: boolean }> {
+  try {
+    const res = await fetch('/n8n/api/v1/workflows', { signal })
+    if (res.status === 401 || res.status === 403) return { reachable: true, workflows: [], authError: true }
+    if (!res.ok) return { reachable: true, workflows: [], authError: false }
+    const body = (await res.json()) as { data?: N8nWorkflow[] }
+    return { reachable: true, workflows: body.data ?? [], authError: false }
+  } catch {
+    // Connection refused: n8n is not running. Not an app error, a reported state.
+    return { reachable: false, workflows: [], authError: false }
+  }
+}
+
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
+  n8n: n8nStatus,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),
   queue: (s?: AbortSignal) => get<{ pending: PendingWrite[] }>('/sheet-queue', s),

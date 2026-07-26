@@ -4,6 +4,7 @@ import { FlagIcon } from '@phosphor-icons/react'
 import { api, useApi, type ReportRow } from '@/lib/api'
 import { computeMetrics, formatUptime, isFlagged, minutesOf, num } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
+import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { Masthead, type SystemState } from '@/components/masthead'
 import { DayRibbon, type Tick } from '@/components/day-ribbon'
@@ -39,29 +40,39 @@ function Quantity({ value, label, unit }: { value: string; label: string; unit?:
   )
 }
 
-function LedgerRow({ r, fmt }: { r: ReportRow; fmt: Intl.NumberFormat }) {
+function LedgerRow({
+  r,
+  fmt,
+  threshold,
+  pad,
+}: {
+  r: ReportRow
+  fmt: Intl.NumberFormat
+  threshold: number
+  pad: string
+}) {
   const flagged = isFlagged(r.flag_review)
   const confidence = num(r.confidence)
 
   return (
     <tr className="border-line hover:bg-surface border-b transition-colors last:border-b-0">
-      <td className="tabular text-ink-faint py-3 pe-4 align-top text-xs whitespace-nowrap">
+      <td className={cn('tabular text-ink-faint pe-4 align-top text-xs whitespace-nowrap', pad)}>
         {r.date}
         <span className="ms-2 opacity-70">{r.heure}</span>
       </td>
-      <td className="text-ink py-3 pe-4 align-top text-sm whitespace-nowrap">{r.technicien || '—'}</td>
-      <td className="text-ink-muted py-3 pe-4 align-top text-sm">{r.chantier || '—'}</td>
-      <td className="tabular text-ink py-3 pe-4 text-end align-top text-sm whitespace-nowrap">
+      <td className={cn('text-ink pe-4 align-top text-sm whitespace-nowrap', pad)}>{r.technicien || '—'}</td>
+      <td className={cn('text-ink-muted pe-4 align-top text-sm', pad)}>{r.chantier || '—'}</td>
+      <td className={cn('tabular text-ink pe-4 text-end align-top text-sm whitespace-nowrap', pad)}>
         {num(r.goulottes_m) ? fmt.format(num(r.goulottes_m)) : '·'}
       </td>
-      <td className="tabular text-ink py-3 pe-4 text-end align-top text-sm whitespace-nowrap">
+      <td className={cn('tabular text-ink pe-4 text-end align-top text-sm whitespace-nowrap', pad)}>
         {num(r.cables_m) ? fmt.format(num(r.cables_m)) : '·'}
       </td>
-      <td className="py-3 pe-4 align-top">
+      <td className={cn('pe-4 align-top', pad)}>
         {/* Confidence as a bar, not a percentage: the eye compares lengths faster than digits. */}
         <span className="bg-line inline-block h-1 w-14 overflow-hidden rounded-full align-middle">
           <span
-            className={cn('block h-full rounded-full', confidence < 0.7 ? 'bg-status-warn' : 'bg-status-ok')}
+            className={cn('block h-full rounded-full', confidence < threshold ? 'bg-status-warn' : 'bg-status-ok')}
             style={{ width: `${Math.round(Math.min(Math.max(confidence, 0), 1) * 100)}%` }}
           />
         </span>
@@ -75,8 +86,10 @@ function LedgerRow({ r, fmt }: { r: ReportRow; fmt: Intl.NumberFormat }) {
 
 export function OverviewPage() {
   const { t, locale, dir } = useI18n()
-  const reports = useApi(api.reports, 60_000)
-  const health = useApi(api.health, 30_000)
+  const { settings } = useSettings()
+  // 0 means manual only: useApi treats a falsy interval as "fetch once".
+  const reports = useApi(api.reports, settings.refreshMs || undefined)
+  const health = useApi(api.health, settings.refreshMs ? Math.min(settings.refreshMs, 30_000) : undefined)
 
   const m = useMemo(() => (reports.data ? computeMetrics(reports.data.reports) : null), [reports.data])
   const fmt = useMemo(
@@ -178,7 +191,13 @@ export function OverviewPage() {
               </thead>
               <tbody>
                 {m.ledger.map((r) => (
-                  <LedgerRow key={r._row} r={r} fmt={fmt} />
+                  <LedgerRow
+                    key={r._row}
+                    r={r}
+                    fmt={fmt}
+                    threshold={settings.confidence}
+                    pad={settings.density === 'compact' ? 'py-1.5' : 'py-3'}
+                  />
                 ))}
               </tbody>
             </table>

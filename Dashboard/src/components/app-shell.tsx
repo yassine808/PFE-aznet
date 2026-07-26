@@ -3,7 +3,8 @@ import { motion } from 'motion/react'
 import { ChartBarIcon, MoonIcon, PathIcon, RowsIcon, StackIcon, SunIcon } from '@phosphor-icons/react'
 import { LOCALES, LOCALE_LABEL, useI18n, type Locale } from '@/lib/i18n'
 import { useTheme } from '@/lib/theme'
-import { LiveDot } from '@/components/live-dot'
+import { N8nStatus } from '@/components/n8n-status'
+import { SettingsPanel } from '@/components/settings-panel'
 import { cn } from '@/lib/utils'
 import type { Route } from '@/lib/router'
 
@@ -93,10 +94,7 @@ export function AppShell({
         </div>
 
         <div className="flex flex-col gap-3">
-          <div className="text-ink-muted flex items-center gap-2 text-xs">
-            <LiveDot tone="idle" />
-            {t('status.idle')}
-          </div>
+          <N8nStatus />
 
           <div className="flex items-center justify-between gap-2">
             <div className="border-line flex rounded-md border p-0.5" role="group" aria-label={t('lang.label')}>
@@ -116,15 +114,18 @@ export function AppShell({
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={toggle}
-              title={theme === 'dark' ? t('theme.toLight') : t('theme.toDark')}
-              aria-label={theme === 'dark' ? t('theme.toLight') : t('theme.toDark')}
-              className="border-line text-ink-muted hover:text-ink rounded-md border p-1.5 transition-colors active:translate-y-px"
-            >
-              {theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}
-            </button>
+            <div className="flex items-center gap-2">
+              <SettingsPanel />
+              <button
+                type="button"
+                onClick={toggle}
+                title={theme === 'dark' ? t('theme.toLight') : t('theme.toDark')}
+                aria-label={theme === 'dark' ? t('theme.toLight') : t('theme.toDark')}
+                className="border-line text-ink-muted hover:text-ink rounded-md border p-1.5 transition-colors active:translate-y-px"
+              >
+                {theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}
+              </button>
+            </div>
           </div>
         </div>
       </nav>

@@ -84,7 +84,7 @@
   --status-fail: var(--color-fail);
   --status-queued: var(--color-queued);
 
-  --wash: oklch(0.638 0.152 245 / 0.06);
+  --wash: oklch(0.638 0.152 245 / 0.22);
   --grain-opacity: 0.02;
   /* Hairline top highlight: the light-side edge of a raised surface, never a drop shadow. */
   --edge: inset 0 1px 0 oklch(1 0 0 / 0.9);
@@ -105,7 +105,7 @@
   --status-fail: oklch(0.688 0.168 26);
   --status-queued: oklch(0.716 0.062 262);
 
-  --wash: oklch(0.638 0.152 245 / 0.1);
+  --wash: oklch(0.638 0.152 245 / 0.16);
   --grain-opacity: 0.035;
   --edge: inset 0 1px 0 oklch(1 0 0 / 0.06);
 }
@@ -135,10 +135,44 @@
   body::before {
     content: '';
     position: fixed;
-    inset: 0;
+    /* Oversized so the drift never exposes an edge. */
+    inset: -25%;
     z-index: -1;
     pointer-events: none;
-    background-image: radial-gradient(circle at 82% -8%, var(--wash) 0%, transparent 58%);
+    /*
+      Intermediate stops instead of a single hard falloff: a two-stop radial
+      gradient banks visibly on 8-bit displays, and the bands crawl once the
+      layer scales, which reads as jitter rather than as a smooth breath.
+    */
+    background-image: radial-gradient(
+      circle at 70% 12%,
+      var(--wash) 0%,
+      color-mix(in oklch, var(--wash), transparent 35%) 18%,
+      color-mix(in oklch, var(--wash), transparent 70%) 34%,
+      transparent 56%
+    );
+    /*
+      Sinusoidal easing, not ease-in-out: ease-in-out decelerates to a full stop
+      at the peak, which the eye reads as a hitch. A sine curve carries velocity
+      through the turn, so the cycle never appears to pause.
+    */
+    animation: wash-breathe 16s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+    /* Promote to its own compositor layer once, up front, so the first cycle is
+       as smooth as the hundredth. */
+    transform: translateZ(0);
+    will-change: transform, opacity;
+  }
+
+  @keyframes wash-breathe {
+    0%,
+    100% {
+      transform: translateZ(0) scale(1);
+      opacity: 0.82;
+    }
+    50% {
+      transform: translateZ(0) scale(1.055);
+      opacity: 1;
+    }
   }
 
   /* Grain, applied once over the whole viewport. Never inside a scrolling container. */
