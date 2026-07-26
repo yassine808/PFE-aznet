@@ -300,6 +300,86 @@ def list_queue(limit: int = 20) -> dict:
         raise HTTPException(502, str(exc)) from exc
 
 
+# ── Technician directory ───────────────────────────────────────────────────
+# Managed from the dashboard, read by the reception workflow to authorize a
+# sender before any transcription happens.
+
+
+class TechnicianIn(BaseModel):
+    channel: str = Field(..., description="telegram | whatsapp")
+    external_id: str = Field(..., description="Telegram chat id or WhatsApp number")
+    name: str
+    role: Optional[str] = None
+    active: bool = True
+
+
+@app.get("/technicians")
+def list_technicians() -> dict:
+    try:
+        return {"technicians": logs.list_technicians()}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/technicians")
+def add_technician(payload: TechnicianIn) -> dict:
+    try:
+        return logs.upsert_technician(
+            payload.channel, payload.external_id, payload.name, payload.role, payload.active
+        )
+    except logs.LogStoreError as exc:
+        detail = str(exc)
+        # Bad channel or blank field is the caller's mistake (422); anything
+        # else is the store being unreachable (502).
+        raise HTTPException(422 if "unknown channel" in detail or "required" in detail else 502, detail) from exc
+
+
+@app.delete("/technicians/{tech_id}")
+def remove_technician(tech_id: int) -> dict:
+    try:
+        return {"deleted": logs.delete_technician(tech_id)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/technicians/lookup")
+def lookup_technician(channel: str, external_id: str) -> dict:
+    """Authorization check for n8n: returns the technician or `found: false`."""
+    try:
+        found = logs.find_technician(channel, external_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return {"found": found is not None, "technician": found}
+
+
+# ── Service uptime samples ─────────────────────────────────────────────────
+
+
+class SampleIn(BaseModel):
+    service: str
+    state: str
+
+
+class SamplesIn(BaseModel):
+    samples: List[SampleIn]
+
+
+@app.post("/service-samples")
+def post_samples(payload: SamplesIn) -> dict:
+    try:
+        return {"written": logs.record_samples([s.model_dump() for s in payload.samples])}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/service-samples")
+def get_samples(hours: int = 1) -> dict:
+    try:
+        return {"samples": logs.read_samples(hours)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 class ResolveRequest(BaseModel):
     ok: bool
     error: Optional[str] = None

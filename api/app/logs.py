@@ -75,6 +75,36 @@ CREATE TABLE IF NOT EXISTS failed_writes (
     last_error     TEXT,
     payload        JSONB NOT NULL
 );
+
+-- Who is allowed to send reports, and under what name they appear in the Sheet.
+-- This is the directory the reception workflow checks before processing: a
+-- sender absent from it is logged with stage="denied" and never reaches the
+-- LLM, which is what keeps an unknown number from burning free-tier quota.
+-- (channel, external_id) is unique because one phone number or chat id is one
+-- person per channel; the same human on both channels is two rows.
+CREATE TABLE IF NOT EXISTS technicians (
+    id          BIGSERIAL PRIMARY KEY,
+    channel     TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    role        TEXT,
+    active      BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (channel, external_id)
+);
+
+-- Service reachability samples, one row per service per minute, written by the
+-- dashboard. Kept out of pipeline_logs deliberately: those rows describe what
+-- happened to a technician's message, these describe whether infrastructure was
+-- answering. Mixing them would make both harder to query and would drown the
+-- pipeline timeline in telemetry.
+CREATE TABLE IF NOT EXISTS service_samples (
+    id      BIGSERIAL PRIMARY KEY,
+    ts      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    service TEXT NOT NULL,
+    state   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS service_samples_svc_ts_idx ON service_samples (service, ts DESC);
 """
 
 
@@ -357,3 +387,110 @@ def resolve_write(write_id: int, ok: bool, error: Optional[str] = None) -> None:
                 "UPDATE failed_writes SET attempts = attempts + 1, last_error = %s WHERE id = %s",
                 (error, write_id),
             )
+
+
+# ── Technician directory ───────────────────────────────────────────────────
+# The dashboard writes it; the reception workflow reads it to decide whether a
+# sender is known. Kept deliberately small: identity and role, no PII beyond
+# the channel handle the technician already sends from.
+
+CHANNELS = ("telegram", "whatsapp")
+
+
+def list_technicians() -> List[dict]:
+    with _cursor() as cur:
+        cur.execute("SELECT * FROM technicians ORDER BY channel, name")
+        rows = [dict(r) for r in cur.fetchall()]
+    for r in rows:
+        if isinstance(r.get("created_at"), datetime):
+            r["created_at"] = r["created_at"].isoformat()
+    return rows
+
+
+def upsert_technician(
+    channel: str, external_id: str, name: str, role: Optional[str] = None, active: bool = True
+) -> dict:
+    """Insert, or update the existing row for this (channel, external_id).
+
+    Upsert rather than insert so re-adding a number that already exists corrects
+    the name instead of failing with a constraint error the operator cannot act on.
+    """
+    if channel not in CHANNELS:
+        raise LogStoreError(f"unknown channel: {channel} (expected one of {', '.join(CHANNELS)})")
+    if not external_id.strip() or not name.strip():
+        raise LogStoreError("external_id and name are required")
+
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO technicians (channel, external_id, name, role, active)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (channel, external_id)
+            DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role, active = EXCLUDED.active
+            RETURNING *
+            """,
+            (channel, external_id.strip(), name.strip(), role, active),
+        )
+        row = dict(_one(cur) or {})
+    if isinstance(row.get("created_at"), datetime):
+        row["created_at"] = row["created_at"].isoformat()
+    return row
+
+
+def delete_technician(tech_id: int) -> bool:
+    with _cursor() as cur:
+        cur.execute("DELETE FROM technicians WHERE id = %s", (tech_id,))
+        return cur.rowcount > 0
+
+
+def find_technician(channel: str, external_id: str) -> Optional[dict]:
+    """Lookup used by the reception workflow to authorize an incoming sender."""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT * FROM technicians WHERE channel = %s AND external_id = %s",
+            (channel, external_id.strip()),
+        )
+        row = _one(cur)
+    return dict(row) if row else None
+
+
+# ── Service uptime samples ─────────────────────────────────────────────────
+
+
+def record_samples(samples: List[dict]) -> int:
+    """Append one row per service reading.
+
+    Written by the dashboard every minute. Cheap and append-only: aggregation
+    happens at read time, so a sampling gap stays visibly a gap instead of being
+    smoothed into fake uptime.
+    """
+    if not samples:
+        return 0
+    with _cursor() as cur:
+        cur.executemany(
+            "INSERT INTO service_samples (service, state) VALUES (%s, %s)",
+            [(s["service"], s["state"]) for s in samples],
+        )
+        return len(samples)
+
+
+def read_samples(hours: int = 1) -> List[dict]:
+    """Samples inside the window, oldest first, for the dashboard's uptime strips."""
+    window = max(1, min(hours, 24 * 30))
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT service, state, ts FROM service_samples "
+            "WHERE ts > now() - (%s * interval '1 hour') ORDER BY ts ASC",
+            (window,),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    for r in rows:
+        if isinstance(r.get("ts"), datetime):
+            r["ts"] = r["ts"].isoformat()
+    return rows
+
+
+def prune_samples(days: int = RETENTION_DAYS) -> int:
+    with _cursor() as cur:
+        cur.execute("DELETE FROM service_samples WHERE ts < now() - (%s * interval '1 day')", (days,))
+        return cur.rowcount

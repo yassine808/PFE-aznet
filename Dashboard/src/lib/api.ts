@@ -184,8 +184,63 @@ export async function generateDailyReport(date: string, rows: ReportRow[]): Prom
   return res.json() as Promise<DailyReportContent>
 }
 
+export interface Technician {
+  id: number
+  channel: 'telegram' | 'whatsapp'
+  external_id: string
+  name: string
+  role?: string | null
+  active: boolean
+  created_at?: string
+}
+
+export async function addTechnician(input: {
+  channel: string
+  external_id: string
+  name: string
+  role?: string
+}): Promise<Technician> {
+  const res = await fetch(`${BASE}/technicians`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
+  }
+  return res.json() as Promise<Technician>
+}
+
+export async function deleteTechnician(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/technicians/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+}
+
+export interface ServiceSample {
+  service: string
+  state: string
+  ts: string
+}
+
+/** Fire-and-forget: a dropped sample is a gap in history, never a user-facing error. */
+export async function postSamples(samples: { service: string; state: string }[]): Promise<void> {
+  if (samples.length === 0) return
+  try {
+    await fetch(`${BASE}/service-samples`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ samples }),
+    })
+  } catch {
+    /* offline: the next minute's sample will land instead */
+  }
+}
+
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
+  technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
+  samples: (s?: AbortSignal) => get<{ samples: ServiceSample[] }>('/service-samples?hours=2', s),
   n8n: n8nStatus,
   n8nExecutions,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
