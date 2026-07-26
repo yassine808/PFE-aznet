@@ -1,0 +1,184 @@
+@import 'tailwindcss';
+
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource/ibm-plex-sans-arabic/400.css';
+@import '@fontsource/ibm-plex-sans-arabic/500.css';
+@import '@fontsource/ibm-plex-sans-arabic/600.css';
+
+/* Dark mode is driven by a class on <html>, set by ThemeProvider, not by the media query alone. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  One cool-tinted slate ramp carries every surface, border and text color.
+  Every neutral is tinted toward the accent hue (245) at chroma 0.003-0.012:
+  no pure grey, no #000, no #fff. See DESIGN.md, "The Earned Slate Rule".
+*/
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-arabic: 'IBM Plex Sans Arabic', 'Geist Variable', sans-serif;
+
+  --color-slate-25: oklch(0.985 0.003 245);
+  --color-slate-50: oklch(0.972 0.004 245);
+  --color-slate-100: oklch(0.946 0.005 245);
+  --color-slate-200: oklch(0.902 0.007 245);
+  --color-slate-300: oklch(0.836 0.009 245);
+  --color-slate-400: oklch(0.688 0.011 245);
+  --color-slate-500: oklch(0.564 0.012 245);
+  --color-slate-600: oklch(0.462 0.012 245);
+  --color-slate-700: oklch(0.376 0.012 245);
+  --color-slate-800: oklch(0.282 0.011 245);
+  --color-slate-850: oklch(0.232 0.01 245);
+  --color-slate-900: oklch(0.192 0.009 245);
+  --color-slate-950: oklch(0.146 0.008 245);
+
+  /* Desaturated electric blue. Focus, active nav, links, primary action. Nothing else. */
+  --color-accent-400: oklch(0.724 0.128 245);
+  --color-accent-500: oklch(0.638 0.152 245);
+  --color-accent-600: oklch(0.556 0.156 245);
+
+  /* Status band: pipeline state only, never emphasis. Always paired with a label or icon. */
+  --color-ok: oklch(0.596 0.118 152);
+  --color-warn: oklch(0.686 0.132 72);
+  --color-fail: oklch(0.564 0.182 26);
+  --color-queued: oklch(0.606 0.062 262);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+  Semantic surface tokens. Light and dark are two authored designs, not an inversion:
+  the dark ramp steps are chosen independently so contrast holds in both.
+*/
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-status-ok: var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-fail: var(--status-fail);
+  --color-status-queued: var(--status-queued);
+}
+
+:root {
+  --canvas: var(--color-slate-50);
+  --surface: oklch(0.995 0.002 245);
+  --surface-raised: oklch(1 0 0);
+  --line: var(--color-slate-200);
+  --line-strong: var(--color-slate-300);
+  --ink: var(--color-slate-900);
+  --ink-muted: var(--color-slate-600);
+  --ink-faint: var(--color-slate-500);
+  --accent: var(--color-accent-600);
+  --status-ok: var(--color-ok);
+  --status-warn: oklch(0.556 0.126 72);
+  --status-fail: var(--color-fail);
+  --status-queued: var(--color-queued);
+
+  --wash: oklch(0.638 0.152 245 / 0.06);
+  --grain-opacity: 0.02;
+  /* Hairline top highlight: the light-side edge of a raised surface, never a drop shadow. */
+  --edge: inset 0 1px 0 oklch(1 0 0 / 0.9);
+}
+
+.dark {
+  --canvas: var(--color-slate-950);
+  --surface: var(--color-slate-900);
+  --surface-raised: var(--color-slate-850);
+  --line: oklch(0.286 0.011 245);
+  --line-strong: oklch(0.352 0.012 245);
+  --ink: var(--color-slate-100);
+  --ink-muted: var(--color-slate-400);
+  --ink-faint: var(--color-slate-500);
+  --accent: var(--color-accent-400);
+  --status-ok: oklch(0.724 0.132 152);
+  --status-warn: oklch(0.798 0.136 72);
+  --status-fail: oklch(0.688 0.168 26);
+  --status-queued: oklch(0.716 0.062 262);
+
+  --wash: oklch(0.638 0.152 245 / 0.1);
+  --grain-opacity: 0.035;
+  --edge: inset 0 1px 0 oklch(1 0 0 / 0.06);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  html[dir='rtl'] {
+    font-family: var(--font-arabic);
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    position: relative;
+  }
+
+  /*
+    Backdrop: one soft accent wash. No image file, no mesh blobs, no lattice.
+    Fixed and pointer-events-none so it never repaints while content scrolls.
+  */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: radial-gradient(circle at 82% -8%, var(--wash) 0%, transparent 58%);
+  }
+
+  /* Grain, applied once over the whole viewport. Never inside a scrolling container. */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  :focus-visible {
+    @apply outline-accent outline-2 outline-offset-2;
+  }
+}
+
+@layer utilities {
+  /* Raised surface: tonal step plus a single hairline light edge. No resting drop shadow. */
+  .edge {
+    box-shadow: var(--edge);
+  }
+
+  /* Numbers align in columns or they are a defect. See DESIGN.md, "The Aligned Column Rule". */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+}
+
+/*
+  Perpetual motion signals live data. When the user asks for less motion it all stops:
+  no state in this app is ever conveyed by movement alone.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
