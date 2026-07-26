@@ -148,6 +148,42 @@ export async function n8nStatus(
   }
 }
 
+/** Writes one cell back to the Sheet. Row is the 1-based Sheet row; row 1 is the header. */
+export async function patchReport(row: number, field: string, value: string): Promise<void> {
+  const res = await fetch(`${BASE}/reports/${row}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field, value }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
+  }
+}
+
+export interface DailyReportContent {
+  objet: string
+  corps: string
+}
+
+/**
+ * Generates the end-of-day manager email. This is a real LLM call against a
+ * free-tier quota, so it is only ever fired by an explicit user action, never
+ * by a poll or on mount.
+ */
+export async function generateDailyReport(date: string, rows: ReportRow[]): Promise<DailyReportContent> {
+  const res = await fetch(`${BASE}/daily-report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, rows }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 300) || res.statusText}`)
+  }
+  return res.json() as Promise<DailyReportContent>
+}
+
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   n8n: n8nStatus,

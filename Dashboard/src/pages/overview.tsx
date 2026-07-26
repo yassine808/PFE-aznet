@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { Masthead, type SystemState } from '@/components/masthead'
 import { DayRibbon, type Tick } from '@/components/day-ribbon'
 import { ServicesPanel } from '@/components/services-panel'
+import { ContributionGraph } from '@/components/contribution-graph'
 
 const rise = {
   hidden: { opacity: 0, y: 8 },
@@ -151,6 +152,12 @@ export function OverviewPage() {
             <Quantity value={fmt.format(m.totalsToday.bureaux)} label={t('metric.bureaux')} />
             <Quantity value={fmt.format(m.totalsToday.panneaux)} label={t('metric.panneaux')} />
           </div>
+        </Band>
+      </motion.div>
+
+      <motion.div variants={rise}>
+        <Band title={t('graph.year')} aside={fmt.format(m.total)}>
+          <ContributionGraph rows={reports.data?.reports ?? []} />
         </Band>
       </motion.div>
 

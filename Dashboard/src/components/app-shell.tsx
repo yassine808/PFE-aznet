@@ -1,6 +1,16 @@
 import type { ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { ChartBarIcon, MoonIcon, PathIcon, RowsIcon, StackIcon, SunIcon } from '@phosphor-icons/react'
+import {
+  CalendarBlankIcon,
+  ChartBarIcon,
+  MoonIcon,
+  PathIcon,
+  RowsIcon,
+  StackIcon,
+  SunHorizonIcon,
+  SunIcon,
+  TrayIcon,
+} from '@phosphor-icons/react'
 import { LOCALES, LOCALE_LABEL, useI18n, type Locale } from '@/lib/i18n'
 import { useTheme } from '@/lib/theme'
 import { ServerStatus } from '@/components/server-status'
@@ -13,7 +23,15 @@ const NAV: { section: string; items: { route: Route; labelKey: string; Icon: typ
     section: 'nav.section.read',
     items: [
       { route: 'overview', labelKey: 'nav.overview', Icon: ChartBarIcon },
+      { route: 'inbox', labelKey: 'nav.inbox', Icon: TrayIcon },
       { route: 'reports', labelKey: 'nav.reports', Icon: RowsIcon },
+    ],
+  },
+  {
+    section: 'nav.section.reports',
+    items: [
+      { route: 'daily', labelKey: 'nav.daily', Icon: SunHorizonIcon },
+      { route: 'weekly', labelKey: 'nav.weekly', Icon: CalendarBlankIcon },
     ],
   },
   {
