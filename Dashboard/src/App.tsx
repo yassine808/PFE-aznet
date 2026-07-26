@@ -1,6 +1,7 @@
 import { motion } from 'motion/react'
 import { AppShell } from '@/components/app-shell'
 import { OverviewPage } from '@/pages/overview'
+import { ReportsPage } from '@/pages/reports'
 import { useI18n } from '@/lib/i18n'
 import { useRoute, type Route } from '@/lib/router'
 
@@ -33,6 +34,8 @@ export default function App() {
 
         {route === 'overview' ? (
           <OverviewPage />
+        ) : route === 'reports' ? (
+          <ReportsPage />
         ) : (
           <section className="py-16">
             <p className="text-ink-faint max-w-[65ch] text-sm">{t('state.empty.body')}</p>

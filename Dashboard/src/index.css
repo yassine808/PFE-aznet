@@ -99,8 +99,10 @@
   --ink: var(--color-slate-100);
   --ink-muted: var(--color-slate-400);
   --ink-faint: var(--color-slate-500);
-  --accent: var(--color-accent-400);
-  --status-ok: oklch(0.724 0.132 152);
+  /* L nudged to 0.70: the dataviz validator flags 0.72+ as outside the dark
+     lightness band for chart marks. Contrast against the dark surface still clears 3:1. */
+  --accent: oklch(0.7 0.128 245);
+  --status-ok: oklch(0.7 0.132 152);
   --status-warn: oklch(0.968 0.004 245);
   --status-fail: oklch(0.688 0.168 26);
   --status-queued: oklch(0.716 0.062 262);
@@ -195,6 +197,25 @@
   /* Raised surface: tonal step plus a single hairline light edge. No resting drop shadow. */
   .edge {
     box-shadow: var(--edge);
+  }
+
+  /* Status pulse. CSS-only so React re-renders can never restart or stutter it. */
+  .live-ping {
+    animation: live-ping 2s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+    transform-origin: center;
+    will-change: transform, opacity;
+  }
+
+  @keyframes live-ping {
+    0% {
+      transform: scale(1);
+      opacity: 0.45;
+    }
+    70%,
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
   }
 
   /* Numbers align in columns or they are a defect. See DESIGN.md, "The Aligned Column Rule". */

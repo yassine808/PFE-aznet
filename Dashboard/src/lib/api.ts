@@ -39,15 +39,18 @@ export interface Health {
   stt_default: string
 }
 
+/** Mirrors the pipeline_logs row shape returned by GET /logs. */
 export interface LogEntry {
   id: number
   ts: string
   stage: string
   level: string
   channel?: string | null
+  technicien?: string | null
   correlation_id?: string | null
   message?: string | null
-  detail?: unknown
+  duration_ms?: number | null
+  payload?: unknown
 }
 
 export interface LogStats {
@@ -92,9 +95,37 @@ export interface N8nWorkflow {
  * then fall back to a name match.
  */
 export function pickReceptionWorkflow(workflows: N8nWorkflow[]): N8nWorkflow | undefined {
+  const pattern = import.meta.env.VITE_N8N_WORKFLOW_MATCH || 'r[ée]ception|pipeline complet'
+  let matches: (w: N8nWorkflow) => boolean
+  try {
+    const re = new RegExp(pattern, 'i')
+    matches = (w) => re.test(w.name)
+  } catch {
+    // A malformed pattern in .env must not take the status pill down with it.
+    matches = (w) => /r[ée]ception|pipeline complet/i.test(w.name)
+  }
   const live = workflows.filter((w) => !w.isArchived)
-  const matches = (w: N8nWorkflow) => /r[ée]ception|pipeline complet/i.test(w.name)
   return live.find((w) => w.active && matches(w)) ?? live.find(matches) ?? live.find((w) => w.active) ?? live[0]
+}
+
+export interface N8nExecution {
+  id: number
+  status: string
+  startedAt: string
+  stoppedAt?: string | null
+  workflowId?: string
+}
+
+/** Last executions, newest first. Proves the orchestrator is doing work, not just running. */
+export async function n8nExecutions(signal?: AbortSignal): Promise<N8nExecution[]> {
+  try {
+    const res = await fetch('/n8n/api/v1/executions?limit=20', { signal })
+    if (!res.ok) return []
+    const body = (await res.json()) as { data?: N8nExecution[] }
+    return body.data ?? []
+  } catch {
+    return []
+  }
 }
 
 /**
@@ -120,6 +151,7 @@ export async function n8nStatus(
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   n8n: n8nStatus,
+  n8nExecutions,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),
   queue: (s?: AbortSignal) => get<{ pending: PendingWrite[] }>('/sheet-queue', s),
@@ -133,14 +165,29 @@ export interface Async<T> {
 }
 
 /**
+ * Module-level response cache, keyed by endpoint.
+ *
+ * Without this, navigating away from a route unmounts its hooks and coming back
+ * re-runs every fetch from a blank loading state, so the app appears to forget
+ * everything it just showed. With it, a remount paints cached data immediately
+ * and revalidates in the background: stale-while-revalidate.
+ *
+ * ponytail: a plain Map, not TanStack Query. Five endpoints, one consumer app,
+ * no mutations to invalidate. Reach for a real query library if that changes.
+ */
+const cache = new Map<string, unknown>()
+
+/**
  * Fetch on mount, optionally re-fetch on an interval.
  * Errors are kept and shown; they are never swallowed into an empty state,
  * because "no data" and "the API is down" must not look the same.
  */
-export function useApi<T>(fetcher: (s?: AbortSignal) => Promise<T>, pollMs?: number): Async<T> {
-  const [data, setData] = useState<T | null>(null)
+export function useApi<T>(key: string, fetcher: (s?: AbortSignal) => Promise<T>, pollMs?: number): Async<T> {
+  const cached = cache.get(key) as T | undefined
+  const [data, setData] = useState<T | null>(cached ?? null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Only the very first visit shows a skeleton; later remounts paint from cache.
+  const [loading, setLoading] = useState(cached === undefined)
   const [nonce, setNonce] = useState(0)
   const fetcherRef = useRef(fetcher)
   fetcherRef.current = fetcher
@@ -150,9 +197,11 @@ export function useApi<T>(fetcher: (s?: AbortSignal) => Promise<T>, pollMs?: num
     let timer: number | undefined
 
     const run = async (first: boolean) => {
-      if (first) setLoading(true)
+      if (first && cache.get(key) === undefined) setLoading(true)
       try {
-        setData(await fetcherRef.current(controller.signal))
+        const next = await fetcherRef.current(controller.signal)
+        cache.set(key, next)
+        setData(next)
         setError(null)
       } catch (err) {
         if (controller.signal.aborted) return
@@ -169,7 +218,7 @@ export function useApi<T>(fetcher: (s?: AbortSignal) => Promise<T>, pollMs?: num
       controller.abort()
       if (timer) window.clearInterval(timer)
     }
-  }, [pollMs, nonce])
+  }, [key, pollMs, nonce])
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
   return { data, error, loading, reload }

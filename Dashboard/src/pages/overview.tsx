@@ -1,14 +1,14 @@
 import { useMemo } from 'react'
 import { motion } from 'motion/react'
-import { FlagIcon } from '@phosphor-icons/react'
-import { api, useApi, type ReportRow } from '@/lib/api'
-import { computeMetrics, formatUptime, isFlagged, minutesOf, num } from '@/lib/metrics'
+import { api, pickReceptionWorkflow, useApi } from '@/lib/api'
+import { computeMetrics, formatUptime, isFlagged, minutesOf } from '@/lib/metrics'
+import { buildServices } from '@/lib/services'
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { Masthead, type SystemState } from '@/components/masthead'
 import { DayRibbon, type Tick } from '@/components/day-ribbon'
-import { cn } from '@/lib/utils'
+import { ServicesPanel } from '@/components/services-panel'
 
 const rise = {
   hidden: { opacity: 0, y: 8 },
@@ -18,7 +18,7 @@ const rise = {
 /** Section heading. No box: a rule and a label carry the grouping. */
 function Band({ title, aside, children }: { title: string; aside?: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex min-w-0 flex-col gap-4">
       <div className="border-line flex items-baseline justify-between gap-4 border-b pb-2">
         <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">{title}</h2>
         {aside && <span className="tabular text-ink-faint text-xs">{aside}</span>}
@@ -40,56 +40,16 @@ function Quantity({ value, label, unit }: { value: string; label: string; unit?:
   )
 }
 
-function LedgerRow({
-  r,
-  fmt,
-  threshold,
-  pad,
-}: {
-  r: ReportRow
-  fmt: Intl.NumberFormat
-  threshold: number
-  pad: string
-}) {
-  const flagged = isFlagged(r.flag_review)
-  const confidence = num(r.confidence)
-
-  return (
-    <tr className="border-line hover:bg-surface border-b transition-colors last:border-b-0">
-      <td className={cn('tabular text-ink-faint pe-4 align-top text-xs whitespace-nowrap', pad)}>
-        {r.date}
-        <span className="ms-2 opacity-70">{r.heure}</span>
-      </td>
-      <td className={cn('text-ink pe-4 align-top text-sm whitespace-nowrap', pad)}>{r.technicien || '—'}</td>
-      <td className={cn('text-ink-muted pe-4 align-top text-sm', pad)}>{r.chantier || '—'}</td>
-      <td className={cn('tabular text-ink pe-4 text-end align-top text-sm whitespace-nowrap', pad)}>
-        {num(r.goulottes_m) ? fmt.format(num(r.goulottes_m)) : '·'}
-      </td>
-      <td className={cn('tabular text-ink pe-4 text-end align-top text-sm whitespace-nowrap', pad)}>
-        {num(r.cables_m) ? fmt.format(num(r.cables_m)) : '·'}
-      </td>
-      <td className={cn('pe-4 align-top', pad)}>
-        {/* Confidence as a bar, not a percentage: the eye compares lengths faster than digits. */}
-        <span className="bg-line inline-block h-1 w-14 overflow-hidden rounded-full align-middle">
-          <span
-            className={cn('block h-full rounded-full', confidence < threshold ? 'bg-status-warn' : 'bg-status-ok')}
-            style={{ width: `${Math.round(Math.min(Math.max(confidence, 0), 1) * 100)}%` }}
-          />
-        </span>
-      </td>
-      <td className="py-3 align-top">
-        {flagged && <FlagIcon size={14} weight="fill" className="text-status-warn" />}
-      </td>
-    </tr>
-  )
-}
-
 export function OverviewPage() {
   const { t, locale, dir } = useI18n()
   const { settings } = useSettings()
-  // 0 means manual only: useApi treats a falsy interval as "fetch once".
-  const reports = useApi(api.reports, settings.refreshMs || undefined)
-  const health = useApi(api.health, settings.refreshMs ? Math.min(settings.refreshMs, 30_000) : undefined)
+  const poll = settings.refreshMs || undefined
+
+  const reports = useApi('reports', api.reports, poll)
+  const health = useApi('health', api.health, poll)
+  const logs = useApi('logs', api.logs, poll)
+  const n8n = useApi('n8n', api.n8n, poll)
+  const executions = useApi('n8n-executions', api.n8nExecutions, poll)
 
   const m = useMemo(() => (reports.data ? computeMetrics(reports.data.reports) : null), [reports.data])
   const fmt = useMemo(
@@ -104,10 +64,33 @@ export function OverviewPage() {
         const at = minutesOf(r.heure)
         return at === null
           ? null
-          : { at, flagged: isFlagged(r.flag_review), label: `${r.heure} · ${r.technicien ?? ''}` }
+          : {
+              at,
+              flagged: isFlagged(r.flag_review),
+              time: r.heure ?? '',
+              technicien: r.technicien ?? '',
+              chantier: r.chantier ?? '',
+            }
       })
       .filter((x): x is Tick => x !== null)
   }, [m])
+
+  const services = useMemo(
+    () =>
+      buildServices({
+        health: health.data,
+        healthError: health.error,
+        logs: logs.data?.logs ?? [],
+        stats: logs.data?.stats ?? null,
+        logsError: logs.error,
+        reportsOk: !reports.error,
+        n8nReachable: n8n.data?.reachable ?? false,
+        workflow: n8n.data ? pickReceptionWorkflow(n8n.data.workflows) : undefined,
+        lastExecution: executions.data?.[0] ?? null,
+        locale,
+      }),
+    [health.data, health.error, logs.data, logs.error, reports.error, n8n.data, executions.data, locale],
+  )
 
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
 
@@ -115,8 +98,11 @@ export function OverviewPage() {
     return (
       <div className="flex flex-col gap-10 pt-8">
         <Skeleton className="h-44 rounded-xl" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-64" />
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+        </div>
+        <Skeleton className="h-48" />
       </div>
     )
   }
@@ -124,8 +110,9 @@ export function OverviewPage() {
   if (m.total === 0) return <EmptyState />
 
   const apiUp = !health.error && health.data?.status === 'ok'
-  // Degraded is a real state, not a cosmetic one: the API answers but rows need a human.
-  const state: SystemState = !apiUp ? 'down' : m.flagged > 0 ? 'degraded' : 'nominal'
+  const anyServiceDown = services.some((s) => s.state === 'fail')
+  // Degraded is a real state, not a cosmetic one: something answers but needs a human.
+  const state: SystemState = !apiUp || anyServiceDown ? (apiUp ? 'degraded' : 'down') : m.flagged > 0 ? 'degraded' : 'nominal'
 
   return (
     <motion.div
@@ -148,24 +135,17 @@ export function OverviewPage() {
         />
       </motion.div>
 
-      {health.error && (
-        <motion.div variants={rise}>
-          <ErrorState message={health.error} onRetry={health.reload} />
-        </motion.div>
-      )}
-
-      <motion.div variants={rise}>
+      {/* Ribbon and totals share a row: the same day, read two ways. */}
+      <motion.div variants={rise} className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Band
           title={t('ribbon.title')}
           aside={m.dayISO ? `${m.dayISO}${m.dayIsStale ? ` · ${t('ribbon.stale')}` : ''}` : undefined}
         >
           <DayRibbon ticks={ticks} dir={dir} />
         </Band>
-      </motion.div>
 
-      <motion.div variants={rise}>
-        <Band title={t('panel.productionToday')} aside={m.dayISO ?? undefined}>
-          <div className="divide-line grid grid-cols-2 gap-x-8 sm:grid-cols-4 sm:divide-x">
+        <Band title={t('panel.productionToday')} aside={fmt.format(m.dayRows.length)}>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
             <Quantity value={fmt.format(m.totalsToday.goulottes_m)} label={t('metric.goulottes')} unit="m" />
             <Quantity value={fmt.format(m.totalsToday.cables_m)} label={t('metric.cables')} unit="m" />
             <Quantity value={fmt.format(m.totalsToday.bureaux)} label={t('metric.bureaux')} />
@@ -174,37 +154,28 @@ export function OverviewPage() {
         </Band>
       </motion.div>
 
-      <motion.div variants={rise}>
-        <Band title={t('ledger.title')} aside={`${fmt.format(m.ledger.length)} · ${t('metric.total').toLowerCase()}`}>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[46rem] border-collapse text-start">
-              <thead>
-                <tr className="border-line text-ink-faint border-b text-start text-[0.6875rem] tracking-wide uppercase">
-                  <th className="py-2 pe-4 text-start font-medium">{t('col.when')}</th>
-                  <th className="py-2 pe-4 text-start font-medium">{t('col.technicien')}</th>
-                  <th className="py-2 pe-4 text-start font-medium">{t('col.chantier')}</th>
-                  <th className="py-2 pe-4 text-end font-medium">{t('metric.goulottes')}</th>
-                  <th className="py-2 pe-4 text-end font-medium">{t('metric.cables')}</th>
-                  <th className="py-2 pe-4 text-start font-medium">{t('col.confidence')}</th>
-                  <th className="py-2 text-start font-medium sr-only">{t('metric.flagged')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {m.ledger.map((r) => (
-                  <LedgerRow
-                    key={r._row}
-                    r={r}
-                    fmt={fmt}
-                    threshold={settings.confidence}
-                    pad={settings.density === 'compact' ? 'py-1.5' : 'py-3'}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <motion.div variants={rise} className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {/* The aside states the coverage limit: this history is observed from
+            this screen only, so gaps mean "unwatched", not "down". */}
+        <Band title={t('panel.services')} aside={t('panel.uptimeNote')}>
+          <ServicesPanel rows={services} />
+        </Band>
 
+        <Band title={t('panel.quality')}>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+            <Quantity value={fmt.format(m.flagged)} label={t('metric.flagged')} />
+            <Quantity value={m.voiceShare !== null ? `${m.voiceShare}%` : '—'} label={t('metric.voiceShare')} />
+            <Quantity
+              value={fmt.format(logs.data?.stats.last_24h.error ?? 0)}
+              label={t('metric.errors24h')}
+            />
+            <Quantity
+              value={fmt.format(logs.data?.stats.pending_sheet_writes ?? 0)}
+              label={t('metric.pendingWrites')}
+            />
+          </div>
           {m.undated > 0 && (
-            <p className="text-status-warn text-xs">
+            <p className="text-status-warn mt-2 text-xs">
               {t('metric.undated')}: <span className="tabular">{fmt.format(m.undated)}</span>
             </p>
           )}

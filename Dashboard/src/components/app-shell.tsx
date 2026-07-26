@@ -3,7 +3,7 @@ import { motion } from 'motion/react'
 import { ChartBarIcon, MoonIcon, PathIcon, RowsIcon, StackIcon, SunIcon } from '@phosphor-icons/react'
 import { LOCALES, LOCALE_LABEL, useI18n, type Locale } from '@/lib/i18n'
 import { useTheme } from '@/lib/theme'
-import { N8nStatus } from '@/components/n8n-status'
+import { ServerStatus } from '@/components/server-status'
 import { SettingsPanel } from '@/components/settings-panel'
 import { cn } from '@/lib/utils'
 import type { Route } from '@/lib/router'
@@ -94,7 +94,7 @@ export function AppShell({
         </div>
 
         <div className="flex flex-col gap-3">
-          <N8nStatus />
+          <ServerStatus />
 
           <div className="flex items-center justify-between gap-2">
             <div className="border-line flex rounded-md border p-0.5" role="group" aria-label={t('lang.label')}>
