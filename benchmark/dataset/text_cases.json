@@ -1,5 +1,5 @@
 {
-  "_comment": "Text-path benchmark cases for the extraction step. Written by hand, not generated, so the expected values are ground truth rather than another model's opinion. `expected` grades only the listed fields (metrics.extraction_accuracy skips `resume`); an explicit null means the model must NOT invent a value, which is the single most important property for this project.",
+  "_comment": "Text-path benchmark cases for the extraction step. Written by hand, not generated, so the expected values are ground truth rather than another model's opinion. `expected` grades only the listed fields (metrics.extraction_accuracy skips `resume`); an explicit null means the model must NOT invent a value, which is the single most important property for this project. Explicit negation ('pas de goulotte', 'aucun bureau terminé') is a STATED value and grades as 0; a field simply never mentioned grades as null. The two are different facts and the prompt must keep them apart — this file was internally inconsistent about it until 2026-07-27.",
   "cases": [
     {
       "id": "t01_plain_french",
@@ -101,14 +101,14 @@
     },
     {
       "id": "t09_units_confusion",
-      "note": "Numbers appear next to non-quantity nouns (floor number, room number, team size). A weak model maps them onto the wrong field.",
+      "note": "Numbers sit next to non-quantities (floor, room number, team size) — a weak model maps them onto the wrong field. 'Pas de goulotte aujourd'hui' is an EXPLICIT zero, not an absence: the technician stated the value, so it is 0. Contrast t08, where nothing is said at all and every quantity is null.",
       "text": "Chantier Bouskoura, client Renault. On était 4 techniciens au 3ème étage, bureau numéro 12. On a tiré 600 mètres de câble et raccordé 3 panneaux. Pas de goulotte aujourd'hui.",
       "expected": {
         "chantier": "Bouskoura",
         "client": "Renault",
         "cables_m": 600,
         "panneaux_raccordes": 3,
-        "goulottes_m": null
+        "goulottes_m": 0
       }
     },
     {

@@ -2,6 +2,7 @@ import io
 import math
 import time
 
+from app import prompt_loader
 from app.config import settings
 from app.schemas import TranscriptionInfo
 
@@ -57,6 +58,13 @@ class GroqWhisperProvider(TranscriptionProvider):
                 model=settings.groq_whisper_model,
                 # Darija has no ISO tag Whisper knows; 'ar' beats autodetect
                 language="ar",
+                # Whisper reads `prompt` as the transcript of the audio just
+                # before this clip, not as instructions — so the file is a
+                # sample of chantier vocabulary and code-switching, which biases
+                # decoding towards "goulotte"/"brassage" instead of the
+                # phonetic soup a generic Whisper produces. See
+                # app/prompts/stt-vocabulary.md.
+                prompt=prompt_loader.load(prompt_loader.STT_VOCABULARY, with_soul=False),
                 # verbose_json (vs plain "text") also returns per-segment
                 # avg_logprob, which we use to derive a confidence score.
                 response_format="verbose_json",

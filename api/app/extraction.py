@@ -18,6 +18,7 @@ results table in `benchmark/README.md`.
 import json
 from typing import List, Optional, Tuple
 
+from app import prompt_loader
 from app.config import settings
 from app.schemas import ExtractedReport
 
@@ -26,35 +27,11 @@ class ExtractionError(RuntimeError):
     pass
 
 
-_INSTRUCTIONS = """Tu analyses le rapport journalier d'un technicien de câblage réseau au Maroc.
-Le texte peut être en darija (arabe marocain), en français, ou mélangé, et provient
-souvent d'une transcription vocale imparfaite (corrige mentalement les erreurs évidentes
-grâce au contexte métier : goulotte, câble réseau, panneau de brassage, prise RJ45, baie,
-bureau, étage, chantier).
-
-Extrais les informations suivantes. Règles strictes :
-- Convertis les nombres énoncés en lettres (arabe ou français) en chiffres.
-- Les quantités sont en mètres pour goulottes et câbles.
-- Si une information est absente du texte, mets null. N'invente JAMAIS.
-- Si le technicien se corrige ("300... non, 350"), retiens la dernière valeur.
-- Un nombre collé à autre chose qu'une quantité (étage, numéro de bureau, effectif)
-  n'est pas une quantité : laisse le champ concerné à null.
-- "autres_travaux" : travaux réels mentionnés qui ne rentrent dans aucune quantité standard.
-- "observations" : problèmes, manques de matériel, remarques.
-- "resume" : 2 à 4 phrases en français professionnel, à la 3e personne, style compte rendu
-  destiné au chef de chantier. Toujours rempli.
-
-Rapport du technicien :
-"""
-
-_IMAGE_INSTRUCTIONS = (
-    "Cette image est une photo prise par un technicien de câblage : page de carnet, "
-    "tableau blanc, bon de livraison, ou vue du chantier. Lis tout le texte visible "
-    "(français, darija en lettres latines, ou arabe) et décris aussi ce que montre la "
-    "photo si elle contient du travail réalisé. Puis extrais le rapport.\n"
-    "Si l'image ne contient aucune information exploitable, mets tous les champs à null "
-    "et explique-le dans \"resume\".\n\n"
-) + _INSTRUCTIONS
+# Prompts are Markdown in app/prompts/, loaded once and cached. `_INSTRUCTIONS`
+# stays exported under its old name: benchmark/run_model_benchmark.py imports it,
+# and the benchmark must score exactly what production sends.
+_INSTRUCTIONS = prompt_loader.load(prompt_loader.TEXT_EXTRACTION)
+_IMAGE_INSTRUCTIONS = prompt_loader.load(prompt_loader.IMAGE_EXTRACTION)
 
 
 def _parse_chain(raw: str) -> List[Tuple[str, str]]:

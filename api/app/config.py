@@ -46,12 +46,27 @@ class Settings(BaseSettings):
     # Image is Google-only because the free Groq catalogue has no vision model
     # (verified against GET /models), so the fallbacks buy resilience against a
     # single model 404ing or overloading, not against Google being down.
+    # Ranked 2026-07-27 over the ten cases in benchmark/dataset/text_cases.json:
+    #   gpt-oss-120b      100%, 0 invented, 1.6s, 0/10 failures  <- primary
+    #   flash-lite-latest  98%, 1 invented, 1.0s, 0/10 failures  <- other vendor
+    #   gemini-3.6-flash  100%, 0 invented, 4.9s, 6/10 quota failures
+    # 3.6-flash is accurate but ran out of free quota after four calls, so it
+    # sits last: a model that answers perfectly and then stops is a fallback,
+    # not a primary.
     extraction_text_chain: str = (
-        "gemini:gemini-3.6-flash,groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest"
+        "groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest,gemini:gemini-3.6-flash"
     )
     # Not gemini-2.5-flash: it is still in the model list but 404s with "no
     # longer available to new users" (benchmark run 2026-07-27). Nor
     # gemini-3.5-flash, which answered 503 "high demand" on 10/10 calls.
+    # Image *generation* (app/imagegen.py) — the summary card, not extraction.
+    # nano-banana-pro first, then the flash image models. All Google: no free
+    # image generator exists on Groq. Metered far more tightly than the text
+    # models, which is why generation is only ever triggered by a user click.
+    image_generation_chain: str = (
+        "gemini:gemini-3.1-flash-image,gemini:nano-banana-pro-preview,gemini:gemini-3-pro-image"
+    )
+
     extraction_image_chain: str = (
         "gemini:gemini-3.6-flash,gemini:gemini-3.5-flash-lite,gemini:gemini-flash-lite-latest"
     )
