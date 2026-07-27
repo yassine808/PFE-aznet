@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { CopyIcon, SparkleIcon } from '@phosphor-icons/react'
+import { CopyIcon, DownloadSimpleIcon, SparkleIcon } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
-import { api, useApi } from '@/lib/api'
+import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
+import { exportReport, type ReportFormat } from '@/lib/report-export'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -17,6 +18,11 @@ export function WeeklyReportPage() {
   const [selected, setSelected] = useState(() => iso(weekStart(new Date())))
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [copied, setCopied] = useState(false)
+  const [content, setContent] = useState<DailyReportContent | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+  const settings = useApi('settings', api.settings)
+  const format = (settings.data?.settings.report_format ?? 'markdown') as ReportFormat
 
   const fmt = useMemo(
     () => new Intl.NumberFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'),
@@ -78,6 +84,23 @@ export function WeeklyReportPage() {
     }
   }, [reports.data, days])
 
+  /*
+   * There is no dedicated weekly endpoint, and adding one would mean a second
+   * prompt to maintain. POST /daily-report already takes an arbitrary row set
+   * and a label, so the week's rows go through it unchanged.
+   */
+  const generate = async () => {
+    setBusy(true)
+    setGenError(null)
+    try {
+      setContent(await generateDailyReport(`${iso(days[0])} → ${iso(days[6])}`, week.rows))
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const copy = async () => {
     const lines = [
       `${t('weekly.title')} ${iso(days[0])} → ${iso(days[6])}`,
@@ -116,20 +139,31 @@ export function WeeklyReportPage() {
           {iso(days[0])} → {iso(days[6])}
         </span>
         <div className="ms-auto flex items-center gap-3">
-          {/*
-            Present but not wired: there is no weekly LLM endpoint yet, only
-            POST /daily-report. Shipping it enabled would fake a capability the
-            backend does not have.
-          */}
           <button
             type="button"
-            disabled
-            title={t('weekly.generateSoon')}
-            className="border-line text-ink-faint flex cursor-not-allowed items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+            onClick={generate}
+            disabled={busy || week.rows.length === 0}
+            className={cn(
+              'flex items-center gap-2 text-xs transition-transform',
+              busy || week.rows.length === 0
+                ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-3 py-1.5'
+                : 'bg-accent breathe-glow rounded-md px-3.5 py-2 text-white active:translate-y-px',
+            )}
           >
             <SparkleIcon size={13} weight="fill" />
-            {t('daily.generate')}
+            {busy ? t('daily.generating') : t('daily.generate')}
           </button>
+
+          {content && (
+            <button
+              type="button"
+              onClick={() => void exportReport(content.objet, content.corps, format)}
+              className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
+            >
+              <DownloadSimpleIcon size={13} />
+              {t('daily.download')}
+            </button>
+          )}
 
           <button
             type="button"
@@ -141,6 +175,16 @@ export function WeeklyReportPage() {
           </button>
         </div>
       </div>
+
+      {genError && <ErrorState message={genError} onRetry={generate} />}
+
+      {content && (
+        <section className="border-line rounded-xl border p-6">
+          <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('daily.subject')}</p>
+          <h2 className="text-ink mt-1 text-lg font-medium tracking-tight">{content.objet}</h2>
+          <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">{content.corps}</p>
+        </section>
+      )}
 
       {/* Pick a week by clicking its column. One year at a time; the rail on the
           right switches years, the way GitHub's contribution calendar does. */}

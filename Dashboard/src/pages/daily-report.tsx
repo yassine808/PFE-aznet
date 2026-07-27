@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { CopyIcon, SparkleIcon } from '@phosphor-icons/react'
+import { CopyIcon, DownloadSimpleIcon, SparkleIcon } from '@phosphor-icons/react'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
+import { exportReport, type ReportFormat } from '@/lib/report-export'
 import { toISODate, todayISO } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -12,6 +13,9 @@ export function DailyReportPage() {
 
   const [date, setDate] = useState(todayISO())
   const [content, setContent] = useState<DailyReportContent | null>(null)
+  // Format preference comes from the Automation panel; markdown until it loads.
+  const settings = useApi('settings', api.settings)
+  const format = (settings.data?.settings.report_format ?? 'markdown') as ReportFormat
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -132,14 +136,24 @@ export function DailyReportPage() {
               <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('daily.subject')}</p>
               <h2 className="text-ink mt-1 text-lg font-medium tracking-tight">{content.objet}</h2>
             </div>
-            <button
-              type="button"
-              onClick={copy}
-              className="border-line text-ink-muted hover:text-ink flex shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
-            >
-              <CopyIcon size={13} />
-              {copied ? t('daily.copied') : t('daily.copy')}
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void exportReport(content.objet, content.corps, format)}
+                className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
+              >
+                <DownloadSimpleIcon size={13} />
+                {t('daily.download')}
+              </button>
+              <button
+                type="button"
+                onClick={copy}
+                className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
+              >
+                <CopyIcon size={13} />
+                {copied ? t('daily.copied') : t('daily.copy')}
+              </button>
+            </div>
           </div>
           {/* Preserve the model's paragraph breaks; it writes prose, not markup. */}
           <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">{content.corps}</p>

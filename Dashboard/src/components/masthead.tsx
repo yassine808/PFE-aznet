@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import { motion } from 'motion/react'
+import { SpeakerSimpleXIcon, SpeakerSimpleHighIcon } from '@phosphor-icons/react'
 import { useI18n } from '@/lib/i18n'
+import { useAlarm } from '@/lib/alarm'
 import { LiveDot } from '@/components/live-dot'
 import { cn } from '@/lib/utils'
 
@@ -22,6 +25,9 @@ export function Masthead({
   meta: { label: string; value: string }[]
 }) {
   const { t } = useI18n()
+  const [muted, setMuted] = useState(false)
+  const down = state === 'down'
+  useAlarm(down, muted)
 
   // Attention is signalled by inverting the slab, not by hue: nominal is a dark
   // slab, degraded flips to a pale one in both themes, down is the only colour.
@@ -38,8 +44,21 @@ export function Masthead({
     <motion.section
       layout
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      className={cn('edge relative overflow-hidden rounded-xl px-7 py-8', skin)}
+      className={cn('edge relative overflow-hidden rounded-xl px-7 py-8', skin, down && 'alarm-flash')}
+      role={down ? 'alert' : undefined}
     >
+      {down && (
+        <button
+          type="button"
+          onClick={() => setMuted((m) => !m)}
+          title={muted ? t('alert.unmute') : t('alert.mute')}
+          aria-label={muted ? t('alert.unmute') : t('alert.mute')}
+          className="absolute end-4 top-4 rounded-md p-1.5 text-white/80 ring-1 ring-white/30 transition-colors hover:text-white active:translate-y-px"
+        >
+          {muted ? <SpeakerSimpleXIcon size={15} /> : <SpeakerSimpleHighIcon size={15} />}
+        </button>
+      )}
+
       <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
         <div>
           <p className="flex items-center gap-2 text-xs font-medium tracking-wide uppercase opacity-80">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export const ROUTES = ['overview', 'inbox', 'reports', 'daily', 'weekly', 'access', 'pipeline', 'queue'] as const
+export const ROUTES = ['overview', 'inbox', 'reports', 'daily', 'weekly', 'automation', 'access', 'queue'] as const
 export type Route = (typeof ROUTES)[number]
 
 export interface Location {

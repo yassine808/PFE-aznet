@@ -78,11 +78,31 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export interface N8nNode {
+  id: string
+  name: string
+  type: string
+  /** Canvas coordinates as stored by n8n: [x, y]. */
+  position: [number, number]
+  disabled?: boolean
+  parameters?: Record<string, unknown>
+}
+
+/**
+ * n8n's connection map: source node name -> output kind -> output index ->
+ * list of targets. The double array is not a typo: index 0 is the first
+ * output, and an IF node has two.
+ */
+export type N8nConnections = Record<string, Record<string, { node: string; type: string; index: number }[][]>>
+
 export interface N8nWorkflow {
   id: string
   name: string
   active: boolean
   isArchived?: boolean
+  updatedAt?: string
+  nodes?: N8nNode[]
+  connections?: N8nConnections
 }
 
 /**
@@ -217,6 +237,41 @@ export async function deleteTechnician(id: number): Promise<void> {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 }
 
+/** Operator preferences, stored server-side so any scheduler reads the same values. */
+export interface AppSettings {
+  daily_time?: string
+  weekly_day?: number
+  weekly_time?: string
+  emails?: string[]
+  report_format?: string
+}
+
+export async function putSettings(values: Partial<AppSettings>): Promise<AppSettings> {
+  const res = await fetch(`${BASE}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
+  }
+  return ((await res.json()) as { settings: AppSettings }).settings
+}
+
+export async function sendTestMail(to: string): Promise<void> {
+  const res = await fetch(`${BASE}/notify/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    // The API names the missing env vars on a 422; surface that verbatim.
+    throw new Error(body.slice(0, 300) || `${res.status} ${res.statusText}`)
+  }
+}
+
 export interface ServiceSample {
   service: string
   state: string
@@ -240,6 +295,7 @@ export async function postSamples(samples: { service: string; state: string }[])
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
+  settings: (s?: AbortSignal) => get<{ settings: AppSettings }>('/settings', s),
   samples: (s?: AbortSignal) => get<{ samples: ServiceSample[] }>('/service-samples?hours=2', s),
   n8n: n8nStatus,
   n8nExecutions,

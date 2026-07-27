@@ -105,6 +105,15 @@ CREATE TABLE IF NOT EXISTS service_samples (
     state   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS service_samples_svc_ts_idx ON service_samples (service, ts DESC);
+
+-- Operator preferences: report schedule, notification recipients, export format.
+-- Key/JSON rather than typed columns because these are settings, not domain data:
+-- adding one must not require a migration.
+CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 
@@ -494,3 +503,31 @@ def prune_samples(days: int = RETENTION_DAYS) -> int:
     with _cursor() as cur:
         cur.execute("DELETE FROM service_samples WHERE ts < now() - (%s * interval '1 day')", (days,))
         return cur.rowcount
+
+
+# ── Application settings ───────────────────────────────────────────────────
+# One row per key, JSON value. Small and generic on purpose: report schedule,
+# notification recipients and export format are operator preferences, not
+# domain data, and they change without a migration.
+
+
+def get_settings() -> dict:
+    with _cursor() as cur:
+        cur.execute("SELECT key, value FROM app_settings")
+        return {r["key"]: r["value"] for r in (cast(dict, x) for x in cur.fetchall())}
+
+
+def put_settings(values: Dict[str, Any]) -> dict:
+    """Upsert every supplied key. Absent keys are left untouched, never cleared."""
+    if not values:
+        return get_settings()
+    with _cursor() as cur:
+        for key, value in values.items():
+            cur.execute(
+                """
+                INSERT INTO app_settings (key, value) VALUES (%s, %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+                """,
+                (key, json.dumps(value)),
+            )
+    return get_settings()

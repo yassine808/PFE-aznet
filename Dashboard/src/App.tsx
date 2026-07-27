@@ -6,7 +6,7 @@ import { InboxPage } from '@/pages/inbox'
 import { DailyReportPage } from '@/pages/daily-report'
 import { WeeklyReportPage } from '@/pages/weekly-report'
 import { AccessControlPage } from '@/pages/access-control'
-import { PipelinePage } from '@/pages/pipeline'
+import { AutomationPage } from '@/pages/automation'
 import { OpsProvider } from '@/lib/ops-context'
 import { useI18n } from '@/lib/i18n'
 import { useRoute, type Route } from '@/lib/router'
@@ -17,8 +17,8 @@ const TITLE_KEY: Record<Route, string> = {
   reports: 'page.reports.title',
   daily: 'page.daily.title',
   weekly: 'page.weekly.title',
+  automation: 'page.automation.title',
   access: 'page.access.title',
-  pipeline: 'page.pipeline.title',
   queue: 'page.queue.title',
 }
 
@@ -56,10 +56,10 @@ export default function App() {
             <DailyReportPage />
           ) : route === 'weekly' ? (
             <WeeklyReportPage />
+          ) : route === 'automation' ? (
+            <AutomationPage />
           ) : route === 'access' ? (
             <AccessControlPage />
-          ) : route === 'pipeline' ? (
-            <PipelinePage />
           ) : (
             <section className="py-16">
               <p className="text-ink-faint max-w-[65ch] text-sm">{t('state.empty.body')}</p>

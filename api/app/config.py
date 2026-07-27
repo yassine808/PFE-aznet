@@ -34,5 +34,15 @@ class Settings(BaseSettings):
     groq_whisper_model: str = "whisper-large-v3"
     groq_llm_model: str = "llama-3.3-70b-versatile"
 
+    # Notification mail, used by POST /notify/test so the dashboard can prove a
+    # recipient address before the end-of-day report goes out. Optional at
+    # startup like every other key: the endpoint fails loudly with a precise
+    # message when they are unset rather than the API refusing to boot.
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from: Optional[str] = None
+
 
 settings = Settings()

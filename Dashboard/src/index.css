@@ -240,6 +240,23 @@
     }
   }
 
+  /* API down. The slab is already red; this pulses its brightness so the failure
+     reads from across the room. Opacity, not colour, so the text stays legible. */
+  .alarm-flash {
+    animation: alarm-flash 1.1s steps(1, end) infinite;
+  }
+
+  @keyframes alarm-flash {
+    0%,
+    49% {
+      filter: brightness(1);
+    }
+    50%,
+    100% {
+      filter: brightness(1.35);
+    }
+  }
+
   /* Status pulse. CSS-only so React re-renders can never restart or stutter it. */
   .live-ping {
     animation: live-ping 2s cubic-bezier(0.37, 0, 0.63, 1) infinite;

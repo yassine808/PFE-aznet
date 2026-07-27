@@ -3,8 +3,8 @@ import { motion } from 'motion/react'
 import {
   CalendarBlankIcon,
   ChartBarIcon,
+  ClockIcon,
   MoonIcon,
-  PathIcon,
   RowsIcon,
   StackIcon,
   SunHorizonIcon,
@@ -38,8 +38,8 @@ const NAV: { section: string; items: { route: Route; labelKey: string; Icon: typ
   {
     section: 'nav.section.ops',
     items: [
+      { route: 'automation', labelKey: 'nav.automation', Icon: ClockIcon },
       { route: 'access', labelKey: 'nav.access', Icon: UsersThreeIcon },
-      { route: 'pipeline', labelKey: 'nav.pipeline', Icon: PathIcon },
       { route: 'queue', labelKey: 'nav.queue', Icon: StackIcon },
     ],
   },

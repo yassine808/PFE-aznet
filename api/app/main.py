@@ -1,7 +1,7 @@
 """FastAPI entrypoint — the single endpoint n8n and the web form call."""
 import time
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -350,6 +350,74 @@ def lookup_technician(channel: str, external_id: str) -> dict:
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     return {"found": found is not None, "technician": found}
+
+
+# ── Operator settings ──────────────────────────────────────────────────────
+# Report schedule, notification recipients and export format. Stored here so
+# the dashboard and any scheduler read one source of truth.
+
+
+class SettingsIn(BaseModel):
+    values: Dict[str, Any]
+
+
+@app.get("/settings")
+def read_settings() -> dict:
+    try:
+        return {"settings": logs.get_settings()}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.put("/settings")
+def write_settings(payload: SettingsIn) -> dict:
+    try:
+        return {"settings": logs.put_settings(payload.values)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+class TestMailIn(BaseModel):
+    to: str
+
+
+@app.post("/notify/test")
+def send_test_mail(payload: TestMailIn) -> dict:
+    """Send one plain-text probe so an address can be verified before it matters.
+
+    Credentials are optional at startup, so an unconfigured install gets a 422
+    naming exactly which variables are missing instead of a silent no-op.
+    """
+    if not settings.smtp_user or not settings.smtp_password:
+        raise HTTPException(
+            422,
+            "SMTP is not configured — set SMTP_USER and SMTP_PASSWORD in .env "
+            "(Gmail requires an app password, not the account password)",
+        )
+
+    import smtplib  # lazy: keeps the import out of the test suite's path
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg["Subject"] = "aznet — test de notification"
+    msg["From"] = settings.smtp_from or settings.smtp_user
+    msg["To"] = payload.to
+    msg.set_content(
+        "Ceci est un message de test envoyé depuis le tableau de bord aznet.\n"
+        "Si vous le recevez, l'adresse est correctement configurée pour les "
+        "rapports quotidiens et hebdomadaires."
+    )
+
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+            smtp.starttls()
+            smtp.login(settings.smtp_user, settings.smtp_password)
+            smtp.send_message(msg)
+    except Exception as exc:
+        # 502: the mail relay refused us, which is not the caller's mistake.
+        raise HTTPException(502, f"envoi échoué: {exc}") from exc
+
+    return {"sent": True, "to": payload.to}
 
 
 # ── Service uptime samples ─────────────────────────────────────────────────
