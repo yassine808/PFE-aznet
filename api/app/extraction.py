@@ -1,10 +1,22 @@
 """LLM extraction + French reformulation.
 
-Primary: Gemini 2.5 Flash structured output (response_schema = ExtractedReport).
-Fallback: Groq Llama 3.3 in JSON mode. Both free tier. Prompt embeds chantier
-domain vocabulary so the LLM also repairs plausible STT errors in context.
+One prompt, three input shapes, and an explicit ordered fallback chain per
+shape (`EXTRACTION_TEXT_CHAIN` / `EXTRACTION_IMAGE_CHAIN` in `config.py`):
+
+    text   — a typed report, or an STT transcription
+    image  — a photo of a notebook page, whiteboard or delivery note
+    audio  — handled upstream by `app/providers/` (STT), then arrives here as text
+
+Every chain entry is `provider:model`. The chain is tried in order and the
+first success wins; if all of them fail the combined error is raised, because a
+silent fallback to "no data" would put an empty row in the manager's Sheet and
+look like a quiet day on the chantier.
+
+Model choice is not taste: see `benchmark/run_model_benchmark.py` and the
+results table in `benchmark/README.md`.
 """
 import json
+from typing import List, Optional, Tuple
 
 from app.config import settings
 from app.schemas import ExtractedReport
@@ -24,6 +36,9 @@ Extrais les informations suivantes. Règles strictes :
 - Convertis les nombres énoncés en lettres (arabe ou français) en chiffres.
 - Les quantités sont en mètres pour goulottes et câbles.
 - Si une information est absente du texte, mets null. N'invente JAMAIS.
+- Si le technicien se corrige ("300... non, 350"), retiens la dernière valeur.
+- Un nombre collé à autre chose qu'une quantité (étage, numéro de bureau, effectif)
+  n'est pas une quantité : laisse le champ concerné à null.
 - "autres_travaux" : travaux réels mentionnés qui ne rentrent dans aucune quantité standard.
 - "observations" : problèmes, manques de matériel, remarques.
 - "resume" : 2 à 4 phrases en français professionnel, à la 3e personne, style compte rendu
@@ -32,31 +47,72 @@ Extrais les informations suivantes. Règles strictes :
 Rapport du technicien :
 """
 
+_IMAGE_INSTRUCTIONS = (
+    "Cette image est une photo prise par un technicien de câblage : page de carnet, "
+    "tableau blanc, bon de livraison, ou vue du chantier. Lis tout le texte visible "
+    "(français, darija en lettres latines, ou arabe) et décris aussi ce que montre la "
+    "photo si elle contient du travail réalisé. Puis extrais le rapport.\n"
+    "Si l'image ne contient aucune information exploitable, mets tous les champs à null "
+    "et explique-le dans \"resume\".\n\n"
+) + _INSTRUCTIONS
 
-def _extract_gemini(text: str) -> ExtractedReport:
+
+def _parse_chain(raw: str) -> List[Tuple[str, str]]:
+    """`"gemini:x,groq:y"` -> `[("gemini", "x"), ("groq", "y")]`."""
+    entries = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        provider, _, model = item.partition(":")
+        if not model:
+            raise ExtractionError(f"malformed chain entry {item!r} — expected 'provider:model'")
+        entries.append((provider.strip(), model.strip()))
+    if not entries:
+        raise ExtractionError("empty extraction chain")
+    return entries
+
+
+def _call_gemini(
+    model: str,
+    text: Optional[str] = None,
+    image: Optional[bytes] = None,
+    mime_type: str = "image/jpeg",
+) -> ExtractedReport:
     if not settings.gemini_api_key:
         raise ExtractionError("GEMINI_API_KEY not configured")
     from google import genai
+    from google.genai import types
 
     client = genai.Client(api_key=settings.gemini_api_key)
+    if image is not None:
+        contents = [types.Part.from_bytes(data=image, mime_type=mime_type), _IMAGE_INSTRUCTIONS]
+    else:
+        contents = _INSTRUCTIONS + (text or "")
     try:
         resp = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=_INSTRUCTIONS + text,
-            config={
-                "response_mime_type": "application/json",
-                "response_schema": ExtractedReport,
-            },
+            model=model,
+            contents=contents,
+            config={"response_mime_type": "application/json", "response_schema": ExtractedReport},
         )
         parsed = resp.parsed
     except Exception as exc:  # noqa: BLE001
-        raise ExtractionError(f"gemini: {exc}") from exc
+        raise ExtractionError(f"gemini/{model}: {exc}") from exc
     if not isinstance(parsed, ExtractedReport):
-        raise ExtractionError(f"gemini: unparseable response {resp.text!r:.200}")
+        raise ExtractionError(f"gemini/{model}: unparseable response {resp.text!r:.200}")
     return parsed
 
 
-def _extract_groq(text: str) -> ExtractedReport:
+def _call_groq(
+    model: str,
+    text: Optional[str] = None,
+    image: Optional[bytes] = None,
+    mime_type: str = "image/jpeg",
+) -> ExtractedReport:
+    if image is not None:
+        # Checked live against GET /models: the free Groq catalogue is text and
+        # audio only. Saying so here beats a confusing 400 from the API.
+        raise ExtractionError(f"groq/{model}: no vision model in the free catalogue")
     if not settings.groq_api_key:
         raise ExtractionError("GROQ_API_KEY not configured")
     from groq import Groq
@@ -68,29 +124,52 @@ def _extract_groq(text: str) -> ExtractedReport:
     )
     try:
         resp = client.chat.completions.create(
-            model=settings.groq_llm_model,
+            model=model,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": _INSTRUCTIONS + f"\nRéponds en JSON avec exactement ces clés: {schema_hint}"},
-                {"role": "user", "content": text},
+                {"role": "user", "content": text or ""},
             ],
         )
-        raw = resp.choices[0].message.content
-        return ExtractedReport.model_validate_json(raw)
-    except ExtractionError:
-        raise
+        return ExtractedReport.model_validate_json(resp.choices[0].message.content)
     except Exception as exc:  # noqa: BLE001
-        raise ExtractionError(f"groq: {exc}") from exc
+        raise ExtractionError(f"groq/{model}: {exc}") from exc
+
+
+_ENGINES = {"gemini": _call_gemini, "groq": _call_groq}
+
+
+def _run_chain(
+    chain: str,
+    text: Optional[str] = None,
+    image: Optional[bytes] = None,
+    mime_type: str = "image/jpeg",
+) -> Tuple[ExtractedReport, str]:
+    """Try each `provider:model` in order. Returns (report, winning model id)."""
+    failures = []
+    for provider, model in _parse_chain(chain):
+        engine = _ENGINES.get(provider)
+        if engine is None:
+            failures.append(f"{provider}: unknown provider")
+            continue
+        try:
+            return engine(model, text=text, image=image, mime_type=mime_type), f"{provider}/{model}"
+        except ExtractionError as exc:
+            failures.append(str(exc))
+    raise ExtractionError("extraction failed on every engine — " + " | ".join(failures))
 
 
 def extract_report(text: str) -> ExtractedReport:
-    """Primary engine with explicit fallback — never silent (both failures raise)."""
-    try:
-        return _extract_gemini(text)
-    except ExtractionError as primary_err:
-        try:
-            return _extract_groq(text)
-        except ExtractionError as fallback_err:
-            raise ExtractionError(
-                f"extraction failed on both engines — gemini: {primary_err} | groq: {fallback_err}"
-            ) from fallback_err
+    """Text path. Signature kept single-argument: n8n and the tests both rely on it."""
+    report, _ = _run_chain(settings.extraction_text_chain, text=text)
+    return report
+
+
+def extract_report_with_model(text: str) -> Tuple[ExtractedReport, str]:
+    """Same as `extract_report` but also reports which model answered."""
+    return _run_chain(settings.extraction_text_chain, text=text)
+
+
+def extract_report_from_image(image: bytes, mime_type: str = "image/jpeg") -> Tuple[ExtractedReport, str]:
+    """Vision path — a photographed note or a picture of the work itself."""
+    return _run_chain(settings.extraction_image_chain, image=image, mime_type=mime_type)

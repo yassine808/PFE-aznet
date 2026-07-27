@@ -1,0 +1,126 @@
+{
+  "_comment": "Text-path benchmark cases for the extraction step. Written by hand, not generated, so the expected values are ground truth rather than another model's opinion. `expected` grades only the listed fields (metrics.extraction_accuracy skips `resume`); an explicit null means the model must NOT invent a value, which is the single most important property for this project.",
+  "cases": [
+    {
+      "id": "t01_plain_french",
+      "note": "Clean French, every quantity present. Floor case: any model failing this is unusable.",
+      "text": "Bonjour, aujourd'hui sur le chantier Marina Center pour le client OCP, on a installé 150 mètres de goulotte et tiré 800 mètres de câble réseau. On a terminé 5 bureaux au premier étage et raccordé 2 panneaux de brassage.",
+      "expected": {
+        "chantier": "Marina Center",
+        "client": "OCP",
+        "goulottes_m": 150,
+        "cables_m": 800,
+        "bureaux_termines": 5,
+        "panneaux_raccordes": 2
+      }
+    },
+    {
+      "id": "t02_darija_numbers_words",
+      "note": "Darija with quantities spoken as Arabic words. Tests number normalisation, not just digit copying.",
+      "text": "salam, lyoum f chantier Anfa Place, khdmna m3a client Attijari. dirna miya w khamsin metre dyal goulotte, w jerrina rob3 miya metre dyal cable. kmmalna tlata dyal bureaux.",
+      "expected": {
+        "chantier": "Anfa Place",
+        "client": "Attijari",
+        "goulottes_m": 150,
+        "cables_m": 400,
+        "bureaux_termines": 3,
+        "panneaux_raccordes": null
+      }
+    },
+    {
+      "id": "t03_self_correction",
+      "note": "Speaker corrects themselves mid-sentence. The final value wins; a model that takes the first number is wrong.",
+      "text": "Chantier Technopark, client Maroc Telecom. On a posé 300 mètres de câble, non pardon, 350 mètres de câble. Goulotte c'est 80 mètres. Aucun bureau terminé aujourd'hui.",
+      "expected": {
+        "chantier": "Technopark",
+        "client": "Maroc Telecom",
+        "goulottes_m": 80,
+        "cables_m": 350,
+        "bureaux_termines": 0
+      }
+    },
+    {
+      "id": "t04_hallucination_trap",
+      "note": "Only one quantity is stated. Every other field must come back null. This is the case that separates trustworthy models from confident ones.",
+      "text": "Salam, lyoum ma khdmnach bzzaf, ghir jerrina 120 metre dyal cable f chantier Sidi Maarouf. safi.",
+      "expected": {
+        "chantier": "Sidi Maarouf",
+        "client": null,
+        "goulottes_m": null,
+        "cables_m": 120,
+        "bureaux_termines": null,
+        "panneaux_raccordes": null
+      }
+    },
+    {
+      "id": "t05_observations",
+      "note": "A blocking problem is reported. `observations` must be populated; quantities must stay null rather than being guessed at zero.",
+      "text": "Chantier Casa Finance City. Aujourd'hui on n'a pas pu avancer, il manque des goulottes et l'ascenseur était en panne donc pas d'accès au 8ème étage. Il faut livrer le matériel demain matin.",
+      "expected": {
+        "chantier": "Casa Finance City",
+        "goulottes_m": null,
+        "cables_m": null,
+        "bureaux_termines": null,
+        "panneaux_raccordes": null
+      }
+    },
+    {
+      "id": "t06_mixed_code_switch",
+      "note": "Heavy Darija/French alternation inside single sentences, plus a decimal.",
+      "text": "Ana f chantier Zenith Millenium, client CNSS. Rakeb 45.5 metre dyal goulotte f couloir, w cable 210 metre. Kmmalna deux bureaux w wahed panneau de brassage. Kayn chi problème f la climatisation.",
+      "expected": {
+        "chantier": "Zenith Millenium",
+        "client": "CNSS",
+        "goulottes_m": 45.5,
+        "cables_m": 210,
+        "bureaux_termines": 2,
+        "panneaux_raccordes": 1
+      }
+    },
+    {
+      "id": "t07_arabic_script",
+      "note": "Written in Arabic script rather than Latin-transliterated Darija. Technicians type both ways.",
+      "text": "السلام، اليوم في ورش مرينا، الزبون البنك الشعبي. ركبنا 90 متر ديال الڭولوت وجررنا 500 متر ديال الكابل. كملنا 4 مكاتب.",
+      "expected": {
+        "goulottes_m": 90,
+        "cables_m": 500,
+        "bureaux_termines": 4,
+        "panneaux_raccordes": null
+      }
+    },
+    {
+      "id": "t08_no_quantities_at_all",
+      "note": "Pure status update with zero numbers. Everything numeric must be null and `resume` must still be written.",
+      "text": "Salam chef, lyoum kunna ghi f réunion m3a l'architecte f chantier Ain Diab, ma dernach walo f terrain. Ghedda nbdaw l'étage 2.",
+      "expected": {
+        "goulottes_m": null,
+        "cables_m": null,
+        "bureaux_termines": null,
+        "panneaux_raccordes": null
+      }
+    },
+    {
+      "id": "t09_units_confusion",
+      "note": "Numbers appear next to non-quantity nouns (floor number, room number, team size). A weak model maps them onto the wrong field.",
+      "text": "Chantier Bouskoura, client Renault. On était 4 techniciens au 3ème étage, bureau numéro 12. On a tiré 600 mètres de câble et raccordé 3 panneaux. Pas de goulotte aujourd'hui.",
+      "expected": {
+        "chantier": "Bouskoura",
+        "client": "Renault",
+        "cables_m": 600,
+        "panneaux_raccordes": 3,
+        "goulottes_m": null
+      }
+    },
+    {
+      "id": "t10_noisy_transcription",
+      "note": "Simulates a bad STT hypothesis: mangled domain words the prompt says to repair from context (goulot/gollote, cabl, brasage).",
+      "text": "salam lyoum f chantier lamarina client saham, rakebna miytin metr dyal gollote w cabl khamsa miya metr, kmelna setta bureau w juj panneau de brasage",
+      "expected": {
+        "goulottes_m": 200,
+        "cables_m": 500,
+        "bureaux_termines": 6,
+        "panneaux_raccordes": 2
+      }
+    }
+  ]
+}

@@ -20,6 +20,10 @@ build/
 
 # audio dataset (binary bloat — references.csv stays in git)
 benchmark/dataset/audio/
+# image fixtures are rendered from text_cases.json on every run, and results are
+# per-run artifacts — both regenerate, neither belongs in history
+benchmark/dataset/images/
+benchmark/results/
 
 # n8n local state
 .n8n/

@@ -31,7 +31,7 @@ def test_health():
 
 
 def test_text_mode(monkeypatch):
-    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t: (REPORT, "test/stub"))
     r = client.post("/process", data={"text": "Installation de 150m de goulotte"})
     assert r.status_code == 200
     body = r.json()
@@ -42,7 +42,7 @@ def test_text_mode(monkeypatch):
 
 def test_voice_mode(monkeypatch):
     monkeypatch.setattr(main, "get_provider", lambda name: FakeProvider())
-    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t: (REPORT, "test/stub"))
     r = client.post("/process", files={"audio": ("note.ogg", b"fake-bytes", "audio/ogg")})
     assert r.status_code == 200
     body = r.json()
@@ -78,7 +78,7 @@ def test_extraction_failure_maps_to_502(monkeypatch):
     def boom(t):
         raise ExtractionError("both engines down")
 
-    monkeypatch.setattr(main.extraction, "extract_report", boom)
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", boom)
     r = client.post("/process", data={"text": "rapport"})
     assert r.status_code == 502
     assert "extraction failed" in r.json()["detail"]
@@ -90,7 +90,7 @@ def test_short_transcription_flagged(monkeypatch):
             return TranscriptionInfo(text="سلام", provider="fake", latency_s=0.1)
 
     monkeypatch.setattr(main, "get_provider", lambda name: Short())
-    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t: (REPORT, "test/stub"))
     r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
     assert r.status_code == 200
     assert "short_transcription" in r.json()["warnings"]
@@ -104,7 +104,7 @@ def test_low_confidence_flagged(monkeypatch):
             )
 
     monkeypatch.setattr(main, "get_provider", lambda name: LowConfidence())
-    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t: (REPORT, "test/stub"))
     r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
     assert r.status_code == 200
     body = r.json()
@@ -123,7 +123,7 @@ def test_high_confidence_not_flagged(monkeypatch):
             )
 
     monkeypatch.setattr(main, "get_provider", lambda name: HighConfidence())
-    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t: (REPORT, "test/stub"))
     r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
     assert r.status_code == 200
     assert "low_confidence_transcription" not in r.json()["warnings"]
@@ -133,7 +133,7 @@ def test_missing_confidence_not_flagged(monkeypatch):
     """Providers with no confidence signal (gemini, hf-darija) must not be
     falsely flagged — None means 'unknown', not 'low'."""
     monkeypatch.setattr(main, "get_provider", lambda name: FakeProvider())
-    monkeypatch.setattr(main.extraction, "extract_report", lambda t: REPORT)
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t: (REPORT, "test/stub"))
     r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
     assert r.status_code == 200
     body = r.json()
@@ -149,3 +149,42 @@ def test_unknown_provider_rejected(monkeypatch):
     )
     assert r.status_code == 422
     assert "Unknown STT provider" in r.json()["detail"]
+
+
+def test_image_mode(monkeypatch):
+    """Vision path returns the report directly — no transcription, and the
+    rapport_complet column is marked so nobody reads it as a verbatim quote."""
+    monkeypatch.setattr(
+        main.extraction, "extract_report_from_image", lambda blob, mime: (REPORT, "gemini/test")
+    )
+    r = client.post("/process", files={"image": ("note.jpg", b"\xff\xd8fake", "image/jpeg")})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["transcription"] is None
+    assert body["rapport_complet"].startswith("[photo] ")
+    assert "image_input" in body["warnings"]
+
+
+def test_image_extraction_failure_maps_to_502(monkeypatch):
+    def boom(blob, mime):
+        raise ExtractionError("no vision model reachable")
+
+    monkeypatch.setattr(main.extraction, "extract_report_from_image", boom)
+    r = client.post("/process", files={"image": ("note.jpg", b"\xff\xd8fake", "image/jpeg")})
+    assert r.status_code == 502
+    assert "image extraction failed" in r.json()["detail"]
+
+
+def test_empty_image_rejected():
+    r = client.post("/process", files={"image": ("note.jpg", b"", "image/jpeg")})
+    assert r.status_code == 422
+
+
+def test_image_plus_text_rejected():
+    r = client.post(
+        "/process",
+        data={"text": "rapport"},
+        files={"image": ("note.jpg", b"\xff\xd8fake", "image/jpeg")},
+    )
+    assert r.status_code == 422
+    assert "exactly one" in r.json()["detail"]

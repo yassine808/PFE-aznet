@@ -117,7 +117,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Telegram: voice note, forwarded/uploaded audio, OR typed text report.\n// Dedupe: processed message keys tracked in static data (poll restarts re-deliver).\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  if (!m) continue;\n  const key = 'tg:' + m.chat.id + ':' + m.message_id;\n  if (s.processedMsgs[key]) continue;\n  const media = m.voice ?? m.audio;\n  const base = {\n    channel: 'telegram',\n    chat_id: m.chat.id,\n    message_id: m.message_id,\n    user_id: String(m.from?.id),\n    is_forwarded: Boolean(m.forward_date || m.forward_origin),\n    technicien: m.from?.first_name ?? String(m.from?.id),\n  };\n  if (media) {\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'audio', file_ref: media.file_id } });\n  } else if (m.text && !m.text.startsWith('/')) {\n    // typed report (ignore bot commands like /start)\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'text', text_input: m.text, file_ref: null } });\n  }\n}\nreturn out;"
+        "jsCode": "// Telegram: voice note, forwarded/uploaded audio, PHOTO, or typed text report.\n// Dedupe: processed message keys tracked in static data (poll restarts re-deliver).\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  if (!m) continue;\n  const key = 'tg:' + m.chat.id + ':' + m.message_id;\n  if (s.processedMsgs[key]) continue;\n  const media = m.voice ?? m.audio;\n  // photo arrives as an array of sizes, smallest first — the last one is the\n  // largest Telegram kept, and OCR of a handwritten page needs every pixel.\n  const photo = Array.isArray(m.photo) && m.photo.length ? m.photo[m.photo.length - 1] : null;\n  // \"send as file\" keeps full resolution and arrives as a document instead.\n  const imageDoc = m.document && String(m.document.mime_type ?? '').startsWith('image/') ? m.document : null;\n  const base = {\n    channel: 'telegram',\n    chat_id: m.chat.id,\n    message_id: m.message_id,\n    user_id: String(m.from?.id),\n    is_forwarded: Boolean(m.forward_date || m.forward_origin),\n    technicien: m.from?.first_name ?? String(m.from?.id),\n    caption: m.caption ?? null,\n  };\n  if (media) {\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'audio', file_ref: media.file_id } });\n  } else if (photo || imageDoc) {\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'image', file_ref: (photo ?? imageDoc).file_id } });\n  } else if (m.text && !m.text.startsWith('/')) {\n    // typed report (ignore bot commands like /start)\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'text', text_input: m.text, file_ref: null } });\n  }\n}\nreturn out;"
       },
       "id": "e1000000-0000-4000-8000-000000000004",
       "name": "Extract TG msgs",
@@ -130,7 +130,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// WhatsApp Cloud API webhook payload (manual webhook: wrapped in body).\n// Voice notes and forwarded audio both arrive as type 'audio'. Text reports supported.\n// Dedupe: Meta retries webhook deliveries on slow/failed responses.\nconst s = $getWorkflowStaticData('global');\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  for (const entry of item.json.body?.entry ?? []) {\n    for (const change of entry.changes ?? []) {\n      const v = change.value;\n      const contactName = v?.contacts?.[0]?.profile?.name;\n      for (const m of v?.messages ?? []) {\n        const key = 'wa:' + m.id;\n        if (s.processedMsgs[key]) continue;\n        const base = {\n          channel: 'whatsapp',\n          chat_id: m.from,\n          message_id: m.id,\n          user_id: String(m.from),\n          is_forwarded: Boolean(m.context?.forwarded),\n          technicien: contactName ?? m.from,\n        };\n        if (m.type === 'audio' && m.audio?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'audio', file_ref: m.audio.id } });\n        } else if (m.type === 'text' && m.text?.body) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'text', text_input: m.text.body, file_ref: null } });\n        }\n      }\n    }\n  }\n}\nreturn out;"
+        "jsCode": "// WhatsApp Cloud API webhook payload (manual webhook: wrapped in body).\n// Voice notes and forwarded audio both arrive as type 'audio'. Photos arrive as\n// type 'image'. Text reports supported.\n// Dedupe: Meta retries webhook deliveries on slow/failed responses.\nconst s = $getWorkflowStaticData('global');\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  for (const entry of item.json.body?.entry ?? []) {\n    for (const change of entry.changes ?? []) {\n      const v = change.value;\n      const contactName = v?.contacts?.[0]?.profile?.name;\n      for (const m of v?.messages ?? []) {\n        const key = 'wa:' + m.id;\n        if (s.processedMsgs[key]) continue;\n        const base = {\n          channel: 'whatsapp',\n          chat_id: m.from,\n          message_id: m.id,\n          user_id: String(m.from),\n          is_forwarded: Boolean(m.context?.forwarded),\n          technicien: contactName ?? m.from,\n          caption: m.audio?.caption ?? m.image?.caption ?? null,\n        };\n        if (m.type === 'audio' && m.audio?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'audio', file_ref: m.audio.id } });\n        } else if (m.type === 'image' && m.image?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'image', file_ref: m.image.id } });\n        } else if (m.type === 'text' && m.text?.body) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'text', text_input: m.text.body, file_ref: null } });\n        }\n      }\n    }\n  }\n}\nreturn out;"
       },
       "id": "e1000000-0000-4000-8000-000000000005",
       "name": "Extract WA msgs",
@@ -275,10 +275,10 @@
           "conditions": [
             {
               "leftValue": "={{ $('Access control').item.json.kind }}",
-              "rightValue": "audio",
+              "rightValue": "text",
               "operator": {
                 "type": "string",
-                "operation": "equals"
+                "operation": "notEquals"
               }
             }
           ],
@@ -287,7 +287,7 @@
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-000000000011",
-      "name": "Audio or text?",
+      "name": "Media or text?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
@@ -692,7 +692,7 @@
             "resume": "={{ $('Process output').item.json.report.resume }}",
             "rapport_complet": "={{ $('Process output').item.json.rapport_complet }}",
             "confidence": "={{ $('Process output').item.json.transcription?.confidence }}",
-            "flag_review": "={{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') || ($('Process output').item.json.warnings ?? []).includes('short_transcription') }}",
+            "flag_review": "={{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') || ($('Process output').item.json.warnings ?? []).includes('short_transcription') || ($('Process output').item.json.warnings ?? []).includes('image_input') }}",
             "lien_audio": "={{ $('Access control').item.json.file_ref }}"
           },
           "matchingColumns": [],
@@ -1601,6 +1601,81 @@
         2580
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e1000000-0000-4000-8000-0000000000a1",
+      "name": "Audio or image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5640,
+        365
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Access control').item.json.kind }}",
+              "rightValue": "audio",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/process",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "image",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{ $('Restore message').item.json.correlation_id }}"
+            },
+            {
+              "name": "channel",
+              "value": "={{ $('Access control').item.json.channel }}"
+            },
+            {
+              "name": "technicien",
+              "value": "={{ $('Access control').item.json.technicien }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-0000000000a2",
+      "name": "POST /process (image)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5840,
+        565
+      ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     }
   ],
   "connections": {
@@ -1715,7 +1790,7 @@
       "main": [
         [
           {
-            "node": "Audio or text?",
+            "node": "Media or text?",
             "type": "main",
             "index": 0
           }
@@ -1726,25 +1801,7 @@
       "main": [
         [
           {
-            "node": "Audio or text?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Audio or text?": {
-      "main": [
-        [
-          {
-            "node": "TG or WA? (download)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "POST /process (text)",
+            "node": "Media or text?",
             "type": "main",
             "index": 0
           }
@@ -1791,7 +1848,7 @@
       "main": [
         [
           {
-            "node": "POST /process (audio)",
+            "node": "Audio or image?",
             "type": "main",
             "index": 0
           }
@@ -1813,7 +1870,7 @@
       "main": [
         [
           {
-            "node": "POST /process (audio)",
+            "node": "Audio or image?",
             "type": "main",
             "index": 0
           }
@@ -2209,6 +2266,65 @@
         [
           {
             "node": "POST /logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Media or text?": {
+      "main": [
+        [
+          {
+            "node": "TG or WA? (download)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "POST /process (text)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio or image?": {
+      "main": [
+        [
+          {
+            "node": "POST /process (audio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "POST /process (image)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /process (image)": {
+      "main": [
+        [
+          {
+            "node": "Process output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TG or WA? (fail)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log process failed",
             "type": "main",
             "index": 0
           }

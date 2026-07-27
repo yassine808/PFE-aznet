@@ -89,9 +89,31 @@ Both reception workflows now carry an **Access control** Code node: an `ALLOWLIS
 - Allowlisted senders proceed; `technicien` is taken from the allowlist name (stable, not the free-form Telegram first name) and `role` is written to the Sheet so boss-specific behavior can branch on it later.
 - Unknown senders get **exactly one** automated HR-contact reply per chat (tracked in workflow static data), then are dropped silently.
 
+## 5b. Input routing: audio, image, text
+
+A technician can send a voice note, a **photo** (notebook page, whiteboard, delivery note, or the work itself) or typed text. The extractor Code nodes tag each message with a `kind`, and two forks route it:
+
+| Fork | Condition | Branches |
+|---|---|---|
+| `Media or text?` | `kind != 'text'` | download subgraph / `POST /process (text)` |
+| `Audio or image?` | `kind == 'audio'` | `POST /process (audio)` / `POST /process (image)` |
+
+Audio and image **share the whole download subgraph** — `TG Get Voice File` takes any `file_id` and `WA Get media URL` takes any media id, neither cares about the type — so only the final POST differs. That is why the split sits *after* the download rather than before it: forking earlier would mean maintaining two identical copies of the Telegram/WhatsApp download branches.
+
+Per channel, an image arrives as:
+
+- **Telegram** — `message.photo` (an array of sizes; the workflow takes the **last**, which is the largest Telegram kept — OCR of a handwritten page needs the pixels) or `message.document` with an `image/*` mime type when sent as a file.
+- **WhatsApp** — `message.type === 'image'` with `image.id`.
+
+Captions are captured onto the item as `caption` but are **not yet sent to `/process`** — see the caption item in `TO-DO.md`.
+
+The API decides nothing about routing: it takes exactly one of `audio`, `image` or `text` and 422s otherwise. Model selection per input shape lives in `EXTRACTION_TEXT_CHAIN` / `EXTRACTION_IMAGE_CHAIN` (see `api/app/config.py` and `benchmark/README.md`).
+
 ## 6. Sheets append + flag_review
 
-The reception workflows append the full row to the `Rapports` tab (date, heure, technicien, role, all extracted fields, rapport_complet, confidence, `flag_review`, lien_audio). `flag_review` is `true` when the API returned `low_confidence_transcription` or `short_transcription` — the dashboard's review queue filters on it. Replace `REPLACE_WITH_SPREADSHEET_ID` and attach a Google Sheets credential.
+The reception workflows append the full row to the `Rapports` tab (date, heure, technicien, role, all extracted fields, rapport_complet, confidence, `flag_review`, lien_audio). `flag_review` is `true` when the API returned `low_confidence_transcription`, `short_transcription` or `image_input` — the dashboard's review queue filters on it. Photo-derived rows are always flagged: there is no transcription to sanity-check them against, so a human should glance at every one.
+
+For an image there is no raw text, so `rapport_complet` holds the model's own summary prefixed with `[photo] `. The prefix matters: without it the column looks like something the technician actually said. Replace `REPLACE_WITH_SPREADSHEET_ID` and attach a Google Sheets credential.
 
 ## 7. Error workflow
 

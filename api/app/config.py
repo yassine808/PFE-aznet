@@ -2,6 +2,7 @@
 from pathlib import Path
 from typing import Optional
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # .env lives at the repo root (shared with docker-compose); anchor to this file
@@ -34,6 +35,24 @@ class Settings(BaseSettings):
     groq_whisper_model: str = "whisper-large-v3"
     groq_llm_model: str = "llama-3.3-70b-versatile"
 
+    # Ordered "provider:model" fallback chains, one per input shape. Tried left
+    # to right; the first success wins (app/extraction.py). Ranked by
+    # benchmark/run_model_benchmark.py — see benchmark/README.md for the table.
+    #
+    # Text mixes vendors on purpose: Gemini and Groq have separate free-tier
+    # quotas, so a Gemini rate limit falls through to a different company's
+    # capacity rather than to another queue behind the same meter.
+    #
+    # Image is Google-only because the free Groq catalogue has no vision model
+    # (verified against GET /models), so the fallbacks buy resilience against a
+    # single model 404ing or overloading, not against Google being down.
+    extraction_text_chain: str = (
+        "gemini:gemini-3.6-flash,groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest"
+    )
+    extraction_image_chain: str = (
+        "gemini:gemini-3.6-flash,gemini:gemini-2.5-flash,gemini:gemini-flash-lite-latest"
+    )
+
     # Notification mail, used by POST /notify/test so the dashboard can prove a
     # recipient address before the end-of-day report goes out. Optional at
     # startup like every other key: the endpoint fails loudly with a precise
@@ -41,7 +60,10 @@ class Settings(BaseSettings):
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: Optional[str] = None
-    smtp_password: Optional[str] = None
+    # The repo .env spells this SMTP_PASS while the field name implies
+    # SMTP_PASSWORD; accept both rather than have the Test button 422 with
+    # "SMTP is not configured" against a file that plainly configures it.
+    smtp_password: Optional[str] = Field(None, validation_alias=AliasChoices("SMTP_PASSWORD", "SMTP_PASS"))
     smtp_from: Optional[str] = None
 
 

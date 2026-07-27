@@ -78,6 +78,7 @@ def health() -> dict:
 @app.post("/process", response_model=ProcessResponse)
 async def process(
     audio: Optional[UploadFile] = File(None, description="Voice note (ogg/opus from WhatsApp)"),
+    image: Optional[UploadFile] = File(None, description="Photo: notebook page, whiteboard, delivery note, or the work itself"),
     text: Optional[str] = Form(None, description="Raw report text (web form mode)"),
     provider: Optional[str] = Form(None, description="STT engine override (benchmark use)"),
     correlation_id: Optional[str] = Form(None, description="Trace id minted by n8n at reception"),
@@ -88,9 +89,11 @@ async def process(
     # line up with the workflow's rows in the dashboard timeline.
     ctx = {"correlation_id": correlation_id, "channel": channel, "technicien": technicien}
 
-    if (audio is None) == (text is None):
-        await _log("api", "error", message="Provide exactly one of 'audio' or 'text'", **ctx)
-        raise HTTPException(422, "Provide exactly one of 'audio' or 'text'")
+    provided = [name for name, value in (("audio", audio), ("image", image), ("text", text)) if value is not None]
+    if len(provided) != 1:
+        detail = f"Provide exactly one of 'audio', 'image' or 'text' (got: {provided or 'none'})"
+        await _log("api", "error", message=detail, **ctx)
+        raise HTTPException(422, detail)
 
     warnings: List[str] = []
     transcription = None
@@ -126,6 +129,38 @@ async def process(
             duration_ms=int((time.time() - t0) * 1000),
             payload={"engine": engine, "chars": len(rapport_complet)}, **ctx,
         )
+    elif image is not None:
+        # The vision path skips the text step entirely: the model reads the
+        # photo and fills the schema in one call, so there is no intermediate
+        # transcription to store or to get wrong twice.
+        blob = await image.read()
+        if not blob:
+            raise HTTPException(422, "Empty image file")
+        t1 = time.time()
+        try:
+            report, model_used = await run_in_threadpool(
+                extraction.extract_report_from_image, blob, image.content_type or "image/jpeg"
+            )
+        except extraction.ExtractionError as exc:
+            await _log(
+                "extracted", "error", message=f"image extraction failed: {exc}",
+                duration_ms=int((time.time() - t1) * 1000), **ctx,
+            )
+            raise HTTPException(502, f"image extraction failed: {exc}") from exc
+
+        # There is no raw text for a photo. The model's own summary is the most
+        # faithful thing to put in the column, marked so nobody reads it as a
+        # verbatim quote from the technician.
+        rapport_complet = f"[photo] {report.resume}"
+        warnings.append("image_input")
+        await _log(
+            "extracted", "info", message="ok (image)",
+            duration_ms=int((time.time() - t1) * 1000),
+            payload={"model": model_used, "chantier": report.chantier, "bytes": len(blob)}, **ctx,
+        )
+        return ProcessResponse(
+            rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
+        )
     else:
         rapport_complet = (text or "").strip()
         if not rapport_complet:
@@ -134,7 +169,7 @@ async def process(
 
     t1 = time.time()
     try:
-        report = extraction.extract_report(rapport_complet)
+        report, model_used = await run_in_threadpool(extraction.extract_report_with_model, rapport_complet)
     except extraction.ExtractionError as exc:
         await _log(
             "extracted", "error", message=f"extraction failed: {exc}",
@@ -145,7 +180,7 @@ async def process(
     await _log(
         "extracted", "info", message="ok",
         duration_ms=int((time.time() - t1) * 1000),
-        payload={"chantier": report.chantier}, **ctx,
+        payload={"model": model_used, "chantier": report.chantier}, **ctx,
     )
 
     return ProcessResponse(
