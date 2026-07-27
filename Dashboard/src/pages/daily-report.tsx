@@ -141,7 +141,6 @@ export function DailyReportPage() {
               year={year}
               onSelectDay={setDate}
               selectedDay={date}
-              cellHeight={18}
             />
           </div>
 
