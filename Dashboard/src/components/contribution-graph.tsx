@@ -31,6 +31,7 @@ export function ContributionGraph({
   onSelectDay,
   onSelectWeek,
   selectedWeek,
+  selectedDay,
 }: {
   rows: ReportRow[]
   /** Calendar year to render. Defaults to a rolling 53 weeks ending today. */
@@ -38,6 +39,8 @@ export function ContributionGraph({
   onSelectDay?: (iso: string) => void
   onSelectWeek?: (mondayIso: string) => void
   selectedWeek?: string
+  /** ISO day to outline as the current selection, e.g. the Daily panel's date. */
+  selectedDay?: string
 }) {
   const { t, locale, dir } = useI18n()
   const intlLocale = locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'
@@ -110,6 +113,20 @@ export function ContributionGraph({
 
   const fmtDate = new Intl.DateTimeFormat(intlLocale, { dateStyle: 'medium' })
   const interactive = Boolean(onSelectDay || onSelectWeek)
+  const todayIso = isoOf(new Date())
+
+  /*
+   * Today and "the day you picked" are different questions, so they get
+   * different marks: today is a hairline outline that is always present, the
+   * selection is a thick accent outline. Outline, not ring — ring-offset would
+   * need a solid offset colour, and these cells sit on a transparent panel.
+   */
+  const mark = (iso: string) =>
+    iso === selectedDay
+      ? ' outline outline-2 outline-accent'
+      : iso === todayIso
+        ? ' outline outline-1 outline-ink-muted'
+        : ''
 
   return (
     <div className="flex flex-col gap-2">
@@ -172,14 +189,14 @@ export function ContributionGraph({
                           key={d.iso}
                           type="button"
                           onClick={() => onSelectDay(d.iso)}
-                          className={`aspect-square w-full rounded-[2px] transition-transform hover:scale-125 ${STEP[level(d.count)]}`}
+                          className={`aspect-square w-full rounded-[2px] transition-transform hover:scale-125 ${STEP[level(d.count)]}${mark(d.iso)}`}
                           title={`${fmtDate.format(d.date)} · ${d.count}`}
                           aria-label={`${fmtDate.format(d.date)} · ${d.count}`}
                         />
                       ) : (
                         <span
                           key={d.iso}
-                          className={`aspect-square w-full rounded-[2px] ${STEP[level(d.count)]}`}
+                          className={`aspect-square w-full rounded-[2px] ${STEP[level(d.count)]}${mark(d.iso)}`}
                           title={`${fmtDate.format(d.date)} · ${d.count}`}
                         />
                       ),
@@ -197,6 +214,10 @@ export function ContributionGraph({
           <span className="tabular">{total}</span> {t('graph.reportsIn')} <span className="tabular">{activeDays}</span>{' '}
           {t('graph.activeDays')}
           {interactive && onSelectDay ? ` · ${t('graph.clickHint')}` : ''}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="outline-ink-muted size-[11px] rounded-[2px] outline outline-1" />
+          {t('graph.today')}
         </span>
         <span className="flex items-center gap-1.5">
           {t('graph.less')}

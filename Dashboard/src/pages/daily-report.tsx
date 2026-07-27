@@ -6,12 +6,20 @@ import { exportReport, type ReportFormat } from '@/lib/report-export'
 import { toISODate, todayISO } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
+import { ContributionGraph } from '@/components/contribution-graph'
 
 export function DailyReportPage() {
   const { t } = useI18n()
   const reports = useApi('reports', api.reports)
 
   const [date, setDate] = useState(todayISO())
+  // Year shown by the graph. Follows the picked date, so typing a 2025 date in
+  // the input scrolls the heatmap to 2025 rather than leaving it out of view.
+  const year = Number(date.slice(0, 4)) || new Date().getFullYear()
+  const years = useMemo(() => {
+    const y = new Date().getFullYear()
+    return [y, y - 1, y - 2]
+  }, [])
   const [content, setContent] = useState<DailyReportContent | null>(null)
   // Format preference comes from the Automation panel; markdown until it loads.
   const settings = useApi('settings', api.settings)
@@ -119,6 +127,42 @@ export function DailyReportPage() {
           ))}
         </div>
       )}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
+          {t('graph.year')}
+        </h2>
+
+        <div className="flex items-start gap-5">
+          <div className="min-w-0 flex-1">
+            {/* Clicking a cell sets the report date; the date input stays authoritative. */}
+            <ContributionGraph
+              rows={reports.data?.reports ?? []}
+              year={year}
+              onSelectDay={setDate}
+              selectedDay={date}
+            />
+          </div>
+
+          <div className="flex shrink-0 flex-col gap-1" role="group" aria-label={t('weekly.year')}>
+            {years.map((y) => (
+              <button
+                key={y}
+                type="button"
+                // Jump to Jan 1 of that year: the graph follows `date`, so the
+                // year rail and the date input never disagree.
+                onClick={() => setDate(`${y}-01-01`)}
+                aria-pressed={y === year}
+                className={`tabular rounded px-2.5 py-1 text-xs transition-colors ${
+                  y === year ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink'
+                }`}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {error && <ErrorState message={error} onRetry={generate} />}
 
