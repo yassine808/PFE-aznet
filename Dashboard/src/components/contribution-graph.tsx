@@ -32,6 +32,7 @@ export function ContributionGraph({
   onSelectWeek,
   selectedWeek,
   selectedDay,
+  cellHeight,
 }: {
   rows: ReportRow[]
   /** Calendar year to render. Defaults to a rolling 53 weeks ending today. */
@@ -41,6 +42,12 @@ export function ContributionGraph({
   selectedWeek?: string
   /** ISO day to outline as the current selection, e.g. the Daily panel's date. */
   selectedDay?: string
+  /**
+   * Fixed row height in px. Default cells are square, so height is dictated by
+   * however wide the panel is; set this when the graph is the main object on
+   * the page and should read taller than 53 columns of width would allow.
+   */
+  cellHeight?: number
 }) {
   const { t, locale, dir } = useI18n()
   const intlLocale = locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'
@@ -114,6 +121,10 @@ export function ContributionGraph({
   const fmtDate = new Intl.DateTimeFormat(intlLocale, { dateStyle: 'medium' })
   const interactive = Boolean(onSelectDay || onSelectWeek)
   const todayIso = isoOf(new Date())
+  const rowTemplate = cellHeight ? `repeat(7, ${cellHeight}px)` : 'repeat(7, 1fr)'
+  // Square cells only when height is width-driven; a fixed row height means the
+  // cell must fill its track instead, otherwise it collapses back to a square.
+  const cellShape = cellHeight ? 'h-full w-full' : 'aspect-square w-full'
 
   /*
    * Today and "the day you picked" are different questions, so they get
@@ -138,7 +149,7 @@ export function ContributionGraph({
       <div className="pb-1">
         <div className="flex gap-1.5" style={{ direction: dir }}>
           {/* Weekday gutter */}
-          <div className="grid shrink-0 gap-[2px] pt-[14px]" style={{ gridTemplateRows: 'repeat(7, 1fr)' }}>
+          <div className="grid shrink-0 gap-[2px] pt-[14px]" style={{ gridTemplateRows: rowTemplate }}>
             {dayLabels.map((d, i) => (
               <span key={i} className="text-ink-faint flex items-center text-[8px] leading-none capitalize">
                 {d}
@@ -165,7 +176,7 @@ export function ContributionGraph({
                     className={`grid min-w-0 gap-[2px] rounded-[3px] ${
                       onSelectWeek ? 'cursor-pointer' : ''
                     } ${weekSelected ? 'ring-accent ring-2 ring-offset-1 ring-offset-transparent' : ''}`}
-                    style={{ gridTemplateRows: 'repeat(7, 1fr)' }}
+                    style={{ gridTemplateRows: rowTemplate }}
                     onClick={onSelectWeek ? () => onSelectWeek(isoMonday) : undefined}
                     role={onSelectWeek ? 'button' : undefined}
                     tabIndex={onSelectWeek ? 0 : undefined}
@@ -183,20 +194,20 @@ export function ContributionGraph({
                   >
                     {w.days.map((d) =>
                       !d.inScope ? (
-                        <span key={d.iso} className="aspect-square w-full" />
+                        <span key={d.iso} className={cellShape} />
                       ) : onSelectDay ? (
                         <button
                           key={d.iso}
                           type="button"
                           onClick={() => onSelectDay(d.iso)}
-                          className={`aspect-square w-full rounded-[2px] transition-transform hover:scale-125 ${STEP[level(d.count)]}${mark(d.iso)}`}
+                          className={`${cellShape} rounded-[2px] transition-transform hover:scale-125 ${STEP[level(d.count)]}${mark(d.iso)}`}
                           title={`${fmtDate.format(d.date)} · ${d.count}`}
                           aria-label={`${fmtDate.format(d.date)} · ${d.count}`}
                         />
                       ) : (
                         <span
                           key={d.iso}
-                          className={`aspect-square w-full rounded-[2px] ${STEP[level(d.count)]}${mark(d.iso)}`}
+                          className={`${cellShape} rounded-[2px] ${STEP[level(d.count)]}${mark(d.iso)}`}
                           title={`${fmtDate.format(d.date)} · ${d.count}`}
                         />
                       ),
