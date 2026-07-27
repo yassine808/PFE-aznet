@@ -1,29 +1,21 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { CaretLeftIcon, CaretRightIcon, CopyIcon } from '@phosphor-icons/react'
+import { CopyIcon, SparkleIcon } from '@phosphor-icons/react'
+import { cn } from '@/lib/utils'
 import { api, useApi } from '@/lib/api'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
+import { ContributionGraph, isoOf as iso, weekStart } from '@/components/contribution-graph'
 
 const DAY_MS = 86_400_000
-
-function iso(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-/** Monday of the week containing `d`. ISO weeks start Monday. */
-function weekStart(d: Date) {
-  const copy = new Date(d)
-  copy.setHours(0, 0, 0, 0)
-  const dow = (copy.getDay() + 6) % 7
-  return new Date(copy.getTime() - dow * DAY_MS)
-}
 
 export function WeeklyReportPage() {
   const { t, locale } = useI18n()
   const reports = useApi('reports', api.reports)
-  const [offset, setOffset] = useState(0)
+  // Selected week as its Monday. Picked from the year graph below.
+  const [selected, setSelected] = useState(() => iso(weekStart(new Date())))
+  const [year, setYear] = useState(() => new Date().getFullYear())
   const [copied, setCopied] = useState(false)
 
   const fmt = useMemo(
@@ -35,8 +27,17 @@ export function WeeklyReportPage() {
     [locale],
   )
 
-  const start = useMemo(() => new Date(weekStart(new Date()).getTime() + offset * 7 * DAY_MS), [offset])
+  const start = useMemo(() => {
+    const [y, m, d] = selected.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }, [selected])
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * DAY_MS)), [start])
+
+  // Current year plus the two before it, newest first.
+  const years = useMemo(() => {
+    const y = new Date().getFullYear()
+    return [y, y - 1, y - 2]
+  }, [])
 
   const week = useMemo(() => {
     const rows = (reports.data?.reports ?? []).filter((r) => {
@@ -111,36 +112,71 @@ export function WeeklyReportPage() {
       className="flex flex-col gap-8 pt-8"
     >
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setOffset((o) => o - 1)}
-          aria-label={t('weekly.previous')}
-          className="border-line text-ink-muted hover:text-ink rounded-md border p-1.5 transition-colors active:translate-y-px"
-        >
-          <CaretLeftIcon size={14} className="rtl:rotate-180" />
-        </button>
         <span className="tabular text-ink text-sm">
           {iso(days[0])} → {iso(days[6])}
         </span>
-        <button
-          type="button"
-          onClick={() => setOffset((o) => Math.min(0, o + 1))}
-          disabled={offset >= 0}
-          aria-label={t('weekly.next')}
-          className="border-line text-ink-muted hover:text-ink rounded-md border p-1.5 transition-colors active:translate-y-px disabled:opacity-40"
-        >
-          <CaretRightIcon size={14} className="rtl:rotate-180" />
-        </button>
+        <div className="ms-auto flex items-center gap-3">
+          {/*
+            Present but not wired: there is no weekly LLM endpoint yet, only
+            POST /daily-report. Shipping it enabled would fake a capability the
+            backend does not have.
+          */}
+          <button
+            type="button"
+            disabled
+            title={t('weekly.generateSoon')}
+            className="border-line text-ink-faint flex cursor-not-allowed items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          >
+            <SparkleIcon size={13} weight="fill" />
+            {t('daily.generate')}
+          </button>
 
-        <button
-          type="button"
-          onClick={copy}
-          className="border-line text-ink-muted hover:text-ink ms-auto flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
-        >
-          <CopyIcon size={13} />
-          {copied ? t('daily.copied') : t('daily.copy')}
-        </button>
+          <button
+            type="button"
+            onClick={copy}
+            className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
+          >
+            <CopyIcon size={13} />
+            {copied ? t('daily.copied') : t('daily.copy')}
+          </button>
+        </div>
       </div>
+
+      {/* Pick a week by clicking its column. One year at a time; the rail on the
+          right switches years, the way GitHub's contribution calendar does. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
+          {t('weekly.pickWeek')}
+        </h2>
+
+        <div className="flex items-start gap-5">
+          <div className="min-w-0 flex-1">
+            <ContributionGraph
+              rows={reports.data?.reports ?? []}
+              year={year}
+              onSelectWeek={setSelected}
+              selectedWeek={selected}
+            />
+          </div>
+
+          <div className="flex shrink-0 flex-col gap-1" role="group" aria-label={t('weekly.year')}>
+            {years.map((y) => (
+              <button
+                key={y}
+                type="button"
+                onClick={() => setYear(y)}
+                aria-pressed={y === year}
+                className={cn(
+                  'tabular rounded-md px-4 py-1.5 text-start text-sm transition-colors active:translate-y-px',
+                  y === year ? 'bg-accent font-medium text-white' : 'text-ink-muted hover:bg-surface hover:text-ink',
+                )}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* Computed locally from the Sheet: no model call, so the numbers are arithmetic, not prose. */}
       <p className="text-ink-faint max-w-[65ch] text-sm">{t('weekly.intro')}</p>

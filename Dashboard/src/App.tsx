@@ -6,6 +6,7 @@ import { InboxPage } from '@/pages/inbox'
 import { DailyReportPage } from '@/pages/daily-report'
 import { WeeklyReportPage } from '@/pages/weekly-report'
 import { AccessControlPage } from '@/pages/access-control'
+import { PipelinePage } from '@/pages/pipeline'
 import { OpsProvider } from '@/lib/ops-context'
 import { useI18n } from '@/lib/i18n'
 import { useRoute, type Route } from '@/lib/router'
@@ -57,6 +58,8 @@ export default function App() {
             <WeeklyReportPage />
           ) : route === 'access' ? (
             <AccessControlPage />
+          ) : route === 'pipeline' ? (
+            <PipelinePage />
           ) : (
             <section className="py-16">
               <p className="text-ink-faint max-w-[65ch] text-sm">{t('state.empty.body')}</p>

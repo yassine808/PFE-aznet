@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { CheckIcon, FlagIcon, SpeakerHighIcon, TextAlignLeftIcon } from '@phosphor-icons/react'
+import { CheckIcon, FlagIcon, PencilSimpleIcon, SpeakerHighIcon, TextAlignLeftIcon } from '@phosphor-icons/react'
 import { api, patchReport, useApi, type ReportRow } from '@/lib/api'
-import { isFlagged } from '@/lib/metrics'
+import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
+import { ChannelIcon } from '@/components/channel-icon'
 import { cn } from '@/lib/utils'
 
 /** Fields the manager is allowed to correct before the row feeds the day's report. */
@@ -19,6 +20,8 @@ const EDITABLE: { field: keyof ReportRow & string; labelKey: string; long?: bool
 
 function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
   const { t } = useI18n()
+  // Cards read as messages by default; editing is opt-in per message.
+  const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -52,9 +55,13 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
   return (
     <article className="border-line bg-surface edge rounded-xl border p-5">
       <header className="border-line flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b pb-3">
-        <span className="text-ink-muted flex items-center gap-1.5 text-xs">
-          {voice ? <SpeakerHighIcon size={13} /> : <TextAlignLeftIcon size={13} />}
+        <span className="text-ink-muted flex items-center gap-1.5 text-xs capitalize">
+          <ChannelIcon channel={(r.canal ?? '').trim().toLowerCase()} size={13} />
           {r.canal || '—'}
+        </span>
+        <span className="text-ink-faint flex items-center gap-1 text-xs">
+          {voice ? <SpeakerHighIcon size={12} /> : <TextAlignLeftIcon size={12} />}
+          {voice ? t('inbox.audio') : t('inbox.text')}
         </span>
         <span className="text-ink text-sm font-medium">{r.technicien || '—'}</span>
         <span className="tabular text-ink-faint text-xs">
@@ -86,6 +93,46 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
         />
       )}
 
+      {/* Read view: the generated summary and figures as they stand today. */}
+      {!editing && (
+        <div className="mt-3 flex flex-col gap-3">
+          {r.resume && <p className="text-ink max-w-[70ch] text-sm leading-relaxed">{r.resume}</p>}
+
+          <div className="text-ink-muted flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            {r.chantier && (
+              <span>
+                {t('col.chantier')}: <span className="text-ink">{r.chantier}</span>
+              </span>
+            )}
+            {num(r.goulottes_m) > 0 && (
+              <span>
+                {t('metric.goulottes')}: <span className="tabular text-ink">{num(r.goulottes_m)} m</span>
+              </span>
+            )}
+            {num(r.cables_m) > 0 && (
+              <span>
+                {t('metric.cables')}: <span className="tabular text-ink">{num(r.cables_m)} m</span>
+              </span>
+            )}
+            {r.observations && (
+              <span>
+                {t('inbox.field.observations')}: <span className="text-ink">{r.observations}</span>
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="border-line text-ink-muted hover:text-ink flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
+          >
+            <PencilSimpleIcon size={13} />
+            {t('inbox.modify')}
+          </button>
+        </div>
+      )}
+
+      {editing && (
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {EDITABLE.map(({ field, labelKey, long }) => (
           <div key={field} className={cn('flex flex-col gap-1.5', long && 'sm:col-span-2')}>
@@ -111,9 +158,11 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
           </div>
         ))}
       </div>
+      )}
 
       {error && <p className="text-status-fail mt-3 text-xs break-all">{error}</p>}
 
+      {editing && (
       <div className="mt-4 flex items-center gap-3">
         <button
           type="button"
@@ -131,6 +180,17 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
         {dirty.length > 0 && !saving && (
           <span className="tabular text-ink-faint text-xs">{dirty.length}</span>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            setDraft({})
+            setEditing(false)
+          }}
+          className="text-ink-faint hover:text-ink text-xs underline underline-offset-4 transition-colors"
+        >
+          {t('inbox.cancel')}
+        </button>
+
         {saved && (
           <span className="text-status-ok flex items-center gap-1 text-xs">
             <CheckIcon size={13} weight="bold" />
@@ -138,17 +198,20 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
           </span>
         )}
       </div>
+      )}
     </article>
   )
 }
 
-export function InboxPage() {
+export function InboxPage({ initialDate }: { initialDate?: string }) {
   const { t } = useI18n()
   const { settings } = useSettings()
   const reports = useApi('reports', api.reports, settings.refreshMs || undefined)
 
   const [channel, setChannel] = useState<string>('')
   const [who, setWho] = useState<string>('')
+  // Seeded from the deep link out of Overview's year graph (#/inbox?date=…).
+  const [date, setDate] = useState<string>(initialDate ?? '')
 
   const all = useMemo(() => [...(reports.data?.reports ?? [])].reverse(), [reports.data])
 
@@ -165,8 +228,9 @@ export function InboxPage() {
     () =>
       all
         .filter((r) => (channel ? (r.canal ?? '').trim() === channel : true))
-        .filter((r) => (who ? (r.technicien ?? '').trim() === who : true)),
-    [all, channel, who],
+        .filter((r) => (who ? (r.technicien ?? '').trim() === who : true))
+        .filter((r) => (date ? toISODate(r.date) === date : true)),
+    [all, channel, who, date],
   )
 
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
@@ -192,6 +256,26 @@ export function InboxPage() {
       <div className="flex flex-wrap items-center gap-4">
         <Filter label={t('inbox.channel')} value={channel} onChange={setChannel} options={channels} allLabel={t('inbox.all')} />
         <Filter label={t('col.technicien')} value={who} onChange={setWho} options={people} allLabel={t('inbox.all')} />
+
+        <div className="flex items-center gap-2">
+          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('daily.date')}</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="border-line focus:border-accent text-ink bg-canvas tabular rounded-md border px-2 py-1 text-xs outline-none transition-colors"
+          />
+          {date && (
+            <button
+              type="button"
+              onClick={() => setDate('')}
+              className="text-ink-faint hover:text-ink text-xs underline underline-offset-4"
+            >
+              {t('inbox.all')}
+            </button>
+          )}
+        </div>
+
         <span className="tabular text-ink-faint text-xs">{rows.length}</span>
       </div>
 

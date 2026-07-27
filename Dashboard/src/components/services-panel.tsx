@@ -1,7 +1,7 @@
 import { api, useApi } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { LiveDot } from '@/components/live-dot'
-import { ChannelIcon } from '@/components/channel-icon'
+import { ServiceIcon } from '@/components/channel-icon'
 import { availability, timeline } from '@/lib/uptime'
 import type { ServiceRow, ServiceState } from '@/lib/services'
 
@@ -51,9 +51,7 @@ export function ServicesPanel({ rows }: { rows: ServiceRow[] }) {
               <span className="translate-y-[3px]">
                 <LiveDot tone={r.state} live={r.state === 'ok'} />
               </span>
-              {(r.key === 'telegram' || r.key === 'whatsapp') && (
-                <ChannelIcon channel={r.key} className="text-ink-muted translate-y-[2px]" size={13} />
-              )}
+              <ServiceIcon service={r.key} className="text-ink-muted translate-y-[2px]" size={13} />
               <span className="text-ink min-w-0 flex-1 truncate text-sm">{t(r.labelKey)}</span>
               <span className={`text-xs ${r.state === 'fail' ? 'text-status-fail' : 'text-ink-muted'}`}>
                 {t(r.captionKey)}

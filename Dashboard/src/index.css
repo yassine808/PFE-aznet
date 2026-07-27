@@ -85,6 +85,8 @@
   --status-queued: var(--color-queued);
 
   --wash: oklch(0.638 0.152 245 / 0.22);
+  --accent-halo-min: oklch(0.556 0.156 245 / 0.1);
+  --accent-halo-max: oklch(0.556 0.156 245 / 0.32);
   --grain-opacity: 0.02;
   /* Hairline top highlight: the light-side edge of a raised surface, never a drop shadow. */
   --edge: inset 0 1px 0 oklch(1 0 0 / 0.9);
@@ -108,6 +110,8 @@
   --status-queued: oklch(0.716 0.062 262);
 
   --wash: oklch(0.638 0.152 245 / 0.16);
+  --accent-halo-min: oklch(0.7 0.128 245 / 0.14);
+  --accent-halo-max: oklch(0.7 0.128 245 / 0.42);
   --grain-opacity: 0.035;
   --edge: inset 0 1px 0 oklch(1 0 0 / 0.06);
 }
@@ -128,6 +132,22 @@
   body {
     @apply bg-canvas text-ink font-sans antialiased;
     position: relative;
+  }
+
+  /*
+    Scrollbar hidden, scrolling intact. Wheel, trackpad, keyboard, and touch all
+    still work; only the visual bar is suppressed, so nothing becomes
+    unreachable. Firefox and IE use the standard properties, WebKit needs the
+    pseudo-element.
+  */
+  html {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
   }
 
   /*
@@ -197,6 +217,27 @@
   /* Raised surface: tonal step plus a single hairline light edge. No resting drop shadow. */
   .edge {
     box-shadow: var(--edge);
+  }
+
+  /*
+    Slow breathing halo on the primary generate action.
+    Deliberately soft and low-opacity rather than a neon ring: it should read as
+    the button being alive, not as a glow effect. Sine easing so the cycle never
+    appears to pause at the extremes, same curve as the background wash.
+  */
+  .breathe-glow {
+    animation: breathe-glow 4.5s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+    will-change: box-shadow;
+  }
+
+  @keyframes breathe-glow {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--accent-halo-min);
+    }
+    50% {
+      box-shadow: 0 0 16px 3px var(--accent-halo-max);
+    }
   }
 
   /* Status pulse. CSS-only so React re-renders can never restart or stutter it. */

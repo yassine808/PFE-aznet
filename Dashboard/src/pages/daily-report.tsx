@@ -84,7 +84,7 @@ export function DailyReportPage() {
           className={
             busy || rows.length === 0
               ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-4 py-2 text-sm'
-              : 'bg-accent rounded-md px-4 py-2 text-sm text-white transition-transform active:translate-y-px'
+              : 'bg-accent breathe-glow rounded-md px-4 py-2 text-sm text-white transition-transform active:translate-y-px'
           }
         >
           <span className="flex items-center gap-2">

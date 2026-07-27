@@ -113,37 +113,42 @@ export function ContributionGraph({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto pb-1">
+      {/*
+        No horizontal scroll: columns are fractional and cells are square, so the
+        whole year compresses to fit whatever width the panel has. Fixed-px cells
+        would always overflow at 53 columns.
+      */}
+      <div className="pb-1">
         <div className="flex gap-1.5" style={{ direction: dir }}>
           {/* Weekday gutter */}
-          <div className="grid shrink-0 gap-[3px] pt-[15px]" style={{ gridTemplateRows: 'repeat(7, 11px)' }}>
+          <div className="grid shrink-0 gap-[2px] pt-[14px]" style={{ gridTemplateRows: 'repeat(7, 1fr)' }}>
             {dayLabels.map((d, i) => (
-              <span key={i} className="text-ink-faint h-[11px] text-[9px] leading-[11px] capitalize">
+              <span key={i} className="text-ink-faint flex items-center text-[8px] leading-none capitalize">
                 {d}
               </span>
             ))}
           </div>
 
-          <div className="flex flex-col gap-1">
-            <div className="flex gap-[3px]">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="grid auto-cols-fr grid-flow-col gap-[2px]">
               {monthLabels.map((label, i) => (
-                <span key={i} className="text-ink-faint w-[11px] text-[9px] whitespace-nowrap capitalize">
+                <span key={i} className="text-ink-faint overflow-visible text-[8px] whitespace-nowrap capitalize">
                   {label}
                 </span>
               ))}
             </div>
 
-            <div className="flex gap-[3px]">
+            <div className="grid auto-cols-fr grid-flow-col gap-[2px]">
               {weeks.map((w) => {
                 const isoMonday = isoOf(w.monday)
                 const weekSelected = selectedWeek === isoMonday
                 return (
                   <div
                     key={isoMonday}
-                    className={`grid gap-[3px] rounded-[3px] ${
+                    className={`grid min-w-0 gap-[2px] rounded-[3px] ${
                       onSelectWeek ? 'cursor-pointer' : ''
                     } ${weekSelected ? 'ring-accent ring-2 ring-offset-1 ring-offset-transparent' : ''}`}
-                    style={{ gridTemplateRows: 'repeat(7, 11px)' }}
+                    style={{ gridTemplateRows: 'repeat(7, 1fr)' }}
                     onClick={onSelectWeek ? () => onSelectWeek(isoMonday) : undefined}
                     role={onSelectWeek ? 'button' : undefined}
                     tabIndex={onSelectWeek ? 0 : undefined}
@@ -161,20 +166,20 @@ export function ContributionGraph({
                   >
                     {w.days.map((d) =>
                       !d.inScope ? (
-                        <span key={d.iso} className="size-[11px]" />
+                        <span key={d.iso} className="aspect-square w-full" />
                       ) : onSelectDay ? (
                         <button
                           key={d.iso}
                           type="button"
                           onClick={() => onSelectDay(d.iso)}
-                          className={`size-[11px] rounded-[2px] transition-transform hover:scale-125 ${STEP[level(d.count)]}`}
+                          className={`aspect-square w-full rounded-[2px] transition-transform hover:scale-125 ${STEP[level(d.count)]}`}
                           title={`${fmtDate.format(d.date)} · ${d.count}`}
                           aria-label={`${fmtDate.format(d.date)} · ${d.count}`}
                         />
                       ) : (
                         <span
                           key={d.iso}
-                          className={`size-[11px] rounded-[2px] ${STEP[level(d.count)]}`}
+                          className={`aspect-square w-full rounded-[2px] ${STEP[level(d.count)]}`}
                           title={`${fmtDate.format(d.date)} · ${d.count}`}
                         />
                       ),

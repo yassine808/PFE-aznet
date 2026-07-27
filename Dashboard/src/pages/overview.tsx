@@ -132,6 +132,8 @@ export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }
       </motion.div>
 
       <motion.div variants={rise} className="grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {/* The aside states the coverage limit: this history is observed from
+            this screen only, so gaps mean "unwatched", not "down". */}
         <Band title={t('panel.services')} aside={t('panel.uptimeNote')}>
           <ServicesPanel rows={services} />
         </Band>
@@ -141,6 +143,7 @@ export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }
           <ContributionGraph rows={reports.data?.reports ?? []} onSelectDay={onOpenDay} />
         </Band>
       </motion.div>
+
     </motion.div>
   )
 }

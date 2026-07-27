@@ -10,6 +10,7 @@ import {
   SunHorizonIcon,
   SunIcon,
   TrayIcon,
+  UsersThreeIcon,
 } from '@phosphor-icons/react'
 import { LOCALES, LOCALE_LABEL, useI18n, type Locale } from '@/lib/i18n'
 import { useTheme } from '@/lib/theme'
@@ -37,6 +38,7 @@ const NAV: { section: string; items: { route: Route; labelKey: string; Icon: typ
   {
     section: 'nav.section.ops',
     items: [
+      { route: 'access', labelKey: 'nav.access', Icon: UsersThreeIcon },
       { route: 'pipeline', labelKey: 'nav.pipeline', Icon: PathIcon },
       { route: 'queue', labelKey: 'nav.queue', Icon: StackIcon },
     ],
