@@ -31,40 +31,46 @@
 
 ```
 Technician
-   │ voice note (Darija) / Telegram
+   │ voice note (Darija) / photo / typed text
    ▼
-Telegram Bot API ──webhook──► n8n (Docker)
-                                          │ download media
-                                          ▼
-                             FastAPI AI Service  ◄──── React Web Form (text mode)
-                             ├─ TranscriptionProvider (adapters: Groq / Gemini / HF)
-                             ├─ Extractor: LLM → Pydantic JSON (14 cahier fields)
-                             └─ Reformulator: professional French summary
-                                          │ JSON
-                                          ▼
-                                 n8n: append row → Google Sheets
-                                          ├─ email to chef de chantier + resp. technique
-                                          └─ Telegram confirmation reply to technician
-                                          
-Manager Dashboard (React/Vercel) ◄─ reads ─ Google Sheets API
+Telegram (polling)  +  WhatsApp Cloud API (webhook)
+   └─────────┬───────────┘
+                 ▼
+              n8n (Docker)
+                 │  Media or text?  →  Audio or image?
+                 ▼
+     FastAPI AI Service   (exactly one of audio | image | text)
+     ├─ audio → TranscriptionProvider (Groq / Gemini / HF) → text
+     ├─ image → vision chain, photo → schema in one call
+     ├─ text  → extraction chain (ordered, cross-vendor fallback)
+     └─ Reformulator: professional French summary
+                 │ JSON
+                 ▼
+     n8n: reply to technician → append row → Google Sheets
+          ├─ end-of-day email to chef de chantier + resp. technique
+          └─ failed writes park in `failed_writes`, drained by the 5-min cron
+
+Manager Dashboard (React, admin PC) ◄─ /reports ─ FastAPI ◄─ Google Sheets API
 ```
 
-JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'activité, goulottes_m, cables_m, bureaux_termines, panneaux_raccordes, autres_travaux, observations, rapport_complet, lien_audio.
+JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'activité, goulottes_m, cables_m, bureaux_termines, panneaux_raccordes, autres_travaux, observations, rapport_complet, lien_audio (+ `canal`, `confidence`, `flag_review` added in Sprint 2).
+
+**Reply-first ordering is deliberate:** the technician gets their summary before the Sheet append, so a Sheets outage never costs them their reply.
 
 ## 4. Timeline (Jul 15 → Aug 31)
 
 ### Week 0 — Setup & risk-kill (Jul 15–19)
-- [ ] Accounts: **Telegram bot (BotFather)**, Google Cloud (Sheets API), Groq, Gemini (AI Studio), HF, Cloudflare, Vercel
-- [ ] Repo scaffold: `api/`, `web/`, `n8n/`, `docs/`, `benchmark/`
+- [x] Accounts: Telegram bot (BotFather), Google Cloud (Sheets API), Groq, Gemini (AI Studio), WhatsApp Cloud API. **Not used:** Cloudflare (public URL is a Tailscale Funnel instead), Vercel (dashboard runs on the admin's PC). **HF token still unset** — the `hf-darija` adapter therefore cannot run.
+- [x] Repo scaffold: `api/`, `Dashboard/` (replaced `web/` 2026-07-26), `n8n/`, `docs/`, `benchmark/`
 - [x] Docker Compose n8n up + **E2E smoke test PASSED (Jul 17): Telegram voice note → n8n polling workflow → binary audio downloaded** (biggest integration risk killed; localhost-only via getUpdates polling, no tunnel needed)
-- [ ] Record dataset: 15–20 simulated Darija chantier voice notes + reference transcriptions
+- [ ] Record dataset: 15–20 simulated Darija chantier voice notes + reference transcriptions — **still empty; this is the single blocker on the STT decision**
 - [ ] Director sign-off on this plan + ask: aznet server? real technician recordings?
 
 ### Sprint 1 — AI core + benchmark (Jul 20 – Aug 1)
-- [ ] FastAPI skeleton, `TranscriptionProvider` interface + 3 adapters
-- [ ] Benchmark harness: WER/CER per engine + extraction accuracy → **pick primary STT** (report chapter material)
-- [ ] Extraction: Pydantic schema, Gemini structured output, French reformulation prompt
-- [ ] Unit tests + golden-set eval on extraction
+- [x] FastAPI skeleton, `TranscriptionProvider` interface + 3 adapters (groq / gemini / hf-darija)
+- [~] Benchmark harness: WER/CER harness written (`benchmark/run_benchmark.py`) but **cannot run without the audio dataset**, so the primary STT is still unpicked. The *extraction* side is measured: `benchmark/run_model_benchmark.py` ranks text and vision models on 10 hand-written Darija/French cases, and that table sets `EXTRACTION_TEXT_CHAIN` / `EXTRACTION_IMAGE_CHAIN`.
+- [x] Extraction: Pydantic schema, Gemini structured output (`response_schema=ExtractedReport`), French reformulation prompt, ordered per-modality fallback chains
+- [x] Unit tests (46, no API keys or DB needed) + golden-set eval on extraction (the benchmark's 10 cases, two of which exist purely to catch invented quantities)
 - **Exit:** `/process` endpoint audio→structured JSON works; benchmark results table done
 - Report in parallel: état de l'art (STT Darija, LLM extraction, outils)
 
@@ -75,7 +81,7 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - [x] Dashboard v1: report list, filters (technicien/chantier/date), review queue on `flag_review`, confidence %, inline Sheet correction. Backend `/reports` + `/reports/{row}` (`api/app/sheets.py`).
 - [x] Failure path: low-confidence → `flag_review=true` row + confidence column, surfaced in dashboard review queue
 - [x] Dashboard v2 redesign (2026-07-24): neutral Efferd-style framed panels, light/dark, FR/EN/AR (RTL) i18n from JSON, 16 metrics (Activité/Production/Qualité/Cadence incl. WoW, Darija-voice share, API uptime), per-tech summary, recent/health/activity row. Backend `GET /health` now returns uptime for the ops tile.
-- [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director
+- [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director — SMTP is wired (`POST /notify/test`, recipients in the Automation panel) but `SMTP_USER`/`SMTP_PASS` are still unset in `.env`, so nothing can actually send yet
 - Report in parallel: conception (UML: use cases, séquence, classes, déploiement)
 
 ### Sprint 3 — Pilot, docs, report (Aug 17 – Aug 28)

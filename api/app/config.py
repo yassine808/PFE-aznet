@@ -49,8 +49,11 @@ class Settings(BaseSettings):
     extraction_text_chain: str = (
         "gemini:gemini-3.6-flash,groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest"
     )
+    # Not gemini-2.5-flash: it is still in the model list but 404s with "no
+    # longer available to new users" (benchmark run 2026-07-27). Nor
+    # gemini-3.5-flash, which answered 503 "high demand" on 10/10 calls.
     extraction_image_chain: str = (
-        "gemini:gemini-3.6-flash,gemini:gemini-2.5-flash,gemini:gemini-flash-lite-latest"
+        "gemini:gemini-3.6-flash,gemini:gemini-3.5-flash-lite,gemini:gemini-flash-lite-latest"
     )
 
     # Notification mail, used by POST /notify/test so the dashboard can prove a

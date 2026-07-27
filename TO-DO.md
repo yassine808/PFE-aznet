@@ -1,10 +1,11 @@
 # TO-DO
 
 Phased and dependency-ordered. Full rationale + cut-line in `vault/roadmap.md`.
-Hard deadline: Aug 31 2026. Most items need the admin dashboard (not built yet — `web/` empty).
+Hard deadline: Aug 31 2026. Dashboard is built and running (`Dashboard/`; the old `web/` was deleted 2026-07-26).
 
 ## Phase 0 — Prerequisites (now → Aug 1, close Sprint 1)
-- [ ] Finish STT benchmark → pick default provider (blocks everything downstream)
+- [ ] Finish STT benchmark → pick default provider — **blocked on the dataset**: `benchmark/dataset/audio/` is still empty, so `stt_provider=groq` is an assumption, not a measurement. Harness is ready (`benchmark/run_benchmark.py`).
+- [x] Text + image model benchmark → pick extraction chains — `benchmark/run_model_benchmark.py` over 10 hand-written Darija/French cases; results and the resulting `EXTRACTION_*_CHAIN` values in `benchmark/README.md`.
 - [ ] Full n8n E2E: Telegram → /process → Sheets append → email notif
 
 ## Phase 1 — Pipeline (Sprint 2, no dashboard needed)
@@ -15,15 +16,15 @@ Hard deadline: Aug 31 2026. Most items need the admin dashboard (not built yet �
 - [x] End-of-day cron: assemble today's transcriptions + messages → LLM report → email — `n8n/daily-report-cron.json` + `POST /daily-report` (photos + .docx still open)
 
 ## Phase 2 — Dashboard v1+ (Sprint 2, Aug 3–14)
-- [ ] Save + show each audio with its transcription per row
-- [ ] Manual correction: edit an extracted field, write back via Sheets API (keeps Sheets as source of truth)
-- [ ] Review queue: filter view on flag_review rows
-- [ ] Show confidence % per transcription (model confidence proxy, labeled "confidence" not "accuracy")
+- [x] Save + show each audio with its transcription per row — Inbox panel plays `lien_audio` inline next to the transcription (`Dashboard/src/pages/inbox.tsx`). Link durability is still the open Drive item below.
+- [x] Manual correction: edit an extracted field, write back via Sheets API — `PATCH /reports/{row}` + the Inbox **Modifier** form and the Reports ledger; Sheets stays the source of truth.
+- [x] Review queue: filter view on flag_review rows — Reports panel "À vérifier" toggle (`onlyFlagged`).
+- [x] Show confidence % per transcription — bar + column in the Reports ledger, threshold configurable in the settings panel. Labeled "confiance", never "accuracy".
 
 ## Phase 3 — Nice-to-haves (Sprint 3 buffer, only if ahead)
-- [ ] GitHub-style contribution heatmap: report count/day/technician
-- [ ] Weekly/monthly rollup report: trends across chantiers (materials, recurring issues)
-- [ ] Settings panel: cron timers, emails, API uptime/usage (post-PFE unless time allows)
+- [x] GitHub-style contribution heatmap — `Dashboard/src/components/contribution-graph.tsx`, on Overview, Daily and Weekly; today is outlined, clicking a day deep-links into the Inbox.
+- [x] Weekly rollup report — Weekly panel: per-day and per-technician totals, week picker on the year graph, LLM narrative via `POST /daily-report` over the week's rows. Monthly still open.
+- [x] Settings + Automation panels — refresh interval, confidence threshold, table density; plus daily/weekly trigger times, notification recipients with a live SMTP **Test** button, and report format (txt/md/docx). Stored server-side in `app_settings` via `GET|PUT /settings`. **Times are stored but not yet enforced** — n8n's `scheduleTrigger` nodes still hold the real cron; wiring n8n to read `/settings` is open.
 - [ ] Daily stat: % spoken Darija words vs French (post-PFE, zero cahier value)
 - [ ] Image generation from report via free API (post-PFE or cut — burns free-tier quota)
 
@@ -42,12 +43,27 @@ Full config walkthrough: `docs/setup-guide.md`.
 - [x] Failure reply to sender: both /process nodes `onError: continueErrorOutput` → channel-aware "❌ Erreur, réessayez" reply
 - [x] Dedupe guard: processed message keys in static data (`tg:chat:msgid` / `wa:wamid`) — survives poll restarts + Meta webhook retries
 - [x] "⏳ Traitement en cours..." ack sent right after authorization, before STT
+- [x] **Image input**: photo → vision model → same structured row. `Media or text?` then `Audio or image?` (audio and image share one download subgraph); Telegram `photo`/image `document`, WhatsApp `type=image`; `POST /process (image)`. Photo rows always `flag_review=true`.
+- [x] **Per-modality model chains with fallbacks**: `EXTRACTION_TEXT_CHAIN` / `EXTRACTION_IMAGE_CHAIN` in `api/app/config.py`, tried in order, logging which model answered. Text alternates vendors so a Gemini quota trips over to Groq's separate meter.
 - [ ] Durable audio links: upload audio to Google Drive, store share link in `lien_audio` (file_id/media_id not durable; Meta media URLs expire ~5 min)
 - [ ] Caption support: audio sent WITH caption (mostly Telegram) → needs optional `caption` form field on `/process`, merged into text before extraction
 - [ ] Boss commands: `directeur` role sends "/rapport" text → bot replies with today's rollup on demand (reuses `/daily-report`)
 - [ ] **Message commands — edit by reply.** Technician replies to one of their own messages with `/modify {nouveau texte}`; the bot re-runs extraction on the new text and updates *that* Sheet row instead of appending a new one. Needs: (a) store the origin message id per row (`tg:chat:msgid` / `wa:wamid` — already minted for the dedupe guard, currently thrown away after the claim) plus its Sheet row number, in `processed_messages`; (b) an n8n branch that detects `reply_to_message` / `context.id` + a `/`-prefixed body before the normal audio/text fork; (c) `PATCH /reports/{row}` already exists for the write-back. Same branch is the natural home for `/supprimer` and the `/rapport` boss command below.
 - [ ] **Assistant persona from leaked-system-prompt techniques** — mine <https://github.com/yassine808/system_prompts_leaks> for prompt structure that production assistants actually use (role framing, refusal/uncertainty wording, formatting discipline, anti-hallucination phrasing) and fold the useful parts into all three prompt sites: text extraction, STT post-processing, and the audio/vision paths (`app/extraction.py` `_INSTRUCTIONS`, the image instructions in `benchmark/run_model_benchmark.py`, `app/daily_report.py`). Identity is **"l'assistant AZnet"** — never Claude, ChatGPT, Gemini or any vendor name, in any language. Keep the existing hard rule (`null` for absent fields, never invent) as the top constraint; borrowed phrasing must not dilute it. Verify with the `t04_hallucination_trap` / `t08_no_quantities_at_all` benchmark cases before and after.
 - [ ] Ack via emoji reaction instead of "⏳ Traitement en cours..." message: react on the sent voice note (TG `setMessageReaction`, WA `POST /messages type=reaction` on the wamid) — less chat noise, same signal
+
+## Dashboard v2 (rebuilt from scratch 2026-07-26 in `Dashboard/`)
+- [x] Design system first: `PRODUCT.md` + `DESIGN.md`, OKLCH tokens, Tailwind v4 CSS-first theming, light/dark authored independently, FR/EN/AR with RTL
+- [x] Overview: masthead, day ribbon, production band, per-service uptime strips, year heatmap
+- [x] Reports ledger: search, flagged filter, confidence column, inline correction
+- [x] Inbox: messages/audio per channel and technician, **Modifier** reveals the edit form
+- [x] Daily + Weekly report panels with generate, copy and download (txt/md/docx)
+- [x] Access control panel: add/remove technicians (telegram/whatsapp + id + name + role), backed by the `technicians` table and `/technicians/lookup`
+- [x] Automation panel: trigger times, notification recipients + SMTP test, report format
+- [x] Ops resilience: stale-while-revalidate cache so panels keep their data across navigation; uptime sampler above the router, persisted to `service_samples`; CSS-keyframe status pulse that React re-renders cannot restart
+- [x] API-down alarm: masthead flashes red and beeps (WebAudio, no asset), with a mute toggle
+- [ ] Enforce the stored schedule: n8n `scheduleTrigger` nodes should read `/settings` instead of hardcoded times
+- [ ] Verify the dashboard visually — never done; Playwright's Chrome is not installed (`npx playwright install chrome`)
 
 ## Notes
 - "Add some solutions or critical things to be aware of" — captured in vault/roadmap.md cut-line + contradictions sections

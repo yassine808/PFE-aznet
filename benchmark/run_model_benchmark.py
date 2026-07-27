@@ -36,12 +36,14 @@ RESULTS_DIR = BENCH_DIR / "results"
 # Candidates come from the providers' live model lists, filtered to what a free
 # tier actually serves. Groq has no vision model in the free catalogue, which is
 # why the image row is Google-only — that is a finding, not an oversight.
+# Two models were dropped after the 2026-07-27 run and are listed here so nobody
+# re-adds them: gemini-2.5-flash 404s ("no longer available to new users") and
+# gemini-3.5-flash returned 503 "high demand" on 10/10 calls — present in the
+# model list, not actually servable on the free tier.
 GEMINI_TEXT = [
     "gemini-3.6-flash",
-    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-    "gemini-2.5-flash",
     "gemini-flash-lite-latest",
 ]
 GROQ_TEXT = [
@@ -52,8 +54,8 @@ GROQ_TEXT = [
 ]
 GEMINI_VISION = [
     "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-2.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
     "gemini-flash-lite-latest",
 ]
 
@@ -228,6 +230,15 @@ def main() -> int:
     csv_path = RESULTS_DIR / f"models-{args.mode}-{stamp}.csv"
     rows: List[dict] = []
 
+    # Written per row, not at the end: a rate-limited run against a dozen free-tier
+    # models takes long enough that an interrupted one must not lose everything.
+    csv_file = open(csv_path, "w", encoding="utf-8", newline="")
+    writer = csv.DictWriter(csv_file, fieldnames=[
+        "model", "case", "accuracy", "latency_s", "invented", "expected_nulls", "wrong_fields", "error",
+    ])
+    writer.writeheader()
+    csv_file.flush()
+
     for model in models:
         engine = engine_for(model)
         print(f"\n=== {model} ({args.mode}) ===", flush=True)
@@ -238,27 +249,32 @@ def main() -> int:
                 acc, detail = extraction_accuracy(expected, actual)
                 invented, nulls = hallucination_detail(expected, actual)
                 wrong = [k for k, ok in detail.items() if not ok]
-                rows.append({
+                row = {
                     "model": model, "case": case["id"], "accuracy": round(acc, 3),
                     "latency_s": round(latency, 2), "invented": invented, "expected_nulls": nulls,
                     "wrong_fields": "|".join(wrong), "error": "",
-                })
+                }
+                rows.append(row)
+                writer.writerow(row)
+                csv_file.flush()
+                # ASCII only: the Windows console is cp1252 and a UnicodeEncodeError
+                # here would kill the run on exactly the cases that found a mistake.
                 print(f"  {case['id']:<24} acc={acc:.0%} {latency:5.2f}s "
-                      f"{'invented=' + str(invented) if invented else ''} {'✗ ' + ','.join(wrong) if wrong else ''}",
+                      f"{'invented=' + str(invented) if invented else ''} {'WRONG: ' + ','.join(wrong) if wrong else ''}",
                       flush=True)
             except Exception as exc:  # noqa: BLE001 — a dead model is a result, not a crash
-                rows.append({
+                row = {
                     "model": model, "case": case["id"], "accuracy": "", "latency_s": "",
                     "invented": "", "expected_nulls": "", "wrong_fields": "",
                     "error": str(exc)[:300],
-                })
+                }
+                rows.append(row)
+                writer.writerow(row)
+                csv_file.flush()
                 print(f"  {case['id']:<24} ERROR {str(exc)[:160]}", flush=True)
             time.sleep(args.sleep)
 
-    with open(csv_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(rows)
+    csv_file.close()
 
     # Leaderboard. Accuracy first, then hallucinations, then latency: a fast
     # model that invents quantities is worse than a slow one that says null.
