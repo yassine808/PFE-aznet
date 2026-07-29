@@ -308,6 +308,104 @@ export async function sendTestMail(to: string): Promise<void> {
   }
 }
 
+// ── Accounts, sessions and history ────────────────────────────────────────
+// The session cookie is httpOnly, so nothing here ever touches the token. The
+// Vite proxy keeps /api same-origin, which is what makes the cookie ride along
+// on every fetch without `credentials: 'include'`.
+
+export interface Account {
+  id: number
+  email: string
+  name: string
+  role: 'directeur' | 'chef'
+  active: boolean
+  last_seen_at?: string | null
+  created_at?: string
+}
+
+export interface UserAction {
+  id: number
+  user_id: number | null
+  user_name: string | null
+  action: string
+  target?: string | null
+  before_val?: string | null
+  after_val?: string | null
+  created_at: string
+}
+
+export interface History {
+  actions: UserAction[]
+  /** action name → count. The numbers are COUNT queries, not stored counters. */
+  totals: Record<string, number>
+  pages: { route: string; seconds: number; visits: number }[]
+  daily: { day: string; n: number }[]
+  total_seconds: number
+}
+
+async function post<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    let detail = text
+    try {
+      detail = (JSON.parse(text) as { detail?: string }).detail ?? text
+    } catch {
+      /* not JSON — use the raw body */
+    }
+    throw new Error(detail.slice(0, 300) || `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<T>
+}
+
+export const login = (email: string, password: string) =>
+  post<{ user: Account }>('/auth/login', { email, password })
+
+export const logout = () => post<{ ok: boolean }>('/auth/logout')
+
+/** Null when signed out. Not a 401, so it cannot be confused with the API being down. */
+export const whoami = (s?: AbortSignal) => get<{ user: Account | null }>('/auth/me', s)
+
+export const listUsers = (s?: AbortSignal) => get<{ users: Account[] }>('/users', s)
+
+export const createUser = (input: { email: string; name: string; password: string; role: string }) =>
+  post<Account>('/users', input)
+
+export async function deleteUser(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/users/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+}
+
+export const history = (userId?: number, s?: AbortSignal) =>
+  get<History>(userId ? `/history?user_id=${userId}` : '/history', s)
+
+/**
+ * Time spent on a page. `sendBeacon` because this fires as the tab is closing,
+ * when a normal fetch is cancelled by the browser.
+ */
+export function trackVisit(route: string, seconds: number): void {
+  if (seconds <= 0) return
+  const body = JSON.stringify({ route, seconds })
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(`${BASE}/page-visit`, new Blob([body], { type: 'application/json' }))
+      return
+    }
+    void fetch(`${BASE}/page-visit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    })
+  } catch {
+    /* a lost visit is a gap in a graph, never a user-facing error */
+  }
+}
+
 export interface ServiceSample {
   service: string
   state: string
@@ -332,6 +430,8 @@ export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
   settings: (s?: AbortSignal) => get<{ settings: AppSettings }>('/settings', s),
+  users: listUsers,
+  history,
   samples: (s?: AbortSignal) => get<{ samples: ServiceSample[] }>('/service-samples?hours=2', s),
   n8n: n8nStatus,
   n8nExecutions,

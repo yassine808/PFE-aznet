@@ -6,6 +6,8 @@ import {
   ClockIcon,
   MoonIcon,
   RowsIcon,
+  IdentificationBadgeIcon,
+  SignOutIcon,
   PulseIcon,
   StackIcon,
   SunHorizonIcon,
@@ -15,6 +17,7 @@ import {
 } from '@phosphor-icons/react'
 import { LOCALES, LOCALE_LABEL, useI18n, type Locale } from '@/lib/i18n'
 import { useTheme } from '@/lib/theme'
+import { useAuth } from '@/lib/auth'
 import { ServerStatus } from '@/components/server-status'
 import { SettingsPanel } from '@/components/settings-panel'
 import { cn } from '@/lib/utils'
@@ -43,6 +46,7 @@ const NAV: { section: string; items: { route: Route; labelKey: string; Icon: typ
       { route: 'access', labelKey: 'nav.access', Icon: UsersThreeIcon },
       { route: 'logs', labelKey: 'nav.logs', Icon: PulseIcon },
       { route: 'queue', labelKey: 'nav.queue', Icon: StackIcon },
+      { route: 'team', labelKey: 'nav.team', Icon: IdentificationBadgeIcon },
     ],
   },
 ]
@@ -147,6 +151,7 @@ export function AppShell({
               >
                 {theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}
               </button>
+              <SignOut />
             </div>
           </div>
         </div>
@@ -156,5 +161,25 @@ export function AppShell({
         <div className="mx-auto max-w-[1400px]">{children}</div>
       </main>
     </div>
+  )
+}
+
+/** Who is signed in, and the way out. The name doubles as the reminder that
+ *  every action from here is recorded against it. */
+function SignOut() {
+  const { t } = useI18n()
+  const { user, signOut } = useAuth()
+  if (!user) return null
+  return (
+    <button
+      type="button"
+      onClick={() => void signOut()}
+      title={`${user.name} — ${t('auth.signOut')}`}
+      aria-label={t('auth.signOut')}
+      className="border-line text-ink-muted hover:text-ink flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors active:translate-y-px"
+    >
+      <SignOutIcon size={14} />
+      <span className="hidden sm:inline">{user.name}</span>
+    </button>
   )
 }

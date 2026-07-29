@@ -385,6 +385,7 @@ class DailyReportRequest(BaseModel):
 
 @app.post("/daily-report", response_model=daily_report.DailyReportContent)
 def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(auth.require_user)) -> daily_report.DailyReportContent:
+    auth.record(caller, "report_generated", target=payload.date)
     if not payload.rows:
         raise HTTPException(422, "No rows for the given date")
     try:
@@ -402,7 +403,8 @@ class ImageCardRequest(BaseModel):
 
 
 @app.post("/generate-image")
-async def generate_image(payload: ImageCardRequest) -> dict:
+async def generate_image(payload: ImageCardRequest, caller: dict = Depends(auth.require_human)) -> dict:
+    auth.record(caller, "image_generated", target=getattr(payload, 'date', None))
     """Illustrated summary card for a day or week.
 
     Returns the image as a base64 data URI rather than a file: the dashboard
@@ -563,9 +565,12 @@ def list_technicians(caller: dict = Depends(auth.require_human)) -> dict:
 @app.post("/technicians")
 def add_technician(payload: TechnicianIn, caller: dict = Depends(auth.require_human)) -> dict:
     try:
-        return logs.upsert_technician(
+        created = logs.upsert_technician(
             payload.channel, payload.external_id, payload.name, payload.role, payload.active
         )
+        auth.record(caller, "technician_added", target=f"{payload.channel} {payload.external_id}",
+                    after=payload.name)
+        return created
     except logs.LogStoreError as exc:
         detail = str(exc)
         # Bad channel or blank field is the caller's mistake (422); anything
@@ -576,6 +581,7 @@ def add_technician(payload: TechnicianIn, caller: dict = Depends(auth.require_hu
 @app.delete("/technicians/{tech_id}")
 def remove_technician(tech_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     try:
+        auth.record(caller, "technician_removed", target=str(tech_id))
         return {"deleted": logs.delete_technician(tech_id)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
@@ -585,6 +591,7 @@ def remove_technician(tech_id: int, caller: dict = Depends(auth.require_human)) 
 def remove_person(person_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     """Delete a person, their identities and their memory."""
     try:
+        auth.record(caller, "person_removed", target=str(person_id))
         return {"deleted": logs.delete_person(person_id)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
@@ -617,6 +624,7 @@ def refresh_one_profile(person_id: int, caller: dict = Depends(auth.require_huma
         raise HTTPException(502, str(exc)) from exc
     if person is None:
         raise HTTPException(404, f"person {person_id} not found")
+    auth.record(caller, "profile_refreshed", target=person["name"])
     return _refresh_profile(person, sheets.read_reports())
 
 
@@ -665,6 +673,7 @@ def read_settings(caller: dict = Depends(auth.require_human)) -> dict:
 
 @app.put("/settings")
 def write_settings(payload: SettingsIn, caller: dict = Depends(auth.require_human)) -> dict:
+    auth.record(caller, "settings_saved", detail=payload.values)
     try:
         return {"settings": logs.put_settings(payload.values)}
     except logs.LogStoreError as exc:
@@ -677,6 +686,7 @@ class TestMailIn(BaseModel):
 
 @app.post("/notify/test")
 def send_test_mail(payload: TestMailIn, caller: dict = Depends(auth.require_human)) -> dict:
+    auth.record(caller, "test_mail_sent", target=payload.to)
     """Send one plain-text probe so an address can be verified before it matters.
 
     Credentials are optional at startup, so an unconfigured install gets a 422
