@@ -453,10 +453,15 @@ def delete_technician(tech_id: int) -> bool:
 
 
 def find_technician(channel: str, external_id: str) -> Optional[dict]:
-    """Lookup used by the reception workflow to authorize an incoming sender."""
+    """Lookup used by the reception workflow to authorize an incoming sender.
+
+    Filters on `active`: deactivating a technician in the dashboard has to
+    actually revoke access. Without this an inactive row still answers
+    `found: true` and the operator's click does nothing they can observe.
+    """
     with _cursor() as cur:
         cur.execute(
-            "SELECT * FROM technicians WHERE channel = %s AND external_id = %s",
+            "SELECT * FROM technicians WHERE channel = %s AND external_id = %s AND active",
             (channel, external_id.strip()),
         )
         row = _one(cur)

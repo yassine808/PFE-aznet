@@ -40,7 +40,7 @@
       "typeVersion": 1,
       "position": [
         0,
-        1780
+        1980
       ],
       "parameters": {
         "content": "## 3 — Rapport quotidien\nLun–Sam 18:30 : lignes du jour → /daily-report (Gemini→Groq) → email au responsable.\nAucune ligne aujourd'hui = fin silencieuse, pas d'email.",
@@ -56,7 +56,7 @@
       "typeVersion": 1,
       "position": [
         0,
-        2280
+        2780
       ],
       "parameters": {
         "content": "## 4 — Gestionnaire d'erreurs\nAttrape tout crash non géré → POST /logs (stage `workflow_error`).\n⚠️ Après import : Settings → Error Workflow → **ce workflow lui-même**.",
@@ -143,10 +143,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Access control — ONE allowlist for both channels.\n// Keys: Telegram numeric user IDs AND WhatsApp phone numbers (digits, no '+').\nconst ALLOWLIST = {\n  '<TELEGRAM_USER_ID>': { name: 'Yassine', role: 'directeur' },           // Telegram ID\n  '<WHATSAPP_NUMBER>': { name: 'Yassine', role: 'directeur' },          // WhatsApp wa_id\n};\nconst s = $getWorkflowStaticData('global');\ns.hrRepliedTo = s.hrRepliedTo ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  const entry = ALLOWLIST[String(item.json.user_id)];\n  const dedupeKey = item.json.channel + ':' + item.json.chat_id;\n  if (entry) {\n    out.push({ json: { ...item.json, technicien: entry.name, role: entry.role, authorized: true } });\n  } else if (!s.hrRepliedTo[dedupeKey]) {\n    // Outsider: exactly ONE automated HR-contact reply per chat, then silence.\n    s.hrRepliedTo[dedupeKey] = true;\n    out.push({ json: { ...item.json, authorized: false } });\n  }\n}\nreturn out;"
+        "jsCode": "// Single named source for the authorization branch.\n// Both channels merge here, so the code node after the lookup can pair a\n// lookup response back to its message with $('Sender').itemMatching(i).\n// The allowlist itself is NOT here: it lives in the `technicians` table\n// the dashboard writes to, and is read by the next node.\nreturn $input.all();"
       },
       "id": "e1000000-0000-4000-8000-000000000006",
-      "name": "Access control",
+      "name": "Sender",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -182,7 +182,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3320,
+        4040,
         365
       ]
     },
@@ -213,7 +213,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3680,
+        4400,
         270
       ]
     },
@@ -230,7 +230,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        4040,
+        4760,
         80
       ],
       "credentials": {
@@ -254,7 +254,7 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        4040,
+        4760,
         270
       ],
       "credentials": {
@@ -291,7 +291,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4400,
+        5120,
         365
       ]
     },
@@ -322,7 +322,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4760,
+        5480,
         270
       ]
     },
@@ -336,7 +336,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        5120,
+        5840,
         270
       ],
       "credentials": {
@@ -360,7 +360,7 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        5120,
+        5840,
         460
       ],
       "credentials": {
@@ -392,7 +392,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5480,
+        6200,
         365
       ],
       "credentials": {
@@ -441,7 +441,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5840,
+        6560,
         365
       ],
       "onError": "continueErrorOutput",
@@ -484,7 +484,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4760,
+        5480,
         460
       ],
       "onError": "continueErrorOutput",
@@ -501,7 +501,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6200,
+        6920,
         270
       ]
     },
@@ -532,7 +532,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        6200,
+        6920,
         460
       ]
     },
@@ -549,7 +549,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        6560,
+        7280,
         365
       ],
       "credentials": {
@@ -573,7 +573,7 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        6560,
+        7280,
         555
       ],
       "credentials": {
@@ -610,7 +610,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3680,
+        4400,
         460
       ]
     },
@@ -625,7 +625,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        4040,
+        4760,
         460
       ],
       "credentials": {
@@ -649,7 +649,7 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        4040,
+        4760,
         650
       ],
       "credentials": {
@@ -878,7 +878,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        7280,
+        8000,
         365
       ],
       "credentials": {
@@ -919,7 +919,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        6560,
+        7280,
         175
       ]
     },
@@ -936,7 +936,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        6920,
+        7640,
         270
       ],
       "credentials": {
@@ -960,7 +960,7 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        6920,
+        7640,
         460
       ],
       "credentials": {
@@ -1024,7 +1024,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1880,
+        2600,
         365
       ],
       "parameters": {
@@ -1037,7 +1037,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2240,
+        2960,
         365
       ],
       "onError": "continueRegularOutput",
@@ -1058,7 +1058,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        2960,
+        3680,
         365
       ],
       "parameters": {
@@ -1091,7 +1091,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2600,
+        3320,
         365
       ],
       "parameters": {
@@ -1104,7 +1104,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3320,
+        4040,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1125,7 +1125,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2240,
+        2960,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1146,7 +1146,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3680,
+        4400,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1167,7 +1167,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        7280,
+        8000,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1188,7 +1188,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        7640,
+        8360,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1209,7 +1209,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8000,
+        8720,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1230,7 +1230,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6200,
+        6920,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1251,7 +1251,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        7640,
+        8360,
         365
       ],
       "onError": "continueRegularOutput",
@@ -1470,8 +1470,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        200,
-        2300
+        80,
+        2280
       ]
     },
     {
@@ -1494,8 +1494,8 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        420,
-        2300
+        440,
+        2280
       ],
       "credentials": {
         "googleApi": {
@@ -1513,8 +1513,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        640,
-        2300
+        800,
+        2280
       ]
     },
     {
@@ -1531,8 +1531,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        860,
-        2300
+        1160,
+        2280
       ]
     },
     {
@@ -1547,8 +1547,8 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        1080,
-        2300
+        1520,
+        2280
       ],
       "credentials": {
         "gmailOAuth2": {
@@ -1565,7 +1565,7 @@
       "typeVersion": 1,
       "position": [
         80,
-        2580
+        3080
       ]
     },
     {
@@ -1578,7 +1578,7 @@
       "typeVersion": 2,
       "position": [
         440,
-        2580
+        3080
       ]
     },
     {
@@ -1598,7 +1598,7 @@
       "typeVersion": 4.2,
       "position": [
         800,
-        2580
+        3080
       ],
       "onError": "continueRegularOutput"
     },
@@ -1608,7 +1608,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        5640,
+        6360,
         365
       ],
       "parameters": {
@@ -1669,13 +1669,53 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5840,
+        6560,
         565
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.API_BASE_URL }}/technicians/lookup",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "channel",
+              "value": "={{ $json.channel }}"
+            },
+            {
+              "name": "external_id",
+              "value": "={{ $json.user_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1880,
+        365
+      ],
+      "id": "lookup-technicien-0001",
+      "name": "Lookup technicien"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Authorization from the `technicians` table (dashboard-managed), not\n// from a literal in this workflow. GET /technicians/lookup already\n// filters on `active`, so a technician deactivated in the dashboard\n// stops being authorized on the next message.\nconst s = $getWorkflowStaticData('global');\ns.hrRepliedTo = s.hrRepliedTo ?? {};\nconst out = [];\nconst results = $input.all();\nfor (let i = 0; i < results.length; i++) {\n  const msg = $('Sender').itemMatching(i).json;\n  const tech = results[i].json.found ? results[i].json.technician : null;\n  const dedupeKey = msg.channel + ':' + msg.chat_id;\n  if (tech) {\n    out.push({ json: { ...msg, technicien: tech.name, role: tech.role, authorized: true } });\n  } else if (!s.hrRepliedTo[dedupeKey]) {\n    // Outsider: exactly ONE automated HR-contact reply per chat, then silence.\n    s.hrRepliedTo[dedupeKey] = true;\n    out.push({ json: { ...msg, authorized: false } });\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        365
+      ],
+      "id": "filtrer-acces-000001",
+      "name": "Filtrer accès"
     }
   ],
   "connections": {
@@ -1716,7 +1756,7 @@
       "main": [
         [
           {
-            "node": "Access control",
+            "node": "Sender",
             "type": "main",
             "index": 0
           }
@@ -1727,18 +1767,7 @@
       "main": [
         [
           {
-            "node": "Access control",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Access control": {
-      "main": [
-        [
-          {
-            "node": "Correlate",
+            "node": "Sender",
             "type": "main",
             "index": 0
           }
@@ -2325,6 +2354,39 @@
           },
           {
             "node": "Log process failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sender": {
+      "main": [
+        [
+          {
+            "node": "Lookup technicien",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup technicien": {
+      "main": [
+        [
+          {
+            "node": "Filtrer accès",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrer accès": {
+      "main": [
+        [
+          {
+            "node": "Correlate",
             "type": "main",
             "index": 0
           }
