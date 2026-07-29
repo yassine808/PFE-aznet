@@ -128,11 +128,22 @@ def seed_admin() -> None:
         cur.execute("SELECT count(*) AS n FROM users")
         existing = dict(logs._one(cur) or {"n": 0})["n"]
     if existing:
+        # Said out loud because the three outcomes here -- seeded, refused,
+        # skipped -- are indistinguishable from outside, and a silent skip
+        # looks exactly like ADMIN_EMAIL being ignored for no reason.
+        print(f"[auth] {existing} account(s) already exist — seed skipped")
         return
     if not email or not password:
         print("[auth] no accounts and no ADMIN_EMAIL/ADMIN_PASSWORD — dashboard login unusable")
         return
-    create_user(email, os.environ.get("ADMIN_NAME", "Directeur"), password, "directeur")
+    try:
+        create_user(email, os.environ.get("ADMIN_NAME", "Directeur"), password, "directeur")
+    except AuthError as exc:
+        # Loud, but never fatal. A rejected seed password (too short) would
+        # otherwise propagate out of startup and take the whole API down --
+        # and with it the pipeline, which has nothing to do with the dashboard.
+        print(f"[auth] could not seed {email}: {exc} — fix ADMIN_PASSWORD and restart")
+        return
     print(f"[auth] seeded first director account: {email}")
 
 
