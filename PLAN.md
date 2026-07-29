@@ -11,7 +11,7 @@
 |---|---|
 | Scope | Hybrid: n8n orchestration (per cahier) + custom-coded AI service + web app (for PFE substance) |
 | Code boundary | **Option A** — you code: FastAPI AI service (STT + LLM extraction + French reformulation), React web form, manager dashboard. n8n does: **Telegram** reception, Sheets writes, notifications |
-| Reception channel | **Telegram Bot API + WhatsApp Cloud API — both live** (unified n8n workflow `reception-unified.json`). Telegram first (no Meta friction); WhatsApp brought up E2E 2026-07-23 (System User token = no expiry, published app, WABA `subscribed_apps`, manual GET-echo webhook since n8n's WhatsApp Trigger fails Meta's challenge, media download via HTTP node). Cahier §5 *"passerelle équivalente"* satisfied and then some. Channel-agnostic: both feed one `/process` + one Sheet; reply goes back on the originating channel |
+| Reception channel | **Telegram Bot API + WhatsApp Cloud API — both live** (unified n8n workflow, one import: `n8n/aznet-complete.json`). Telegram first (no Meta friction); WhatsApp brought up E2E 2026-07-23 (System User token = no expiry, published app, WABA `subscribed_apps`, manual GET-echo webhook since n8n's WhatsApp Trigger fails Meta's challenge, media download via HTTP node). Cahier §5 *"passerelle équivalente"* satisfied and then some. Channel-agnostic: both feed one `/process` + one Sheet; reply goes back on the originating channel |
 | STT (Darija) | Week-1 **benchmark** via `TranscriptionProvider` adapter interface: Groq Whisper-large-v3, Gemini 2.5 Flash native audio, 1 HF Darija fine-tune. Benchmark picks the primary |
 | Test dataset | 15–20 **self-simulated** Darija voice notes + hand-written reference transcriptions. Wave 2 with real technician notes if director provides |
 | LLM | **Gemini 2.5 Flash** primary (structured JSON output, strong French) + **Groq Llama 3.3 70B** fallback adapter |
@@ -24,7 +24,7 @@
 2. Methodology: **Scrum-light** — 3 sprints × 2 weeks, backlog on GitHub Projects, sprint demo to director each cycle. Gives the report a methodology chapter.
 3. **Google Sheets = single source of truth** (per cahier). Dashboard reads Sheets API. PostgreSQL/Supabase documented as evolution path, not built.
 4. Notifications: **email (Gmail SMTP)** primary + **Telegram** confirmation reply to the technician (no session-window limit, unlike WhatsApp's 24h rule). Teams webhook documented as config option.
-5. Dashboard: **no auth** — runs on the admin's PC only (localhost), decided 2026-07-23. Redesigned 2026-07-24 to a neutral Efferd-style app-shell with light/dark + FR/EN/AR (RTL) i18n loaded from JSON locales (`web/src/locales/`).
+5. Dashboard: **authenticated since 2026-07-29** — reversed the 2026-07-23 "no auth, admin PC only" assumption because the director and the chefs de chantier now use it and the history has to say who did what. Accounts (`users`), bcrypt, opaque session tokens in Postgres behind an httpOnly cookie, roles `directeur` / `chef`, and every endpoint gated on the API rather than on the login form. n8n gets in with `X-API-Key`. Still on one PC; publishing needs CORS narrowed and a login rate limit first. Rebuilt 2026-07-26 in `Dashboard/` (light/dark + FR/EN/AR RTL i18n from `Dashboard/src/locales/`).
 6. Git repo (this one), conventional commits, README per module.
 
 ## 3. Architecture
@@ -50,7 +50,9 @@ Telegram (polling)  +  WhatsApp Cloud API (webhook)
           ├─ end-of-day email to chef de chantier + resp. technique
           └─ failed writes park in `failed_writes`, drained by the 5-min cron
 
-Manager Dashboard (React, admin PC) ◄─ /reports ─ FastAPI ◄─ Google Sheets API
+     nightly 03:00 cron → profile model → persons.profile → injected into extraction
+
+Dashboard (React, login required) ◄─ /reports ─ FastAPI ◄─ Google Sheets API
 ```
 
 JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'activité, goulottes_m, cables_m, bureaux_termines, panneaux_raccordes, autres_travaux, observations, rapport_complet, lien_audio (+ `canal`, `confidence`, `flag_review` added in Sprint 2).
@@ -68,9 +70,9 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 
 ### Sprint 1 — AI core + benchmark (Jul 20 – Aug 1)
 - [x] FastAPI skeleton, `TranscriptionProvider` interface + 3 adapters (groq / gemini / hf-darija)
-- [~] Benchmark harness: WER/CER harness written (`benchmark/run_benchmark.py`) but **cannot run without the audio dataset**, so the primary STT is still unpicked. The *extraction* side is measured: `benchmark/run_model_benchmark.py` ranks text and vision models on 10 hand-written Darija/French cases, and that table sets `EXTRACTION_TEXT_CHAIN` / `EXTRACTION_IMAGE_CHAIN`.
+- [~] Benchmark harness: WER/CER harness written (`benchmark/run_benchmark.py`) but **cannot run without the audio dataset**, so the primary STT is still unpicked. The *extraction* side is measured: `benchmark/run_model_benchmark.py` ranks text and vision models on 10 hand-written Darija/French cases, and that table sets `extraction_text_chain` / `extraction_image_chain`.
 - [x] Extraction: Pydantic schema, Gemini structured output (`response_schema=ExtractedReport`), French reformulation prompt, ordered per-modality fallback chains
-- [x] Unit tests (46, no API keys or DB needed) + golden-set eval on extraction (the benchmark's 10 cases, two of which exist purely to catch invented quantities)
+- [x] Unit tests (53, no API keys or DB needed) + golden-set eval on extraction (the benchmark's 10 cases, two of which exist purely to catch invented quantities)
 - **Exit:** `/process` endpoint audio→structured JSON works; benchmark results table done
 - Report in parallel: état de l'art (STT Darija, LLM extraction, outils)
 
@@ -81,6 +83,9 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - [x] Dashboard v1: report list, filters (technicien/chantier/date), review queue on `flag_review`, confidence %, inline Sheet correction. Backend `/reports` + `/reports/{row}` (`api/app/sheets.py`).
 - [x] Failure path: low-confidence → `flag_review=true` row + confidence column, surfaced in dashboard review queue
 - [x] Dashboard v2 redesign (2026-07-24): neutral Efferd-style framed panels, light/dark, FR/EN/AR (RTL) i18n from JSON, 16 metrics (Activité/Production/Qualité/Cadence incl. WoW, Darija-voice share, API uptime), per-tech summary, recent/health/activity row. Backend `GET /health` now returns uptime for the ops tile.
+- [x] **Five models, not one** (2026-07-27/29): STT, text extraction, vision extraction, image-card generation (`POST /generate-image`), and a nightly technician-profile model (`app/memory.py`). Prompts moved out of Python into versioned Markdown under `api/app/prompts/` with a shared `00-soul.md` identity.
+- [x] **One person across channels** (2026-07-29): `persons` / `technicians` split so a colleague's profile follows them rather than their phone number; the n8n allowlist now reads the table instead of a hardcoded JS literal.
+- [x] **Dashboard accounts + audit trail** (2026-07-29): login, bcrypt, revocable sessions, roles, `user_actions` (with before → after on report edits) and `page_visits`, surfaced in the new **Équipe** panel. New **Journaux** panel renders the live pipeline log.
 - [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director — SMTP is wired (`POST /notify/test`, recipients in the Automation panel) but `SMTP_USER`/`SMTP_PASS` are still unset in `.env`, so nothing can actually send yet
 - Report in parallel: conception (UML: use cases, séquence, classes, déploiement)
 
