@@ -7,8 +7,10 @@ services:
     image: postgres:16-alpine
     container_name: pfe-postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
+    # No published port. Only the api service needs to reach it, and it does so
+    # over the compose network as `postgres:5432`. Publishing it put a database
+    # on the machine's public interface -- harmless on a laptop, an open door on
+    # a server reachable from the internet.
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-pfe}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-pfe}
@@ -26,8 +28,9 @@ services:
     image: docker.n8n.io/n8nio/n8n:latest
     container_name: pfe-n8n
     restart: unless-stopped
-    ports:
-      - "5678:5678"
+    # Reached through the `web` proxy: /webhook/* for Meta and Telegram, and
+    # nothing else. The editor UI is deliberately not public -- open it with
+    # `docker compose port`-free SSH forwarding, or temporarily re-add a port.
     environment:
       - GENERIC_TIMEZONE=Africa/Casablanca
       - TZ=Africa/Casablanca
@@ -61,8 +64,9 @@ services:
     build: ./api
     container_name: pfe-api
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # Reached as `api:8000` by both n8n and the web proxy. Publishing it would
+    # expose a second origin for the same API, which is precisely what the
+    # same-origin design exists to avoid.
     env_file: .env
     environment:
       # .env holds localhost:5432 for a host-run uvicorn; inside this network the
@@ -79,6 +83,21 @@ services:
         condition: service_healthy
     volumes:
       - ./credentials:/app/credentials:ro
+
+  # The only service with a published port: one origin serving the dashboard,
+  # the API under /api, and n8n's webhooks under /webhook. That is what keeps the
+  # session cookie SameSite=Lax and makes CORS a non-issue -- and it is the same
+  # shape locally, behind the Tailscale Funnel, and on the aznet server. Only the
+  # hostname in front of it changes.
+  web:
+    build: ./Dashboard
+    container_name: pfe-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      - api
+      - n8n
 
 volumes:
   n8n_data:

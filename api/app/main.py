@@ -44,10 +44,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Dashboard SPA calls from another origin (Vite dev :5173 / Vercel); Sheets creds stay server-side
+# In production the dashboard is served from the same origin as this API (nginx
+# routes / to the build and /api here), so no browser request is cross-origin and
+# this middleware never fires. It exists for `npm run dev` on :5173, which is a
+# different origin. Hence a narrow default rather than "*": a wildcard on a
+# publicly reachable API lets any page on the internet script it with the
+# visitor's session, and allow_credentials cannot be combined with "*" anyway.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -100,16 +106,48 @@ class LoginIn(BaseModel):
     password: str
 
 
+# Generous enough that a person fumbling their password never notices, tight
+# enough that guessing is pointless: 8 failures per 5 minutes per address.
+LOGIN_MAX_FAILURES = 8
+LOGIN_WINDOW_SECONDS = 300
+_login_failures: Dict[str, List[float]] = {}
+
+
+def _login_allowed(client: str) -> bool:
+    """Sliding-window throttle on failed logins, keyed by client address.
+
+    bcrypt makes each attempt cost ~100 ms, which is a speed bump, not a limit:
+    left alone, a script still gets tens of thousands of guesses a day against an
+    account whose password a human chose. Only *failures* count, so a working
+    session is never punished.
+
+    ponytail: in-process dict, so it resets on restart and does not span
+    replicas. Both are fine for one container on one server; move it to the
+    `sessions` table's database if the API is ever scaled out.
+    """
+    now = time.time()
+    hits = [t for t in _login_failures.get(client, []) if now - t < LOGIN_WINDOW_SECONDS]
+    _login_failures[client] = hits
+    return len(hits) < LOGIN_MAX_FAILURES
+
+
 @app.post("/auth/login")
-def login(payload: LoginIn, response: Response) -> dict:
+def login(payload: LoginIn, response: Response, request: Request) -> dict:
+    client = request.client.host if request.client else "unknown"
+    if not _login_allowed(client):
+        # 429 rather than 401: the credentials were never checked, and saying so
+        # tells an honest user locked out by a typo to simply wait.
+        raise HTTPException(429, "trop de tentatives, réessayez dans quelques minutes")
     try:
         result = auth.login(payload.email, payload.password)
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     if result is None:
+        _login_failures.setdefault(client, []).append(time.time())
         # One message for every failure mode. Distinguishing "no such account"
         # from "wrong password" tells an attacker which emails are real.
         raise HTTPException(401, "identifiants invalides")
+    _login_failures.pop(client, None)
     auth.set_cookie(response, result["token"])
     auth.record(result["user"], "login")
     return {"user": result["user"]}
@@ -562,6 +600,54 @@ async def run_job(name: str, caller: dict = Depends(auth.require_human)) -> dict
         raise HTTPException(404, f"unknown job: {name}")
     auth.record(caller, "job_run", target=name)
     return await run_in_threadpool(jobs.run, name)
+
+
+# ── n8n orchestrator, read-only ────────────────────────────────────────────
+# The dashboard's Automation panels used to call n8n straight through the Vite
+# dev proxy, which attached X-N8N-API-KEY server-side. A static build has no dev
+# server, so the proxy had to move -- and it moves *here* rather than into nginx
+# because nginx cannot tell a logged-in browser from a stranger. Injecting the
+# key in the proxy would publish a fully authenticated n8n admin API (workflows,
+# credentials) to anyone who can reach the public URL.
+#
+# Read-only on purpose: the dashboard only ever lists. Nothing here can start,
+# edit or deactivate a workflow.
+
+
+async def _n8n_get(path: str) -> Any:
+    """One authenticated GET against n8n's public API.
+
+    Errors are raised as 502 and translated by the callers into the "n8n is
+    unreachable" state the panels already know how to render -- an orchestrator
+    that is down is a state to display, not an exception to leak.
+    """
+    if not settings.n8n_api_key:
+        raise HTTPException(502, "N8N_API_KEY is not configured")
+    import httpx
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            res = await client.get(
+                f"{settings.n8n_url.rstrip('/')}/api/v1/{path}",
+                headers={"X-N8N-API-KEY": settings.n8n_api_key},
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, f"n8n unreachable: {exc}") from exc
+    if res.status_code in (401, 403):
+        raise HTTPException(502, "n8n rejected the API key")
+    if res.status_code >= 400:
+        raise HTTPException(502, f"n8n returned {res.status_code}")
+    return res.json()
+
+
+@app.get("/n8n/workflows")
+async def n8n_workflows(caller: dict = Depends(auth.require_human)) -> Any:
+    return await _n8n_get("workflows")
+
+
+@app.get("/n8n/executions")
+async def n8n_executions(limit: int = 20, caller: dict = Depends(auth.require_human)) -> Any:
+    return await _n8n_get(f"executions?limit={int(limit)}")
 
 
 # ── Technician directory ───────────────────────────────────────────────────

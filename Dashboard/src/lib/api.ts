@@ -139,7 +139,7 @@ export interface N8nExecution {
 /** Last executions, newest first. Proves the orchestrator is doing work, not just running. */
 export async function n8nExecutions(signal?: AbortSignal): Promise<N8nExecution[]> {
   try {
-    const res = await fetch('/n8n/api/v1/executions?limit=20', { signal })
+    const res = await fetch(`${BASE}/n8n/executions?limit=20`, { signal })
     if (!res.ok) return []
     const body = (await res.json()) as { data?: N8nExecution[] }
     return body.data ?? []
@@ -149,16 +149,22 @@ export async function n8nExecutions(signal?: AbortSignal): Promise<N8nExecution[
 }
 
 /**
- * n8n's public API, reached through the dev proxy which attaches the API key.
- * A reachable server with every workflow deactivated is a real and dangerous
- * state, so server health and workflow activation are reported separately.
+ * n8n's public API, reached through the API (GET /n8n/workflows) which attaches
+ * the key server-side and gates the route behind a session. A reachable server
+ * with every workflow deactivated is a real and dangerous state, so server
+ * health and workflow activation are reported separately.
  */
 export async function n8nStatus(
   signal?: AbortSignal,
 ): Promise<{ reachable: boolean; workflows: N8nWorkflow[]; authError: boolean }> {
   try {
-    const res = await fetch('/n8n/api/v1/workflows', { signal })
-    if (res.status === 401 || res.status === 403) return { reachable: true, workflows: [], authError: true }
+    const res = await fetch(`${BASE}/n8n/workflows`, { signal })
+    // The API collapses every n8n-side failure into 502; the detail says which.
+    // "rejected" means n8n answered and refused the key — the server is up.
+    if (res.status === 502) {
+      const detail = await res.text().catch(() => '')
+      return { reachable: /rejected/.test(detail), workflows: [], authError: /rejected/.test(detail) }
+    }
     if (!res.ok) return { reachable: true, workflows: [], authError: false }
     const body = (await res.json()) as { data?: N8nWorkflow[] }
     return { reachable: true, workflows: body.data ?? [], authError: false }

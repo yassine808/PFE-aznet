@@ -90,6 +90,19 @@ class Settings(BaseSettings):
     # Flip to true the day the dashboard is published over HTTPS.
     cookie_secure: bool = False
 
+    # n8n's public API, read by the dashboard's orchestrator panels through
+    # GET /n8n/workflows and /n8n/executions. The key lives here rather than in
+    # the reverse proxy: a proxy that injects it would hand an unauthenticated
+    # n8n admin API to anyone who can reach the public URL, whereas these routes
+    # sit behind require_human like the rest of the dashboard.
+    n8n_url: str = "http://n8n:5678"
+    n8n_api_key: Optional[str] = None
+
+    # Comma-separated browser origins allowed to call this API cross-origin. The
+    # served dashboard is same-origin and needs no entry here; the default covers
+    # the Vite dev server only. Deliberately not "*" -- see main.py.
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
     # Notification mail, used by POST /notify/test so the dashboard can prove a
     # recipient address before the end-of-day report goes out. Optional at
     # startup like every other key: the endpoint fails loudly with a precise
