@@ -8,7 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import daily_report, extraction, imagegen, logs, prompt_loader, sheets
+from app import daily_report, extraction, imagegen, logs, memory, prompt_loader, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError
@@ -96,6 +96,13 @@ async def process(
     # Same trace id n8n threads through every stage, so the API's own errors
     # line up with the workflow's rows in the dashboard timeline.
     ctx = {"correlation_id": correlation_id, "channel": channel, "technicien": technicien}
+    # Nightly summary of this technician (app/memory.py), injected as context.
+    # Best effort on purpose: an unknown sender or a log store outage must
+    # degrade to plain extraction, not fail a report someone is waiting for.
+    try:
+        sender_profile = logs.profile_for(technicien)
+    except logs.LogStoreError:
+        sender_profile = None
 
     provided = [name for name, value in (("audio", audio), ("image", image), ("text", text)) if value is not None]
     if len(provided) != 1:
@@ -147,7 +154,8 @@ async def process(
         t1 = time.time()
         try:
             report, model_used = await run_in_threadpool(
-                extraction.extract_report_from_image, blob, image.content_type or "image/jpeg"
+                extraction.extract_report_from_image, blob,
+                image.content_type or "image/jpeg", sender_profile,
             )
         except extraction.ExtractionError as exc:
             await _log(
@@ -177,7 +185,9 @@ async def process(
 
     t1 = time.time()
     try:
-        report, model_used = await run_in_threadpool(extraction.extract_report_with_model, rapport_complet)
+        report, model_used = await run_in_threadpool(
+            extraction.extract_report_with_model, rapport_complet, sender_profile
+        )
     except extraction.ExtractionError as exc:
         await _log(
             "extracted", "error", message=f"extraction failed: {exc}",
@@ -397,8 +407,14 @@ class TechnicianIn(BaseModel):
 
 @app.get("/technicians")
 def list_technicians() -> dict:
+    """People, each with their channel identities and remembered facts.
+
+    Still `/technicians` and still keyed `technicians`: the dashboard and the
+    workflow both call it, and renaming a working endpoint to match an internal
+    refactor buys nothing an operator can see.
+    """
     try:
-        return {"technicians": logs.list_technicians()}
+        return {"technicians": logs.list_persons()}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
 
@@ -422,6 +438,61 @@ def remove_technician(tech_id: int) -> dict:
         return {"deleted": logs.delete_technician(tech_id)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+@app.delete("/persons/{person_id}")
+def remove_person(person_id: int) -> dict:
+    """Delete a person, their identities and their memory."""
+    try:
+        return {"deleted": logs.delete_person(person_id)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+def _refresh_profile(person: dict, rows: List[dict]) -> dict:
+    """Rebuild one person's profile. Never raises: called in a loop by the cron,
+    and one technician with no reports must not stop the rest."""
+    name = person["name"]
+    try:
+        reports = memory.collect(rows, name)
+        profile, model = memory.build(name, person.get("role"), reports)
+    except memory.ProfileError as exc:
+        # Left as-is rather than cleared: yesterday's profile is better context
+        # than none, and clearing on failure would erase a good summary because
+        # a free-tier model was busy at 3am.
+        return {"person_id": person["id"], "name": name, "updated": False, "reason": str(exc)}
+    logs.save_profile(person["id"], profile)
+    return {"person_id": person["id"], "name": name, "updated": True, "model": model,
+            "profile": profile}
+
+
+@app.post("/persons/{person_id}/profile")
+def refresh_one_profile(person_id: int) -> dict:
+    """Regenerate a single profile. The dashboard's button, and the way to fix a
+    wrong profile without waiting for the next cron."""
+    try:
+        person = next((p for p in logs.list_persons() if p["id"] == person_id), None)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if person is None:
+        raise HTTPException(404, f"person {person_id} not found")
+    return _refresh_profile(person, sheets.read_reports())
+
+
+@app.post("/profiles/refresh")
+def refresh_all_profiles() -> dict:
+    """Rebuild every profile. Called by the 03:00 cron in n8n.
+
+    The Sheet is read once for all of them: it is the slow part, and reading it
+    per technician would turn a nightly job into a quota problem of its own.
+    """
+    try:
+        persons = logs.list_persons()
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    rows = sheets.read_reports()
+    results = [_refresh_profile(p, rows) for p in persons]
+    return {"refreshed": sum(1 for r in results if r["updated"]), "results": results}
 
 
 @app.get("/technicians/lookup")

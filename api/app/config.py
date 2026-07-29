@@ -67,6 +67,13 @@ class Settings(BaseSettings):
         "gemini:gemini-3.1-flash-image,gemini:nano-banana-pro-preview,gemini:gemini-3-pro-image"
     )
 
+    # Nightly technician profiles (app/memory.py). Prose, not JSON, and nobody is
+    # waiting on it -- so the cheap/fast text models come first and a slow one is
+    # a fine fallback at 03:00.
+    profile_chain: str = (
+        "groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest,gemini:gemini-3.6-flash"
+    )
+
     extraction_image_chain: str = (
         "gemini:gemini-3.6-flash,gemini:gemini-3.5-flash-lite,gemini:gemini-flash-lite-latest"
     )

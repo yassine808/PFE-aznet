@@ -1716,6 +1716,23 @@
       ],
       "id": "filtrer-acces-000001",
       "name": "Filtrer accès"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/profiles/refresh",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        1670
+      ],
+      "id": "refresh-profils-0001",
+      "name": "Rafraîchir profils"
     }
   ],
   "connections": {
@@ -2387,6 +2404,17 @@
         [
           {
             "node": "Correlate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prune logs (30d)": {
+      "main": [
+        [
+          {
+            "node": "Rafraîchir profils",
             "type": "main",
             "index": 0
           }

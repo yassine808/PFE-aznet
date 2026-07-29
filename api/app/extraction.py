@@ -50,11 +50,30 @@ def _parse_chain(raw: str) -> List[Tuple[str, str]]:
     return entries
 
 
+def _profile_block(profile: Optional[str]) -> str:
+    """The technician's profile, framed so it cannot be read as report content.
+
+    Explicitly labelled as context and explicitly forbidden as a source of
+    values. Without that framing a profile saying "intervient surtout sur Sidi
+    Maarouf" is one plausible step away from filling `chantier` on a message
+    that never named a site -- which is inventing data.
+    """
+    if not profile or not profile.strip():
+        return ""
+    return (
+        "\n\n## Contexte sur l'auteur (informatif)\n"
+        + profile.strip()
+        + "\n\nCe contexte sert uniquement à mieux comprendre sa façon de s'exprimer. "
+        "Il n'est JAMAIS une source de valeurs : ne remplis aucun champ à partir de lui."
+    )
+
+
 def _call_gemini(
     model: str,
     text: Optional[str] = None,
     image: Optional[bytes] = None,
     mime_type: str = "image/jpeg",
+    profile: Optional[str] = None,
 ) -> ExtractedReport:
     if not settings.gemini_api_key:
         raise ExtractionError("GEMINI_API_KEY not configured")
@@ -63,9 +82,10 @@ def _call_gemini(
 
     client = genai.Client(api_key=settings.gemini_api_key)
     if image is not None:
-        contents = [types.Part.from_bytes(data=image, mime_type=mime_type), _IMAGE_INSTRUCTIONS]
+        contents = [types.Part.from_bytes(data=image, mime_type=mime_type),
+                    _IMAGE_INSTRUCTIONS + _profile_block(profile)]
     else:
-        contents = _INSTRUCTIONS + (text or "")
+        contents = _INSTRUCTIONS + _profile_block(profile) + "\n\n" + (text or "")
     try:
         resp = client.models.generate_content(
             model=model,
@@ -85,6 +105,7 @@ def _call_groq(
     text: Optional[str] = None,
     image: Optional[bytes] = None,
     mime_type: str = "image/jpeg",
+    profile: Optional[str] = None,
 ) -> ExtractedReport:
     if image is not None:
         # Checked live against GET /models: the free Groq catalogue is text and
@@ -121,6 +142,7 @@ def _run_chain(
     text: Optional[str] = None,
     image: Optional[bytes] = None,
     mime_type: str = "image/jpeg",
+    profile: Optional[str] = None,
 ) -> Tuple[ExtractedReport, str]:
     """Try each `provider:model` in order. Returns (report, winning model id)."""
     failures = []
@@ -130,7 +152,8 @@ def _run_chain(
             failures.append(f"{provider}: unknown provider")
             continue
         try:
-            return engine(model, text=text, image=image, mime_type=mime_type), f"{provider}/{model}"
+            return (engine(model, text=text, image=image, mime_type=mime_type, profile=profile),
+                    f"{provider}/{model}")
         except ExtractionError as exc:
             failures.append(str(exc))
     raise ExtractionError("extraction failed on every engine — " + " | ".join(failures))
@@ -142,11 +165,18 @@ def extract_report(text: str) -> ExtractedReport:
     return report
 
 
-def extract_report_with_model(text: str) -> Tuple[ExtractedReport, str]:
-    """Same as `extract_report` but also reports which model answered."""
-    return _run_chain(settings.extraction_text_chain, text=text)
+def extract_report_with_model(text: str, profile: Optional[str] = None) -> Tuple[ExtractedReport, str]:
+    """Same as `extract_report` but also reports which model answered.
+
+    `profile` is the nightly summary of the technician who sent this (see
+    app/memory.py); it is optional so an unknown sender, or a Sheets outage,
+    degrades to exactly the previous behaviour rather than failing.
+    """
+    return _run_chain(settings.extraction_text_chain, text=text, profile=profile)
 
 
-def extract_report_from_image(image: bytes, mime_type: str = "image/jpeg") -> Tuple[ExtractedReport, str]:
+def extract_report_from_image(
+    image: bytes, mime_type: str = "image/jpeg", profile: Optional[str] = None
+) -> Tuple[ExtractedReport, str]:
     """Vision path — a photographed note or a picture of the work itself."""
-    return _run_chain(settings.extraction_image_chain, image=image, mime_type=mime_type)
+    return _run_chain(settings.extraction_image_chain, image=image, mime_type=mime_type, profile=profile)

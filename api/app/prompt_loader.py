@@ -29,6 +29,7 @@ TEXT_EXTRACTION = "extraction-text.md"
 IMAGE_EXTRACTION = "extraction-image.md"
 STT_VOCABULARY = "stt-vocabulary.md"
 IMAGE_GENERATION = "image-generation.md"
+PROFILE = "profile.md"
 
 
 class PromptError(RuntimeError):
@@ -85,7 +86,7 @@ def available() -> dict:
     """Prompt name -> character count. Surfaced by /health so an operator can
     see at a glance that the prompts loaded and how much they cost per call."""
     sizes = {}
-    for name in (SOUL, TEXT_EXTRACTION, IMAGE_EXTRACTION, STT_VOCABULARY, IMAGE_GENERATION):
+    for name in (SOUL, TEXT_EXTRACTION, IMAGE_EXTRACTION, STT_VOCABULARY, IMAGE_GENERATION, PROFILE):
         try:
             # STT never gets the soul block, so reporting its size with one
             # would overstate what Whisper is actually sent.
