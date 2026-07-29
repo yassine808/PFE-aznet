@@ -3,12 +3,12 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import daily_report, extraction, imagegen, logs, memory, prompt_loader, sheets
+from app import auth, daily_report, extraction, imagegen, logs, memory, prompt_loader, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError
@@ -25,6 +25,7 @@ async def lifespan(_: FastAPI):
     try:
         logs.init_schema()
         print("[logs] postgres schema ready")
+        auth.seed_admin()
     except logs.LogStoreError as exc:
         print(f"[logs] DISABLED — {exc}")
     yield
@@ -81,6 +82,122 @@ def health() -> dict:
         },
         "prompts": prompt_loader.available(),
     }
+
+
+# ── Dashboard accounts ─────────────────────────────────────────────────────
+# The gate is here rather than on the login form: the dashboard is a static
+# bundle, and anyone who can open it can call these URLs directly from devtools.
+
+
+class LoginIn(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/auth/login")
+def login(payload: LoginIn, response: Response) -> dict:
+    try:
+        result = auth.login(payload.email, payload.password)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if result is None:
+        # One message for every failure mode. Distinguishing "no such account"
+        # from "wrong password" tells an attacker which emails are real.
+        raise HTTPException(401, "identifiants invalides")
+    auth.set_cookie(response, result["token"])
+    auth.record(result["user"], "login")
+    return {"user": result["user"]}
+
+
+@app.post("/auth/logout")
+def logout(
+    response: Response,
+    session: Optional[str] = Cookie(default=None, alias=auth.COOKIE_NAME),
+    caller: Optional[dict] = Depends(auth.current_user),
+) -> dict:
+    auth.record(caller, "logout")
+    auth.logout(session)
+    auth.clear_cookie(response)
+    return {"ok": True}
+
+
+@app.get("/auth/me")
+def whoami(caller: Optional[dict] = Depends(auth.current_user)) -> dict:
+    """Who the browser is, or null. Deliberately not 401: the dashboard calls
+    this on load to decide whether to show the login screen, and an error there
+    would be indistinguishable from the API being down."""
+    return {"user": caller}
+
+
+class UserIn(BaseModel):
+    email: str
+    name: str
+    password: str
+    role: str = "chef"
+
+
+@app.get("/users")
+def list_users(caller: dict = Depends(auth.require_human)) -> dict:
+    """Every account for the director; only their own for a chef."""
+    try:
+        users = auth.list_users()
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if caller.get("role") != "directeur":
+        users = [u for u in users if u["id"] == caller["id"]]
+    return {"users": users}
+
+
+@app.post("/users")
+def add_user(payload: UserIn, caller: dict = Depends(auth.require_director)) -> dict:
+    try:
+        user = auth.create_user(payload.email, payload.name, payload.password, payload.role)
+    except auth.AuthError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    auth.record(caller, "user_created", target=user["email"], after=user["role"])
+    return user
+
+
+@app.delete("/users/{user_id}")
+def remove_user(user_id: int, caller: dict = Depends(auth.require_director)) -> dict:
+    if user_id == caller["id"]:
+        # Deleting yourself locks everyone out if you are the only director, and
+        # the seed only runs when the table is empty.
+        raise HTTPException(422, "on ne peut pas supprimer son propre compte")
+    try:
+        deleted = auth.delete_user(user_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    auth.record(caller, "user_deleted", target=str(user_id))
+    return {"deleted": deleted}
+
+
+@app.get("/history")
+def user_history(
+    user_id: Optional[int] = None, limit: int = 100, caller: dict = Depends(auth.require_human)
+) -> dict:
+    """A chef may only read their own history, whatever they ask for."""
+    target = user_id if caller.get("role") == "directeur" else caller["id"]
+    try:
+        return auth.history(target, limit)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+class VisitIn(BaseModel):
+    route: str
+    seconds: int
+
+
+@app.post("/page-visit")
+def track_visit(payload: VisitIn, caller: dict = Depends(auth.require_human)) -> dict:
+    """Time spent on a page. Measured in the browser because the server cannot
+    see how long a page stayed open, and sent with sendBeacon so it survives the
+    tab closing."""
+    auth.record_visit(caller.get("id"), payload.route, payload.seconds)
+    return {"ok": True}
 
 
 @app.post("/process", response_model=ProcessResponse)
@@ -211,7 +328,7 @@ async def process(
 
 # No auth: dashboard + API run only on the admin's machine (localhost), decided 2026-07-23.
 @app.get("/reports")
-def list_reports() -> dict:
+def list_reports(caller: dict = Depends(auth.require_human)) -> dict:
     try:
         return {"reports": sheets.read_reports()}
     except sheets.SheetsError as exc:
@@ -224,14 +341,38 @@ class ReportPatch(BaseModel):
 
 
 @app.patch("/reports/{row}")
-def patch_report(row: int, payload: ReportPatch) -> dict:
+def patch_report(row: int, payload: ReportPatch, caller: dict = Depends(auth.require_human)) -> dict:
     if row < 2:
         raise HTTPException(422, "row must be >= 2 (row 1 is the header)")
+
+    # Read the old value before overwriting it, so the history can say
+    # "goulottes_m: 40 → 45" instead of "someone edited a row". Costs one extra
+    # Sheets read per edit; there is no other moment when the previous value
+    # still exists.
+    previous = None
+    try:
+        current = next((r for r in sheets.read_reports() if r.get("_row") == row), None)
+        previous = (current or {}).get(payload.field)
+    except sheets.SheetsError:
+        pass  # an unreadable Sheet must not block the correction itself
+
     try:
         sheets.update_report_field(row, payload.field, payload.value)
     except sheets.SheetsError as exc:
         detail = str(exc)
         raise HTTPException(422 if "unknown column" in detail else 502, detail) from exc
+
+    # Clearing flag_review is "handling a flagged report" — the count the
+    # director asked for — so it is recorded as its own action rather than as
+    # one more field edit lost among the others.
+    handled = payload.field == "flag_review" and (payload.value or "").upper() not in ("TRUE", "1")
+    auth.record(
+        caller,
+        "flag_cleared" if handled else "report_edited",
+        target=f"row {row} · {payload.field}",
+        before=previous,
+        after=payload.value,
+    )
     return {"ok": True}
 
 
@@ -243,7 +384,7 @@ class DailyReportRequest(BaseModel):
 
 
 @app.post("/daily-report", response_model=daily_report.DailyReportContent)
-def daily_report_endpoint(payload: DailyReportRequest) -> daily_report.DailyReportContent:
+def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(auth.require_user)) -> daily_report.DailyReportContent:
     if not payload.rows:
         raise HTTPException(422, "No rows for the given date")
     try:
@@ -307,7 +448,7 @@ class LogEvent(BaseModel):
 
 
 @app.post("/logs")
-def create_log(event: LogEvent) -> dict:
+def create_log(event: LogEvent, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         log_id = logs.write(**event.model_dump())
     except logs.LogStoreError as exc:
@@ -337,7 +478,7 @@ def list_logs(
 
 
 @app.delete("/logs")
-def prune_logs(days: int = logs.RETENTION_DAYS) -> dict:
+def prune_logs(days: int = logs.RETENTION_DAYS, caller: dict = Depends(auth.require_director)) -> dict:
     """Retention sweep, called by the daily cron workflow."""
     try:
         return {"deleted": logs.prune(days)}
@@ -351,7 +492,7 @@ class ClaimRequest(BaseModel):
 
 
 @app.post("/logs/claim")
-def claim(payload: ClaimRequest) -> dict:
+def claim(payload: ClaimRequest, caller: dict = Depends(auth.require_user)) -> dict:
     """Idempotency gate. `fresh: false` means n8n must stop — already processed.
 
     Meta retries the WhatsApp webhook when it does not get a fast 200, which
@@ -377,7 +518,7 @@ class FailedWrite(BaseModel):
 
 
 @app.post("/sheet-queue")
-def queue_write(item: FailedWrite) -> dict:
+def queue_write(item: FailedWrite, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         return {"id": logs.queue_failed_write(item.payload, item.error, item.correlation_id)}
     except logs.LogStoreError as exc:
@@ -385,7 +526,7 @@ def queue_write(item: FailedWrite) -> dict:
 
 
 @app.get("/sheet-queue")
-def list_queue(limit: int = 20) -> dict:
+def list_queue(limit: int = 20, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         return {"pending": logs.pending_writes(limit)}
     except logs.LogStoreError as exc:
@@ -406,7 +547,7 @@ class TechnicianIn(BaseModel):
 
 
 @app.get("/technicians")
-def list_technicians() -> dict:
+def list_technicians(caller: dict = Depends(auth.require_human)) -> dict:
     """People, each with their channel identities and remembered facts.
 
     Still `/technicians` and still keyed `technicians`: the dashboard and the
@@ -420,7 +561,7 @@ def list_technicians() -> dict:
 
 
 @app.post("/technicians")
-def add_technician(payload: TechnicianIn) -> dict:
+def add_technician(payload: TechnicianIn, caller: dict = Depends(auth.require_human)) -> dict:
     try:
         return logs.upsert_technician(
             payload.channel, payload.external_id, payload.name, payload.role, payload.active
@@ -433,7 +574,7 @@ def add_technician(payload: TechnicianIn) -> dict:
 
 
 @app.delete("/technicians/{tech_id}")
-def remove_technician(tech_id: int) -> dict:
+def remove_technician(tech_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     try:
         return {"deleted": logs.delete_technician(tech_id)}
     except logs.LogStoreError as exc:
@@ -441,7 +582,7 @@ def remove_technician(tech_id: int) -> dict:
 
 
 @app.delete("/persons/{person_id}")
-def remove_person(person_id: int) -> dict:
+def remove_person(person_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     """Delete a person, their identities and their memory."""
     try:
         return {"deleted": logs.delete_person(person_id)}
@@ -467,7 +608,7 @@ def _refresh_profile(person: dict, rows: List[dict]) -> dict:
 
 
 @app.post("/persons/{person_id}/profile")
-def refresh_one_profile(person_id: int) -> dict:
+def refresh_one_profile(person_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     """Regenerate a single profile. The dashboard's button, and the way to fix a
     wrong profile without waiting for the next cron."""
     try:
@@ -480,7 +621,7 @@ def refresh_one_profile(person_id: int) -> dict:
 
 
 @app.post("/profiles/refresh")
-def refresh_all_profiles() -> dict:
+def refresh_all_profiles(caller: dict = Depends(auth.require_user)) -> dict:
     """Rebuild every profile. Called by the 03:00 cron in n8n.
 
     The Sheet is read once for all of them: it is the slow part, and reading it
@@ -496,7 +637,7 @@ def refresh_all_profiles() -> dict:
 
 
 @app.get("/technicians/lookup")
-def lookup_technician(channel: str, external_id: str) -> dict:
+def lookup_technician(channel: str, external_id: str, caller: dict = Depends(auth.require_user)) -> dict:
     """Authorization check for n8n: returns the technician or `found: false`."""
     try:
         found = logs.find_technician(channel, external_id)
@@ -515,7 +656,7 @@ class SettingsIn(BaseModel):
 
 
 @app.get("/settings")
-def read_settings() -> dict:
+def read_settings(caller: dict = Depends(auth.require_human)) -> dict:
     try:
         return {"settings": logs.get_settings()}
     except logs.LogStoreError as exc:
@@ -523,7 +664,7 @@ def read_settings() -> dict:
 
 
 @app.put("/settings")
-def write_settings(payload: SettingsIn) -> dict:
+def write_settings(payload: SettingsIn, caller: dict = Depends(auth.require_human)) -> dict:
     try:
         return {"settings": logs.put_settings(payload.values)}
     except logs.LogStoreError as exc:
@@ -535,7 +676,7 @@ class TestMailIn(BaseModel):
 
 
 @app.post("/notify/test")
-def send_test_mail(payload: TestMailIn) -> dict:
+def send_test_mail(payload: TestMailIn, caller: dict = Depends(auth.require_human)) -> dict:
     """Send one plain-text probe so an address can be verified before it matters.
 
     Credentials are optional at startup, so an unconfigured install gets a 422

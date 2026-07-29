@@ -111,6 +111,65 @@ CREATE TABLE IF NOT EXISTS technicians (
     UNIQUE (channel, external_id)
 );
 
+-- Dashboard accounts: the director and the chefs. Separate from `persons`
+-- because a technician sends reports from WhatsApp and never logs in, while a
+-- chef logs in and never sends reports -- different identifiers, different
+-- lifecycles. A chef who is also a technician is two rows, correctly: those are
+-- two roles, and only one of them should ever carry a password.
+CREATE TABLE IF NOT EXISTS users (
+    id            BIGSERIAL PRIMARY KEY,
+    email         TEXT NOT NULL UNIQUE,
+    name          TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'chef',   -- 'directeur' | 'chef'
+    password_hash TEXT NOT NULL,
+    active        BOOLEAN NOT NULL DEFAULT true,
+    last_seen_at  TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Opaque session tokens rather than JWTs, so a session can actually be revoked:
+-- deleting the row logs that browser out on its next request. A signed token
+-- stays valid until it expires no matter what the database says, which is the
+-- wrong behaviour the day an account has to be shut off.
+CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
+
+-- What a human deliberately changed. `before`/`after` are filled for edits so
+-- the history reads "goulottes_m: 40 -> 45" rather than "someone edited a row".
+-- ON DELETE SET NULL, not CASCADE: removing an account must not erase the record
+-- of what it did, which is the one thing an audit trail exists to prevent.
+CREATE TABLE IF NOT EXISTS user_actions (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    user_name  TEXT,
+    action     TEXT NOT NULL,
+    target     TEXT,
+    before_val TEXT,
+    after_val  TEXT,
+    detail     JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS user_actions_user_idx ON user_actions (user_id, created_at DESC);
+
+-- Navigation, kept apart from user_actions because it is ~20x the volume and a
+-- different shape (it has a duration). Merged, every "what did she change?"
+-- query would need to filter out page views and the timeline would be noise.
+-- Duration is measured in the browser: the server cannot see how long a page
+-- stayed open.
+CREATE TABLE IF NOT EXISTS page_visits (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    route      TEXT NOT NULL,
+    seconds    INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS page_visits_user_idx ON page_visits (user_id, created_at DESC);
+
 -- There is deliberately NO table of remembered facts here. Everything a
 -- profile is built from is already in the Sheet: every report a technician
 -- ever sent, with their own words in `rapport_complet`. A second store of

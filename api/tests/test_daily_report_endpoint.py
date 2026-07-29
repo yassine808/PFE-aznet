@@ -5,6 +5,12 @@ from app.daily_report import DailyReportContent, DailyReportError
 
 client = TestClient(main.app)
 
+# Endpoints are gated now. Overriding the dependency keeps this suite free of a
+# database and of real credentials, which is the rule for the whole suite.
+main.app.dependency_overrides[main.auth.require_user] = lambda: {
+    "id": 1, "name": "Test", "role": "directeur"
+}
+
 ROWS = [
     {
         "technicien": "Yassine",

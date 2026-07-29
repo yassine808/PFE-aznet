@@ -44,6 +44,10 @@ services:
       # Default targets the api service below; override to host.docker.internal:8000
       # when running uvicorn on the host instead (dev with --reload).
       - API_BASE_URL=${API_BASE_URL:-http://api:8000}
+      # Every workflow call to the API sends this as X-API-Key. n8n has no
+      # browser and therefore no session cookie; without it the whole pipeline
+      # 401s the moment authentication is switched on.
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # NOTE: n8n's built-in tunnel (start --tunnel) is dead in modern n8n (2.x ignores it) — use Tailscale Funnel, see n8n/README.md

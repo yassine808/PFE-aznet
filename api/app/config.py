@@ -78,6 +78,18 @@ class Settings(BaseSettings):
         "gemini:gemini-3.6-flash,gemini:gemini-3.5-flash-lite,gemini:gemini-flash-lite-latest"
     )
 
+    # Dashboard auth. Both optional so the API still boots on a machine that has
+    # neither -- the endpoints fail loudly at call time instead, same as the
+    # model keys.
+    #
+    # `internal_api_key` is what n8n sends as X-API-Key. Unset means machine
+    # access is DISABLED, never "everyone is a machine".
+    internal_api_key: Optional[str] = None
+    # Off on http://localhost, which is where this runs today: a Secure cookie is
+    # simply not sent over http, so leaving it on would make login silently fail.
+    # Flip to true the day the dashboard is published over HTTPS.
+    cookie_secure: bool = False
+
     # Notification mail, used by POST /notify/test so the dashboard can prove a
     # recipient address before the end-of-day report goes out. Optional at
     # startup like every other key: the endpoint fails loudly with a precise

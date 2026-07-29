@@ -7,6 +7,13 @@ client = TestClient(main.app)
 
 ROWS = [{"_row": 2, "date": "2026-07-23", "technicien": "Yassine", "resume": "150 m de goulotte."}]
 
+# PATCH /reports is gated and records who made the edit. Overriding the
+# dependency rather than logging in keeps the suite free of a database, which is
+# the rule for this whole test suite.
+main.app.dependency_overrides[main.auth.require_human] = lambda: {
+    "id": 1, "name": "Test", "role": "directeur"
+}
+
 
 def test_reports_ok(monkeypatch):
     monkeypatch.setattr(main.sheets, "read_reports", lambda: ROWS)
