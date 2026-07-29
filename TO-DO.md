@@ -11,9 +11,9 @@ Hard deadline: Aug 31 2026. Dashboard is built and running (`Dashboard/`; the ol
 ## Phase 1 — Pipeline (Sprint 2, no dashboard needed)
 - [x] Treat voice messages and forwarded audios the same (n8n: match message.voice OR message.audio) — both workflows
 - [x] Access control: allowlist employees + director; outsider gets one automated HR-contact reply. Same table gets a role column so boss behavior differs from employees (both changeable in settings later) — `Access control` node in both workflows; fill ALLOWLIST with real user IDs
-- [x] Error logs: n8n error workflow → Errors sheet tab (timestamp, node, message, payload link) — `n8n/error-workflow.json`; set it as Error Workflow in each production workflow
+- [x] Error logs: n8n error trigger → `POST /logs` (Postgres, not a sheet tab) — band 2 of `n8n/aznet-complete.json`; set the workflow as its own Error Workflow after import
 - [x] Low-confidence STT → flag_review=true column in the Sheet (not just backend log) — `Append Sheet row` node writes flag_review + confidence
-- [x] End-of-day cron: assemble today's transcriptions + messages → LLM report → email — `n8n/daily-report-cron.json` + `POST /daily-report` (photos + .docx still open)
+- [x] End-of-day cron: assemble today's transcriptions + messages → LLM report → email — `api/app/jobs.py` (`daily_report`, plus `weekly_report`) + `POST /daily-report` (photos + .docx still open)
 
 ## Phase 2 — Dashboard v1+ (Sprint 2, Aug 3–14)
 - [x] Save + show each audio with its transcription per row — Inbox panel plays `lien_audio` inline next to the transcription (`Dashboard/src/pages/inbox.tsx`). Link durability is still the open Drive item below.
@@ -30,8 +30,8 @@ Hard deadline: Aug 31 2026. Dashboard is built and running (`Dashboard/`; the ol
 
 ## Channels (2026-07-23: keep BOTH Telegram + WhatsApp as inputs)
 Full config walkthrough: `docs/setup-guide.md`.
-- [x] WhatsApp Cloud API reception workflow (`n8n/whatsapp-reception.json`) — superseded by unified
-- [x] **Unified reception workflow** (`n8n/reception-unified.json`) — one workflow, both triggers, shared allowlist/pipeline/Sheet (`canal` column), channel-aware replies. Fully patched: credential IDs, spreadsheet ID + column schema, allowlist (TG `<TELEGRAM_USER_ID>`, WA `<WHATSAPP_NUMBER>`), env-based tokens.
+- [x] WhatsApp Cloud API reception workflow — folded into `n8n/aznet-complete.json` band 1
+- [x] **Unified reception workflow** (`n8n/aznet-complete.json`) — one workflow, both triggers, shared allowlist/pipeline/Sheet (`canal` column), channel-aware replies. Fully patched: credential IDs, spreadsheet ID + column schema, allowlist (TG `<TELEGRAM_USER_ID>`, WA `<WHATSAPP_NUMBER>`), env-based tokens.
 - [x] n8n credentials created (Telegram, WhatsApp OAuth, WhatsApp API + WABA `<WABA_ID>`, Google service account `n8n-sheets@pfe-aznet`); env passthrough + `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` in compose
 - [x] Google Sheet `Rapports` created (headers split), shared with service account
 - [x] Telegram E2E smoke test: voice → ⏳ → ✅ → Sheet row

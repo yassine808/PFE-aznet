@@ -9,7 +9,7 @@ status: current
 
 Turns the raw [[to-do]] backlog into a phased, dependency-ordered plan scoped to [[project-overview]] sprint timeline and PLAN.md's MoSCoW cut-line. Hard deadline **Aug 31 2026**.
 
-> **Status 2026-07-23:** Phase 0 + Phase 1 **done**; Phase 2 dashboard **v1 built**. Dual-channel reception (Telegram + WhatsApp) is live E2E through one unified workflow (`n8n/reception-unified.json`): access control + roles, dedupe, text input, failure replies, low-confidence flagging, error-tab workflow, end-of-day cron. Dashboard (`web/` + FastAPI `/reports`) reads the Sheet with filters, review queue, confidence %, inline correction. Remaining Phase 2: dashboard restyle (efferd), durable Drive audio links. See [[n8n-workflows]] and `docs/setup-guide.md`.
+> **Status 2026-07-23:** Phase 0 + Phase 1 **done**; Phase 2 dashboard **v1 built**. Dual-channel reception (Telegram + WhatsApp) is live E2E through one unified workflow (`n8n/aznet-complete.json`): access control + roles, dedupe, text input, failure replies, low-confidence flagging, error-tab workflow, end-of-day cron. Dashboard (`web/` + FastAPI `/reports`) reads the Sheet with filters, review queue, confidence %, inline correction. Remaining Phase 2: dashboard restyle (efferd), durable Drive audio links. See [[n8n-workflows]] and `docs/setup-guide.md`.
 
 **Key constraint (now resolved):** dashboard existed only as an empty `web/` when this roadmap was written — hence the re-sequencing below. Dashboard v1 now exists (Vite + React TS), so Phase 2 items are unblocked.
 

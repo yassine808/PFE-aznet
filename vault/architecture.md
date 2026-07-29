@@ -88,7 +88,7 @@ See [[Extraction Pipeline]] for full detail. Primary Gemini structured output (`
 
 ## n8n Workflow (actual)
 
-Only one reception path exists today: **Telegram polling** (`n8n/telegram-reception-polling.json`), plus a webhook variant (`n8n/telegram-reception.json`) targeted at the pilot. See [[n8n Workflows]] for the real node-by-node breakdown. Sheets append and email notification are **not implemented** — see TO-DO.md / PLAN.md Sprint 2.
+Both reception paths live in one workflow, `n8n/aznet-complete.json`: **Telegram polling** (`getUpdates` every 15s, outbound-only) and **WhatsApp webhooks** (needs the Tailscale Funnel URL). See [[n8n Workflows]] for the node-by-node breakdown. Sheets append is in band 1; the report emails are jobs in `api/app/jobs.py`.
 
 ## Observability layer (2026-07-25)
 

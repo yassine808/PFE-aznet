@@ -6,26 +6,26 @@ Role (per PLAN.md): **Telegram** reception → voice download → call FastAPI `
 
 Workflow exports (`*.json`) live here — export after every meaningful change (n8n UI → workflow menu → Download).
 
-Two import-ready variants:
-- [`telegram-reception-polling.json`](./telegram-reception-polling.json) — **current dev approach.** Polls `getUpdates` every 15s; outbound-only so plain `localhost` works — no tunnel, no public URL. Paste the bot token in the "Offset + token" Code node + a Telegram credential on "Get Voice File", toggle Active. If `getUpdates` returns 409, clear a leftover webhook once via `https://api.telegram.org/bot<TOKEN>/deleteWebhook`.
-- [`telegram-reception.json`](./telegram-reception.json) — webhook variant (needs the public HTTPS URL below; n8n's built-in `start --tunnel` is dead in n8n 2.x — use Tailscale Funnel). Pilot/server target.
+There is **one** export here: [`aznet-complete.json`](./aznet-complete.json). Telegram reception polls `getUpdates` every 15s — outbound only, so plain `localhost` works with no tunnel. If `getUpdates` returns 409, clear a leftover webhook once via `https://api.telegram.org/bot<TOKEN>/deleteWebhook`. WhatsApp is webhook-driven and does need the public HTTPS URL below (n8n's built-in `start --tunnel` is dead in n8n 2.x — use Tailscale Funnel).
 
 ## Import (one file)
 
-**Import [`aznet-complete.json`](./aznet-complete.json) — that's it.** It merges all four production workflows into a single n8n workflow with independent trigger branches, laid out in four labelled bands:
+**Import [`aznet-complete.json`](./aznet-complete.json) — that's it.** One n8n workflow with independent trigger branches, in two labelled bands:
 
 | Band | Triggers | Role |
 |---|---|---|
 | 1 — Réception | `Every 15s` (TG poll), 2 WA webhooks | voice/text → `/process` → reply → Sheet |
-| 2 — Maintenance | `Every 5 min`, `Daily 03:00` | drain the Sheet retry queue, prune logs >30 d |
-| 3 — Rapport quotidien | `18:30 Mon-Sat` | day's rows → manager email |
-| 4 — Gestionnaire d'erreurs | `Error Trigger` | any crash → `POST /logs` |
+| 2 — Erreurs | `Error Trigger` | any crash → `POST /logs` |
+
+Everything scheduled — the Sheet retry drain, log retention, the 03:00 profile
+rebuild, the daily and weekly report emails — moved to the API's own scheduler
+(`api/app/jobs.py`) on 2026-07-29. n8n cron nodes could not show an operator
+what a run produced or let them force one; the dashboard's **Automation** page
+does both. See §9.
 
 After import: **Settings → Error Workflow → this same workflow** (a workflow can be its own error handler; the field ships empty because it needs the ID n8n assigns at import). Then attach credentials once — one Google service account, one Telegram, one WhatsApp, one Gmail — and activate.
 
-The individual files (`reception-unified.json`, `maintenance-cron.json`, `daily-report-cron.json`, `error-workflow.json`) remain as the per-concern sources; `aznet-complete.json` is generated from them. Edit the sources, then re-merge.
-
-⚠️ `legacy-*.json` are the pre-unification single-channel flows, kept for reference only. **Never activate one alongside the unified flow** — they poll the same bot token and subscribe to the same Meta webhook, so you would get double processing: two Sheet rows, two replies, doubled free-tier quota burn. They also predate the reply-first fix, the durable dedup and all logging.
+`aznet-complete.json` is now the only source — edit it in the n8n UI and re-export. The per-concern files and the pre-unification `legacy-*.json` single-channel flows were deleted on 2026-07-29; they are in git history if a comparison is ever needed. They must never be re-activated alongside this workflow: they poll the same bot token and subscribe to the same Meta webhook, which means double processing — two Sheet rows, two replies, doubled free-tier quota burn.
 
 ## Run
 
@@ -57,7 +57,7 @@ Gives a **stable** `https://<TAILSCALE_HOSTNAME>`. Put it in `.env` as `WEBHOOK_
 
 ## 3. Telegram voice smoke test (Week 0 exit criterion)
 
-1. n8n → new workflow → import `telegram-reception.json` (or add nodes manually, see below) → attach your Telegram API credential to both Telegram nodes.
+1. n8n → new workflow → import `aznet-complete.json` (or add nodes manually, see below) → attach your Telegram API credential to both Telegram nodes.
 2. Ensure `WEBHOOK_URL` = your live tunnel URL, then **toggle the workflow Active** (this is what registers the webhook with Telegram).
 3. From your own Telegram account, open the bot chat and **send a voice note** (hold mic, speak, release).
 4. **PASS** = an execution appears in n8n and the *Get Voice File* node outputs binary audio (the `.oga`/OPUS file). That's the whole integration risk killed.
@@ -117,7 +117,9 @@ For an image there is no raw text, so `rapport_complet` holds the model's own su
 
 ## 7. Error workflow
 
-Import [`error-workflow.json`](./error-workflow.json), then in each production workflow: **Settings → Error Workflow → "Error handler -> POST /logs"**. Any failed execution posts `stage: workflow_error` to the API with the workflow name, failing node and execution URL, and shows up in the dashboard's **Logs n8n** panel.
+Band 2 of `aznet-complete.json`. After import: **Settings → Error Workflow → this same workflow** — a workflow can be its own error handler, and the field ships empty because it needs the ID n8n assigns at import. Any failed execution posts `stage: workflow_error` to the API with the workflow name, failing node and execution URL, and shows up in the dashboard's **Logs n8n** panel.
+
+This band stayed in n8n when the others moved to the API: it catches n8n's *own* execution failures, which the API cannot observe.
 
 It writes to Postgres, **not** the Sheet: an error handler that reports through Google Sheets cannot report the failure of writing to Google Sheets.
 
@@ -138,19 +140,19 @@ POSTGRES_DB=pfe_logs
 
 The unified workflow posts one row per stage (`received → authorized → transcribed → extracted → replied → sheet_written`), plus `denied`, `duplicate`, `sheet_failed` and `api`. Every row carries a `correlation_id` minted by the **Correlate** node, so the n8n stages and the API's own errors — two separate processes — join into one timeline in the dashboard.
 
-Retention is 30 days, swept by the maintenance workflow.
+Retention is 30 days, swept by the API scheduler's `prune_logs` job (`api/app/jobs.py`).
 
 ## 7c. Reply-first + Sheet retry queue
 
 **The Sheet write no longer blocks the technician's reply.** The chain is now `Process output → reply → Log replied → Append Sheet row`. When the append fails, the report is parked in the `failed_writes` table (`POST /sheet-queue`) instead of being lost, and the technician still receives their summary.
 
-Import [`maintenance-cron.json`](./maintenance-cron.json): every 5 min it drains the retry queue back into the `Rapports` tab, and daily at 03:00 it prunes logs older than 30 days. Replace `REPLACE_WITH_SPREADSHEET_ID` and attach the Google credential, same as the reception workflow.
+The queue is drained by the API's `sheet_queue` job every 5 minutes (`api/app/jobs.py` → `sheets.append_report`), which resolves a parked row only once Google has accepted the write. Nothing to import; the **Automation** page shows the last drain and has a **Run** button for it.
 
 Idempotency: **Claim message (dedup)** calls `POST /logs/claim` before processing. Meta retries the WhatsApp webhook when it does not get a fast 200 — without the claim that means duplicate Sheet rows, duplicate replies and duplicate free-tier quota burn. If the claim store is unreachable the message is treated as fresh (a rare duplicate beats a silently dropped report).
 
 ## 8. WhatsApp reception (second input channel)
 
-[`whatsapp-reception.json`](./whatsapp-reception.json) mirrors the Telegram pipeline on the WhatsApp Cloud API — same access control, same `/process` call, same Sheet row, so both channels coexist. Setup:
+Band 1 of `aznet-complete.json` carries both channels: the WhatsApp branch mirrors the Telegram pipeline — same access control, same `/process` call, same Sheet row — so the two coexist in one workflow. Setup:
 
 Uses n8n's **native WhatsApp nodes** — two credentials:
 
@@ -162,6 +164,16 @@ Uses n8n's **native WhatsApp nodes** — two credentials:
 
 Voice notes and forwarded audio both arrive as `type: "audio"` → treated identically. If an imported WhatsApp node shows a red parameter, re-pick the operation in its dropdown (n8n version drift) — the flow is: media *Get URL* → media *Download* → `/process`.
 
-## 9. End-of-day report cron
+## 9. Scheduled jobs (no longer in n8n)
 
-Import [`daily-report-cron.json`](./daily-report-cron.json): Mon–Sat 18:30 → reads today's `Rapports` rows → `POST /daily-report` (Gemini→Groq rollup, see `api/app/daily_report.py`) → Gmail to the manager. Zero rows today = the run ends quietly, no email. `.docx` attachment remains a stretch goal.
+`api/app/jobs.py` runs five jobs on one daemon thread, all visible and re-runnable from the dashboard's **Automation** page:
+
+| Job | When | Role |
+|---|---|---|
+| `daily_report` | `daily_time`, Mon–Sat | today's rows → French summary → email |
+| `weekly_report` | `weekly_day` + `weekly_time` | Monday→that day, same generator |
+| `sheet_queue` | every 5 min | drain `failed_writes` into the `Rapports` tab |
+| `profiles` | 03:00 | rebuild every technician profile from the Sheet |
+| `prune_logs` | 03:00 | drop logs and uptime samples older than 30 days |
+
+Times live in `app_settings` and are re-read on every check, so an edit in the dashboard takes effect without restarting the API. Zero rows for a day or week = the run ends quietly, no email. `.docx` attachment remains a stretch goal.

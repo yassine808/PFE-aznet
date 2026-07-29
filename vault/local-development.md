@@ -101,11 +101,11 @@ All optional at import time — a missing key only fails the specific call that 
 
 See `n8n/README.md` for the full recipe. Summary:
 1. Create a bot via **@BotFather**, paste the token into an n8n Telegram credential.
-2. Import `n8n/telegram-reception-polling.json`.
+2. Import `n8n/aznet-complete.json`.
 3. Toggle the workflow **Active**.
 4. Send a voice note to the bot from your own Telegram account — the *Get Voice File* node should output binary audio. That's the Week-0 smoke test (already passed, per PLAN.md).
 
-For webhook-mode dev (only needed to exercise `telegram-reception.json`):
+For webhook-mode dev (WhatsApp reception; Telegram polls and needs none):
 ```bash
 tailscale funnel --bg 5678     # once; persists across reboots
 tailscale funnel status        # → https://<TAILSCALE_HOSTNAME>

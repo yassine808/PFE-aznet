@@ -92,7 +92,7 @@ Five things in that diagram are deliberate and easy to break:
 |---|---|
 | `api/` | FastAPI AI service — five models (STT, text extraction, vision, image card, nightly profiles), versioned prompts in `app/prompts/`, auth + audit trail, dashboard and report endpoints |
 | `Dashboard/` | React 19 + Vite + Tailwind v4 — login, metrics, inbox, reports, automation, access control, live logs, Équipe (accounts + audit). Light/dark + FR/EN/AR (RTL) from JSON locales. Replaced `web/` on 2026-07-26 |
-| `n8n/` | **`aznet-complete.json` — the one file to import** (reception + maintenance + daily report + error handler in four labelled bands). Per-concern sources alongside it; `legacy-*.json` are superseded single-channel flows, never activate one |
+| `n8n/` | **`aznet-complete.json` — the one file to import** (reception + error handler, two labelled bands). Everything scheduled moved to `api/app/jobs.py`; set the workflow as its own Error Workflow after import |
 | `benchmark/` | Darija STT benchmark — dataset protocol, WER harness (Sprint 1) |
 | `docs/` | Cahier des charges, installation doc, user guide |
 

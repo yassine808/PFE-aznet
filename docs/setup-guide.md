@@ -78,7 +78,7 @@ Test-mode limits: 5 recipient numbers max, each must message the test number fir
 
 ## 5. The unified workflow
 
-`n8n/reception-unified.json` = source of truth, import via Workflows → ⋯ → Import from File.
+`n8n/aznet-complete.json` = source of truth, import via Workflows → ⋯ → Import from File.
 
 Already baked into the file (patched via scripts, re-import = zero manual wiring):
 - credential IDs for Telegram / WhatsApp API / WhatsApp OAuth / Google service account
@@ -97,9 +97,9 @@ Credential/ID changes later: edit the JSON (or re-run the patch scripts) and re-
 
 ## 6. Companion workflows
 
-- `n8n/error-workflow.json` — Error Trigger → `Errors` tab. Import, then set as Error Workflow in the unified workflow's settings.
-- `n8n/daily-report-cron.json` — Mon–Sat 18:30 → today's rows → `POST /daily-report` → Gmail. Needs Gmail credential + manager address.
-- `n8n/telegram-reception*.json`, `n8n/whatsapp-reception.json` — single-channel variants, superseded by unified; keep as reference.
+- Error handling is band 2 of the same file. After import: **Settings → Error Workflow → this same workflow**, otherwise the Error Trigger never fires.
+- The daily and weekly report emails, the Sheet retry drain, the profile rebuild and log retention are **not** in n8n — they run in the API scheduler (`api/app/jobs.py`) and are driven from the dashboard's **Automation** page. Recipients are set there too; the API needs `SMTP_USER` / `SMTP_PASSWORD` in `.env`.
+- Both channels live in `aznet-complete.json`. The pre-unification single-channel exports were deleted on 2026-07-29 — git history has them.
 
 ## 7. Smoke test
 

@@ -5,7 +5,7 @@ priority: high
 status: partial
 ---
 
-> **Status 2026-07-25:** all four workflows are merged into **one importable file, `n8n/aznet-complete.json`** (63 nodes in four labelled bands: réception, maintenance, rapport quotidien, gestionnaire d'erreurs). **The reply now happens BEFORE the Sheet append** — a Google outage can no longer swallow a report; failed writes park in a Postgres retry queue drained every 5 min. Added: durable WhatsApp idempotency (was in-memory, wiped on restart), retries + timeouts on `/process`, and per-stage logging to `POST /logs` joined by `correlation_id`. The error workflow posts to `/logs` instead of an `Errors` sheet tab. `legacy-*.json` are the superseded single-channel flows — **never activate one alongside the unified flow** (double processing). **Full setup doc: `docs/setup-guide.md`.**
+> **Status 2026-07-29:** n8n now carries **reception + the error handler only** — `n8n/aznet-complete.json`, 52 nodes in two labelled bands (réception, erreurs). The maintenance, daily-report and (new) weekly-report schedules moved into the API's own scheduler, `api/app/jobs.py`, driven from the dashboard's **Automation** page: a cron node could not show what a run produced or let an operator re-run it. The error band stayed because it catches n8n's own execution failures, which the API cannot see. **The reply now happens BEFORE the Sheet append** — a Google outage can no longer swallow a report; failed writes park in a Postgres retry queue drained every 5 min. Added: durable WhatsApp idempotency (was in-memory, wiped on restart), retries + timeouts on `/process`, and per-stage logging to `POST /logs` joined by `correlation_id`. The error workflow posts to `/logs` instead of an `Errors` sheet tab. `legacy-*.json` are the superseded single-channel flows — **never activate one alongside the unified flow** (double processing). **Full setup doc: `docs/setup-guide.md`.**
 
 # n8n Workflows
 
@@ -14,10 +14,9 @@ status: partial
 Workflow files in `n8n/` (exported JSON):
 
 - `n8n/aznet-complete.json` — **the one to import.** Merges everything below. Reception band: Telegram polling + WhatsApp webhook into one pipeline: extract (audio OR typed text, dedupe) → shared allowlist w/ roles (outsiders: one HR reply) → ⏳ ack → download per channel → `POST /process` (audio or text mode, error → ❌ reply) → ✅ résumé reply on the originating channel → **then** Sheets append (`canal`, `confidence`, `flag_review`); on write failure the report is queued for retry instead of lost. Seven `Log *` leaf nodes record each stage.
-- `n8n/error-workflow.json` — Error Trigger → `POST /logs` (`stage: workflow_error`); set as Error Workflow. No longer writes to an `Errors` sheet tab: an error handler that reports through Google cannot report Google failing.
-- `n8n/maintenance-cron.json` — every 5 min drains the Sheet retry queue; daily 03:00 prunes logs older than 30 days.
-- `n8n/daily-report-cron.json` — Mon–Sat 18:30, today's rows → `/daily-report` → email.
-- `n8n/telegram-reception-polling.json`, `n8n/telegram-reception.json`, `n8n/whatsapp-reception.json` — single-channel variants, superseded, kept as reference.
+- Band 2 of `aznet-complete.json` — Error Trigger → `POST /logs` (`stage: workflow_error`); set the workflow as its own Error Workflow after import. No longer writes to an `Errors` sheet tab: an error handler that reports through Google cannot report Google failing.
+- `api/app/jobs.py` — five scheduled jobs: `sheet_queue` (5 min, drains the retry queue), `prune_logs` + `profiles` (03:00), `daily_report` (Mon–Sat) and `weekly_report`. Times read from `app_settings` on every check.
+- The per-concern workflow files (`reception-unified`, `maintenance-cron`, `daily-report-cron`, `error-workflow`) and the `legacy-*` single-channel flows were deleted on 2026-07-29 — git history has them.
 
 ```
 Telegram (voice note / forwarded audio)

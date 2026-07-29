@@ -45,14 +45,14 @@ was the earlier candidate and is no longer used. Steps in `docs/setup-guide.md`.
 Per `n8n/README.md`:
 1. **@BotFather** → `/newbot` → get a token.
 2. n8n → Credentials → Telegram API → paste the token.
-3. Import `n8n/telegram-reception-polling.json`, toggle Active.
+3. Import `n8n/aznet-complete.json`, set it as its own Error Workflow (Settings → Error Workflow), toggle Active.
 
 No webhook, no `setWebhook` call, no secret token verification is needed for the polling variant used in dev.
 
 ## Pilot deployment (planned, Sprint 3 per PLAN.md)
 
 - Deploy the same Docker Compose stack (n8n + containerized API) to the aznet server or an Oracle Always Free VM.
-- Switch to `n8n/telegram-reception.json` (webhook), published via Tailscale Funnel if the host has no fixed public IP/HTTPS.
+- Telegram polling needs no public URL; WhatsApp does — publish n8n via Tailscale Funnel if the host has no fixed public IP/HTTPS.
 - Register 2-3 real phone numbers for the pilot.
 
 None of this exists yet. Do not follow any prior version of this document that specified `vercel.json`, Caddy, Prometheus, or GitHub Actions CI — those tools are not part of the current plan; see [[Monitoring Observability]] and [[n8n Advanced]] for the honest state of those areas.

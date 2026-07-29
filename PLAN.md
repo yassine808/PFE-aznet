@@ -77,7 +77,7 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - Report in parallel: état de l'art (STT Darija, LLM extraction, outils)
 
 ### Sprint 2 — E2E pipeline + web app (Aug 3 – Aug 14)
-- [x] Full n8n workflow (unified Telegram + WhatsApp): reception → media download → `/process` → Sheets append → ✅ reply on originating channel. Access control + roles, dedupe, text-input mode, failure replies, end-of-day report cron (`daily-report-cron.json`), error-tab workflow.
+- [x] Full n8n workflow (unified Telegram + WhatsApp): reception → media download → `/process` → Sheets append → ✅ reply on originating channel. Access control + roles, dedupe, text-input mode, failure replies, end-of-day report cron, error-handler band. Scheduled work moved to the API scheduler (`api/app/jobs.py`) on 2026-07-29; n8n keeps reception + the error trigger.
 - [x] Google Sheet `Rapports` structured per cahier §6 (+ `canal`, `confidence`, `flag_review`)
 - [x] Text mode via `/process` (typed reports on both channels); standalone React form still optional
 - [x] Dashboard v1: report list, filters (technicien/chantier/date), review queue on `flag_review`, confidence %, inline Sheet correction. Backend `/reports` + `/reports/{row}` (`api/app/sheets.py`).

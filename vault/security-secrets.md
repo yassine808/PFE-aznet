@@ -40,7 +40,7 @@ Stored as an n8n credential (Telegram API), pasted from BotFather. The **polling
 
 ## Planned, not yet applicable
 
-- **Webhook secret token verification** — only relevant once the webhook variant (`n8n/telegram-reception.json`) is actually deployed with `cloudflared`/a pilot server; the current dev workflow is polling-only.
+- **Webhook secret token verification** — relevant to the WhatsApp branch, which is webhook-driven behind the Tailscale Funnel; the Telegram branch polls and exposes nothing.
 - **Google Sheets service account, minimal-scope IAM** — moot until a service account is created at all (see [[Google Sheets Integration]]).
 - **Gmail app password** — moot until email notification is built.
 - **VPS hardening (SSH, firewall, fail2ban)** — moot until a pilot VPS/server exists (see [[Deployment Guide]]).
