@@ -214,5 +214,21 @@
   "workflow.updated": "آخر تعديل",
   "workflow.nodeDisabled": "هذه العقدة معطّلة: تُتخطى أثناء التنفيذ.",
   "workflow.none": "لا يوجد سير عمل نشط في n8n.",
-  "workflow.noNodes": "سير العمل هذا لا يحتوي عقدًا."
+  "workflow.noNodes": "سير العمل هذا لا يحتوي عقدًا.",
+  "nav.logs": "السجلات",
+  "page.logs.title": "السجلات المباشرة",
+  "logs.intro": "كل مرحلة في السلسلة، من n8n والواجهة معًا، بترتيب الوصول.",
+  "logs.filter": "تصفية حسب المستوى",
+  "logs.filter.all": "الكل",
+  "logs.filter.info": "نجاح",
+  "logs.filter.error": "أخطاء",
+  "logs.empty": "لا توجد أحداث لهذا المرشّح.",
+  "logs.retention": "مدة الحفظ:",
+  "logs.days": "يومًا",
+  "access.regenerate": "إعادة توليد ملف",
+  "access.removePerson": "حذف الشخص",
+  "access.noProfile": "لا يوجد ملف بعد — يُولَّد ليلًا عند 03:00.",
+  "access.profileFailed": "لم يتم توليد الملف.",
+  "automation.profiles": "ملفات التقنيين",
+  "automation.profilesHint": "كل ليلة عند 03:00. يلخّص تقارير كل تقني لإعطاء سياق للذكاء الاصطناعي."
 }

@@ -214,5 +214,21 @@
   "workflow.updated": "Updated",
   "workflow.nodeDisabled": "This node is disabled: it is skipped at run time.",
   "workflow.none": "No live workflow in n8n.",
-  "workflow.noNodes": "This workflow has no nodes."
+  "workflow.noNodes": "This workflow has no nodes.",
+  "nav.logs": "Logs",
+  "page.logs.title": "Live logs",
+  "logs.intro": "Every pipeline stage, n8n and the API together, in arrival order.",
+  "logs.filter": "Filter by level",
+  "logs.filter.all": "All",
+  "logs.filter.info": "Success",
+  "logs.filter.error": "Errors",
+  "logs.empty": "No events for this filter.",
+  "logs.retention": "Retention:",
+  "logs.days": "days",
+  "access.regenerate": "Regenerate profile for",
+  "access.removePerson": "Delete person",
+  "access.noProfile": "No profile yet — generated nightly at 03:00.",
+  "access.profileFailed": "Profile not generated.",
+  "automation.profiles": "Technician profiles",
+  "automation.profilesHint": "Nightly at 03:00. Summarises each technician's reports to give the AI context."
 }

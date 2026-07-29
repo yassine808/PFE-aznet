@@ -156,6 +156,19 @@ export function AutomationPage() {
                 />
               </div>
             </div>
+
+            {/*
+              Read-only on purpose. The 03:00 schedule lives in the n8n workflow,
+              not in app_settings — making it editable here would show a time the
+              cron does not actually use, which is worse than showing nothing.
+            */}
+            <div className="border-line flex flex-col gap-1 border-t pt-4">
+              <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+                {t('automation.profiles')}
+              </span>
+              <span className="text-ink tabular text-sm">03:00</span>
+              <p className="text-ink-faint max-w-[45ch] text-xs">{t('automation.profilesHint')}</p>
+            </div>
           </div>
         </Band>
 

@@ -6,6 +6,7 @@ import {
   ClockIcon,
   MoonIcon,
   RowsIcon,
+  PulseIcon,
   StackIcon,
   SunHorizonIcon,
   SunIcon,
@@ -40,6 +41,7 @@ const NAV: { section: string; items: { route: Route; labelKey: string; Icon: typ
     items: [
       { route: 'automation', labelKey: 'nav.automation', Icon: ClockIcon },
       { route: 'access', labelKey: 'nav.access', Icon: UsersThreeIcon },
+      { route: 'logs', labelKey: 'nav.logs', Icon: PulseIcon },
       { route: 'queue', labelKey: 'nav.queue', Icon: StackIcon },
     ],
   },

@@ -214,5 +214,21 @@
   "workflow.updated": "Modifié le",
   "workflow.nodeDisabled": "Ce nœud est désactivé : il est ignoré à l'exécution.",
   "workflow.none": "Aucun workflow actif dans n8n.",
-  "workflow.noNodes": "Ce workflow ne contient aucun nœud."
+  "workflow.noNodes": "Ce workflow ne contient aucun nœud.",
+  "nav.logs": "Journaux",
+  "page.logs.title": "Journaux en direct",
+  "logs.intro": "Chaque étape du pipeline, n8n et l'API confondus, dans l'ordre d'arrivée.",
+  "logs.filter": "Filtrer par niveau",
+  "logs.filter.all": "Tout",
+  "logs.filter.info": "Succès",
+  "logs.filter.error": "Erreurs",
+  "logs.empty": "Aucun événement pour ce filtre.",
+  "logs.retention": "Conservation :",
+  "logs.days": "jours",
+  "access.regenerate": "Régénérer le profil de",
+  "access.removePerson": "Supprimer la personne",
+  "access.noProfile": "Aucun profil — généré cette nuit à 03:00.",
+  "access.profileFailed": "Profil non généré.",
+  "automation.profiles": "Profils techniciens",
+  "automation.profilesHint": "Chaque nuit à 03:00. Résume les rapports de chaque technicien pour donner du contexte à l'IA."
 }

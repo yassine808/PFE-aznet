@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { PlusIcon, TrashIcon } from '@phosphor-icons/react'
-import { addTechnician, api, deleteTechnician, useApi } from '@/lib/api'
+import { ArrowsClockwiseIcon, PlusIcon, TrashIcon, UserMinusIcon } from '@phosphor-icons/react'
+import { addTechnician, api, deletePerson, deleteTechnician, refreshProfile, useApi } from '@/lib/api'
+import type { Technician } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { ChannelIcon } from '@/components/channel-icon'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -41,6 +42,15 @@ export function AccessControlPage() {
   const remove = async (id: number) => {
     try {
       await deleteTechnician(id)
+      list.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const removePerson = async (id: number) => {
+    try {
+      await deletePerson(id)
       list.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -114,48 +124,117 @@ export function AccessControlPage() {
       ) : (list.data?.technicians.length ?? 0) === 0 ? (
         <EmptyState body={t('access.empty')} />
       ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-line text-ink-faint border-b text-[0.6875rem] tracking-wide uppercase">
-              <th className="py-2 pe-4 text-start font-medium">{t('inbox.channel')}</th>
-              <th className="py-2 pe-4 text-start font-medium">{t('access.identifier')}</th>
-              <th className="py-2 pe-4 text-start font-medium">{t('col.technicien')}</th>
-              <th className="py-2 pe-4 text-start font-medium">{t('access.role')}</th>
-              <th className="py-2 text-end font-medium">
-                <span className="sr-only">{t('access.remove')}</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.data?.technicians.map((tech) => (
-              <tr key={tech.id} className="border-line hover:bg-surface border-b transition-colors last:border-b-0">
-                <td className="py-3 pe-4 text-sm">
-                  <span className="text-ink-muted flex items-center gap-2 capitalize">
-                    <ChannelIcon channel={tech.channel} size={14} />
-                    {tech.channel}
-                  </span>
-                </td>
-                <td className="tabular text-ink py-3 pe-4 text-sm">{tech.external_id}</td>
-                <td className="text-ink py-3 pe-4 text-sm">{tech.name}</td>
-                <td className="text-ink-muted py-3 pe-4 text-sm">{tech.role || '—'}</td>
-                <td className="py-3 text-end">
-                  <button
-                    type="button"
-                    onClick={() => remove(tech.id)}
-                    aria-label={`${t('access.remove')} ${tech.name}`}
-                    className="text-ink-faint hover:text-status-fail transition-colors"
-                  >
-                    <TrashIcon size={15} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="flex flex-col gap-3">
+          {list.data?.technicians.map((person) => (
+            <PersonCard
+              key={person.id}
+              person={person}
+              onRemoveIdentity={remove}
+              onRemovePerson={removePerson}
+              onReload={list.reload}
+            />
+          ))}
+        </ul>
       )}
 
       <p className="text-ink-faint max-w-[70ch] text-xs">{t('access.enforceNote')}</p>
     </motion.div>
+  )
+}
+
+/**
+ * One colleague: their channels side by side, and what the AI knows about them.
+ *
+ * A card rather than table rows because a person now has a variable number of
+ * channels and a paragraph of profile — a table would either repeat the name on
+ * every row (the confusion this refactor exists to remove) or need a rowspan
+ * that breaks on mobile.
+ */
+function PersonCard({
+  person,
+  onRemoveIdentity,
+  onRemovePerson,
+  onReload,
+}: {
+  person: Technician
+  onRemoveIdentity: (id: number) => void
+  onRemovePerson: (id: number) => void
+  onReload: () => void
+}) {
+  const { t } = useI18n()
+  const [pending, setPending] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+
+  const regenerate = async () => {
+    setPending(true)
+    setFailed(null)
+    try {
+      const res = await refreshProfile(person.id)
+      if (!res.updated) setFailed(res.reason ?? t('access.profileFailed'))
+      onReload()
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <li className="border-line bg-surface edge flex flex-col gap-3 rounded-xl border p-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-ink text-sm font-medium">{person.name}</span>
+        <span className="text-ink-faint text-xs">{person.role || '—'}</span>
+
+        {/* The point of the whole refactor, made visible: two badges, one person. */}
+        <span className="flex flex-wrap items-center gap-1.5">
+          {person.identities.map((id) => (
+            <span
+              key={id.id}
+              className={cn(
+                'border-line text-ink-muted flex items-center gap-1.5 rounded-full border py-0.5 ps-2 pe-1 text-xs',
+                !id.active && 'opacity-50',
+              )}
+            >
+              <ChannelIcon channel={id.channel} size={12} />
+              <span className="tabular">{id.external_id}</span>
+              <button
+                type="button"
+                onClick={() => onRemoveIdentity(id.id)}
+                aria-label={`${t('access.remove')} ${id.channel} ${id.external_id}`}
+                className="text-ink-faint hover:text-status-fail p-0.5 transition-colors"
+              >
+                <TrashIcon size={12} />
+              </button>
+            </span>
+          ))}
+        </span>
+
+        <span className="ms-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={regenerate}
+            disabled={pending}
+            aria-label={`${t('access.regenerate')} ${person.name}`}
+            className="text-ink-faint hover:text-ink p-1 transition-colors disabled:opacity-40"
+          >
+            <ArrowsClockwiseIcon size={15} className={cn(pending && 'animate-spin')} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemovePerson(person.id)}
+            aria-label={`${t('access.removePerson')} ${person.name}`}
+            className="text-ink-faint hover:text-status-fail p-1 transition-colors"
+          >
+            <UserMinusIcon size={15} />
+          </button>
+        </span>
+      </div>
+
+      <p className="text-ink-muted max-w-[70ch] text-xs leading-relaxed">
+        {person.profile || <span className="text-ink-faint italic">{t('access.noProfile')}</span>}
+      </p>
+      {failed && <p className="text-status-fail text-xs break-all">{failed}</p>}
+    </li>
   )
 }
 

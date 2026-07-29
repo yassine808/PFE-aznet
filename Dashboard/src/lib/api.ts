@@ -204,13 +204,29 @@ export async function generateDailyReport(date: string, rows: ReportRow[]): Prom
   return res.json() as Promise<DailyReportContent>
 }
 
-export interface Technician {
+/** One channel handle. Several of these can belong to the same person. */
+export interface Identity {
   id: number
+  person_id: number
   channel: 'telegram' | 'whatsapp'
   external_id: string
+  active: boolean
+  created_at?: string
+}
+
+/**
+ * A colleague, with every channel they write from. `GET /technicians` returns
+ * people — the endpoint kept its name because the workflow calls it too, and
+ * renaming a working URL to match an internal refactor buys nothing.
+ */
+export interface Technician {
+  id: number
   name: string
   role?: string | null
-  active: boolean
+  /** Nightly summary written by the profile model. Null until the first run. */
+  profile?: string | null
+  profile_updated_at?: string | null
+  identities: Identity[]
   created_at?: string
 }
 
@@ -232,9 +248,29 @@ export async function addTechnician(input: {
   return res.json() as Promise<Technician>
 }
 
+/** Remove one channel handle. The person and their profile survive. */
 export async function deleteTechnician(id: number): Promise<void> {
   const res = await fetch(`${BASE}/technicians/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+}
+
+/** Remove the person and every handle they own. */
+export async function deletePerson(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/persons/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+}
+
+/**
+ * Rebuild one profile now instead of waiting for the 03:00 cron. Slow by
+ * nature — it is a model call — so callers must show a pending state.
+ */
+export async function refreshProfile(id: number): Promise<{ updated: boolean; reason?: string }> {
+  const res = await fetch(`${BASE}/persons/${id}/profile`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
+  }
+  return res.json() as Promise<{ updated: boolean; reason?: string }>
 }
 
 /** Operator preferences, stored server-side so any scheduler reads the same values. */
