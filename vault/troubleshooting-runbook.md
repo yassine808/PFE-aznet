@@ -5,7 +5,7 @@ priority: medium
 status: partial
 ---
 
-> **Note on status:** this is scoped to what actually exists — local dev only (Docker n8n + local uvicorn API, Telegram polling). There is no production deployment, no Vercel, no VPS, no Sentry, no Sheets integration to troubleshoot yet. A prior version of this doc described incident severities, on-call escalation, and production runbooks for infrastructure that was never built; it has been removed.
+> **Note on status:** this is scoped to what actually exists — Docker Compose (API + n8n + Postgres), Sheets integration built, Dashboard built. No production deployment (no VPS, no Sentry). A prior version of this doc described incident severities and on-call escalation for infrastructure that was never built; it has been removed.
 
 # Troubleshooting (Current Dev Setup)
 
@@ -73,7 +73,7 @@ For the **polling** workflow this should show no webhook set (or you'll get 409s
 
 ## What doesn't apply yet
 
-Vercel function logs, Sentry error tracking, Prometheus alerts, VPS SSH/firewall debugging, Sheets 403/429 errors, Gmail SMTP failures — none of these systems exist yet, so there's nothing to troubleshoot there. See [[Deployment Guide]], [[Google Sheets Integration]], and [[Monitoring Observability]] for the honest state of each.
+Vercel function logs, Sentry error tracking, Prometheus alerts, VPS SSH/firewall debugging — none of these exist yet, so there's nothing to troubleshoot there.
 
 ## Related Notes
 

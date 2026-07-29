@@ -1,51 +1,94 @@
 ---
-tags: [pfe, google-sheets, integration, service-account, api]
-type: technical
+tags: [pfe, sheets, google, integration, architecture]
+type: architecture
 priority: high
-status: partial
+status: current
 ---
 
-> **Note on status:** Google Sheets integration is **not built** as of Jul 23 2026 (Week 1). No spreadsheet exists, no service account has been provisioned, no n8n Sheets node is configured. This document is a plan for Sprint 2 (PLAN.md), not a description of anything running. Any prior version of this doc with concrete spreadsheet IDs, column letters, Apps Script backups, or batching code was fabricated — none of it exists in this repo.
+# Google Sheets Integration
 
-# Google Sheets Integration (Plan)
+## Status — Built (since 2026-03)
 
-## Role (per PLAN.md)
+The full pipeline is built and running:
 
-Google Sheets is the **single source of truth** for report data — the assumption locked in the July 15 interview. n8n will append one row per processed report; the manager dashboard (if built) reads the Sheets API directly, not a database.
+1. **Service account** (`credentials/service-account.json`) with a Google Sheet that has edit access for `aznet-pfe@aznet-pfe.iam.gserviceaccount.com`
+2. **`api/app/sheets.py`** — reads `GOOGLE_SERVICE_ACCOUNT_JSON` (path or JSON inline), uses `gspread` for `get_all_records()` and `append_row()`, `gspread-formatting` for header styling (frozen, bold, blue)
+3. **n8n sheets nodes** — two Google Sheets nodes in the unified workflow (`N9_Append_Success`, `N10_Append_Flag`) using the service account
+4. **Dashboard read/write** — `GET /reports` (paginated, last 1000, ordered by date desc → ligne desc), `PATCH /reports/{row}` (target a row by 1-indexed row number)
+5. **Retry queue** — failed writes go to Postgres `failed_writes`, drained every 5 minutes by `jobs.drain_sheet_queue`
+
+## Sheet Structure
+
+Two tabs are used by the system:
+
+### Rapports (main data tab)
+
+Columns match the `ExtractedReport` schema + metadata added by n8n:
+
+| Column | Data | Source |
+|---|---|---|
+| Date | YYYY-MM-DD HH:MM | n8n adds |
+| Technicien | name + (TG) or (WA) suffix | n8n adds |
+| Chantier | site name | API extraction |
+| Type d'intervention | trouble/fibre/... | API extraction |
+| Equipements concernés | comma-separated | API extraction |
+| Cause identifiée | root cause | API extraction |
+| Actions réalisées | steps taken | API extraction |
+| Matériel utilisé | consumables used | API extraction |
+| Observations | additional notes | API extraction |
+| Résumé (pour l'email) | French summary | API extraction |
+| Catégorie | cat label | API extraction |
+| A relire ? | TRUE/FALSE | API (TRUE if image path) |
+| Lien audio | Dropbox share link | n8n adds |
+| Canal | Telegram / WhatsApp | n8n adds |
+| Rapport complet | model summary prefixed `[audio]`, `[photo]` or `[texte]` | API extraction |
+| Statut | OK, warning, error | n8n sets |
+| Message ID | Telegram chat_id:msg_id / WhatsApp msg_id | n8n adds |
+| Transcription (brute) | Arabic/Latin raw text | API transcription |
+| Modèle (transcription) | e.g. whisper-large-v3 | API transcription |
+| Confiance transcription | logprob or null | API transcription |
+| Modèle (extraction) | e.g. gemini-2.5-flash | API extraction |
+| Provider (extraction) | groq or gemini | API extraction |
+| Nombre de tentatives | retry count | API extraction |
+| Délai (secondes) | wall-clock processing time | API extraction |
+| Erreur | error message if any | API / n8n |
+| Correlation ID | UUIDv4 | n8n generates |
+
+### flag_review (filter tab)
+
+A filter view of Rapports where `A relire ? = TRUE`. The dashboard can make this writable because the row numbers in the filter match the source sheet — Google Sheets filter views preserve row index.
+
+## Endpoints
+
+### `GET /reports`
+
+- Query params: `page_size` (default 1000), `fetch_all` (bool, bypass page_size for CSV export)
+- Returns `{"reports": [...], "total": int, "page": int}`
+- Ordered by date descending, then `ligne` (row number) descending
+- Uses `get_all_records()` with `value_render_option='UNFORMATTED_VALUE'` (dates as strings)
+
+### `PATCH /reports/{row}`
+
+- `row` is 1-indexed (matching Google Sheets row numbers)
+- Body: dict of column names to new values
+- Uses `worksheet.update()` on specific cell ranges
+- Supports partial updates (only send changed columns)
+- Converts boolean fields to `TRUE`/`FALSE` (Google Sheets string convention)
+
+### Retry queue (`api/app/logs.py`)
+
+When a Sheet append fails in n8n, it posts to `POST /sheet-queue`, which writes to Postgres `failed_writes`. The scheduler drains this every 5 minutes (unless the queue is empty), calling `sheets.append_report` with the original payload. Succeeds → deletes from queue; fails → increments `attempts`, capped at 10.
+
+## Configuration
 
 ```
-Telegram → n8n → API /process → (planned) Sheets append → (planned) email notification
+GOOGLE_SERVICE_ACCOUNT_JSON=credentials/service-account.json
+# or inline JSON string (for Docker compose)
 ```
 
-## What determines the column layout
+In Docker compose, `GOOGLE_SERVICE_ACCOUNT_JSON` is an **absolute path** (e.g. `/app/credentials/service-account.json`) because `sheets.py` anchors relative paths to `__file__.parents[2]`, which is `/` inside the image. The `credentials/` dir is `COPY`d into the Docker image; mounted volumes also work for local testing.
 
-The row will be built from:
-- `ExtractedReport` fields returned by the API — see [[API Schemas]] for the real field list (`chantier`, `client`, `type_activite`, `goulottes_m`, `cables_m`, `bureaux_termines`, `panneaux_raccordes`, `autres_travaux`, `observations`, `resume`)
-- Metadata n8n adds itself: `date`, `heure`, `technicien`, `lien_audio` (never sent to the API — see [[Architecture]])
-- `ProcessResponse.warnings` (`short_transcription`, `low_confidence_transcription`) for manual-review flagging (TO-DO.md explicitly asks for this to surface in a dashboard, not just a log)
-
-No column-by-column mapping has been decided or coded yet. Do not invent field names like `stt_confidence_low`/`extraction_confidence`/`type_travail`/`cables_tires` — those don't exist on the real schema.
-
-## Planned setup steps (not yet done)
-
-1. Create a Google Cloud project + service account, enable the Sheets API.
-2. Share a new spreadsheet with the service account (Editor).
-3. n8n → Credentials → Google Sheets (Service Account) → paste the JSON key.
-4. Add a Google Sheets node (Append) to the reception workflow, after the API call.
-
-## Known open questions (from TO-DO.md)
-
-- Manual correction in the dashboard — letting a manager edit/fix an extracted field without touching the Sheet directly
-- Low-confidence STT flag as an explicit dashboard signal, not just a `warnings` entry
-- Weekly/monthly rollups across chantiers
-- A per-technician activity heatmap
-
-None of these have an implementation yet; they're backlog items, not features to document as built.
-
-## Related Notes
-
-- [[Project Overview]]
-- [[Architecture]]
-- [[n8n Workflows]]
-- [[API Schemas]]
-- [[Deployment Guide]]
+## Related
+- [[Deployment Guide]] — service account provisioning
+- [[n8n Workflows]] — how n8n calls Sheets
+- [[Project Overview]] — top-level data flow

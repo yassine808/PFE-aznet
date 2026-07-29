@@ -5,24 +5,36 @@ priority: low
 status: partial
 ---
 
-> **Note on status:** no Vercel project exists for this PFE. There is no `vercel.json`, no deployment, no serverless function. Per PLAN.md, Vercel free tier is earmarked for the **React dashboard** (front-end only, reading Google Sheets directly), not the FastAPI service — the API is planned to run alongside n8n on the same Docker Compose host (pilot server or Oracle Always Free VM). A prior version of this doc described deploying the FastAPI service itself to Vercel serverless functions with a detailed `vercel.json`, cron keep-warm, and CI/CD pipeline; none of that is accurate to the current plan and it has been removed.
+# Vercel (Plan — Dashboard Only, Not Deployed)
 
-# Vercel (Plan — Dashboard Only)
+## Status: Dashboard built, not deployed to Vercel
 
-## What Vercel is actually for in this project
+The dashboard (`Dashboard/`) is fully built (React 19, Vite, TypeScript, Tailwind v4) and runs via `npm run dev` on localhost:5173. It is **not deployed** to Vercel or any other hosting.
 
-PLAN.md §1: *"Front: Vercel free"* — the React (TypeScript) manager dashboard, once built (Sprint 2/3), deploys to Vercel's free Hobby tier as a static/SSR front-end. It reads report data from the Google Sheets API directly (Sheets is the source of truth, per the locked architecture decision) — it does not call the FastAPI service for anything beyond, at most, the web-form submission path (text mode, `POST /process`).
+## What would deploy to Vercel
 
-## Why not the API itself
+The dashboard reads from the **API**, not directly from Google Sheets (`GET /reports`, `GET /health`, etc.). A Vercel deployment would need:
+1. A `VITE_API_BASE_URL` set to the public API URL (currently `localhost:8000` in dev)
+2. `allow_origins` on the API CORS middleware tightened from `["*"]` to the Vercel domain
+3. Auth: session cookies work across same-origin; cross-origin would need CORS + `withCredentials`
 
-FastAPI-on-Vercel-serverless was considered in an earlier (fabricated) version of this doc but isn't the current plan. The API is meant to run as a regular long-lived process (uvicorn, later containerized) alongside n8n on whatever host serves the pilot — see [[Deployment Guide]]. This avoids Vercel's function-duration limits being a concern for STT/LLM calls that can take several seconds.
+## Why it hasn't happened
 
-## Nothing to document yet
+PLAN.md's deployment plan targets **Docker Compose** (all three services: API, n8n, Postgres) on the same machine, exposed via Tailscale Funnel. The dashboard in this setup runs on the developer's machine only (Vite dev server). No Vercel project, no `vercel.json`, no preview deployment exists.
 
-No `vercel.json`, no environment variable dashboard, no build pipeline, no cron keep-warm, no CI/CD — none of it exists. When the dashboard is actually built, this doc should be replaced with its real deploy config, not a projection of one.
+## Current deployment architecture
+
+```
+n8n (Docker, :5678) ← Tailscale Funnel → WhatsApp/Meta
+API (Docker or host, :8000) ← n8n calls
+Postgres (Docker, :5432) ← API reads/writes
+Dashboard (Vite dev, :5173) ← developer only
+```
+
+There is no public hosting for the dashboard. The dashboard panels that interact with n8n (`/n8n` proxy route) only work under `npm run dev` anyway.
 
 ## Related Notes
 
 - [[Deployment Guide]]
-- [[Architecture]]
-- [[Google Sheets Integration]]
+- [[architecture]]
+- [[Local Development]]

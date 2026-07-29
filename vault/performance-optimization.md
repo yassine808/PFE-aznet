@@ -23,7 +23,11 @@ No p95/p99 latency numbers, cold-start rate, or throughput figures have been mea
 ## What's actually in the code today relevant to performance
 
 - **Lazy imports**: every STT provider (`api/app/providers/*.py`) and the extraction module (`api/app/extraction.py`) import their SDKs (`groq`, `google.genai`, `httpx`) *inside* the function body, not at module top-level. This keeps tests dependency-free and avoids paying import cost until a request actually needs that provider — the one deliberate performance-adjacent design choice made so far.
-- **`TranscriptionInfo.latency_s`**: every STT provider times its own call with `time.perf_counter()` and returns it — the only latency instrumentation that exists in the codebase.
+- **`TranscriptionInfo.processing_time`**: every STT provider times its own call with `time.perf_counter()` and returns it — the primary latency instrumentation.
+- **`@lru_cache` on prompts**: `PromptLoader` (`api/app/prompt_loader.py`) caches all prompt files after first read — a prompt change requires a restart, which makes extraction failures reproducible.
+- **`@lru_cache` on config**: `Config` is a singleton; all env vars are read once at import time.
+- **Lazy imports on extraction**: extraction providers (`gemini`, `groq`) import their SDKs inside the function body.
+- **`processing_time` on `ProcessResponse`**: the `/process` endpoint returns the wall-clock processing time in seconds — visible in the Sheet as `Délai (secondes)`.
 
 ## Not built
 

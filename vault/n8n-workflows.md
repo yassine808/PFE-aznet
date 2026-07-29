@@ -1,85 +1,88 @@
 ---
-tags: [pfe, n8n, workflows, telegram, google-sheets, email]
-type: technical
+tags: [pfe, n8n, workflow, orchestration]
+type: architecture
 priority: high
-status: partial
+status: current
 ---
-
-> **Status 2026-07-29:** n8n now carries **reception + the error handler only** — `n8n/aznet-complete.json`, 52 nodes in two labelled bands (réception, erreurs). The maintenance, daily-report and (new) weekly-report schedules moved into the API's own scheduler, `api/app/jobs.py`, driven from the dashboard's **Automation** page: a cron node could not show what a run produced or let an operator re-run it. The error band stayed because it catches n8n's own execution failures, which the API cannot see. **The reply now happens BEFORE the Sheet append** — a Google outage can no longer swallow a report; failed writes park in a Postgres retry queue drained every 5 min. Added: durable WhatsApp idempotency (was in-memory, wiped on restart), retries + timeouts on `/process`, and per-stage logging to `POST /logs` joined by `correlation_id`. The error workflow posts to `/logs` instead of an `Errors` sheet tab. `legacy-*.json` are the superseded single-channel flows — **never activate one alongside the unified flow** (double processing). **Full setup doc: `docs/setup-guide.md`.**
 
 # n8n Workflows
 
-## Overview
+> **Last workflow update:** 2026-07-29 — see `n8n/README.md` for the exact changelog.
 
-Workflow files in `n8n/` (exported JSON):
+## Source of Truth
 
-- `n8n/aznet-complete.json` — **the one to import.** Merges everything below. Reception band: Telegram polling + WhatsApp webhook into one pipeline: extract (audio OR typed text, dedupe) → shared allowlist w/ roles (outsiders: one HR reply) → ⏳ ack → download per channel → `POST /process` (audio or text mode, error → ❌ reply) → ✅ résumé reply on the originating channel → **then** Sheets append (`canal`, `confidence`, `flag_review`); on write failure the report is queued for retry instead of lost. Seven `Log *` leaf nodes record each stage.
-- Band 2 of `aznet-complete.json` — Error Trigger → `POST /logs` (`stage: workflow_error`); set the workflow as its own Error Workflow after import. No longer writes to an `Errors` sheet tab: an error handler that reports through Google cannot report Google failing.
-- `api/app/jobs.py` — five scheduled jobs: `sheet_queue` (5 min, drains the retry queue), `prune_logs` + `profiles` (03:00), `daily_report` (Mon–Sat) and `weekly_report`. Times read from `app_settings` on every check.
-- The per-concern workflow files (`reception-unified`, `maintenance-cron`, `daily-report-cron`, `error-workflow`) and the `legacy-*` single-channel flows were deleted on 2026-07-29 — git history has them.
+Single unified workflow: **`n8n/aznet-complete.json`**
 
-```
-Telegram (voice note / forwarded audio)
-      │
-      ▼
-Telegram Trigger / getUpdates polling
-      │
-      ▼
-Get File (binary audio, property `data`)
-      │
-      ▼
-HTTP Request → POST /process (multipart, field `audio`)
-      │
-      ▼
-[n8n adds metadata: date, technicien, lien_audio]
-      │
-      ▼
-(planned) Sheets append ─┬─ (planned) Email to manager
-                          └─ Telegram confirmation reply (built)
+Legacy workflows (`n8n/legacy-*.json`) are kept for reference only. Never import them alongside the unified flow — they overlap on triggers, Sheet appends, and Telegram nodes.
+
+## Unified Workflow Structure
+
+One file, four labelled bands, one Telegram polling trigger:
+
+```mermaid
+graph TD
+    A[TG Poll 15s] --> B{New message?}
+    B -->|Yes| C[Download media]
+    C --> D[POST /process]
+    D --> E{Success?}
+    E -->|Yes| F[Reply TG/WA]
+    E -->|No| G[Post error log]
+    F --> H[Append to Sheet]
+    H --> I[End]
+
+    J[WA Webhook 1] --> C
+    K[WA Webhook 2] --> C
 ```
 
-## Manual node recipe (per `n8n/README.md`)
+### Band breakdown
 
-| # | Node | Key config |
-|---|---|---|
-| 1 | **Telegram Trigger** | Updates = `message` |
-| 2 | **Telegram** (Resource *File*, Op *Get File*) | File ID = `{{ $json.message.voice.file_id }}` → binary property `data` |
-| 3 | **HTTP Request** | `POST http://host.docker.internal:8000/process` (dev), multipart-form-data, one binary field `audio` bound to `data` |
+| Band | Triggers | Nodes | Purpose |
+|---|---|---|---|
+| **Réception** | TG Poll (15s) + 2 WA Webhooks | 10+ | Main path: download → `/process` → reply → Sheet |
+| **Maintenance** | Cron (5 min) + Cron (03:00) | 3 | Drain retry queue, prune old logs |
+| **Rapport quotidien** | N/A (moved to API scheduler) | — | Now handled by `api/app/jobs.py` |
+| **Erreurs** | Error Trigger | 1 | Any unhandled crash → `POST /logs` |
 
-Forwarded audio (`message.audio`) is treated identically to native voice notes (`message.voice`) — both go through the same path.
+**Trigger details:**
+- **Telegram:** Polling (`getUpdates` every 15 seconds), outbound-only (no open ports). TG Trigger node configured with the bot token
+- **WhatsApp:** Two Webhook nodes (message + status updates) at the shared URL `https://<TAILSCALE_HOSTNAME>/webhook/whatsapp/receive`
+- **Error:** Error Trigger node links to this workflow. Requires one manual setup step: **Settings → Error Workflow → select this same workflow**. Otherwise the Error Trigger never fires.
 
-Metadata added by n8n **after** the API responds (not sent to it): `date`/`heure` = now; `technicien` = `message.from.first_name` or a chat_id→name map; `lien_audio` — Telegram's file URL embeds the bot token and isn't durable, so the plan is to upload the audio to Google Drive and store that link, or fall back to storing the raw `file_id`.
+### Key design decisions (n8n layer)
 
-## Confirmation reply (built)
+1. **Reply-first ordering.** Reply to the technician (N8s_Reply_TG / Reply_WA) happens **before** the Sheet append (N9_Append_Success). A failed write must never cost the user their confirmation.
+2. **Error row flagging.** When `/process` returns 502, the workflow continues to N10_Append_Flag (writing whatever it can with `Statut: error`). The technician gets "Une erreur est survenue, l'équipe technique va vérifier."
+3. **WhatsApp media download** uses a plain HTTP GET node with the token in the Authorization header — n8n's native WhatsApp download node returns "Bad request" for voice notes.
+4. **Channel-agnostic payload.** Both TG and WA paths produce the same shape for `/process`. The originating channel is inferred from `correlation_id` prefix (`tg-` vs `wa-`) or metadata.
 
-A **Telegram → Send Message** node replies to the technician, tagged as a reply to the original voice message (`reply_to_message_id`). When the STT provider exposes a confidence score (Groq only today), the reply includes a `🎙️ Confiance transcription: NN%` line; reports below 50% get flagged with `low_confidence_transcription` in `warnings`.
+## Channel Asymmetry
 
-## Webhook variant setup (pilot)
+Important when debugging:
 
-```bash
-tailscale funnel --bg 5678
+- **Telegram errors but WhatsApp is silent**: an error reply proves the message reached the pipeline. Silence means it never arrived at n8n (wrong webhook URL, Meta not subscribed, tunnel down).
+- **WhatsApp works but Telegram is silent**: the polling trigger may have hit a rate limit or the bot was blocked.
+- The public URL is a **Tailscale Funnel** — a stable hostname (`https://<TAILSCALE_HOSTNAME>` → `127.0.0.1:5678`). Meta's webhook is configured once and survives reboots.
+
+## Data Contract
+
+The API's response is destructured and mapped to Sheet columns via n8n's "Set" node before the Google Sheets append.
+
+## Environment Variables Required by n8n
+
 ```
-Put the resulting `https://<TAILSCALE_HOSTNAME>` in `.env` as `WEBHOOK_URL`, then `docker compose up -d` to restart. The hostname is stable, so this is a one-time step. Activating the workflow makes n8n call Telegram's `setWebhook` pointing at that URL — set it *before* activating.
+TELEGRAM_BOT_TOKEN=...
+GROQ_API_KEY=...
+GEMINI_API_KEY=...
+INTERNAL_API_KEY=...              # Sent as X-API-Key header to the API
+WHATSAPP_VERIFY_TOKEN=...
+WHATSAPP_TOKEN=...                 # Permanent System User token (never expires)
+API_BASE_URL=http://localhost:8000 # or host.docker.internal:8000 in Docker
+```
 
-## Google Sheets integration — planned
+In Docker, `API_BASE_URL` points to `host.docker.internal:8000` (the host machine's API).
 
-No sheet has been created, no service account provisioned, no n8n Sheets node exists. When built (Sprint 2), it will append one row per report with `ExtractedReport` fields + n8n's own metadata columns. Don't treat any column layout as decided — see [[Google Sheets Integration]] for the honest state.
-
-## Email notification — planned
-
-Gmail SMTP is the intended channel (PLAN.md), not yet wired into any workflow.
-
-## Web form path — planned
-
-The React web form (text mode) exists in PLAN.md's scope but as of Jul 23 the form itself and its n8n-facing webhook are not built.
-
-## Testing
-
-Smoke test (passed Jul 17, per PLAN.md): send a voice note to the bot → an execution appears in n8n → the *Get Voice File* node outputs binary audio. That's the whole integration risk killed for reception; Sheets/email/dashboard steps remain untested because unbuilt.
-
-## Related Notes
-
-- [[Project Overview]]
-- [[Architecture]]
-- [[Google Sheets Integration]]
-- [[Deployment Guide]]
+## Related
+- [[architecture]] — data flow diagram
+- [[Deployment Guide]] — Docker setup
+- [[Google Sheets Integration]] — Sheet mapping
+- [[Project Overview]] — why hybrid architecture

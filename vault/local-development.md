@@ -1,153 +1,168 @@
 ---
-tags: [pfe, development, local, setup, docker, debugging]
-type: technical
+tags: [pfe, development, setup, guide]
+type: guide
 priority: high
 status: current
 ---
 
-# Local Development Environment Setup
-
-## Overview
-
-```
-Telegram (phone) ──polling (getUpdates every 15s)──▶ n8n (Docker, localhost:5678)
-                                                          │ HTTP multipart
-                                                          ▼
-                                              FastAPI (uvicorn --reload, :8000)
-```
-
-No tunnel is needed for Telegram in dev: the polling workflow only makes outbound calls, so plain `localhost` works. A public URL is needed for WhatsApp (webhook-driven) and for the webhook Telegram variant — that's **Tailscale Funnel**, `https://<TAILSCALE_HOSTNAME>` → `127.0.0.1:5678`. See `n8n/README.md`.
+# Local Development
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|---|---|---|
-| Git | any recent | |
-| Python | 3.9.x | pinned — `Optional[X]`, never `X \| None` in `api/` |
-| Docker | Desktop or Engine | for n8n |
-| Tailscale | latest | provides the public HTTPS URL (Funnel) for WhatsApp + webhook-mode Telegram |
+- Python 3.9 (not 3.10+)
+- Node.js 18+
+- Docker Desktop (optional — for n8n + Postgres)
+- A `.env` file at repo root (see `.env.example` for template)
 
-There is no Node.js, VS Code extension list, `.vscode/` config, or `requirements-dev.txt` checked into this repo — those don't exist. Dev dependencies (if any) live alongside runtime deps in `api/requirements.txt`.
-
-## Quick start
+## API Setup
 
 ```bash
-# 1. n8n
-docker compose up -d              # from repo root → http://localhost:5678
-
-# 2. API
+# Navigate to the api directory
 cd api
-python -m venv .venv
-.venv/Scripts/activate            # or `source .venv/Scripts/activate` in Git Bash
+
+# Create virtual environment (Python 3.9)
+py -3.9 -m venv .venv
+
+# Activate
+.venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
-.venv/Scripts/python.exe -m uvicorn app.main:app --reload   # :8000
 
-# 3. Tests (no API keys needed)
-.venv/Scripts/python.exe -m pytest
+# Run dev server with hot reload
+uvicorn app.main:app --reload
 ```
 
-## `docker-compose.yml` (actual, repo root)
-
-```yaml
-services:
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
-    container_name: pfe-n8n
-    restart: unless-stopped
-    ports:
-      - "5678:5678"
-    environment:
-      - GENERIC_TIMEZONE=Africa/Casablanca
-      - TZ=Africa/Casablanca
-      - N8N_DIAGNOSTICS_ENABLED=false
-      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
-    volumes:
-      - n8n_data:/home/node/.n8n
-
-  # api:  # Sprint 1 placeholder — uncomment once containerized; today the API runs
-          # locally via uvicorn, not in this compose file
-volumes:
-  n8n_data:
-```
-
-No basic auth, no SQLite tuning, no queue mode, no healthcheck block, no `docker-compose.dev.yml` overlay — this is the whole file.
-
-## `api/requirements.txt` (actual)
-
-```
-fastapi>=0.110,<1
-uvicorn[standard]>=0.29
-pydantic>=2.7,<3
-pydantic-settings>=2.2
-python-multipart>=0.0.9
-groq>=0.11
-google-genai>=1.0
-httpx>=0.27
-```
-No `sentry-sdk`, `slowapi`, `soundfile`, `resampy`, `locust`, `black`, `ruff` — none of that is a dependency today.
-
-## Environment configuration
-
-Config is read by `api/app/config.py` (pydantic-settings) from a `.env` at the **repo root** (shared with docker-compose), not `api/.env`:
+The API runs on `http://localhost:8000`. Test it:
 
 ```bash
-groq_api_key=...
-gemini_api_key=...
-hf_token=...
+curl http://localhost:8000/health
 ```
-All optional at import time — a missing key only fails the specific call that needs it, with a clear error message (e.g. `"GEMINI_API_KEY not configured"`). No `.env.example` file exists in the repo yet.
 
-## Telegram reception (dev)
+### Running tests
 
-See `n8n/README.md` for the full recipe. Summary:
-1. Create a bot via **@BotFather**, paste the token into an n8n Telegram credential.
-2. Import `n8n/aznet-complete.json`.
-3. Toggle the workflow **Active**.
-4. Send a voice note to the bot from your own Telegram account — the *Get Voice File* node should output binary audio. That's the Week-0 smoke test (already passed, per PLAN.md).
-
-For webhook-mode dev (WhatsApp reception; Telegram polls and needs none):
 ```bash
-tailscale funnel --bg 5678     # once; persists across reboots
-tailscale funnel status        # → https://<TAILSCALE_HOSTNAME>
-# put that URL in .env as WEBHOOK_URL (trailing slash), then:
+# From api/ directory, with venv active
+pytest                          # all 53 tests
+pytest tests/test_process_endpoint.py -k test_voice_mode   # single test
+```
+
+Tests must pass **without API keys** — external SDKs are lazy-imported and mocked at test boundaries. No database required.
+
+## Dashboard Setup
+
+```bash
+cd Dashboard
+npm install
+npm run dev          # Vite dev server on :5173
+```
+
+The Vite dev proxy routes `/n8n` → n8n API (with `X-N8N-API-KEY` from `Dashboard/.env`, **not** `VITE_`-prefixed, so it never reaches client JS). This is the only way n8n panels work in dev.
+
+## Docker Compose (full stack)
+
+From repo root:
+
+```bash
 docker compose up -d
 ```
 
-## Testing locally
-
-```bash
-cd api
-.venv/Scripts/python.exe -m pytest                      # all 33 tests
-.venv/Scripts/python.exe -m pytest tests/test_process_endpoint.py -v
-.venv/Scripts/python.exe -m pytest -k test_voice_mode -v
-```
-
-### Manual API testing (multipart, not JSON)
-
-```bash
-# Text mode
-curl -X POST http://localhost:8000/process -F "text=Bonjour c'est Ahmed, chantier Hay Riad..."
-
-# Voice mode
-curl -X POST http://localhost:8000/process -F "audio=@sample.ogg;type=audio/ogg"
-
-# Health check
-curl http://localhost:8000/health
-```
-There is no JSON+base64 request format and no `metadata` field sent to the API — see [[API Schemas]].
-
-## Common issues
-
-| Symptom | Cause | Fix |
+Three services:
+| Service | Port | Notes |
 |---|---|---|
-| Telegram polling gets 409 | Leftover webhook registered | `curl https://api.telegram.org/bot<TOKEN>/deleteWebhook` |
-| `getUpdates` never returns voice | Bot in a group, privacy mode on | Use a 1:1 chat, or disable group privacy |
-| Import errors in editor | Wrong interpreter | Point your editor at `api/.venv/Scripts/python.exe` (see `api/pyrightconfig.json`) |
-| Pyright false positives | Not using the repo venv | pytest is ground truth per CLAUDE.md |
+| api | 8000 | `restart: unless-stopped` |
+| n8n | 5678 | `restart: unless-stopped`, `n8n_data` volume |
+| postgres | 5432 | `restart: unless-stopped`, `pgdata` volume |
 
-## Related Notes
+In compose mode, `DATABASE_URL` points to `postgres` host (compose service name).  
+`GOOGLE_SERVICE_ACCOUNT_JSON` must be an absolute path inside the image.
 
+### Hybrid mode (n8n+DB in Docker, API on host)
+
+```bash
+# Start n8n + postgres
+docker compose up -d n8n postgres
+
+# In .env, ensure DATABASE_URL=postgresql://aznet:aznet@localhost:5432/aznet_pfe
+# Then run API on host
+cd api && uvicorn app.main:app --reload
+
+# Set API_BASE_URL=http://host.docker.internal:8000 in n8n env so the workflow
+# reaches the host API from within the container
+```
+
+## Telegram setup (local dev)
+
+For local development, use Telegram polling mode (no public URL needed):
+
+```bash
+# n8n does this for you — no open ports required
+# The workflow uses the Telegram node in polling mode (getUpdates)
+```
+
+## Telegram setup (production/webhook)
+
+```bash
+# Set the webhook URL in n8n (not directly on Telegram API)
+# n8n's Telegram Trigger handles this when switching to webhook mode
+# Your bot has only one webhook at a time — don't point it at the API
+```
+
+## WhatsApp setup
+
+WhatsApp needs a public HTTPS URL. Use **Tailscale Funnel**:
+
+```bash
+# On the machine running n8n (with Tailscale connected)
+# A funnel route is configured: https://<TAILSCALE_HOSTNAME> → 127.0.0.1:5678
+# Meta's webhook verification is a manual GET-echo step (n8n's WhatsApp Trigger fails it)
+```
+
+Full WhatsApp walkthrough: `docs/setup-guide.md`
+
+## File Structure
+
+```
+PFE-aznet/
+├── api/                  # Python FastAPI microservice
+│   ├── app/
+│   │   ├── main.py       # FastAPI app & all endpoints
+│   │   ├── config.py     # pydantic-settings, env-driven
+│   │   ├── schemas.py    # Pydantic models (ExtractedReport etc.)
+│   │   ├── extraction.py # LLM extraction orchestration
+│   │   ├── sheets.py     # Google Sheets read/write
+│   │   ├── mailer.py     # SMTP email sending
+│   │   ├── imagegen.py   # Summary card image generation
+│   │   ├── memory.py     # Technician profiles
+│   │   ├── daily_report.py       # Daily/weekly email logic
+│   │   ├── auth.py              # Session-based auth
+│   │   ├── prompt_loader.py     # Markdown prompt loader
+│   │   ├── providers/           # STT strategy pattern
+│   │   │   ├── base.py          # TranscriptionProvider ABC
+│   │   │   └── groq.py, gemini.py, hf_darija.py
+│   │   └── prompts/             # Versioned Markdown prompts
+│   ├── tests/            # pytest test suite (53 tests)
+│   └── Dockerfile
+├── Dashboard/            # React/Vite frontend
+│   ├── src/
+│   │   ├── pages/       # overview, inbox, reports, daily, weekly, automation, access, logs, team, login
+│   │   ├── lib/         # api.ts, auth.tsx, ops-context.tsx
+│   │   └── locales/     # fr.json, en.json, ar.json
+│   └── .env             # VITE_API_BASE_URL + N8N_API_KEY (non-VITE_)
+├── n8n/
+│   ├── aznet-complete.json   # Unified workflow (single source of truth)
+│   ├── legacy-*.json         # Pre-unification workflows (reference only)
+│   └── README.md
+├── docs/
+│   ├── cahier-des-charges.md # Original spec
+│   └── setup-guide.md        # Full WhatsApp + Telegram walkthrough
+├── docker-compose.yml   # 3 services: api, n8n, postgres
+├── .env.example         # Environment variable template
+├── PLAN.md              # Sprint timeline, architecture decisions
+└── BUGS-TO-FIX.md       # Known bugs from code review
+```
+
+## Related
 - [[Deployment Guide]]
-- [[n8n Advanced]]
-- [[Testing Strategy]]
-- [[Architecture]]
+- [[security-secrets]]
+- [[n8n Workflows]]

@@ -1,69 +1,142 @@
 ---
-tags: [pfe, deployment, vercel, n8n, vps, docker]
-type: technical
+tags: [pfe, deployment, devops, guide]
+type: guide
 priority: high
-status: partial
+status: current
 ---
 
-> **Note on status:** this is a **plan**, not a description of running infrastructure. As of Jul 23 2026 (Week 1) nothing described below is deployed — the API runs locally via `uvicorn`, n8n runs locally via Docker Compose. No Vercel project, no VPS, no CI/CD pipeline exists. See PLAN.md §4 (timeline) and §1 (locked decisions) for what's actually planned and when.
+# Deployment Guide
 
-# Deployment Guide (Plan)
+## Architecture (containerized)
 
-## Target environments (per PLAN.md)
+Three compose services defined in `docker-compose.yml` at repo root:
 
-| Environment | API | n8n | Notes |
+| Service | Image/Config | Port | Persistence |
 |---|---|---|---|
-| **Dev (current)** | Local `uvicorn --reload`, :8000 | Docker Compose, `localhost:5678` | Telegram polling — no tunnel needed |
-| **Pilot (Sprint 3)** | Same Docker Compose stack on the aznet server if available, else Oracle Always Free VM | Same host + `postgres` service | Telegram polls (no tunnel). **WhatsApp needs a public HTTPS webhook** |
-| **Front (if built)** | Vercel free tier (React dashboard) | — | Dashboard reads Google Sheets API directly, not the FastAPI service |
+| `api` | `api/Dockerfile` (Python 3.9-slim) | 8000:8000 | stateless (env+credentials via compose) |
+| `n8n` | `n8nio/n8n:latest` | 5678:5678 | `n8n_data` named volume (SQLite DB, files) |
+| `postgres` | `postgres:15-alpine` | 5432:5432 | `pgdata` named volume |
 
-The FastAPI service itself is not currently planned to run on Vercel — PLAN.md targets it running alongside n8n on the same host (Docker Compose, `api:` service already stubbed out commented-in `docker-compose.yml`). Any prior version of this doc describing a `vercel.json`, Vercel serverless functions for the API, or a `n8n.aznet.ma` domain was aspirational and has been removed — do not treat it as decided.
+All three `restart: unless-stopped` — the pipeline comes back on its own after a reboot.
 
-## What's real today
+### API Image (`api/Dockerfile`)
 
-- `docker-compose.yml` (repo root) runs n8n only, mapped to `5678:5678`, with a commented-out `api:` service block reserved for Sprint 1.
-- The API has no containerization yet — it's run directly via the venv.
-- No domain, no reverse proxy, no TLS termination is configured anywhere.
+```dockerfile
+FROM python:3.9-slim
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir -r requirements.txt
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
 
-## Webhook tunnel — the recurring outage
+Compose overrides two env values:
+- `DATABASE_URL=postgresql://...@postgres:5432/...` (host = compose service name)
+- `GOOGLE_SERVICE_ACCOUNT_JSON=/app/credentials/service-account.json` (absolute path, because `sheets.py` anchors relative paths to `__file__.parents[2]`, which is `/` in the image)
 
-WhatsApp is webhook-driven: Meta must reach n8n from the public internet over HTTPS with a valid CA
-certificate. Telegram polls, so it is immune.
+For API work, run `uvicorn --reload` on the host instead and set `API_BASE_URL=http://host.docker.internal:8000` so n8n reaches the host-process API.
 
-`trycloudflare` quick tunnels get a **new random hostname on every start**, so each reboot silently
-breaks WhatsApp *and* requires re-running Meta's verification. This has already caused one outage
-(2026-07-25: dead tunnel → WhatsApp totally silent, Telegram still working).
+## Provisioning Checklist
 
-A Cloudflare *named* tunnel would fix it but requires a domain in the account (none owned). **Resolved
-2026-07-25 with Tailscale Funnel**: `tailscale funnel --bg 5678` publishes n8n at a permanent
-`https://<TAILSCALE_HOSTNAME>`, so Meta is configured once. The tailscaled service is `AUTO_START`
-and the funnel config persists, so the URL returns on its own after a reboot. ngrok's free static domain
-was the earlier candidate and is no longer used. Steps in `docs/setup-guide.md`.
+### Required credentials (`.env` at repo root)
 
-## Telegram bot setup (real, dev)
+```dotenv
+# Telegram
+TELEGRAM_BOT_TOKEN=...
 
-Per `n8n/README.md`:
-1. **@BotFather** → `/newbot` → get a token.
-2. n8n → Credentials → Telegram API → paste the token.
-3. Import `n8n/aznet-complete.json`, set it as its own Error Workflow (Settings → Error Workflow), toggle Active.
+# WhatsApp (webhook — no single env var, config in n8n)
+WHATSAPP_VERIFY_TOKEN=...
 
-No webhook, no `setWebhook` call, no secret token verification is needed for the polling variant used in dev.
+# STT
+GROQ_API_KEY=...
+GEMINI_API_KEY=...            # Used for extraction, image generation, and as STT fallback
+# HF_API_KEY=...              # Only if using hf-darija provider (benchmark pending)
 
-## Pilot deployment (planned, Sprint 3 per PLAN.md)
+# Google (all from the same service account)
+GOOGLE_SERVICE_ACCOUNT_JSON=credentials/service-account.json
+GOOGLE_SHEET_ID=...           # From the sheet URL
+GOOGLE_DRIVE_REFRESH_TOKEN=... # For audio file upload to Dropbox equivalent
 
-- Deploy the same Docker Compose stack (n8n + containerized API) to the aznet server or an Oracle Always Free VM.
-- Telegram polling needs no public URL; WhatsApp does — publish n8n via Tailscale Funnel if the host has no fixed public IP/HTTPS.
-- Register 2-3 real phone numbers for the pilot.
+# Database (optional — logs/auth disabled if unset)
+DATABASE_URL=postgresql://aznet:aznet@localhost:5432/aznet_pfe
 
-None of this exists yet. Do not follow any prior version of this document that specified `vercel.json`, Caddy, Prometheus, or GitHub Actions CI — those tools are not part of the current plan; see [[Monitoring Observability]] and [[n8n Advanced]] for the honest state of those areas.
+# Auth
+INTERNAL_API_KEY=...          # Shared secret for n8n → API calls
+SECRET_KEY=...                # Cookie signing key (openssl rand -hex 32)
 
-## Google Sheets / Gmail / dashboard
+# SMTP
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASSWORD=...             # Gmail App Password
 
-Not provisioned. See [[Google Sheets Integration]].
+# Dashboard
+VITE_API_BASE_URL=http://localhost:8000
+```
 
-## Related Notes
+### Google Cloud Platform
 
+1. Create a Google Cloud Project
+2. Enable the **Google Sheets API** and **Google Drive API**
+3. Create a service account → download JSON key → save as `credentials/service-account.json`
+4. Create a Google Sheet → share with the service account email (Editor)
+5. Sheet ID = the long string in the URL between `/d/` and `/edit`
+
+### Auth keys
+
+```bash
+openssl rand -hex 32         # for SECRET_KEY
+openssl rand -hex 32         # for INTERNAL_API_KEY (shared with n8n)
+```
+
+### WhatsApp Cloud API
+
+1. Create/use a Meta Business account
+2. Create a System User with `whatsapp_business_messaging` and `whatsapp_business_media` permissions → generate a permanent token (never expires)
+3. Create (or use existing) WhatsApp Business App
+4. Configure the webhook handler URL: `https://<TAILSCALE_HOSTNAME>/webhook/whatsapp/receive`
+5. Verify token: `WHATSAPP_VERIFY_TOKEN`
+6. Call the WABA `subscribed_apps` API to subscribe the app to the business account's webhook events
+7. Subscribe to `messages` and `message_template_status_update` fields
+
+### Hosting Options
+
+All three services **must run on the same machine** (n8n calls the API at `http://localhost:8000`). The public face is a **Tailscale Funnel** (`https://<TAILSCALE_HOSTNAME>` → `127.0.0.1:5678`) — a stable hostname so Meta's webhook URL is configured once and survives reboots.
+
+#### Full `docker compose up -d`
+
+For production/pilot:
+```bash
+docker compose up -d
+```
+
+#### Hybrid: API on host, n8n in container
+
+For active development:
+```bash
+# Terminal 1
+cd api && .venv/Scripts/python.exe -m uvicorn app.main:app --reload
+
+# Terminal 2 — n8n configured to reach API at host.docker.internal:8000
+docker compose up -d n8n postgres
+```
+
+### Free Tier Constraints / Budget
+
+| Service | Free tier limit | Our usage |
+|---|---|---|
+| Groq API | 30 RPM / 14,000 RPD / 6 concurrent | <10/day |
+| Google Gemini | 1,500 RPM (free tier) | <10 calls/day |
+| HF Inference API | varies by model | only if hf-darija is the chosen STT |
+| Telegram Bot API | unlimited | one bot, polling every 15s |
+| WhatsApp Cloud API | 1,000 messages/day (free tier) | <20/day |
+| n8n | unlimited (self-hosted) | one workflow, 4 active bands |
+| Postgres 15 | unlimited (self-hosted) | <100 MB |
+| Tailscale Funnel | 1 tunnel (free) | 1 HTTPS tunnel |
+| Gmail SMTP | 500/day | 1 email/day |
+
+## Related
 - [[Project Overview]]
-- [[Architecture]]
 - [[n8n Workflows]]
-- [[Local Development]]
+- [[Google Sheets Integration]]
+- [[security-secrets]]

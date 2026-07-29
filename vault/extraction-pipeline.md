@@ -1,116 +1,94 @@
 ---
-tags: [pfe, extraction, llm, gemini, groq, schemas]
-type: technical
+tags: [pfe, extraction, prompts, llm]
+type: architecture
 priority: high
 status: current
 ---
 
 # Extraction Pipeline
 
-## Overview
+## Flow
 
-LLM-based structured extraction: raw transcript (Darija/French/mixed) → `ExtractedReport` (see [[API Schemas]]).
-
-**Primary:** Gemini structured output (`gemini_model` setting, currently `gemini-flash-lite-latest`)
-**Fallback:** Groq Llama JSON mode (`groq_llm_model`, currently `llama-3.3-70b-versatile`)
-**Never:** silent fallback, invented data — both engines failing raises a combined `ExtractionError`
-
-Implementation: `api/app/extraction.py`.
-
-## Pipeline flow
+Three input shapes, all handled by a single `POST /process` endpoint:
 
 ```
-rapport_complet (text)
-     │
-     ▼
-_extract_gemini()  ── success ──▶ ExtractedReport
-     │ ExtractionError
-     ▼
-_extract_groq()    ── success ──▶ ExtractedReport
-     │ ExtractionError
-     ▼
-ExtractionError("extraction failed on both engines — gemini: ... | groq: ...")
+Audio → STT (Groq/Gemini/HF) → raw text → extraction chain → ExtractedReport
+Image → Vision model → schema directly (no transcription) → ExtractedReport  
+Text  → (skip STT) → extraction chain → ExtractedReport
 ```
 
-`extract_report()` in `extraction.py` is the entry point; `api/app/main.py` catches `ExtractionError` and turns it into an HTTP 502.
+## Prompt Architecture
 
-## Prompt
+All prompts are **versioned Markdown files** (`api/app/prompts/`), loaded by `PromptLoader` (`api/app/prompt_loader.py`). Read once per process via `@lru_cache` — restart the API to pick up edits.
 
-Single shared instruction string (`_INSTRUCTIONS` in `extraction.py`), not a separate system/few-shot pair. It tells the model:
-- The text is a Moroccan cabling technician's daily report, possibly Darija/French/mixed, often from an imperfect voice transcription
-- Correct plausible STT errors using domain vocabulary (goulotte, câble réseau, panneau de brassage, prise RJ45, baie, bureau, étage, chantier)
-- Convert spoken numbers (in words, Arabic or French) to digits
-- Absent field → `null`, never invent
-- `resume`: 2-4 professional French sentences, third person, chef-de-chantier report style — always filled
+| Prompt file | Role |
+|---|---|
+| `00-soul.md` | Prepended to every model-facing prompt. Identity, never-invent rule, absence ≠ zero rule |
+| `extraction.md` | Main extraction instruction with French schema fields |
+| `stt-vocabulary.md` | **No soul added.** Whisper reads `prompt` as transcript prefix, not instructions; soul would be echoed into transcript |
+| `daily-report.md` | Aggregation of today's rows → French email |
+| `image-generation.md` | Image generation prompt for summary cards |
+| `profile.md` | Technician profile construction from past reports |
 
-There are no separate few-shot examples embedded in code; the instructions above are the entire prompt, concatenated with the transcript.
+### Soul (00-soul.md) — enforced rules
 
-## Gemini path
+1. **Never invent** — if the technician didn't mention it, mark it null. Do not infer, guess, or hallucinate equipment, causes, or actions.
+2. **Absence ≠ zero** — if the technician doesn't mention material used, it's null, not "0" or "none".
+3. **Numbers in profiles** — the profile prompt explicitly bans numbers.
+4. **Model identity** — preface: "Tu es l'assistant IA de relevé d'intervention d'Aznet Maroc."
 
-```python
-client.models.generate_content(
-    model=settings.gemini_model,
-    contents=_INSTRUCTIONS + text,
-    config={"response_mime_type": "application/json", "response_schema": ExtractedReport},
-)
+## Extraction Chain
+
+Two ordered fallback chains (`config.py`), tried left to right:
+
+### Text extraction (`extraction_text_chain`)
+
 ```
-Uses `response.parsed`; raises `ExtractionError` if it isn't an `ExtractedReport` instance or the API call throws.
-
-## Groq path (fallback)
-
-Builds a `schema_hint` from `ExtractedReport.model_json_schema()` and asks for `{"type": "json_object"}` mode:
-
-```python
-client.chat.completions.create(
-    model=settings.groq_llm_model,
-    response_format={"type": "json_object"},
-    messages=[{"role": "system", "content": _INSTRUCTIONS + f"\nRéponds en JSON avec exactement ces clés: {schema_hint}"},
-              {"role": "user", "content": text}],
-)
+1. Gemini 2.5 Flash (structured output) → preferred, cheaper
+2. Groq Llama 3.3 70B (JSON mode) → fallback
 ```
-Parses the response content with `ExtractedReport.model_validate_json`.
 
-## Error handling
+The chain alternates vendors (Gemini and Groq meter free tiers separately). If both fail, a combined `ExtractionError` is raised → HTTP 502.
 
-```python
-class ExtractionError(RuntimeError):
-    pass
+### Image extraction (`extraction_image_chain`)
+
 ```
-No custom fields (`gemini_error`/`groq_error` attributes, `provider`, etc.) — the combined message string carries both underlying errors. No retry/backoff logic exists in `extraction.py` today; a call either succeeds or raises immediately.
-
-## Confidence
-
-There is no `extraction_confidence` field on `ExtractedReport` and no "high/medium/low" concept from the LLM. The only quality signals are:
-- `warnings: ["short_transcription"]` — set in `main.py` when `rapport_complet` < 10 chars
-- `warnings: ["low_confidence_transcription"]` — set when the STT `TranscriptionInfo.confidence` (Groq only) is below 0.5
-
-Both live on `ProcessResponse`, not on `ExtractedReport`.
-
-## Configuration (`api/app/config.py`)
-
-```python
-groq_api_key: Optional[str] = None
-gemini_api_key: Optional[str] = None
-gemini_model: str = "gemini-flash-lite-latest"
-groq_llm_model: str = "llama-3.3-70b-versatile"
+1. Gemini 2.5 Flash (vision) → only option
 ```
-Keys optional at startup, checked at call time with a clear `ExtractionError` message (`"GEMINI_API_KEY not configured"` / `"GROQ_API_KEY not configured"`). No `EXTRACTION_TIMEOUT` or `EXTRACTION_MAX_RETRIES` settings exist.
 
-## Testing
+Google-only because the free Groq catalogue has no vision model. `flag_review=true` always. The model fills the schema in one call — no intermediate transcription. `rapport_complet` gets `[photo] ` prefix so it's never mistaken for a quote.
 
-`api/tests/` has no dedicated `test_extraction.py` file today — extraction is exercised indirectly through `test_process_endpoint.py` (mocking `app.extraction.genai`/`groq` at the import boundary) and validated for schema shape in `test_schemas.py`. There is no golden 20-transcription dataset yet; that's part of the Sprint-1 benchmark work (see [[STT Benchmark]], PLAN.md).
+### Profile injection
 
-## Not built yet
+`extraction.py` calls `get_technician_profile(name)` from `memory.py`. If a profile exists, it's injected as a labelled block in the extraction message:
 
-- Golden-set extraction accuracy eval (PLAN.md Sprint 1 exit criterion)
-- Confidence calibration / "high/medium/low" bucketing on extraction
-- Retry/backoff on the LLM calls
-- Multi-pass or parallel sub-extraction
+```
+Contexte sur le technicien (informations générales, NE PAS utiliser comme source de valeurs):
+{profile_text}
+```
 
-## Related Notes
+The prompt frames it as "informational, not a source of values" — otherwise a profile saying "intervient surtout sur Sidi Maarouf" would fill `chantier` on a message that never named a site.
 
-- [[Project Overview]]
-- [[Architecture]]
-- [[STT Benchmark]]
-- [[API Schemas]]
-- [[Testing Strategy]]
+## Model Availability (`GET /models`)
+
+Not all listed models are callable. The 2026-07-27 run found:
+- `gemini-2.5-flash` → 404 on every call
+- `gemini-3.5-flash` → 503 on every call
+
+The endpoint returns the configured list from `config.py`; it does not probe availability.
+
+## Error contract
+
+| Condition | HTTP | Detail |
+|---|---|---|
+| Unknown provider / bad input | 422 | |
+| STT engine failure | 502 + `TranscriptionError` | |
+| All extraction engines fail | 502 + `ExtractionError` | Combined error from both engines |
+| Short transcription (<10 chars) | 200 + warning | Not an error, but flagged in n8n |
+| Empty/invalid profile request | `{}` profile | `get_technician_profile` returns empty if no profile exists |
+
+## Related
+- [[architecture]] — system boundaries
+- [[STT Benchmark]] — provider comparison (pending)
+- [[Project Overview]] — top-level feature status
+- [[Google Sheets Integration]] — where the extracted report goes

@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.9"
+  NODE_VERSION: "22"
+
+jobs:
+  api-tests:
+    name: API — tests & lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: api/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pip install ruff
+      - name: Ruff check
+        run: ruff check app/ tests/
+        continue-on-error: true
+      - name: Pytest
+        run: python -m pytest -v --tb=short
+
+  dashboard-checks:
+    name: Dashboard — lint, format, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Dashboard/package-lock.json
+      - run: npm ci
+      - name: TypeScript check
+        run: npx tsc -b --noEmit
+      - name: Oxlint
+        run: npx oxlint
+      - name: Prettier check
+        run: npx prettier --check "src/**/*.{ts,tsx,css,json}"
+
+  prettier:
+    name: Prettier — root files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm init -y
+      - run: npm install --save-dev prettier@^3.5
+      - name: Check formatting
+        run: npx prettier --check "**/*.{md,yaml,yml,json,py}" --ignore-unknown
+
+  sonarqube:
+    name: SonarQube scan
+    runs-on: ubuntu-latest
+    if: ${{ vars.SONAR_TOKEN != '' || secrets.SONAR_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

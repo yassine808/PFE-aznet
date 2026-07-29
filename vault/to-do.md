@@ -13,9 +13,9 @@ Raw backlog, unscoped to sprints yet — cross-check against [[project-overview]
 - ~~Treat voice messages and forwarded audios the same~~ ✅ done — both arrive as `type: audio`
 - Save each audio with its specific transcription in the admin dashboard
 - ~~Add error logs that log all kinds of errors~~ ✅ **done 2026-07-25** — Postgres `pipeline_logs` + **Logs n8n** dashboard panel (live tail, filters, 30-day retention); see [[monitoring-observability]]
-- Add settings in the dashboard to change the timer of cron triggers + email, plus another panel just for APIs and their uptime/usage etc. *(partial: API uptime tile + Logs panel exist; the settings panel does not)*
+- ~~Add settings in the dashboard to change the timer of cron triggers + email, plus another panel just for APIs and their uptime/usage etc.~~ ✅ **done** — `GET|PUT /settings` + Automation page in dashboard. API uptime tile + Logs panel also exist
 - Add stats: for each day, give the % of spoken darija words vs french
-- Add another free API model able to generate images based on the report etc.
+- ~~Add another free API model able to generate images based on the report etc.~~ ✅ **done** — `POST /generate-image` using Gemini 2.5 Flash (`api/app/imagegen.py`)
 - Add some solutions or critical things to be aware of
 - The chatbot should know the boss's WhatsApp number / Telegram account, so it acts differently than with employees, etc. (add in settings so this can be changed)
 - ~~Add security so only employees and the director can use/talk with the assistant~~ ✅ done — allowlist + one-shot HR reply. Add security so only employees and the director can use/talk with the assistant — if an outsider tries to talk to it, it should send one automated message pointing to HR numbers/info + contact

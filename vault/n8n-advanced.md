@@ -19,8 +19,8 @@ PLAN.md's own risk register: *"Free-tier quotas — volume tiny (~5-10 reports/d
 
 ## Patterns actually worth keeping in mind (design intent, not code)
 
-- **Idempotency:** Telegram message ID as a natural dedup key once Sheets append exists — not implemented yet (no Sheets integration at all, see [[Google Sheets Integration]]).
-- **Error visibility:** n8n's own Error Trigger + execution history is the only error-handling mechanism today; no custom circuit breaker, retry-with-backoff, or dead-letter workflow exists.
+- **Idempotency:** WhatsApp message dedup uses `processed_messages` table (Postgres, `ON CONFLICT DO NOTHING`). Telegram dedup uses the same mechanism (TG message ID checked before processing). Both avoid double-processing on at-least-once deliveries.
+- **Error visibility:** n8n's own Error Trigger + execution history is the primary mechanism. On top of that: the API logs all stages to Postgres with the same `correlation_id`, visible in the dashboard's **Logs n8n** panel. No custom circuit breaker, retry-with-backoff, or dead-letter workflow exists — the retry queue for Sheet failures is in Postgres (`failed_writes`), drained every 5 minutes.
 - **Confirmation reply as user-facing acknowledgment:** the polling workflow already replies to the technician (see [[n8n Workflows]]) — that doubles as an implicit "your report was received" signal, reducing the need for separate delivery monitoring.
 
 ## What's explicitly not planned

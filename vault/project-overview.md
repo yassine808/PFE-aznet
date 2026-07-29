@@ -1,141 +1,101 @@
 ---
-tags: [pfe, project-overview, architecture]
+tags: [pfe, project, overview]
 type: overview
 priority: high
 status: current
 ---
 
-# PFE aznet - Project Overview
+# Project Overview
 
-## Project Summary
+## What This Is
 
-**End-of-studies project (PFE)** at **aznet.ma** — Voice notes in Moroccan Darija from cabling technicians → STT → LLM extraction → Professional French summary → Google Sheets → Manager notifications.
+**Subject:** End-of-studies project (PFE) at Aznet.ma  
+**Deadline:** August 31, 2026  
+**Current date:** July 29, 2026  
+**Source of truth:** `PLAN.md` and `docs/cahier-des-charges.md`
 
-**Deadline:** August 31, 2026
+A pipeline that takes voice notes in Moroccan Darija from cabling technicians (via Telegram or WhatsApp), transcribes them, extracts structured data using LLMs, writes to Google Sheets, and emails a professional French summary to managers.
 
 ## Architecture (Hybrid)
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Telegram      │────▶│      n8n         │────▶│   API (FastAPI) │
-│   Bot API       │     │  (Orchestration) │     │   ai microsvc   │
-└─────────────────┘     └──────────────────┘     └────────┬────────┘
-                                                          │
-                              ┌───────────────────────────┘
-                              ▼
-                    ┌──────────────────┐     ┌─────────────────┐
-                    │  Google Sheets   │◀───▶│  Notifications  │
-                    │  (Data store)    │     │  (Gmail SMTP)   │
-                    └──────────────────┘     └─────────────────┘
-```
+- **n8n** (self-hosted) = orchestration & glue: message reception, media download, HTTP calls, Sheets append, error handling
+- **API** (Python/FastAPI) = AI microservice: STT, LLM extraction, scheduled jobs, dashboard backend
+- **PostgreSQL** = observability, auth, queue, settings
+- **Dashboard** (React/Vite/TypeScript/Tailwind v4) = web UI on top of the API
 
-**Key principle:** n8n is the glue; API is the custom AI microservice. Metadata (date, technicien, lien_audio) added by n8n, not the API.
+## Key Design Decisions
+
+1. **n8n does the reply before the Sheet append** — a failed write must never cost the technician their summary. Failed writes go to a Postgres retry queue drained every 5 minutes.
+2. **Darija STT** uses a strategy pattern (Groq Whisper primary, Gemini Audio fallback, HF Darija fine-tune pending benchmark).
+3. **Two extraction fallback chains**: text chain alternates vendors (Gemini structured output → Groq JSON mode); image chain is Google-only (no free Groq vision model).
+4. **No silent fallbacks** — if all engines in a chain fail, the API returns 502 so n8n can flag the row. Never invented data.
+5. **Image input**: vision model reads the photo and fills the schema directly (no intermediate transcription). Always `flag_review=true`.
+6. **Technician profiles**: one French paragraph per technician, rebuilt nightly at 03:00 from their past reports, injected into extraction prompts as labelled context.
+7. **Reply-first ordering**: n8n replies to the technician *before* appending to the Sheet. The user gets their confirmation even if Sheets is down.
+8. **Auth**: session cookies (Postgres-backed) for humans, `X-API-Key` for n8n — two separate gates (`require_user` accepts either, `require_human` rejects machines, `require_director` narrows further).
 
 ## Tech Stack
 
-| Layer | Technology | Notes |
-|-------|------------|-------|
-| Reception | Telegram Bot API | Switched from WhatsApp (Meta friction) |
-| Orchestration | n8n (Docker) | Polling for dev, webhook for pilot |
-| AI API | FastAPI + Python 3.9 | Single endpoint: `POST /process` |
-| STT | Groq Whisper / Gemini / HF Darija | Strategy pattern, benchmark pending |
-| Extraction | Gemini (structured) → Groq fallback | Never silent fallback |
-| Storage | Google Sheets | Free tier |
-| Notifications | Gmail SMTP | Free tier |
-| Deploy | Vercel (API) + VPS (n8n) | Zero budget — free tiers only |
+- **Backend API**: Python 3.9, FastAPI, pydantic-settings, uvicorn
+- **STT**: Groq Whisper-large-v3 (default), Gemini 2.5 Flash (fallback)
+- **LLM**: Google Gemini 2.5 Flash (structured output), Groq Llama 3.3 70B (JSON mode)
+- **Image generation**: Google Gemini 2.5 Flash
+- **Email**: smtplib + Gmail SMTP App Password
+- **Database**: PostgreSQL 15 (optional — logs/auth disabled if `DATABASE_URL` unset)
+- **Orchestration**: n8n (self-hosted, single unified workflow)
+- **Dashboard**: React 19, Vite, TypeScript, Tailwind v4, `motion/react`, Phosphor icons
+- **Deployment**: Docker Compose (3 services: api, n8n, postgres)
+- **Public URL**: Tailscale Funnel → n8n (for WhatsApp webhooks)
 
-## Budget Constraint
+## Feature Status
 
-**Zero budget** — free tiers only:
-- Groq API (Whisper, Llama)
-- Gemini AI Studio
-- Hugging Face Inference
-- Telegram Bot API
-- Gmail SMTP
-- Vercel Hobby
+| Feature | Status | Notes |
+|---|---|---|
+| Telegram voice → STT → Sheet | ✅ Built | Live since 2026-03 |
+| WhatsApp voice → STT → Sheet | ✅ Built | Live since 2026-07-23 |
+| Text (typed report) mode | ✅ Built | `/process` accepts `text` field |
+| Image/photo input | ✅ Built | Vision model, no transcription, `flag_review=true` |
+| LLM extraction (Gemini → Groq) | ✅ Built | Two-chained fallback |
+| Technician profiles | ✅ Built | `api/app/memory.py`, rebuilt at 03:00 |
+| Google Sheets append | ✅ Built | Done by n8n, retry queue for failures |
+| Google Sheets read/write (dashboard) | ✅ Built | `GET|PATCH /reports` |
+| PDF report generation | ✅ Built | `api/app/imagegen.py` (illustrated summary card) |
+| Daily report email | ✅ Built | `api/app/daily_report.py`, triggered by scheduler |
+| Weekly report email | ✅ Built | Reuses daily report with date-range label |
+| Dashboard (React) | ✅ Built | `Dashboard/`, live on port 5173 (dev) |
+| Dashboard auth (sessions) | ✅ Built | `POST /auth/login`, Postgres-backed |
+| Access control (technicians) | ✅ Built | `GET|POST|DELETE /technicians` |
+| STT benchmark | 🟡 Pending | Dataset `benchmark/dataset/audio/` still empty |
+| n8n dashboards | 🟡 N/A | Dashboard has its own panel; n8n UI is admin only |
+| AI search on reports | ❌ Not planned | Sheets search is sufficient |
+| Automated testing on CI | 🟡 Manual | No CI configured (run `pytest` manually) |
+| Public deployment | 🟡 Pilot | Docker Compose on local machine, Tailscale Funnel |
 
-## Data Flow
+## Channels
 
-1. Technician sends voice note via Telegram
-2. n8n receives (polling/webhook) → downloads audio
-3. n8n calls `POST /process` with `audio` as a multipart file upload (not base64) — metadata (date, technicien, lien_audio) is added by n8n *after* the API responds, not sent to it
-4. API: STT → Extraction → Returns `ProcessResponse` (wraps `ExtractedReport`)
-5. n8n appends to Google Sheets
-6. n8n sends manager notification (email)
+Two active reception channels:
 
-## API Contract
+- **Telegram**: Polling (outbound only), no open ports needed. Technicians send voice notes to the bot. The bot uses `getUpdates` every 15s.
+- **WhatsApp**: Webhook-driven via Tailscale Funnel (`https://<TAILSCALE_HOSTNAME>` → n8n). Needs a public HTTPS URL.
 
-**Endpoint:** `POST /process`
+Both feed the same `/process` endpoint and append to the same Sheet. The reply returns on the originating channel.
 
-**Input (one of, multipart form):**
+## Data Flow (simplified)
+
 ```
-// Voice mode
-audio: <file upload> (+ optional `provider` field to override STT engine)
-
-// Web form mode
-text: "transcribed text..."
-```
-n8n adds metadata (date, technicien, lien_audio) to the Sheets row itself — the API never sees it.
-
-**Output:** `ProcessResponse` — `{ rapport_complet, report: ExtractedReport, transcription, warnings }` (see schemas)
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `PLAN.md` | Source of truth — architecture, sprint timeline, locked choices |
-| `docs/cahier-des-charges.md` | Original specification (French) |
-| `CLAUDE.md` | Claude Code instructions for this repo |
-| `api/app/main.py` | FastAPI entry point |
-| `api/app/providers/` | STT providers (strategy pattern) |
-| `api/app/extraction.py` | LLM extraction logic |
-| `api/app/schemas.py` | Data contracts (ExtractedReport) |
-| `n8n/workflows/` | n8n workflow JSON exports |
-
-## Sprint Timeline (from PLAN.md)
-
-| Week | Focus |
-|------|-------|
-| Week 0 (Jul 16-22) | Setup, Telegram reception, API skeleton |
-| Week 1 (Jul 23-29) | STT benchmark, provider selection |
-| Week 2 (Jul 30-Aug 5) | Extraction pipeline, Sheets integration |
-| Week 3 (Aug 6-12) | Notifications, end-to-end testing |
-| Week 4 (Aug 13-19) | Pilot deployment, feedback |
-| Week 5 (Aug 20-26) | Hardening, docs, handoff |
-| Week 6 (Aug 27-31) | Buffer, final delivery |
-
-## Current Status (Jul 23)
-
-- [x] Project structure, git repo
-- [x] Telegram Bot API reception (n8n polling workflow)
-- [x] API skeleton with `/process` endpoint
-- [x] STT provider abstraction (3 adapters registered)
-- [x] Extraction pipeline (Gemini primary, Groq fallback)
-- [x] Schemas defined (ExtractedReport)
-- [x] Tests passing (33 tests, no API keys needed)
-- [ ] STT benchmark to pick default provider
-- [ ] Google Sheets append in n8n
-- [ ] Manager notifications
-- [ ] End-to-end smoke test
-
-## Commands
-
-```bash
-# API development
-cd api
-.venv/Scripts/python.exe -m pytest              # All tests
-.venv/Scripts/python.exe -m uvicorn app.main:app --reload  # Dev server :8000
-
-# n8n
-docker compose up -d                            # http://localhost:5678
+Technician (TG/WA) → n8n → POST /process (API) → JSON → n8n reply → n8n Sheet append
+                                                              → (on failure) Postgres queue → drain → Sheet
 ```
 
-## Links
+Scheduled jobs (API internal): daily email → SMTP, weekly email → SMTP, profile rebuild → persons.profile → no n8n involvement.
 
-- [[PLAN.md]]
-- [[CLAUDE.md]]
-- [[docs/cahier-des-charges.md]]
-- [[STT Benchmark]]
-- [[Extraction Pipeline]]
-- [[n8n Workflows]]
+## Related
+
+- [[architecture]] — detailed system boundaries
+- [[Extraction Pipeline]] — LLM prompt flow
+- [[n8n Workflows]] — orchestration details
 - [[Google Sheets Integration]]
+- [[Deployment Guide]]
+- [[Local Development]]
+- [[STT Benchmark]]
+- [[TO-DO]]

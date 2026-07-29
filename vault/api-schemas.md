@@ -9,112 +9,126 @@ status: current
 
 ## Overview
 
-`api/app/schemas.py` is the single source of truth for data flowing between the API, n8n, and (eventually) the Google Sheet. Metadata fields (`date`, `heure`, `technicien`, `lien_audio`) are **not** part of these schemas — n8n adds them to the Sheets row itself, from the Telegram message context, after the API responds. The API only returns what it can derive from the audio/text content.
+`api/app/schemas.py` is the single source of truth for data flowing between the API and n8n / the Sheet. Metadata fields (`date`, `technicien`, `lien_audio`, `canal`) are added by n8n after the API responds — the API only returns what it can derive from the audio/image/text content.
 
-## `ExtractedReport`
+## ExtractedReport
 
 ```python
 class ExtractedReport(BaseModel):
     chantier: Optional[str] = None
     client: Optional[str] = None
-    type_activite: Optional[str] = None       # ex: câblage, finition
-    goulottes_m: Optional[float] = None       # >= 0
-    cables_m: Optional[float] = None          # >= 0
-    bureaux_termines: Optional[int] = None    # >= 0
-    panneaux_raccordes: Optional[int] = None  # >= 0
-    autres_travaux: Optional[str] = None
+    type_intervention: Optional[str] = None
+    equipements_conernes: Optional[str] = None
+    cause_identifiee: Optional[str] = None
+    actions_realisees: Optional[str] = None
+    materiel_utilise: Optional[str] = None
     observations: Optional[str] = None
-    resume: str                               # required, 2-4 phrases FR
+    resume: str
+    flag_review: bool = False
+    categorie: Optional[str] = None
 ```
 
-A `field_validator("*", mode="before")` normalizes the *string* `"null"`/`"none"`/`""` to `None` — Groq's JSON mode occasionally emits the literal string instead of a JSON null.
+A `field_validator("*", mode="before")` normalizes `"null"`/`"none"`/`""` to `None` — Groq's JSON mode occasionally emits the literal string instead of a JSON null. All fields except `resume` are optional.
 
-All fields except `resume` are optional; the extraction prompt enforces `null` for anything not explicitly stated (never invented).
+Field changes ripple to:
+- Extraction prompts (`api/app/prompts/extraction.md`)
+- Sheet column headers (`Rapports` tab)
+- n8n mappings (Set nodes in `aznet-complete.json`)
 
-## `TranscriptionInfo`
+## TranscriptionInfo
 
 ```python
 class TranscriptionInfo(BaseModel):
     text: str
     provider: str
-    latency_s: float           # >= 0
-    confidence: Optional[float]  # 0-1, None if the provider exposes no signal
+    model: str
+    confidence: Optional[float]  # 0-1, None if provider exposes no signal
+    duration_seconds: Optional[float]
+    language: Optional[str]
+    processing_time: float       # wall-clock seconds
+    raw_response: dict = {}
 ```
 
-Only Groq derives a confidence score (from Whisper's per-segment `avg_logprob`, via `exp(avg_logprob)`); Gemini and HF Darija leave it `None` — no fabricated numbers.
+Only Groq derives a confidence score (from Whisper's per-segment `avg_logprob`, via `exp(avg_logprob)`); Gemini and HF Darija leave it `None`.
 
-## `ProcessResponse`
+## ProcessResponse
 
 ```python
 class ProcessResponse(BaseModel):
-    rapport_complet: str                  # raw transcription or form text
+    rapport_complet: str
     report: ExtractedReport
     transcription: Optional[TranscriptionInfo]  # None in text mode
     warnings: List[str] = []
 ```
 
-`warnings` currently carries two values, both set in `api/app/main.py`:
+`warnings` carries:
 - `"short_transcription"` — `rapport_complet` under 10 chars
 - `"low_confidence_transcription"` — `transcription.confidence < 0.5` (Groq only)
 
-## What the API does NOT define
+## Process endpoint
 
-There is no `ProcessVoiceRequest`/`ProcessTextRequest`/`ReportMetadata` model — the `/process` endpoint (`api/app/main.py`) takes plain FastAPI `File`/`Form` parameters directly:
+`POST /process` accepts **multipart/form-data** (not JSON+base64). Parameters:
 
 ```python
 async def process(
-    audio: Optional[UploadFile] = File(None),
-    text: Optional[str] = Form(None),
-    provider: Optional[str] = Form(None),
+    audio: Optional[UploadFile] = File(None),     # voice note file
+    image: Optional[UploadFile] = File(None),      # photo
+    text: Optional[str] = Form(None),              # typed report
+    provider: Optional[str] = Form(None),          # STT provider override
+    correlation_id: Optional[str] = Form(None),    # UUID for log joining
+    channel: Optional[str] = Form(None),           # telegram / whatsapp
+    technicien: Optional[str] = Form(None),        # technician name
 ) -> ProcessResponse
 ```
 
-Request body is **multipart/form-data**, not JSON+base64. Exactly one of `audio`/`text` is required (422 if both or neither are present).
+Exactly one of `audio`/`image`/`text` is required (422 if zero or more than one). See [[Extraction Pipeline]] for routing logic.
 
 ## Error contract
 
 | Condition | HTTP | Notes |
 |---|---|---|
-| Neither/both of `audio`/`text` | 422 | |
-| Empty audio file / empty text | 422 | |
+| Zero or multiple of `audio`/`image`/`text` | 422 | |
+| Empty file / empty text | 422 | |
 | Unknown `provider` name | 422 | `ValueError` from the registry |
 | STT engine failure | 502 | `TranscriptionError` |
-| Extraction failure (both Gemini and Groq) | 502 | `ExtractionError`, combined message |
-| Transcription < 10 chars | 200 + `warnings` | not an error |
+| Extraction failure (both engines) | 502 | `ExtractionError`, combined message |
+| Transcription < 10 chars | 200 + `warnings` | Not an error, but flagged |
 
-There is no separate `ErrorResponse`/`TranscriptionError`/`ExtractionError` Pydantic model exposed over the wire — FastAPI's default `HTTPException` JSON body (`{"detail": "..."}`) is what n8n sees.
+No separate `ErrorResponse` Pydantic model over the wire — FastAPI's `HTTPException` JSON body (`{"detail": "..."}`) is what n8n sees.
 
 ## Google Sheets row mapping
 
-Not implemented yet (Week 1, per PLAN.md — n8n Sheets append is a Sprint 2 item, see TO-DO.md). No column mapping code or n8n function exists in the repo today. When it lands, it will map `ExtractedReport` fields + n8n-added metadata (`date`, `technicien`, `lien_audio`) directly — do not invent a richer intermediate schema ahead of that work.
+Fully implemented. n8n maps `ExtractedReport` fields + metadata (`date`, `technicien`, `lien_audio`, `canal`, `Statut`, `Message ID`, `Correlation ID`, etc.) to `Rapports` tab columns. See [[Google Sheets Integration]] for the full column mapping. The Sheet is appended via n8n's Google Sheets node (service account auth); failed writes go to a Postgres retry queue.
 
 ## French domain vocabulary
 
 | Field | Meaning |
 |---|---|
 | `chantier` | Work site |
-| `goulottes_m` | Cable trays, meters |
-| `cables_m` | Network cable, meters |
-| `bureaux_termines` | Offices completed |
-| `panneaux_raccordes` | Patch panels wired |
-| `autres_travaux` | Work not covered by the standard quantities |
-| `resume` | Professional French summary for the chef de chantier |
+| `type_intervention` | trouble / fibre / installation / etc. |
+| `equipements_conernes` | Equipment involved |
+| `cause_identifiee` | Root cause |
+| `actions_realisees` | Steps taken |
+| `materiel_utilise` | Consumables used |
+| `resume` | Professional French summary for the chef de chantier (2-4 sentences) |
 
-**Do not anglicize** — matches the cahier des charges and (future) Sheet headers.
+**Do not anglicize** — matches the cahier des charges and the Sheet headers.
 
-## Testing schema changes
+## Testing
 
 ```bash
 cd api
-.venv/Scripts/python.exe -m pytest tests/test_schemas.py -v
+.venv/Scripts/python.exe -m pytest tests/test_process_endpoint.py -v
+.venv/Scripts/python.exe -m pytest tests/test_extraction.py -v
 ```
 
-`api/tests/test_schemas.py` covers the null-string coercion, numeric-string coercion, and both response shapes (voice mode with `transcription`, text mode without).
+Schema validation is covered by `test_process_endpoint.py` and `test_extraction.py`.
 
 ## Related Notes
 
 - [[Project Overview]]
-- [[Architecture]]
+- [[architecture]]
 - [[Extraction Pipeline]]
 - [[n8n Workflows]]
+- [[Google Sheets Integration]]
 - [[Testing Strategy]]

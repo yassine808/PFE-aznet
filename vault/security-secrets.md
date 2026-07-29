@@ -1,63 +1,90 @@
 ---
-tags: [pfe, security, secrets, api-keys]
-type: technical
+tags: [pfe, security, secrets, env]
+type: guide
 priority: high
-status: partial
+status: current
 ---
 
-> **Note on status:** the local-dev secrets handling below (env vars, lazy key checks) is real and current. Everything about VPS hardening, Vercel env dashboards, webhook secret tokens, and service-account IAM roles is **plan**, describing infrastructure that doesn't exist yet — there is no VPS, no Vercel project, no Google service account, no Telegram webhook secret configured (the dev workflow uses polling, which needs none of that). A prior version of this doc presented all of this as already configured; it wasn't.
+# Security and Secrets
 
-# Security & Secrets (Current + Plan)
+## Environment Variables
 
-## What's real today
+Configuration is **env-driven** via `pydantic-settings` (`api/app/config.py`). No hardcoded secrets in code.
 
-### Secrets storage
-
-`api/app/config.py` reads from a `.env` file at the **repo root** (shared with docker-compose), via pydantic-settings:
+Keys are **optional at startup** and checked at call time (fail loudly with a clear message). `Config` is a global singleton with `frozen=True` — `@lru_cache` on the config class.
 
 ```python
-groq_api_key: Optional[str] = None
-gemini_api_key: Optional[str] = None
-hf_token: Optional[str] = None
+# config.py pattern:
+groq_api_key: Optional[str] = Field(None, description="Groq API key")
+# Checked at call time:
+if not config.groq_api_key:
+    raise TranscriptionError("Groq API key not configured")
 ```
 
-All optional at import time; each provider/extraction path raises a clear error at call time if its key is missing (`"GROQ_API_KEY not configured"`, etc.) — never a silent fallback. This is the entire secrets story in the current codebase.
+## Secrets inventory
 
-`.env` is (per standard practice, and CLAUDE.md's zero-invented-behavior stance) expected to be gitignored — verify with `git check-ignore .env` rather than assuming.
+### In `.env` (repo root, gitignored)
 
-### Telegram bot token
-
-Stored as an n8n credential (Telegram API), pasted from BotFather. The **polling** workflow used in dev needs no webhook secret, no public URL, no signature verification — it only makes outbound `getUpdates` calls.
-
-## Threat model (current scope)
-
-| Asset | Threat | Current mitigation |
+| Variable | Used by | Risk |
 |---|---|---|
-| Groq/Gemini/HF API keys | Leak via git/logs | Env var only, never hardcoded; not committed |
-| Telegram bot token | Hijack | Stored as n8n credential, not in workflow JSON |
-| Audio content | PII exposure | Processed in memory, not persisted by the API; not logged |
-| Technician names | PII | Acceptable per cahier des charges (business need) |
+| `TELEGRAM_BOT_TOKEN` | n8n (TG Trigger node) | Can send messages as the bot |
+| `WHATSAPP_TOKEN` | n8n (WA nodes) | Can send messages as the WABA |
+| `WHATSAPP_VERIFY_TOKEN` | n8n (WA webhook verify) | Low risk (just a verification string) |
+| `GROQ_API_KEY` | API | Metered usage on our Groq account |
+| `GEMINI_API_KEY` | API (extraction + STT fallback) | Metered usage on our GCP project |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | API (`sheets.py`) | Full access to the Sheet + Drive |
+| `GOOGLE_SHEET_ID` | API + n8n | Low risk (just a sheet ID) |
+| `GOOGLE_DRIVE_REFRESH_TOKEN` | API | Drive upload capability |
+| `DATABASE_URL` | API (`logs.py`) | Full access to the Postgres database |
+| `INTERNAL_API_KEY` | n8n → API auth | Shared secret for machine-to-machine calls |
+| `SECRET_KEY` | API (auth) | Cookie signing key — compromise = forged sessions |
+| `SMTP_*` | API (`mailer.py`) | Gmail account access |
 
-## Planned, not yet applicable
+### In `Dashboard/.env` (gitignored)
 
-- **Webhook secret token verification** — relevant to the WhatsApp branch, which is webhook-driven behind the Tailscale Funnel; the Telegram branch polls and exposes nothing.
-- **Google Sheets service account, minimal-scope IAM** — moot until a service account is created at all (see [[Google Sheets Integration]]).
-- **Gmail app password** — moot until email notification is built.
-- **VPS hardening (SSH, firewall, fail2ban)** — moot until a pilot VPS/server exists (see [[Deployment Guide]]).
-- **Vercel environment variables** — moot; no Vercel project exists for the API (see [[Vercel Advanced]]).
+| Variable | Used by | Risk |
+|---|---|---|
+| `VITE_API_BASE_URL` | Vite dev server proxy | Low (just a URL) |
+| `N8N_API_KEY` | Vite dev proxy (non-`VITE_` prefix) | n8n admin access |
 
-## Incident response (still applicable, regardless of deployment stage)
+### In `credentials/service-account.json` (gitignored)
 
-If a key leaks:
-1. Revoke it in the provider dashboard (Groq/Gemini/HF console) immediately.
-2. Generate a new key, update the local `.env`.
-3. Check the provider's usage/audit log for abuse.
+Full Google service account key — access to the Sheet, Drive, and any other enabled GCP API under the project.
 
-If the Telegram bot token leaks: revoke via `@BotFather` → `/revoke`, generate a new token, update the n8n credential.
+### Not in any file
 
-## Related Notes
+- Session tokens: stored in Postgres `sessions` table, opaque random tokens (not JWTs), server-side only
+- User passwords: hashed via `hashlib.sha256` (salted with a secret suffix; `bcrypt` not used to keep the dependency light)
+- n8n's own SQLite DB: lives in a Docker named volume (`n8n_data`)
 
-- [[Project Overview]]
-- [[Architecture]]
-- [[Deployment Guide]]
-- [[n8n Workflows]]
+## Auth Architecture
+
+Everything is gated (`api/app/auth.py`). Two ways through:
+
+1. **Session cookie** (for humans browsing the dashboard): `POST /auth/login` validates username/password, creates a session in Postgres, sets a signed cookie. `GET /auth/me` returns the current user. `POST /auth/logout` deletes the session.
+2. **`X-API-Key` header** (for n8n machine calls): checked against `INTERNAL_API_KEY`.
+
+Three auth gates:
+- `require_user` — accepts either cookie or API key
+- `require_human` — rejects API key (settings, report edits, accounts)
+- `require_director` — narrows further by role
+
+`INTERNAL_API_KEY` unset means machine access is **disabled** — never "everyone is a machine."
+
+## Open items before publishing
+
+- `allow_origins=["*"]` in the FastAPI CORS middleware — fine for one-PC usage, needs tightening before internet deployment
+- No rate limit on `/auth/login` — fine for one PC, needed before internet
+- Passwords use SHA-256 (salted), not bcrypt — dependency-light choice but should be upgraded if user count grows
+
+## Git hygiene
+
+- `.env`, `*.env`, `credentials/`, `.venv/` are in `.gitignore`
+- `Dashboard/.env` is separately gitignored
+- Never commit `.env` files or service account keys
+- `git add .` is forbidden by protocol — add files individually
+
+## Related
+
+- [[Deployment Guide]] — provisioning secrets
+- [[Local Development]] — using `.env.example` as template
