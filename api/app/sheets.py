@@ -86,6 +86,47 @@ def update_report_field(row: int, field: str, value: Optional[str]) -> None:
         raise SheetsError(f"sheets write failed: {exc}") from exc
 
 
+def append_report(values: dict) -> None:
+    """Append one report row to the Rapports tab.
+
+    Used only by the retry drain: the happy path still appends from n8n. Cells
+    are placed by header name, so a column reordered in the Sheet moves the value
+    with it instead of silently writing `chantier` into `client`.
+    """
+    svc = _service()
+    try:
+        header_resp = (
+            svc.spreadsheets()
+            .values()
+            .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
+            .execute()
+        )
+        headers = header_resp.get("values", [[]])[0]
+        if not headers:
+            raise SheetsError("Rapports tab has no header row")
+        row = [_cell(values.get(h)) for h in headers]
+        svc.spreadsheets().values().append(
+            spreadsheetId=settings.sheet_id,
+            range=RAPPORTS_TAB,
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [row]},
+        ).execute()
+    except SheetsError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SheetsError(f"sheets append failed: {exc}") from exc
+
+
+def _cell(value) -> str:
+    """Sheets takes strings. None becomes empty — absence is not zero."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    return str(value)
+
+
 def _col_letter(n: int) -> str:
     letters = ""
     while n:

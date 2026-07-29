@@ -8,7 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import auth, daily_report, extraction, imagegen, logs, memory, prompt_loader, sheets
+from app import auth, daily_report, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError
@@ -26,8 +26,14 @@ async def lifespan(_: FastAPI):
         logs.init_schema()
         print("[logs] postgres schema ready")
         auth.seed_admin()
+        # Scheduler starts only with a reachable store: every job either reads
+        # or records through it, so without one they would fail every tick and
+        # fill the panel with noise no operator can act on.
+        if jobs.start():
+            print("[jobs] scheduler running")
     except logs.LogStoreError as exc:
         print(f"[logs] DISABLED — {exc}")
+        print("[jobs] DISABLED — no log store")
     yield
 
 
@@ -535,6 +541,29 @@ def list_queue(limit: int = 20, caller: dict = Depends(auth.require_user)) -> di
         raise HTTPException(502, str(exc)) from exc
 
 
+# ── Scheduled jobs ─────────────────────────────────────────────────────────
+# The three cron bands that used to live in n8n. The scheduler runs them; these
+# two routes are how the dashboard sees and forces them.
+
+
+@app.get("/jobs")
+def list_jobs(caller: dict = Depends(auth.require_human)) -> dict:
+    return {"jobs": jobs.status()}
+
+
+@app.post("/jobs/{name}/run")
+async def run_job(name: str, caller: dict = Depends(auth.require_human)) -> dict:
+    """Run one job now. Never 500s on a job failure — the outcome is the payload.
+
+    Off the event loop: these read the Sheet and call models, and a synchronous
+    handler would freeze every other request for the duration.
+    """
+    if name not in jobs.JOBS:
+        raise HTTPException(404, f"unknown job: {name}")
+    auth.record(caller, "job_run", target=name)
+    return await run_in_threadpool(jobs.run, name)
+
+
 # ── Technician directory ───────────────────────────────────────────────────
 # Managed from the dashboard, read by the reception workflow to authorize a
 # sender before any transcription happens.
@@ -597,23 +626,6 @@ def remove_person(person_id: int, caller: dict = Depends(auth.require_human)) ->
         raise HTTPException(502, str(exc)) from exc
 
 
-def _refresh_profile(person: dict, rows: List[dict]) -> dict:
-    """Rebuild one person's profile. Never raises: called in a loop by the cron,
-    and one technician with no reports must not stop the rest."""
-    name = person["name"]
-    try:
-        reports = memory.collect(rows, name)
-        profile, model = memory.build(name, person.get("role"), reports)
-    except memory.ProfileError as exc:
-        # Left as-is rather than cleared: yesterday's profile is better context
-        # than none, and clearing on failure would erase a good summary because
-        # a free-tier model was busy at 3am.
-        return {"person_id": person["id"], "name": name, "updated": False, "reason": str(exc)}
-    logs.save_profile(person["id"], profile)
-    return {"person_id": person["id"], "name": name, "updated": True, "model": model,
-            "profile": profile}
-
-
 @app.post("/persons/{person_id}/profile")
 def refresh_one_profile(person_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     """Regenerate a single profile. The dashboard's button, and the way to fix a
@@ -625,7 +637,7 @@ def refresh_one_profile(person_id: int, caller: dict = Depends(auth.require_huma
     if person is None:
         raise HTTPException(404, f"person {person_id} not found")
     auth.record(caller, "profile_refreshed", target=person["name"])
-    return _refresh_profile(person, sheets.read_reports())
+    return memory.refresh_person(person, sheets.read_reports())
 
 
 @app.post("/profiles/refresh")
@@ -640,7 +652,7 @@ def refresh_all_profiles(caller: dict = Depends(auth.require_user)) -> dict:
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     rows = sheets.read_reports()
-    results = [_refresh_profile(p, rows) for p in persons]
+    results = [memory.refresh_person(p, rows) for p in persons]
     return {"refreshed": sum(1 for r in results if r["updated"]), "results": results}
 
 
@@ -693,33 +705,21 @@ def send_test_mail(payload: TestMailIn, caller: dict = Depends(auth.require_huma
     naming exactly which variables are missing instead of a silent no-op.
     """
     if not settings.smtp_user or not settings.smtp_password:
-        raise HTTPException(
-            422,
+        raise HTTPException(422, str(mailer.MailError(
             "SMTP is not configured — set SMTP_USER and SMTP_PASSWORD in .env "
-            "(Gmail requires an app password, not the account password)",
-        )
-
-    import smtplib  # lazy: keeps the import out of the test suite's path
-    from email.message import EmailMessage
-
-    msg = EmailMessage()
-    msg["Subject"] = "aznet — test de notification"
-    msg["From"] = settings.smtp_from or settings.smtp_user
-    msg["To"] = payload.to
-    msg.set_content(
-        "Ceci est un message de test envoyé depuis le tableau de bord aznet.\n"
-        "Si vous le recevez, l'adresse est correctement configurée pour les "
-        "rapports quotidiens et hebdomadaires."
-    )
-
+            "(Gmail requires an app password, not the account password)"
+        )))
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-            smtp.starttls()
-            smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg)
-    except Exception as exc:
+        mailer.send(
+            [payload.to],
+            "aznet — test de notification",
+            "Ceci est un message de test envoyé depuis le tableau de bord aznet.\n"
+            "Si vous le recevez, l'adresse est correctement configurée pour les "
+            "rapports quotidiens et hebdomadaires.",
+        )
+    except mailer.MailError as exc:
         # 502: the mail relay refused us, which is not the caller's mistake.
-        raise HTTPException(502, f"envoi échoué: {exc}") from exc
+        raise HTTPException(502, str(exc)) from exc
 
     return {"sent": True, "to": payload.to}
 

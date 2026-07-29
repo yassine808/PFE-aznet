@@ -17,7 +17,7 @@ const I18nContext = createContext<{
   locale: Locale
   setLocale: (l: Locale) => void
   dir: 'ltr' | 'rtl'
-  t: (key: string) => string
+  t: (key: string, vars?: Record<string, string | number>) => string
 } | null>(null)
 
 function initialLocale(): Locale {
@@ -38,7 +38,16 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const setLocale = useCallback((l: Locale) => setLocaleState(l), [])
 
   // A missing key surfaces as the key itself. Silent fallback to a blank string hides gaps.
-  const t = useCallback((key: string) => DICTIONARIES[locale][key] ?? fr[key as keyof typeof fr] ?? key, [locale])
+  // `{name}` placeholders are filled from `vars`; an unmatched one is left visible
+  // for the same reason — a sentence reading "{count} rapports" is a bug report.
+  const t = useCallback(
+    (key: string, vars?: Record<string, string | number>) => {
+      const text = DICTIONARIES[locale][key] ?? fr[key as keyof typeof fr] ?? key
+      if (!vars) return text
+      return text.replace(/\{(\w+)\}/g, (match, name) => (name in vars ? String(vars[name]) : match))
+    },
+    [locale],
+  )
 
   return <I18nContext.Provider value={{ locale, setLocale, dir, t }}>{children}</I18nContext.Provider>
 }

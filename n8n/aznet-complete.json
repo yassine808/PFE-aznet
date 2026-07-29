@@ -1,5 +1,5 @@
 {
-  "name": "aznet — pipeline complet (reception + maintenance + rapport quotidien + erreurs)",
+  "name": "aznet — pipeline complet (réception + erreurs)",
   "nodes": [
     {
       "id": "e1000000-0000-4000-8000-900000000000",
@@ -393,7 +393,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6560,
+        6920,
         365
       ],
       "onError": "continueErrorOutput",
@@ -453,7 +453,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6920,
+        7280,
         270
       ]
     },
@@ -484,7 +484,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        6920,
+        7280,
         460
       ]
     },
@@ -501,7 +501,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        7280,
+        7640,
         365
       ],
       "credentials": {
@@ -525,7 +525,7 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        7280,
+        7640,
         555
       ],
       "credentials": {
@@ -830,7 +830,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        8000,
+        8360,
         365
       ],
       "credentials": {
@@ -871,7 +871,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        7280,
+        7640,
         175
       ]
     },
@@ -888,7 +888,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        7640,
+        8000,
         270
       ],
       "credentials": {
@@ -912,7 +912,7 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        7640,
+        8000,
         460
       ],
       "credentials": {
@@ -1155,7 +1155,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8000,
+        8360,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1185,7 +1185,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8360,
+        8720,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1215,7 +1215,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8720,
+        9080,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1245,7 +1245,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6920,
+        7280,
         885
       ],
       "onError": "continueRegularOutput",
@@ -1275,7 +1275,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8360,
+        8720,
         365
       ],
       "onError": "continueRegularOutput",
@@ -1305,7 +1305,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        6360,
+        6560,
         365
       ],
       "parameters": {
@@ -1366,8 +1366,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6560,
-        565
+        6920,
+        555
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -1422,6 +1422,67 @@
       ],
       "id": "filtrer-acces-000001",
       "name": "Filtrer accès"
+    },
+    {
+      "parameters": {},
+      "id": "c1000000-0000-4000-8000-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        80,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten n8n's error payload into one pipeline_logs row.\n// Payload shape: { workflow: {id,name}, execution: {id,url,error,lastNodeExecuted,...} }\n// Goes to Postgres, NOT the Sheet: an error handler that writes to Google\n// cannot report the failure of writing to Google.\nconst e = $input.first().json;\nconst err = e.execution?.error ?? {};\nreturn [{\n  json: {\n    stage: 'workflow_error',\n    level: 'error',\n    message: err.message ?? String(err),\n    correlation_id: null,\n    channel: null,\n    technicien: null,\n    payload: {\n      workflow: e.workflow?.name ?? '',\n      node: err.node?.name ?? e.execution?.lastNodeExecuted ?? '',\n      execution_url: e.execution?.url ?? '',\n      execution_id: e.execution?.id ?? '',\n    },\n  },\n}];"
+      },
+      "id": "c1000000-0000-4000-8000-000000000002",
+      "name": "Format error row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/logs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "c1000000-0000-4000-8000-000000000003",
+      "name": "POST /logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        1180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e1000000-0000-4000-8000-900000000001",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        980
+      ],
+      "parameters": {
+        "content": "## 2 — Erreurs du workflow\nPoint d'entrée séparé : ne se déclenche que si la bande 1 lève une erreur.\nÉcrit dans `pipeline_logs` (Postgres), **jamais** dans le Sheet — un handler\nqui écrit chez Google ne peut pas signaler une panne de Google.\n⚠ À activer : Settings → Error Workflow → *ce même workflow*.",
+        "height": 180,
+        "width": 900,
+        "color": 3
+      }
     }
   ],
   "connections": {
@@ -1965,6 +2026,28 @@
         [
           {
             "node": "Correlate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format error row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format error row": {
+      "main": [
+        [
+          {
+            "node": "POST /logs",
             "type": "main",
             "index": 0
           }

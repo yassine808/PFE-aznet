@@ -129,3 +129,22 @@ def build(name: str, role: Optional[str], reports: str) -> Tuple[str, str]:
             return text, f"{provider}/{model}"
         failures.append(f"{provider}/{model}: empty response")
     raise ProfileError("every profile model failed — " + " | ".join(failures))
+
+
+def refresh_person(person: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Rebuild one person's profile. Never raises: called in a loop by the
+    scheduler, and one technician with no reports must not stop the rest."""
+    from app import logs  # local: keeps memory importable without psycopg2
+
+    name = person["name"]
+    try:
+        reports = collect(rows, name)
+        profile, model = build(name, person.get("role"), reports)
+    except ProfileError as exc:
+        # Left as-is rather than cleared: yesterday's profile is better context
+        # than none, and clearing on failure would erase a good summary because
+        # a free-tier model was busy at 3am.
+        return {"person_id": person["id"], "name": name, "updated": False, "reason": str(exc)}
+    logs.save_profile(person["id"], profile)
+    return {"person_id": person["id"], "name": name, "updated": True, "model": model,
+            "profile": profile}

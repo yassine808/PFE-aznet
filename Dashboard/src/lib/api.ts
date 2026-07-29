@@ -273,6 +273,40 @@ export async function refreshProfile(id: number): Promise<{ updated: boolean; re
   return res.json() as Promise<{ updated: boolean; reason?: string }>
 }
 
+/**
+ * Scheduled maintenance jobs, run by the API's own scheduler.
+ *
+ * `last` is null until a job has run at least once in the current API process:
+ * the status is in-memory, so a restart empties it. That is deliberate — the
+ * durable record of every run is in the pipeline logs, and persisting a second
+ * copy here would be a cache with nothing to gain from it.
+ */
+export interface JobStatus {
+  name: string
+  schedule: string
+  last: {
+    ok: boolean
+    at: string
+    seconds: number
+    result?: Record<string, unknown>
+    error?: string
+  } | null
+}
+
+/**
+ * Force one job now. Resolves even when the job itself failed — `ok: false`
+ * carries the reason, and a rejected promise would make a Sheets quota error
+ * look like the dashboard being broken.
+ */
+export async function runJob(name: string): Promise<JobStatus['last']> {
+  const res = await fetch(`${BASE}/jobs/${name}/run`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
+  }
+  return res.json() as Promise<JobStatus['last']>
+}
+
 /** Operator preferences, stored server-side so any scheduler reads the same values. */
 export interface AppSettings {
   daily_time?: string
@@ -438,6 +472,7 @@ export const api = {
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),
   queue: (s?: AbortSignal) => get<{ pending: PendingWrite[] }>('/sheet-queue', s),
+  jobs: (s?: AbortSignal) => get<{ jobs: JobStatus[] }>('/jobs', s),
 }
 
 export interface Async<T> {
