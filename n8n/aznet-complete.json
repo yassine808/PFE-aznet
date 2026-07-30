@@ -1488,6 +1488,58 @@
         "width": 900,
         "color": 3
       }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '✅' }] }) }}",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-900880000000",
+      "name": "TG ack done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8240,
+        270
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accès').item.json.message_id, emoji: '✅' } }) }}",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-900880000001",
+      "name": "WA ack done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8240,
+        460
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -1894,6 +1946,11 @@
             "node": "Log replied",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "TG ack done",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1908,6 +1965,11 @@
           },
           {
             "node": "Log replied",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "WA ack done",
             "type": "main",
             "index": 0
           }
