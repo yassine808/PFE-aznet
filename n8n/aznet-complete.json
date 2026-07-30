@@ -1540,6 +1540,58 @@
       "maxTries": 2,
       "waitBetweenTries": 1000,
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '❌' }] }) }}",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-900880000002",
+      "name": "TG ack fail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7960,
+        365
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accès').item.json.message_id, emoji: '❌' } }) }}",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-900880000003",
+      "name": "WA ack fail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7960,
+        555
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -2115,6 +2167,28 @@
         [
           {
             "node": "POST /logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG fail reply": {
+      "main": [
+        [
+          {
+            "node": "TG ack fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WA fail reply": {
+      "main": [
+        [
+          {
+            "node": "WA ack fail",
             "type": "main",
             "index": 0
           }
