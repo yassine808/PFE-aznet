@@ -883,7 +883,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Filtrer accès').item.json.chat_id }}",
-        "text": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\n\n' : '✅ Rapport enregistré\n\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "text": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
         "additionalFields": {
           "reply_to_message_id": "={{ $('Filtrer accès').item.json.message_id }}"
         }
@@ -909,7 +909,7 @@
         "operation": "send",
         "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
         "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
-        "textBody": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\n\n' : '✅ Rapport enregistré\n\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
+        "textBody": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
         "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000028",

@@ -1,0 +1,15 @@
+# Deliberately narrow: this set is "things that are bugs", not style.
+#   E9   syntax errors
+#   F63  comparison mistakes (e.g. `is` on a literal)
+#   F7   syntax/semantic errors (break outside loop, ...)
+#   F82  undefined names — the class of bug that only shows up at runtime
+#   F401 unused imports    F841 unused local variables
+#
+# The full default set reports ~255 style findings on this codebase. Widening
+# it is a separate, deliberate cleanup — a lint gate that is red on arrival
+# gets ignored, which is worse than a narrow one that is trusted.
+target-version = "py39"
+line-length = 120
+
+[lint]
+select = ["E9", "F63", "F7", "F82", "F401", "F841"]

@@ -7,6 +7,12 @@ from app.schemas import ExtractedReport, TranscriptionInfo
 
 client = TestClient(main.app)
 
+# /generate-image is gated by require_human. Overriding the dependency rather
+# than logging in keeps the suite free of a database, same as the other modules.
+main.app.dependency_overrides[main.auth.require_human] = lambda: {
+    "id": 1, "name": "Test", "role": "directeur"
+}
+
 REPORT = ExtractedReport(
     chantier="Tour Atlas",
     goulottes_m=150,

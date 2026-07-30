@@ -1,14 +1,46 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push supersedes the previous run on the same ref. Without this, a burst
+# of commits queues runs that can only report on code nobody is looking at.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   PYTHON_VERSION: "3.9"
   NODE_VERSION: "22"
 
 jobs:
-  api-tests:
-    name: API - tests & lint
+  # Runs first and alone: a leaked credential is the one failure where the rest
+  # of the pipeline's result does not matter.
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history: a secret removed in HEAD is still public
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Committed credentials (tracked files)
+        run: python scripts/check_secrets.py
+      - name: Gitleaks (full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  api:
+    name: API — lint, types & tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -22,13 +54,16 @@ jobs:
           cache-dependency-path: api/requirements.txt
       - run: pip install -r requirements.txt
       - run: pip install ruff
-      - name: Ruff check
-        run: ruff check app/ tests/ || true
+      # Rule set pinned in api/ruff.toml — bugs only, not style. See the file.
+      - name: Ruff
+        run: ruff check app/ tests/
+      # No API keys and no database: external SDKs are lazy-imported and mocked
+      # at the boundary. If this ever needs a secret, the test is wrong.
       - name: Pytest
-        run: python -m pytest -v --tb=short
+        run: python -m pytest -q --tb=short
 
-  dashboard-checks:
-    name: Dashboard - lint & build
+  dashboard:
+    name: Dashboard — types, lint & build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,22 +73,50 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      # `npm install`, not `npm ci`: there is no committed package-lock.json.
+      # Committing one would make installs reproducible and re-enable npm
+      # caching here — worth doing, but it is its own change.
       - run: npm install
-      - name: TypeScript check
+      - name: TypeScript
         run: npx tsc -b --noEmit
+      # Warnings do not fail the build; errors do. The current tree is warning-only.
       - name: Oxlint
-        run: npx oxlint || true
+        run: npx oxlint
+      # The build is the real gate: tsc does not catch a broken import path,
+      # a missing asset or a Tailwind v4 token that does not resolve.
+      - name: Build
+        run: npm run build
 
-  prettier:
-    name: Prettier check
+  workflow:
+    name: n8n workflow
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: npm init -y
-      - run: npm install --save-dev prettier@^3.5
-      - name: Check formatting
-        run: npx prettier --check "**/*.{md,yaml,yml,json,py}" --ignore-unknown || true
+          python-version: ${{ env.PYTHON_VERSION }}
+      # n8n reports a bad expression only at runtime, on the node that uses it,
+      # which costs a technician their reply. Catch it here instead.
+      - name: Validate expressions and connections
+        run: python scripts/check_workflow.py
+
+  compose:
+    name: Docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose config --quiet
+
+  i18n:
+    name: Locale key parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      # fr is the reference; a key added to one file and not the others ships a
+      # raw key string to whoever switched language.
+      - name: fr / en / ar have the same keys
+        run: python scripts/check_locales.py
