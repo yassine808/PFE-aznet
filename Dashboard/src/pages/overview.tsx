@@ -16,11 +16,21 @@ const rise = {
 }
 
 /** Section heading. No box: a rule and a label carry the grouping. */
-function Band({ title, aside, children }: { title: string; aside?: string; children: React.ReactNode }) {
+function Band({
+  title,
+  aside,
+  children,
+}: {
+  title: string
+  aside?: string
+  children: React.ReactNode
+}) {
   return (
     <section className="flex min-w-0 flex-col gap-3">
       <div className="border-line flex items-baseline justify-between gap-3 border-b pb-1.5">
-        <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">{title}</h2>
+        <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
+          {title}
+        </h2>
         {aside && <span className="tabular text-ink-faint text-[0.6875rem]">{aside}</span>}
       </div>
       {children}
@@ -45,7 +55,10 @@ export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }
   const { services, health, healthError, stats } = useOps()
   const reports = useApi('reports', api.reports)
 
-  const m = useMemo(() => (reports.data ? computeMetrics(reports.data.reports) : null), [reports.data])
+  const m = useMemo(
+    () => (reports.data ? computeMetrics(reports.data.reports) : null),
+    [reports.data],
+  )
   const fmt = useMemo(
     () => new Intl.NumberFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'),
     [locale],
@@ -107,31 +120,50 @@ export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }
             { label: t('metric.flagged'), value: fmt.format(m.flagged) },
             { label: t('metric.techniciens'), value: fmt.format(m.techniciens) },
             { label: t('metric.errors24h'), value: fmt.format(stats?.last_24h.error ?? 0) },
-            { label: t('metric.uptime'), value: health ? formatUptime(health.uptime_seconds) : '—' },
+            {
+              label: t('metric.uptime'),
+              value: health ? formatUptime(health.uptime_seconds) : '—',
+            },
           ]}
         />
       </motion.div>
 
       {/* Ribbon and totals share a row: the same day, read two ways. */}
-      <motion.div variants={rise} className="grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <motion.div
+        variants={rise}
+        className="grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+      >
         <Band
           title={t('ribbon.title')}
-          aside={m.dayISO ? `${m.dayISO}${m.dayIsStale ? ` · ${t('ribbon.stale')}` : ''}` : undefined}
+          aside={
+            m.dayISO ? `${m.dayISO}${m.dayIsStale ? ` · ${t('ribbon.stale')}` : ''}` : undefined
+          }
         >
           <DayRibbon ticks={ticks} dir={dir} />
         </Band>
 
         <Band title={t('panel.productionToday')} aside={fmt.format(m.dayRows.length)}>
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-            <Quantity value={fmt.format(m.totalsToday.goulottes_m)} label={t('metric.goulottes')} unit="m" />
-            <Quantity value={fmt.format(m.totalsToday.cables_m)} label={t('metric.cables')} unit="m" />
+            <Quantity
+              value={fmt.format(m.totalsToday.goulottes_m)}
+              label={t('metric.goulottes')}
+              unit="m"
+            />
+            <Quantity
+              value={fmt.format(m.totalsToday.cables_m)}
+              label={t('metric.cables')}
+              unit="m"
+            />
             <Quantity value={fmt.format(m.totalsToday.bureaux)} label={t('metric.bureaux')} />
             <Quantity value={fmt.format(m.totalsToday.panneaux)} label={t('metric.panneaux')} />
           </div>
         </Band>
       </motion.div>
 
-      <motion.div variants={rise} className="grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <motion.div
+        variants={rise}
+        className="grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+      >
         {/* The aside states the coverage limit: this history is observed from
             this screen only, so gaps mean "unwatched", not "down". */}
         <Band title={t('panel.services')} aside={t('panel.uptimeNote')}>
@@ -143,7 +175,6 @@ export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }
           <ContributionGraph rows={reports.data?.reports ?? []} onSelectDay={onOpenDay} />
         </Band>
       </motion.div>
-
     </motion.div>
   )
 }

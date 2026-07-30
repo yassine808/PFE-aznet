@@ -12,7 +12,15 @@ import {
   UserFocusIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react'
-import { api, putSettings, runJob, sendTestMail, useApi, type AppSettings, type JobStatus } from '@/lib/api'
+import {
+  api,
+  putSettings,
+  runJob,
+  sendTestMail,
+  useApi,
+  type AppSettings,
+  type JobStatus,
+} from '@/lib/api'
 import { FORMATS, type ReportFormat } from '@/lib/report-export'
 import { useI18n } from '@/lib/i18n'
 import { ErrorState, Skeleton } from '@/components/states'
@@ -38,11 +46,21 @@ const JOB_ICONS: Record<string, typeof BroomIcon> = {
 // Order shown to the operator: the two mails they care about first, plumbing last.
 const JOB_ORDER = ['daily_report', 'weekly_report', 'sheet_queue', 'profiles', 'prune_logs']
 
-function Band({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Band({
+  title,
+  hint,
+  children,
+}: {
+  title: string
+  hint?: string
+  children: React.ReactNode
+}) {
   return (
     <section className="flex min-w-0 flex-col gap-4">
       <div className="border-line flex flex-col gap-1 border-b pb-2">
-        <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">{title}</h2>
+        <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
+          {title}
+        </h2>
         {hint && <p className="text-ink-faint max-w-[75ch] text-xs">{hint}</p>}
       </div>
       {children}
@@ -60,9 +78,12 @@ function Band({ title, hint, children }: { title: string; hint?: string; childre
 function useAgo() {
   const { locale } = useI18n()
   return useMemo(() => {
-    const rtf = new Intl.RelativeTimeFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR', {
-      numeric: 'auto',
-    })
+    const rtf = new Intl.RelativeTimeFormat(
+      locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR',
+      {
+        numeric: 'auto',
+      },
+    )
     return (iso: string) => {
       const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000)
       if (seconds < 60) return rtf.format(-seconds, 'second')
@@ -182,7 +203,10 @@ function JobCard({
         {last ? (
           <>
             <span
-              className={cn('inline-flex items-center gap-1.5', last.ok ? 'text-status-ok' : 'text-status-fail')}
+              className={cn(
+                'inline-flex items-center gap-1.5',
+                last.ok ? 'text-status-ok' : 'text-status-fail',
+              )}
             >
               <span
                 aria-hidden
@@ -190,7 +214,11 @@ function JobCard({
               />
               {t('automation.job.lastRun', { when: ago(last.at) })}
             </span>
-            {text && <span className="text-ink-muted min-w-0 flex-1 truncate" title={text}>{text}</span>}
+            {text && (
+              <span className="text-ink-muted min-w-0 flex-1 truncate" title={text}>
+                {text}
+              </span>
+            )}
           </>
         ) : (
           <span className="text-ink-faint">{t('automation.job.never')}</span>
@@ -221,7 +249,11 @@ export function AutomationPage() {
 
   const [newEmail, setNewEmail] = useState('')
   const [testing, setTesting] = useState<string | null>(null)
-  const [testResult, setTestResult] = useState<{ to: string; ok: boolean; message?: string } | null>(null)
+  const [testResult, setTestResult] = useState<{
+    to: string
+    ok: boolean
+    message?: string
+  } | null>(null)
 
   // Server values win on load; local edits win afterwards until saved.
   useEffect(() => {
@@ -235,9 +267,12 @@ export function AutomationPage() {
   }
 
   const days = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR', {
-      weekday: 'long',
-    })
+    const fmt = new Intl.DateTimeFormat(
+      locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR',
+      {
+        weekday: 'long',
+      },
+    )
     // 2026-06-01 is a Monday, so index 0 lands on Monday — same base as the
     // scheduler's `datetime.weekday()`, which is what makes 4 mean Friday in both.
     return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2026, 5, 1 + i)))
@@ -276,7 +311,11 @@ export function AutomationPage() {
       await sendTestMail(address)
       setTestResult({ to: address, ok: true })
     } catch (err) {
-      setTestResult({ to: address, ok: false, message: err instanceof Error ? err.message : String(err) })
+      setTestResult({
+        to: address,
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      })
     } finally {
       setTesting(null)
     }
@@ -285,13 +324,17 @@ export function AutomationPage() {
   if (stored.error) return <ErrorState message={stored.error} onRetry={stored.reload} />
   if (stored.loading) return <Skeleton className="mt-8 h-96 rounded-xl" />
 
-  const field = 'border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors'
+  const field =
+    'border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors'
 
   // Schedule controls, mounted inside the card of the job they drive.
   const CONTROLS: Record<string, React.ReactNode> = {
     daily_report: (
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="daily-time" className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+        <label
+          htmlFor="daily-time"
+          className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+        >
           {t('automation.dailyAt')}
         </label>
         <input
@@ -306,7 +349,10 @@ export function AutomationPage() {
     weekly_report: (
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="weekly-day" className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+          <label
+            htmlFor="weekly-day"
+            className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+          >
             {t('automation.weeklyOn')}
           </label>
           <select
@@ -323,7 +369,10 @@ export function AutomationPage() {
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="weekly-time" className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+          <label
+            htmlFor="weekly-time"
+            className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+          >
             {t('automation.at')}
           </label>
           <input
@@ -371,7 +420,10 @@ export function AutomationPage() {
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex min-w-64 flex-1 flex-col gap-1.5">
-              <label htmlFor="new-email" className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+              <label
+                htmlFor="new-email"
+                className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+              >
                 {t('automation.addEmail')}
               </label>
               <input
@@ -414,7 +466,12 @@ export function AutomationPage() {
                   <span className="text-ink min-w-0 flex-1 truncate text-sm">{address}</span>
 
                   {testResult?.to === address && (
-                    <span className={cn('text-xs', testResult.ok ? 'text-status-ok' : 'text-status-fail')}>
+                    <span
+                      className={cn(
+                        'text-xs',
+                        testResult.ok ? 'text-status-ok' : 'text-status-fail',
+                      )}
+                    >
                       {testResult.ok ? t('automation.testSent') : t('automation.testFailed')}
                     </span>
                   )}
@@ -431,7 +488,12 @@ export function AutomationPage() {
 
                   <button
                     type="button"
-                    onClick={() => set('emails', values.emails.filter((e) => e !== address))}
+                    onClick={() =>
+                      set(
+                        'emails',
+                        values.emails.filter((e) => e !== address),
+                      )
+                    }
                     aria-label={`${t('access.remove')} ${address}`}
                     className="text-ink-faint hover:text-status-fail transition-colors"
                   >
@@ -484,7 +546,9 @@ export function AutomationPage() {
           disabled={!dirty || saving}
           className={cn(
             'rounded-md px-4 py-2 text-sm transition-transform active:translate-y-px',
-            !dirty || saving ? 'border-line text-ink-faint cursor-not-allowed border' : 'bg-accent text-white',
+            !dirty || saving
+              ? 'border-line text-ink-faint cursor-not-allowed border'
+              : 'bg-accent text-white',
           )}
         >
           {saving ? t('inbox.saving') : t('inbox.save')}
@@ -495,8 +559,12 @@ export function AutomationPage() {
             {t('inbox.saved')}
           </span>
         )}
-        {dirty && !saving && <span className="text-ink-faint text-xs">{t('automation.unsaved')}</span>}
-        <p className="text-ink-faint ms-auto max-w-[46ch] text-end text-xs">{t('automation.enforceNote')}</p>
+        {dirty && !saving && (
+          <span className="text-ink-faint text-xs">{t('automation.unsaved')}</span>
+        )}
+        <p className="text-ink-faint ms-auto max-w-[46ch] text-end text-xs">
+          {t('automation.enforceNote')}
+        </p>
       </div>
     </motion.div>
   )

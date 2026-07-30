@@ -76,7 +76,10 @@ export function DailyReportPage() {
 
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="report-date" className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+          <label
+            htmlFor="report-date"
+            className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+          >
             {t('daily.date')}
           </label>
           {/* Native date input: a picker library would be a dependency for zero gain. */}
@@ -112,14 +115,18 @@ export function DailyReportPage() {
 
       {daysWithData.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('daily.available')}</span>
+          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t('daily.available')}
+          </span>
           {daysWithData.slice(0, 8).map((d) => (
             <button
               key={d}
               type="button"
               onClick={() => setDate(d)}
               className={`tabular rounded border px-2 py-1 text-xs transition-colors ${
-                d === date ? 'border-accent text-accent' : 'border-line text-ink-faint hover:text-ink'
+                d === date
+                  ? 'border-accent text-accent'
+                  : 'border-line text-ink-faint hover:text-ink'
               }`}
             >
               {d}
@@ -154,7 +161,9 @@ export function DailyReportPage() {
                 onClick={() => setDate(`${y}-01-01`)}
                 aria-pressed={y === year}
                 className={`tabular rounded px-2.5 py-1 text-xs transition-colors ${
-                  y === year ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink'
+                  y === year
+                    ? 'bg-slate-100 text-ink dark:bg-slate-850'
+                    : 'text-ink-faint hover:text-ink'
                 }`}
               >
                 {y}
@@ -177,7 +186,9 @@ export function DailyReportPage() {
         >
           <div className="border-line flex items-start justify-between gap-4 border-b pb-4">
             <div>
-              <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('daily.subject')}</p>
+              <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+                {t('daily.subject')}
+              </p>
               <h2 className="text-ink mt-1 text-lg font-medium tracking-tight">{content.objet}</h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -200,7 +211,9 @@ export function DailyReportPage() {
             </div>
           </div>
           {/* Preserve the model's paragraph breaks; it writes prose, not markup. */}
-          <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">{content.corps}</p>
+          <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">
+            {content.corps}
+          </p>
         </motion.article>
       )}
     </motion.div>

@@ -20,7 +20,13 @@ const TONE_CLASS: Record<Tone, string> = {
  * every 15-60s across several rows that produced a visible stutter. CSS
  * keyframes live outside React entirely, so a re-render cannot interrupt them.
  */
-export const LiveDot = memo(function LiveDot({ tone, live = false }: { tone: Tone; live?: boolean }) {
+export const LiveDot = memo(function LiveDot({
+  tone,
+  live = false,
+}: {
+  tone: Tone
+  live?: boolean
+}) {
   return (
     <span className="relative inline-flex size-2 shrink-0 align-middle" aria-hidden="true">
       {live && <span className={`live-ping absolute inset-0 rounded-full ${TONE_CLASS[tone]}`} />}

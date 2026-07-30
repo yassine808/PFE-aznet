@@ -21,7 +21,13 @@ const HOURS = [0, 6, 12, 18, 24]
  * a false encoding is worse than none. Occurrence and time are the whole story;
  * flagged state is carried by colour AND a cap marker, never colour alone.
  */
-export const DayRibbon = memo(function DayRibbon({ ticks, dir }: { ticks: Tick[]; dir: 'ltr' | 'rtl' }) {
+export const DayRibbon = memo(function DayRibbon({
+  ticks,
+  dir,
+}: {
+  ticks: Tick[]
+  dir: 'ltr' | 'rtl'
+}) {
   const { t } = useI18n()
   const [hover, setHover] = useState<number | null>(null)
 
@@ -67,7 +73,12 @@ export const DayRibbon = memo(function DayRibbon({ ticks, dir }: { ticks: Tick[]
                 className={`absolute bottom-0 w-[3px] rounded-full ${tick.flagged ? 'bg-status-warn' : 'bg-accent'}`}
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: '62%', opacity: active ? 1 : 0.9 }}
-                transition={{ type: 'spring', stiffness: 100, damping: 20, delay: Math.min(i * 0.03, 0.35) }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 100,
+                  damping: 20,
+                  delay: Math.min(i * 0.03, 0.35),
+                }}
                 aria-hidden="true"
               />
               {/* Cap marker: the secondary encoding that keeps flagged legible without colour. */}
@@ -104,7 +115,9 @@ export const DayRibbon = memo(function DayRibbon({ ticks, dir }: { ticks: Tick[]
         ))}
 
         {ticks.length === 0 && (
-          <span className="text-ink-faint absolute inset-x-0 top-1/3 text-center text-xs">{t('ribbon.noneToday')}</span>
+          <span className="text-ink-faint absolute inset-x-0 top-1/3 text-center text-xs">
+            {t('ribbon.noneToday')}
+          </span>
         )}
       </div>
 

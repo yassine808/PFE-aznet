@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 
 export const REFRESH_CHOICES = [15_000, 30_000, 60_000, 0] as const
 export type Density = 'comfortable' | 'compact'
@@ -14,9 +22,11 @@ export interface Settings {
 const DEFAULTS: Settings = { refreshMs: 60_000, confidence: 0.7, density: 'comfortable' }
 const STORAGE_KEY = 'aznet.settings'
 
-const SettingsContext = createContext<{ settings: Settings; update: (patch: Partial<Settings>) => void; reset: () => void } | null>(
-  null,
-)
+const SettingsContext = createContext<{
+  settings: Settings
+  update: (patch: Partial<Settings>) => void
+  reset: () => void
+} | null>(null)
 
 function initial(): Settings {
   try {
@@ -39,7 +49,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset.density = settings.density
   }, [settings])
 
-  const update = useCallback((patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch })), [])
+  const update = useCallback(
+    (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch })),
+    [],
+  )
   const reset = useCallback(() => setSettings(DEFAULTS), [])
 
   const value = useMemo(() => ({ settings, update, reset }), [settings, update, reset])

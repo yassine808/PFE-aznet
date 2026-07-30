@@ -12,7 +12,9 @@ const BEEP_MS = 6_000
  */
 function beep(ctxRef: { current: AudioContext | null }) {
   if (!ctxRef.current) {
-    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!Ctor) return
     ctxRef.current = new Ctor()
   }

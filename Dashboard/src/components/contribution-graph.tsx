@@ -65,11 +65,17 @@ export function ContributionGraph({
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const first = year !== undefined ? weekStart(new Date(year, 0, 1)) : weekStart(new Date(today.getTime() - 52 * 7 * DAY_MS))
+    const first =
+      year !== undefined
+        ? weekStart(new Date(year, 0, 1))
+        : weekStart(new Date(today.getTime() - 52 * 7 * DAY_MS))
     const lastDay = year !== undefined ? new Date(year, 11, 31) : today
     const weekCount = Math.ceil((weekStart(lastDay).getTime() - first.getTime()) / (7 * DAY_MS)) + 1
 
-    const cols: { monday: Date; days: { date: Date; iso: string; count: number; inScope: boolean }[] }[] = []
+    const cols: {
+      monday: Date
+      days: { date: Date; iso: string; count: number; inScope: boolean }[]
+    }[] = []
     let sum = 0
     let active = 0
     let peak = 1
@@ -105,7 +111,9 @@ export function ContributionGraph({
     const fmtMonth = new Intl.DateTimeFormat(intlLocale, { month: 'short' })
     return weeks.map((w, i) => {
       const prev = weeks[i - 1]
-      return !prev || prev.monday.getMonth() !== w.monday.getMonth() ? fmtMonth.format(w.monday) : ''
+      return !prev || prev.monday.getMonth() !== w.monday.getMonth()
+        ? fmtMonth.format(w.monday)
+        : ''
     })
   }, [weeks, intlLocale])
 
@@ -149,9 +157,15 @@ export function ContributionGraph({
       <div className="pb-1">
         <div className="flex gap-1.5" style={{ direction: dir }}>
           {/* Weekday gutter */}
-          <div className="grid shrink-0 gap-[2px] pt-[14px]" style={{ gridTemplateRows: rowTemplate }}>
+          <div
+            className="grid shrink-0 gap-[2px] pt-[14px]"
+            style={{ gridTemplateRows: rowTemplate }}
+          >
             {dayLabels.map((d, i) => (
-              <span key={i} className="text-ink-faint flex items-center text-[8px] leading-none capitalize">
+              <span
+                key={i}
+                className="text-ink-faint flex items-center text-[8px] leading-none capitalize"
+              >
                 {d}
               </span>
             ))}
@@ -160,7 +174,10 @@ export function ContributionGraph({
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="grid auto-cols-fr grid-flow-col gap-[2px]">
               {monthLabels.map((label, i) => (
-                <span key={i} className="text-ink-faint overflow-visible text-[8px] whitespace-nowrap capitalize">
+                <span
+                  key={i}
+                  className="text-ink-faint overflow-visible text-[8px] whitespace-nowrap capitalize"
+                >
                   {label}
                 </span>
               ))}
@@ -222,8 +239,8 @@ export function ContributionGraph({
 
       <div className="text-ink-faint flex flex-wrap items-center justify-between gap-3 text-xs">
         <span>
-          <span className="tabular">{total}</span> {t('graph.reportsIn')} <span className="tabular">{activeDays}</span>{' '}
-          {t('graph.activeDays')}
+          <span className="tabular">{total}</span> {t('graph.reportsIn')}{' '}
+          <span className="tabular">{activeDays}</span> {t('graph.activeDays')}
           {interactive && onSelectDay ? ` · ${t('graph.clickHint')}` : ''}
         </span>
         <span className="flex items-center gap-1.5">

@@ -114,7 +114,9 @@ export function computeMetrics(rows: ReportRow[]): Metrics {
 
   // The ribbon shows today when today has data, otherwise the newest day that does.
   // Showing an empty axis when reports exist would read as "the pipeline is dead".
-  const knownDays = [...new Set(dated.map((d) => d.iso).filter((d): d is string => d !== null))].sort()
+  const knownDays = [
+    ...new Set(dated.map((d) => d.iso).filter((d): d is string => d !== null)),
+  ].sort()
   const dayISO = todayRows.length ? today : (knownDays.at(-1) ?? null)
   const dayRows = dayISO ? dated.filter((d) => d.iso === dayISO).map((d) => d.row) : []
 

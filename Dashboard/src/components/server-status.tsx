@@ -37,7 +37,9 @@ export function ServerStatus() {
       title={`API ${apiUp ? 'up' : 'down'} · n8n ${n8nUp ? 'up' : 'down'}`}
     >
       <LiveDot tone={up ? 'ok' : partial ? 'warn' : 'fail'} live={up} />
-      <span className="truncate">{up ? t('server.running') : partial ? t('server.partial') : t('server.stopped')}</span>
+      <span className="truncate">
+        {up ? t('server.running') : partial ? t('server.partial') : t('server.stopped')}
+      </span>
     </span>
   )
 }

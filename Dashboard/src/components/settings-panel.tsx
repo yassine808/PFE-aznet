@@ -19,7 +19,9 @@ function Segmented<T extends string | number>({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">{label}</span>
+      <span className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
+        {label}
+      </span>
       <div className="border-line flex rounded-md border p-0.5" role="group" aria-label={label}>
         {options.map((o) => (
           <button
@@ -29,7 +31,9 @@ function Segmented<T extends string | number>({
             aria-pressed={o.v === value}
             className={cn(
               'flex-1 rounded px-2 py-1 text-xs transition-colors active:translate-y-px',
-              o.v === value ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink',
+              o.v === value
+                ? 'bg-slate-100 text-ink dark:bg-slate-850'
+                : 'text-ink-faint hover:text-ink',
             )}
           >
             {o.label}
@@ -124,25 +128,30 @@ export function SettingsPanel() {
               />
 
               {canTuneConfidence && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-baseline justify-between">
-                  <label htmlFor="confidence" className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
-                    {t('settings.confidence')}
-                  </label>
-                  <span className="tabular text-ink text-xs">{settings.confidence.toFixed(2)}</span>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-baseline justify-between">
+                    <label
+                      htmlFor="confidence"
+                      className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase"
+                    >
+                      {t('settings.confidence')}
+                    </label>
+                    <span className="tabular text-ink text-xs">
+                      {settings.confidence.toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    id="confidence"
+                    type="range"
+                    min={0.3}
+                    max={0.95}
+                    step={0.05}
+                    value={settings.confidence}
+                    onChange={(e) => update({ confidence: Number(e.target.value) })}
+                    className="accent-accent w-full"
+                  />
+                  <p className="text-ink-faint text-xs">{t('settings.confidenceHint')}</p>
                 </div>
-                <input
-                  id="confidence"
-                  type="range"
-                  min={0.3}
-                  max={0.95}
-                  step={0.05}
-                  value={settings.confidence}
-                  onChange={(e) => update({ confidence: Number(e.target.value) })}
-                  className="accent-accent w-full"
-                />
-                <p className="text-ink-faint text-xs">{t('settings.confidenceHint')}</p>
-              </div>
               )}
 
               <button

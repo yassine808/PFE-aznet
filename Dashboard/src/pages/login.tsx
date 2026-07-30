@@ -48,7 +48,9 @@ export function LoginPage() {
         </div>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('login.email')}</span>
+          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t('login.email')}
+          </span>
           <input
             type="email"
             value={email}
@@ -60,7 +62,9 @@ export function LoginPage() {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('login.password')}</span>
+          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t('login.password')}
+          </span>
           <input
             type="password"
             value={password}

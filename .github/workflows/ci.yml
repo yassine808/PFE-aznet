@@ -73,10 +73,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      # `npm install`, not `npm ci`: there is no committed package-lock.json.
-      # Committing one would make installs reproducible and re-enable npm
-      # caching here — worth doing, but it is its own change.
-      - run: npm install
+          cache: npm
+          cache-dependency-path: Dashboard/package-lock.json
+      - run: npm ci
       - name: TypeScript
         run: npx tsc -b --noEmit
       # Warnings do not fail the build; errors do. The current tree is warning-only.

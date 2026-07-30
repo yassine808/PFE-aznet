@@ -28,7 +28,9 @@ function LedgerRow({
         {r.date}
         <span className="ms-2 opacity-70">{r.heure}</span>
       </td>
-      <td className={cn('text-ink pe-4 align-top text-sm whitespace-nowrap', pad)}>{r.technicien || '—'}</td>
+      <td className={cn('text-ink pe-4 align-top text-sm whitespace-nowrap', pad)}>
+        {r.technicien || '—'}
+      </td>
       <td className={cn('text-ink-muted pe-4 align-top text-sm', pad)}>{r.chantier || '—'}</td>
       <td className={cn('tabular text-ink pe-4 text-end align-top text-sm whitespace-nowrap', pad)}>
         {num(r.goulottes_m) ? fmt.format(num(r.goulottes_m)) : '·'}
@@ -40,7 +42,10 @@ function LedgerRow({
         {/* Confidence as a bar, not a percentage: the eye compares lengths faster than digits. */}
         <span className="bg-line inline-block h-1 w-14 overflow-hidden rounded-full align-middle">
           <span
-            className={cn('block h-full rounded-full', confidence < threshold ? 'bg-status-warn' : 'bg-status-ok')}
+            className={cn(
+              'block h-full rounded-full',
+              confidence < threshold ? 'bg-status-warn' : 'bg-status-ok',
+            )}
             style={{ width: `${Math.round(Math.min(Math.max(confidence, 0), 1) * 100)}%` }}
           />
         </span>
@@ -122,7 +127,9 @@ export function ReportsPage() {
           aria-pressed={onlyFlagged}
           className={cn(
             'border-line flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors active:translate-y-px',
-            onlyFlagged ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-muted hover:text-ink',
+            onlyFlagged
+              ? 'bg-slate-100 text-ink dark:bg-slate-850'
+              : 'text-ink-muted hover:text-ink',
           )}
         >
           <FlagIcon size={13} weight={onlyFlagged ? 'fill' : 'regular'} />

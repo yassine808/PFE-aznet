@@ -135,7 +135,11 @@ function AccountChip({
         active ? 'border-accent bg-surface' : 'border-line hover:bg-surface',
       )}
     >
-      <button type="button" onClick={onSelect} className="flex flex-col items-start gap-0.5 text-start">
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex flex-col items-start gap-0.5 text-start"
+      >
         <span className="text-ink text-sm">{account.name}</span>
         <span className="text-ink-faint text-xs">
           {account.email} · {t(`team.role.${account.role}`)}
@@ -188,12 +192,16 @@ function Activity({ data }: { data: History }) {
         ))}
         <div className="flex flex-col gap-0.5">
           <span className="text-ink tabular text-2xl">{hhmm(data.total_seconds)}</span>
-          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('team.totalTime')}</span>
+          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t('team.totalTime')}
+          </span>
         </div>
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('team.graph')}</h2>
+        <h2 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+          {t('team.graph')}
+        </h2>
         {/* Hand-built like every other chart here — no Recharts, per DESIGN.md. */}
         <div className="flex h-24 items-end gap-1">
           {days.map((d) => (
@@ -209,14 +217,18 @@ function Activity({ data }: { data: History }) {
           ))}
         </div>
         <div className="text-ink-faint flex justify-between text-[0.625rem]">
-          <span>{new Date(days[0].key).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}</span>
+          <span>
+            {new Date(days[0].key).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}
+          </span>
           <span>{t('team.today')}</span>
         </div>
       </section>
 
       {data.pages.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('team.timePerPage')}</h2>
+          <h2 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t('team.timePerPage')}
+          </h2>
           <ul className="flex flex-col gap-1">
             {data.pages.map((p) => (
               <li key={p.route} className="flex items-center gap-3 text-xs">
@@ -224,10 +236,14 @@ function Activity({ data }: { data: History }) {
                 <span className="bg-line h-1.5 flex-1 overflow-hidden rounded-full">
                   <span
                     className="bg-accent block h-full rounded-full"
-                    style={{ width: `${(Number(p.seconds) / Number(data.pages[0].seconds || 1)) * 100}%` }}
+                    style={{
+                      width: `${(Number(p.seconds) / Number(data.pages[0].seconds || 1)) * 100}%`,
+                    }}
                   />
                 </span>
-                <span className="text-ink-faint tabular w-16 text-end">{hhmm(Number(p.seconds))}</span>
+                <span className="text-ink-faint tabular w-16 text-end">
+                  {hhmm(Number(p.seconds))}
+                </span>
               </li>
             ))}
           </ul>
@@ -235,16 +251,24 @@ function Activity({ data }: { data: History }) {
       )}
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('team.recent')}</h2>
+        <h2 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+          {t('team.recent')}
+        </h2>
         {data.actions.length === 0 ? (
           <EmptyState body={t('team.noActions')} />
         ) : (
           <ul className="flex flex-col">
             {data.actions.map((a) => (
-              <li key={a.id} className="border-line flex flex-wrap items-baseline gap-x-3 border-b py-2 text-xs last:border-b-0">
+              <li
+                key={a.id}
+                className="border-line flex flex-wrap items-baseline gap-x-3 border-b py-2 text-xs last:border-b-0"
+              >
                 <span className="text-ink-faint tabular w-32 shrink-0">
                   {new Date(a.created_at).toLocaleString(locale, {
-                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
                   })}
                 </span>
                 <span className="text-ink">{t(`team.action.${a.action}`)}</span>
@@ -288,10 +312,15 @@ function NewAccountForm({ onDone }: { onDone: () => void }) {
     setValues((v) => ({ ...v, [k]: e.target.value }))
 
   return (
-    <form onSubmit={submit} className="border-line bg-surface edge flex flex-wrap items-end gap-4 rounded-xl border p-5">
+    <form
+      onSubmit={submit}
+      className="border-line bg-surface edge flex flex-wrap items-end gap-4 rounded-xl border p-5"
+    >
       {(['name', 'email', 'password'] as const).map((field) => (
         <label key={field} className="flex min-w-40 flex-col gap-1.5">
-          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t(`team.${field}`)}</span>
+          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t(`team.${field}`)}
+          </span>
           <input
             type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'}
             value={values[field]}
@@ -304,7 +333,9 @@ function NewAccountForm({ onDone }: { onDone: () => void }) {
       ))}
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('team.roleLabel')}</span>
+        <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+          {t('team.roleLabel')}
+        </span>
         <select
           value={values.role}
           onChange={set('role')}

@@ -58,7 +58,11 @@ export function LogsPage() {
       <div className="flex flex-wrap items-center gap-4">
         <p className="text-ink-faint max-w-[60ch] text-sm">{t('logs.intro')}</p>
 
-        <div className="border-line ms-auto flex rounded-md border p-0.5" role="group" aria-label={t('logs.filter')}>
+        <div
+          className="border-line ms-auto flex rounded-md border p-0.5"
+          role="group"
+          aria-label={t('logs.filter')}
+        >
           {(['all', 'info', 'error'] as const).map((f) => (
             <button
               key={f}
@@ -67,11 +71,15 @@ export function LogsPage() {
               aria-pressed={filter === f}
               className={cn(
                 'rounded px-2.5 py-1 text-xs transition-colors',
-                filter === f ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink',
+                filter === f
+                  ? 'bg-slate-100 text-ink dark:bg-slate-850'
+                  : 'text-ink-faint hover:text-ink',
               )}
             >
               {t(`logs.filter.${f}`)}
-              {f === 'error' && errorCount > 0 && <span className="text-status-fail ms-1.5 tabular">{errorCount}</span>}
+              {f === 'error' && errorCount > 0 && (
+                <span className="text-status-fail ms-1.5 tabular">{errorCount}</span>
+              )}
             </button>
           ))}
         </div>
@@ -95,7 +103,11 @@ export function LogsPage() {
                 <level.Icon size={15} className={cn('mt-0.5 shrink-0', level.text)} weight="fill" />
 
                 <span className="text-ink-faint tabular w-16 shrink-0 text-xs">
-                  {new Date(entry.ts).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  {new Date(entry.ts).toLocaleTimeString(locale, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
                 </span>
 
                 <span className="text-ink-muted w-24 shrink-0 truncate text-xs">{entry.stage}</span>
@@ -106,13 +118,17 @@ export function LogsPage() {
 
                 {entry.technicien && (
                   <span className="text-ink-faint hidden shrink-0 items-center gap-1.5 text-xs sm:flex">
-                    {entry.channel && <ChannelIcon channel={entry.channel as 'telegram' | 'whatsapp'} size={12} />}
+                    {entry.channel && (
+                      <ChannelIcon channel={entry.channel as 'telegram' | 'whatsapp'} size={12} />
+                    )}
                     {entry.technicien}
                   </span>
                 )}
 
                 {typeof entry.duration_ms === 'number' && (
-                  <span className="text-ink-faint tabular w-14 shrink-0 text-end text-xs">{entry.duration_ms}ms</span>
+                  <span className="text-ink-faint tabular w-14 shrink-0 text-end text-xs">
+                    {entry.duration_ms}ms
+                  </span>
                 )}
               </li>
             )

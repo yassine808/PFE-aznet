@@ -22,7 +22,11 @@ function UptimeStrip({ slots, pct }: { slots: (ServiceState | null)[]; pct: numb
   const { t } = useI18n()
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-4 flex-1 items-stretch gap-px" role="img" aria-label={t('uptime.lastHour')}>
+      <div
+        className="flex h-4 flex-1 items-stretch gap-px"
+        role="img"
+        aria-label={t('uptime.lastHour')}
+      >
         {slots.map((s, i) => (
           <span
             key={i}
@@ -31,7 +35,9 @@ function UptimeStrip({ slots, pct }: { slots: (ServiceState | null)[]; pct: numb
           />
         ))}
       </div>
-      <span className="tabular text-ink-faint w-9 shrink-0 text-end text-xs">{pct === null ? '—' : `${pct}%`}</span>
+      <span className="tabular text-ink-faint w-9 shrink-0 text-end text-xs">
+        {pct === null ? '—' : `${pct}%`}
+      </span>
     </div>
   )
 }
@@ -53,10 +59,14 @@ export function ServicesPanel({ rows }: { rows: ServiceRow[] }) {
               </span>
               <ServiceIcon service={r.key} className="text-ink-muted translate-y-[2px]" size={13} />
               <span className="text-ink min-w-0 flex-1 truncate text-sm">{t(r.labelKey)}</span>
-              <span className={`text-xs ${r.state === 'fail' ? 'text-status-fail' : 'text-ink-muted'}`}>
+              <span
+                className={`text-xs ${r.state === 'fail' ? 'text-status-fail' : 'text-ink-muted'}`}
+              >
                 {t(r.captionKey)}
               </span>
-              {r.detail && <span className="tabular text-ink-faint shrink-0 text-xs">{r.detail}</span>}
+              {r.detail && (
+                <span className="tabular text-ink-faint shrink-0 text-xs">{r.detail}</span>
+              )}
             </div>
             <UptimeStrip slots={slots} pct={availability(slots)} />
           </li>

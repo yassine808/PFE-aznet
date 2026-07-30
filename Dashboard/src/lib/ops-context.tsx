@@ -1,5 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react'
-import { api, pickReceptionWorkflow, postSamples, useApi, type Health, type LogEntry, type LogStats } from '@/lib/api'
+import {
+  api,
+  pickReceptionWorkflow,
+  postSamples,
+  useApi,
+  type Health,
+  type LogEntry,
+  type LogStats,
+} from '@/lib/api'
 import { buildServices, type ServiceRow } from '@/lib/services'
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
@@ -49,7 +57,16 @@ export function OpsProvider({ children }: { children: ReactNode }) {
         lastExecution: executions.data?.[0] ?? null,
         locale,
       }),
-    [health.data, health.error, logs.data, logs.error, reports.error, n8n.data, executions.data, locale],
+    [
+      health.data,
+      health.error,
+      logs.data,
+      logs.error,
+      reports.error,
+      n8n.data,
+      executions.data,
+      locale,
+    ],
   )
 
   const servicesRef = useRef(services)

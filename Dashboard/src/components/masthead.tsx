@@ -38,13 +38,22 @@ export function Masthead({
         ? 'bg-slate-100 text-slate-950 ring-1 ring-slate-300 ring-inset dark:ring-slate-400'
         : 'bg-slate-900 text-slate-50 dark:bg-slate-850'
 
-  const stateLabel = state === 'down' ? t('status.unreachable') : state === 'degraded' ? t('state.degraded') : t('status.live')
+  const stateLabel =
+    state === 'down'
+      ? t('status.unreachable')
+      : state === 'degraded'
+        ? t('state.degraded')
+        : t('status.live')
 
   return (
     <motion.section
       layout
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      className={cn('edge relative overflow-hidden rounded-xl px-7 py-8', skin, down && 'alarm-flash')}
+      className={cn(
+        'edge relative overflow-hidden rounded-xl px-7 py-8',
+        skin,
+        down && 'alarm-flash',
+      )}
       role={down ? 'alert' : undefined}
     >
       {down && (
@@ -62,10 +71,15 @@ export function Masthead({
       <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
         <div>
           <p className="flex items-center gap-2 text-xs font-medium tracking-wide uppercase opacity-80">
-            <LiveDot tone={state === 'down' ? 'fail' : state === 'degraded' ? 'ink' : 'ok'} live={state !== 'down'} />
+            <LiveDot
+              tone={state === 'down' ? 'fail' : state === 'degraded' ? 'ink' : 'ok'}
+              live={state !== 'down'}
+            />
             {stateLabel}
           </p>
-          <p className="tabular mt-4 text-6xl leading-none font-medium tracking-tighter">{headline}</p>
+          <p className="tabular mt-4 text-6xl leading-none font-medium tracking-tighter">
+            {headline}
+          </p>
           <p className="mt-2 text-sm opacity-70">{headlineLabel}</p>
         </div>
 

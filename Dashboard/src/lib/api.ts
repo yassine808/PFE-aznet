@@ -93,7 +93,10 @@ export interface N8nNode {
  * list of targets. The double array is not a typo: index 0 is the first
  * output, and an IF node has two.
  */
-export type N8nConnections = Record<string, Record<string, { node: string; type: string; index: number }[][]>>
+export type N8nConnections = Record<
+  string,
+  Record<string, { node: string; type: string; index: number }[][]>
+>
 
 export interface N8nWorkflow {
   id: string
@@ -125,7 +128,12 @@ export function pickReceptionWorkflow(workflows: N8nWorkflow[]): N8nWorkflow | u
     matches = (w) => /r[ée]ception|pipeline complet/i.test(w.name)
   }
   const live = workflows.filter((w) => !w.isArchived)
-  return live.find((w) => w.active && matches(w)) ?? live.find(matches) ?? live.find((w) => w.active) ?? live[0]
+  return (
+    live.find((w) => w.active && matches(w)) ??
+    live.find(matches) ??
+    live.find((w) => w.active) ??
+    live[0]
+  )
 }
 
 export interface N8nExecution {
@@ -163,7 +171,11 @@ export async function n8nStatus(
     // "rejected" means n8n answered and refused the key — the server is up.
     if (res.status === 502) {
       const detail = await res.text().catch(() => '')
-      return { reachable: /rejected/.test(detail), workflows: [], authError: /rejected/.test(detail) }
+      return {
+        reachable: /rejected/.test(detail),
+        workflows: [],
+        authError: /rejected/.test(detail),
+      }
     }
     if (!res.ok) return { reachable: true, workflows: [], authError: false }
     const body = (await res.json()) as { data?: N8nWorkflow[] }
@@ -197,7 +209,10 @@ export interface DailyReportContent {
  * free-tier quota, so it is only ever fired by an explicit user action, never
  * by a poll or on mount.
  */
-export async function generateDailyReport(date: string, rows: ReportRow[]): Promise<DailyReportContent> {
+export async function generateDailyReport(
+  date: string,
+  rows: ReportRow[],
+): Promise<DailyReportContent> {
   const res = await fetch(`${BASE}/daily-report`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -412,8 +427,12 @@ export const whoami = (s?: AbortSignal) => get<{ user: Account | null }>('/auth/
 
 export const listUsers = (s?: AbortSignal) => get<{ users: Account[] }>('/users', s)
 
-export const createUser = (input: { email: string; name: string; password: string; role: string }) =>
-  post<Account>('/users', input)
+export const createUser = (input: {
+  email: string
+  name: string
+  password: string
+  role: string
+}) => post<Account>('/users', input)
 
 export async function deleteUser(id: number): Promise<void> {
   const res = await fetch(`${BASE}/users/${id}`, { method: 'DELETE' })
@@ -506,7 +525,11 @@ const cache = new Map<string, unknown>()
  * Errors are kept and shown; they are never swallowed into an empty state,
  * because "no data" and "the API is down" must not look the same.
  */
-export function useApi<T>(key: string, fetcher: (s?: AbortSignal) => Promise<T>, pollMs?: number): Async<T> {
+export function useApi<T>(
+  key: string,
+  fetcher: (s?: AbortSignal) => Promise<T>,
+  pollMs?: number,
+): Async<T> {
   const cached = cache.get(key) as T | undefined
   const [data, setData] = useState<T | null>(cached ?? null)
   const [error, setError] = useState<string | null>(null)

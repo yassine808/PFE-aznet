@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { CheckIcon, FlagIcon, PencilSimpleIcon, SpeakerHighIcon, TextAlignLeftIcon } from '@phosphor-icons/react'
+import {
+  CheckIcon,
+  FlagIcon,
+  PencilSimpleIcon,
+  SpeakerHighIcon,
+  TextAlignLeftIcon,
+} from '@phosphor-icons/react'
 import { api, patchReport, useApi, type ReportRow } from '@/lib/api'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
@@ -27,7 +33,7 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const original = (f: string) => ((r as unknown as Record<string, string | undefined>)[f] ?? '')
+  const original = (f: string) => (r as unknown as Record<string, string | undefined>)[f] ?? ''
   const value = (f: string) => draft[f] ?? original(f)
   const dirty = Object.entries(draft).filter(([f, v]) => v !== original(f))
 
@@ -78,8 +84,12 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
       {/* What actually arrived, kept verbatim and never editable: it is the evidence. */}
       {r.rapport_complet && (
         <div className="mt-3">
-          <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('inbox.transcript')}</p>
-          <p className="text-ink-muted mt-1 max-w-[65ch] text-sm break-words">{r.rapport_complet}</p>
+          <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t('inbox.transcript')}
+          </p>
+          <p className="text-ink-muted mt-1 max-w-[65ch] text-sm break-words">
+            {r.rapport_complet}
+          </p>
         </div>
       )}
 
@@ -106,7 +116,8 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
             )}
             {num(r.goulottes_m) > 0 && (
               <span>
-                {t('metric.goulottes')}: <span className="tabular text-ink">{num(r.goulottes_m)} m</span>
+                {t('metric.goulottes')}:{' '}
+                <span className="tabular text-ink">{num(r.goulottes_m)} m</span>
               </span>
             )}
             {num(r.cables_m) > 0 && (
@@ -133,71 +144,74 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
       )}
 
       {editing && (
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {EDITABLE.map(({ field, labelKey, long }) => (
-          <div key={field} className={cn('flex flex-col gap-1.5', long && 'sm:col-span-2')}>
-            <label htmlFor={`${r._row}-${field}`} className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
-              {t(labelKey)}
-            </label>
-            {long ? (
-              <textarea
-                id={`${r._row}-${field}`}
-                rows={3}
-                value={value(field)}
-                onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
-                className="border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-              />
-            ) : (
-              <input
-                id={`${r._row}-${field}`}
-                value={value(field)}
-                onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
-                className="border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-              />
-            )}
-          </div>
-        ))}
-      </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {EDITABLE.map(({ field, labelKey, long }) => (
+            <div key={field} className={cn('flex flex-col gap-1.5', long && 'sm:col-span-2')}>
+              <label
+                htmlFor={`${r._row}-${field}`}
+                className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+              >
+                {t(labelKey)}
+              </label>
+              {long ? (
+                <textarea
+                  id={`${r._row}-${field}`}
+                  rows={3}
+                  value={value(field)}
+                  onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                  className="border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors"
+                />
+              ) : (
+                <input
+                  id={`${r._row}-${field}`}
+                  value={value(field)}
+                  onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                  className="border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors"
+                />
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
       {error && <p className="text-status-fail mt-3 text-xs break-all">{error}</p>}
 
       {editing && (
-      <div className="mt-4 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={save}
-          disabled={dirty.length === 0 || saving}
-          className={cn(
-            'rounded-md px-3 py-1.5 text-xs transition-colors active:translate-y-px',
-            dirty.length === 0 || saving
-              ? 'border-line text-ink-faint cursor-not-allowed border'
-              : 'bg-accent text-white',
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={save}
+            disabled={dirty.length === 0 || saving}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs transition-colors active:translate-y-px',
+              dirty.length === 0 || saving
+                ? 'border-line text-ink-faint cursor-not-allowed border'
+                : 'bg-accent text-white',
+            )}
+          >
+            {saving ? t('inbox.saving') : t('inbox.save')}
+          </button>
+          {dirty.length > 0 && !saving && (
+            <span className="tabular text-ink-faint text-xs">{dirty.length}</span>
           )}
-        >
-          {saving ? t('inbox.saving') : t('inbox.save')}
-        </button>
-        {dirty.length > 0 && !saving && (
-          <span className="tabular text-ink-faint text-xs">{dirty.length}</span>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setDraft({})
-            setEditing(false)
-          }}
-          className="text-ink-faint hover:text-ink text-xs underline underline-offset-4 transition-colors"
-        >
-          {t('inbox.cancel')}
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDraft({})
+              setEditing(false)
+            }}
+            className="text-ink-faint hover:text-ink text-xs underline underline-offset-4 transition-colors"
+          >
+            {t('inbox.cancel')}
+          </button>
 
-        {saved && (
-          <span className="text-status-ok flex items-center gap-1 text-xs">
-            <CheckIcon size={13} weight="bold" />
-            {t('inbox.saved')}
-          </span>
-        )}
-      </div>
+          {saved && (
+            <span className="text-status-ok flex items-center gap-1 text-xs">
+              <CheckIcon size={13} weight="bold" />
+              {t('inbox.saved')}
+            </span>
+          )}
+        </div>
       )}
     </article>
   )
@@ -254,11 +268,25 @@ export function InboxPage({ initialDate }: { initialDate?: string }) {
       <p className="text-ink-faint max-w-[65ch] text-sm">{t('inbox.intro')}</p>
 
       <div className="flex flex-wrap items-center gap-4">
-        <Filter label={t('inbox.channel')} value={channel} onChange={setChannel} options={channels} allLabel={t('inbox.all')} />
-        <Filter label={t('col.technicien')} value={who} onChange={setWho} options={people} allLabel={t('inbox.all')} />
+        <Filter
+          label={t('inbox.channel')}
+          value={channel}
+          onChange={setChannel}
+          options={channels}
+          allLabel={t('inbox.all')}
+        />
+        <Filter
+          label={t('col.technicien')}
+          value={who}
+          onChange={setWho}
+          options={people}
+          allLabel={t('inbox.all')}
+        />
 
         <div className="flex items-center gap-2">
-          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('daily.date')}</span>
+          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t('daily.date')}
+          </span>
           <input
             type="date"
             value={date}
@@ -315,7 +343,9 @@ function Filter({
           aria-pressed={value === ''}
           className={cn(
             'rounded px-2 py-1 text-xs transition-colors',
-            value === '' ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink',
+            value === ''
+              ? 'bg-slate-100 text-ink dark:bg-slate-850'
+              : 'text-ink-faint hover:text-ink',
           )}
         >
           {allLabel}
@@ -328,7 +358,9 @@ function Filter({
             aria-pressed={value === o}
             className={cn(
               'rounded px-2 py-1 text-xs transition-colors',
-              value === o ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink',
+              value === o
+                ? 'bg-slate-100 text-ink dark:bg-slate-850'
+                : 'text-ink-faint hover:text-ink',
             )}
           >
             {o}

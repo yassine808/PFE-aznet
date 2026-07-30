@@ -32,7 +32,10 @@ export function timeline(samples: ServiceSample[], service: string): (ServiceSta
     byBucket.set(Math.floor(t / SLOT_MS) * SLOT_MS, state)
   }
 
-  return Array.from({ length: SLOTS }, (_, i) => byBucket.get(now - (SLOTS - 1 - i) * SLOT_MS) ?? null)
+  return Array.from(
+    { length: SLOTS },
+    (_, i) => byBucket.get(now - (SLOTS - 1 - i) * SLOT_MS) ?? null,
+  )
 }
 
 /** Share of recorded slots that were healthy. Null when nothing was recorded. */

@@ -24,9 +24,12 @@ function ageMs(iso?: string | null): number | null {
 export function formatAge(iso: string | null | undefined, locale: string): string {
   const age = ageMs(iso)
   if (age === null) return '—'
-  const rtf = new Intl.RelativeTimeFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR', {
-    numeric: 'auto',
-  })
+  const rtf = new Intl.RelativeTimeFormat(
+    locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR',
+    {
+      numeric: 'auto',
+    },
+  )
   const min = Math.round(age / 60_000)
   if (min < 60) return rtf.format(-min, 'minute')
   const h = Math.round(min / 60)
@@ -60,7 +63,18 @@ export function buildServices(input: {
   lastExecution: { status: string; startedAt: string } | null
   locale: string
 }): ServiceRow[] {
-  const { health, healthError, logs, stats, logsError, reportsOk, n8nReachable, workflow, lastExecution, locale } = input
+  const {
+    health,
+    healthError,
+    logs,
+    stats,
+    logsError,
+    reportsOk,
+    n8nReachable,
+    workflow,
+    lastExecution,
+    locale,
+  } = input
 
   const rows: ServiceRow[] = []
 
@@ -109,15 +123,23 @@ export function buildServices(input: {
   // ── AI: transcription + extraction ─────────────────────────────────────
   const aiLogs = logs.filter((l) => l.stage === 'transcribed' || l.stage === 'extracted')
   const aiErrors = aiLogs.filter((l) => l.level === 'error').length
-  const durations = aiLogs.map((l) => l.duration_ms).filter((d): d is number => typeof d === 'number' && d > 0)
+  const durations = aiLogs
+    .map((l) => l.duration_ms)
+    .filter((d): d is number => typeof d === 'number' && d > 0)
   const median =
-    durations.length > 0 ? [...durations].sort((a, b) => a - b)[Math.floor(durations.length / 2)] : null
+    durations.length > 0
+      ? [...durations].sort((a, b) => a - b)[Math.floor(durations.length / 2)]
+      : null
   rows.push({
     key: 'ai',
     labelKey: 'svc.ai',
     state: aiLogs.length === 0 ? 'idle' : aiErrors > 0 ? 'warn' : 'ok',
     captionKey: aiLogs.length === 0 ? 'svc.noTraffic' : aiErrors > 0 ? 'svc.someErrors' : 'svc.up',
-    detail: [health?.stt_default, median !== null ? `${(median / 1000).toFixed(1)}s` : null, aiErrors ? `${aiErrors} err` : null]
+    detail: [
+      health?.stt_default,
+      median !== null ? `${(median / 1000).toFixed(1)}s` : null,
+      aiErrors ? `${aiErrors} err` : null,
+    ]
       .filter(Boolean)
       .join(' · '),
   })
@@ -130,7 +152,13 @@ export function buildServices(input: {
     key: 'sheets',
     labelKey: 'svc.sheets',
     state: !reportsOk ? 'fail' : pending > 0 || sheetErrors > 0 ? 'warn' : 'ok',
-    captionKey: !reportsOk ? 'svc.unreachable' : pending > 0 ? 'svc.queued' : sheetErrors > 0 ? 'svc.someErrors' : 'svc.up',
+    captionKey: !reportsOk
+      ? 'svc.unreachable'
+      : pending > 0
+        ? 'svc.queued'
+        : sheetErrors > 0
+          ? 'svc.someErrors'
+          : 'svc.up',
     detail: pending > 0 ? `${pending}` : undefined,
   })
 

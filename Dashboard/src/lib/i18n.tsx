@@ -44,12 +44,16 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     (key: string, vars?: Record<string, string | number>) => {
       const text = DICTIONARIES[locale][key] ?? fr[key as keyof typeof fr] ?? key
       if (!vars) return text
-      return text.replace(/\{(\w+)\}/g, (match, name) => (name in vars ? String(vars[name]) : match))
+      return text.replace(/\{(\w+)\}/g, (match, name) =>
+        name in vars ? String(vars[name]) : match,
+      )
     },
     [locale],
   )
 
-  return <I18nContext.Provider value={{ locale, setLocale, dir, t }}>{children}</I18nContext.Provider>
+  return (
+    <I18nContext.Provider value={{ locale, setLocale, dir, t }}>{children}</I18nContext.Provider>
+  )
 }
 
 export function useI18n() {

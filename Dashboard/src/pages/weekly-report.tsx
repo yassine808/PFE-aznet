@@ -29,7 +29,10 @@ export function WeeklyReportPage() {
     [locale],
   )
   const dayName = useMemo(
-    () => new Intl.DateTimeFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR', { weekday: 'short' }),
+    () =>
+      new Intl.DateTimeFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR', {
+        weekday: 'short',
+      }),
     [locale],
   )
 
@@ -37,7 +40,10 @@ export function WeeklyReportPage() {
     const [y, m, d] = selected.split('-').map(Number)
     return new Date(y, m - 1, d)
   }, [selected])
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * DAY_MS)), [start])
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * DAY_MS)),
+    [start],
+  )
 
   // Current year plus the two before it, newest first.
   const years = useMemo(() => {
@@ -180,9 +186,13 @@ export function WeeklyReportPage() {
 
       {content && (
         <section className="border-line rounded-xl border p-6">
-          <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('daily.subject')}</p>
+          <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+            {t('daily.subject')}
+          </p>
           <h2 className="text-ink mt-1 text-lg font-medium tracking-tight">{content.objet}</h2>
-          <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">{content.corps}</p>
+          <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">
+            {content.corps}
+          </p>
         </section>
       )}
 
@@ -212,7 +222,9 @@ export function WeeklyReportPage() {
                 aria-pressed={y === year}
                 className={cn(
                   'tabular rounded-md px-4 py-1.5 text-start text-sm transition-colors active:translate-y-px',
-                  y === year ? 'bg-accent font-medium text-white' : 'text-ink-muted hover:bg-surface hover:text-ink',
+                  y === year
+                    ? 'bg-accent font-medium text-white'
+                    : 'text-ink-muted hover:bg-surface hover:text-ink',
                 )}
               >
                 {y}
@@ -259,7 +271,9 @@ export function WeeklyReportPage() {
                     />
                   </div>
                   <span className="tabular text-ink text-xs">{rows.length}</span>
-                  <span className="text-ink-faint text-[0.6875rem] capitalize">{dayName.format(days[i])}</span>
+                  <span className="text-ink-faint text-[0.6875rem] capitalize">
+                    {dayName.format(days[i])}
+                  </span>
                 </div>
               ))}
             </div>
@@ -296,8 +310,12 @@ export function WeeklyReportPage() {
                 <li key={name} className="flex items-baseline gap-4 py-2.5 first:pt-0 last:pb-0">
                   <span className="text-ink min-w-0 flex-1 truncate text-sm">{name}</span>
                   <span className="tabular text-ink-muted text-sm">{fmt.format(v.count)}</span>
-                  <span className="tabular text-ink-faint w-20 text-end text-xs">{fmt.format(v.goulottes)} m</span>
-                  <span className="tabular text-status-warn w-8 text-end text-xs">{v.flagged || ''}</span>
+                  <span className="tabular text-ink-faint w-20 text-end text-xs">
+                    {fmt.format(v.goulottes)} m
+                  </span>
+                  <span className="tabular text-status-warn w-8 text-end text-xs">
+                    {v.flagged || ''}
+                  </span>
                 </li>
               ))}
             </ul>

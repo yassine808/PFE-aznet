@@ -1,7 +1,14 @@
 import { useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowsClockwiseIcon, PlusIcon, TrashIcon, UserMinusIcon } from '@phosphor-icons/react'
-import { addTechnician, api, deletePerson, deleteTechnician, refreshProfile, useApi } from '@/lib/api'
+import {
+  addTechnician,
+  api,
+  deletePerson,
+  deleteTechnician,
+  refreshProfile,
+  useApi,
+} from '@/lib/api'
 import type { Technician } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { ChannelIcon } from '@/components/channel-icon'
@@ -27,7 +34,12 @@ export function AccessControlPage() {
     setBusy(true)
     setError(null)
     try {
-      await addTechnician({ channel, external_id: externalId.trim(), name: name.trim(), role: role.trim() || undefined })
+      await addTechnician({
+        channel,
+        external_id: externalId.trim(),
+        name: name.trim(),
+        role: role.trim() || undefined,
+      })
       setExternalId('')
       setName('')
       setRole('')
@@ -66,11 +78,20 @@ export function AccessControlPage() {
     >
       <p className="text-ink-faint max-w-[70ch] text-sm">{t('access.intro')}</p>
 
-      <form onSubmit={submit} className="border-line bg-surface edge flex flex-col gap-4 rounded-xl border p-5">
+      <form
+        onSubmit={submit}
+        className="border-line bg-surface edge flex flex-col gap-4 rounded-xl border p-5"
+      >
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1.5">
-            <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{t('inbox.channel')}</span>
-            <div className="border-line flex rounded-md border p-0.5" role="group" aria-label={t('inbox.channel')}>
+            <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+              {t('inbox.channel')}
+            </span>
+            <div
+              className="border-line flex rounded-md border p-0.5"
+              role="group"
+              aria-label={t('inbox.channel')}
+            >
               {CHANNELS.map((c) => (
                 <button
                   key={c}
@@ -79,7 +100,9 @@ export function AccessControlPage() {
                   aria-pressed={channel === c}
                   className={cn(
                     'flex items-center gap-1.5 rounded px-2.5 py-1 text-xs capitalize transition-colors',
-                    channel === c ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink',
+                    channel === c
+                      ? 'bg-slate-100 text-ink dark:bg-slate-850'
+                      : 'text-ink-faint hover:text-ink',
                   )}
                 >
                   <ChannelIcon channel={c} size={13} />
@@ -96,8 +119,20 @@ export function AccessControlPage() {
             onChange={setExternalId}
             placeholder={channel === 'telegram' ? '123456789' : '2126…'}
           />
-          <Field id="name" label={t('col.technicien')} value={name} onChange={setName} placeholder="Yassine" />
-          <Field id="role" label={t('access.role')} value={role} onChange={setRole} placeholder="technicien" />
+          <Field
+            id="name"
+            label={t('col.technicien')}
+            value={name}
+            onChange={setName}
+            placeholder="Yassine"
+          />
+          <Field
+            id="role"
+            label={t('access.role')}
+            value={role}
+            onChange={setRole}
+            placeholder="technicien"
+          />
 
           <button
             type="submit"

@@ -23,7 +23,10 @@ import { SettingsPanel } from '@/components/settings-panel'
 import { cn } from '@/lib/utils'
 import type { Route } from '@/lib/router'
 
-const NAV: { section: string; items: { route: Route; labelKey: string; Icon: typeof ChartBarIcon }[] }[] = [
+const NAV: {
+  section: string
+  items: { route: Route; labelKey: string; Icon: typeof ChartBarIcon }[]
+}[] = [
   {
     section: 'nav.section.read',
     items: [
@@ -110,7 +113,11 @@ export function AppShell({
                         transition={{ type: 'spring', stiffness: 100, damping: 20 }}
                       />
                     )}
-                    <Icon size={17} weight={active ? 'fill' : 'regular'} className={active ? 'text-accent' : ''} />
+                    <Icon
+                      size={17}
+                      weight={active ? 'fill' : 'regular'}
+                      className={active ? 'text-accent' : ''}
+                    />
                     {t(labelKey)}
                   </button>
                 )
@@ -123,7 +130,11 @@ export function AppShell({
           <ServerStatus />
 
           <div className="flex items-center justify-between gap-2">
-            <div className="border-line flex rounded-md border p-0.5" role="group" aria-label={t('lang.label')}>
+            <div
+              className="border-line flex rounded-md border p-0.5"
+              role="group"
+              aria-label={t('lang.label')}
+            >
               {LOCALES.map((l: Locale) => (
                 <button
                   key={l}
@@ -132,7 +143,9 @@ export function AppShell({
                   aria-pressed={l === locale}
                   className={cn(
                     'rounded px-2 py-1 text-xs transition-colors',
-                    l === locale ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink',
+                    l === locale
+                      ? 'bg-slate-100 text-ink dark:bg-slate-850'
+                      : 'text-ink-faint hover:text-ink',
                   )}
                 >
                   {LOCALE_LABEL[l]}
