@@ -4,6 +4,7 @@ import { PlusIcon, TrashIcon } from '@phosphor-icons/react'
 import { api, createUser, deleteUser, useApi, type Account, type History } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
+import { daysAgoISO } from '@/lib/metrics'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
 
@@ -167,9 +168,7 @@ function Activity({ data }: { data: History }) {
   const days = useMemo(() => {
     const found = new Map(data.daily.map((d) => [d.day, Number(d.n)]))
     return Array.from({ length: 14 }, (_, i) => {
-      const date = new Date()
-      date.setDate(date.getDate() - (13 - i))
-      const key = date.toISOString().slice(0, 10)
+      const key = daysAgoISO(13 - i)
       return { key, n: found.get(key) ?? 0 }
     })
   }, [data.daily])

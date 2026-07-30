@@ -31,7 +31,9 @@ export function todayISO(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-function daysAgoISO(n: number): string {
+/** Local-date key for N days ago. Local, not UTC: `toISOString()` would shift the
+ *  day by one in Africa/Casablanca and misalign against the API's local dates. */
+export function daysAgoISO(n: number): string {
   const d = new Date()
   d.setDate(d.getDate() - n)
   const pad = (x: number) => String(x).padStart(2, '0')
