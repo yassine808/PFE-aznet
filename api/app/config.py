@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     n8n_url: str = "http://n8n:5678"
     n8n_api_key: Optional[str] = None
 
+    # How many trusted proxies sit in front of this API, used to pick the real
+    # client address out of X-Forwarded-For when throttling logins (main.py).
+    # 1 = nginx alone; 2 = Tailscale Funnel in front of nginx; 0 = no proxy,
+    # host-run uvicorn. Wrong value either lets a script bypass the throttle or
+    # collapses every visitor onto one key.
+    trusted_proxy_hops: int = 1
+
     # Comma-separated browser origins allowed to call this API cross-origin. The
     # served dashboard is same-origin and needs no entry here; the default covers
     # the Vite dev server only. Deliberately not "*" -- see main.py.

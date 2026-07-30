@@ -113,6 +113,40 @@ LOGIN_WINDOW_SECONDS = 300
 _login_failures: Dict[str, List[float]] = {}
 
 
+def _client_ip(request: Request) -> str:
+    """The browser's address, as seen through the reverse proxy.
+
+    `request.client.host` is nginx's container IP for every visitor once the
+    dashboard is served same-origin, which would make the throttle below global:
+    eight failures by anyone would lock out everyone.
+
+    Which X-Forwarded-For entry is trustworthy depends on how many proxies sit in
+    front, and the two deployments differ -- hence `trusted_proxy_hops` rather
+    than a fixed rule:
+
+      * nginx alone (aznet server, public 443): nginx sets
+        `$proxy_add_x_forwarded_for`, i.e. "<caller's value>, <real peer>". The
+        LAST entry is what nginx saw; the first is whatever the caller claimed.
+        One hop.
+      * Tailscale Funnel in front of nginx (the current setup): tailscaled
+        *replaces* any caller-supplied header -- verified by sending
+        "X-Forwarded-For: 9.9.9.9" and observing only tailscaled's value arrive
+        -- then nginx appends its own peer. Two hops, so the first entry wins.
+
+    Set it too low and a script rotates the header to dodge the limit; too high
+    and every visitor collapses onto one key and locks the whole team out.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        hops = [h.strip() for h in forwarded.split(",") if h.strip()]
+        if hops:
+            # Discard the entries our own proxies appended and keep the value the
+            # outermost trusted one recorded. Everything left of that is supplied
+            # by the caller and must never be trusted.
+            return hops[max(0, len(hops) - settings.trusted_proxy_hops)]
+    return request.client.host if request.client else "unknown"
+
+
 def _login_allowed(client: str) -> bool:
     """Sliding-window throttle on failed logins, keyed by client address.
 
@@ -133,7 +167,7 @@ def _login_allowed(client: str) -> bool:
 
 @app.post("/auth/login")
 def login(payload: LoginIn, response: Response, request: Request) -> dict:
-    client = request.client.host if request.client else "unknown"
+    client = _client_ip(request)
     if not _login_allowed(client):
         # 429 rather than 401: the credentials were never checked, and saying so
         # tells an honest user locked out by a typo to simply wait.
