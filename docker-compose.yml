@@ -56,6 +56,8 @@ services:
     # NOTE: n8n's built-in tunnel (start --tunnel) is dead in modern n8n (2.x ignores it) — use Tailscale Funnel, see n8n/README.md
     volumes:
       - n8n_data:/home/node/.n8n
+    ports:
+    - "5678:5678"
 
   # The AI microservice n8n calls. Containerised so the pipeline comes back on
   # its own after a reboot — a host-run uvicorn does not, and WhatsApp then
