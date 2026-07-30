@@ -574,7 +574,7 @@
     {
       "parameters": {
         "chatId": "={{ $json.chat_id }}",
-        "text": "Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>",
+        "text": "=Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : {{ $env.HR_EMAIL }}",
         "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000023",
@@ -598,7 +598,7 @@
         "operation": "send",
         "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
         "recipientPhoneNumber": "={{ $json.chat_id }}",
-        "textBody": "Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : <HR_EMAIL>",
+        "textBody": "=Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : {{ $env.HR_EMAIL }}",
         "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000024",
@@ -622,7 +622,7 @@
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "<GOOGLE_SHEET_ID>"
+          "value": "={{ $env.GOOGLE_SHEET_ID }}"
         },
         "sheetName": {
           "__rl": true,
