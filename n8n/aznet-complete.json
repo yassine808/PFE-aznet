@@ -365,7 +365,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/process",
+        "url": "={{ $env.API_BASE_URL }}/process",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
@@ -409,7 +409,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/process",
+        "url": "={{ $env.API_BASE_URL }}/process",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
@@ -1338,7 +1338,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/process",
+        "url": "={{ $env.API_BASE_URL }}/process",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
