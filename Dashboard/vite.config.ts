@@ -11,12 +11,16 @@ export default defineConfig(() => {
     },
     server: {
       port: 5173,
-      // The API runs on the host; proxying keeps the browser same-origin so no CORS config is needed.
+      // Target the compose stack's nginx, not the API directly: the api service
+      // publishes no host port on purpose (one public origin, see docker-compose.yml),
+      // so 127.0.0.1:8000 refuses and every call 502s. nginx already maps
+      // /api/ -> api:8000/, hence no rewrite here -- stripping the prefix would
+      // land on the SPA's try_files and return index.html instead of JSON.
+      // Proxying at all keeps the browser same-origin, so no CORS config is needed.
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:8000',
+          target: 'http://127.0.0.1:8080',
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/api/, ''),
         },
         // n8n is no longer proxied here. GET /n8n/workflows and /n8n/executions
         // on the API attach X-N8N-API-KEY server-side and sit behind the session

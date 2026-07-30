@@ -9,6 +9,15 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+# `resume` is deliberately excluded: the model always writes one, even for
+# "salut". It is the only field that cannot distinguish a report from a
+# greeting, which is exactly the distinction `has_data` answers.
+DATA_FIELDS = (
+    "chantier", "client", "type_activite", "goulottes_m", "cables_m",
+    "bureaux_termines", "panneaux_raccordes", "autres_travaux", "observations",
+)
+
+
 class ExtractedReport(BaseModel):
     """Structured facts extracted from one daily report."""
 
@@ -47,6 +56,15 @@ class ExtractedReport(BaseModel):
     resume: str = Field(
         ..., description="Résumé professionnel en français (2-4 phrases)"
     )
+
+    def has_data(self) -> bool:
+        """True when the message carried at least one extractable fact.
+
+        A greeting extracts cleanly — every field null — and a 200 with an empty
+        report is indistinguishable from a real one downstream, so n8n told the
+        technician their report was saved. This is what tells the two apart.
+        """
+        return any(getattr(self, f) is not None for f in DATA_FIELDS)
 
 
 class TranscriptionInfo(BaseModel):

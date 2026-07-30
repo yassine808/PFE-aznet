@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { GearSixIcon, XIcon } from '@phosphor-icons/react'
 import { REFRESH_CHOICES, useSettings, type Density } from '@/lib/settings'
 import { useI18n } from '@/lib/i18n'
+import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 function Segmented<T extends string | number>({
@@ -42,6 +43,9 @@ function Segmented<T extends string | number>({
 export function SettingsPanel() {
   const { t } = useI18n()
   const { settings, update, reset } = useSettings()
+  const { user } = useAuth()
+  // Seuil de confiance: directeur seulement. Les chefs de chantier gardent le reste.
+  const canTuneConfidence = user?.role === 'directeur'
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -119,6 +123,7 @@ export function SettingsPanel() {
                 ]}
               />
 
+              {canTuneConfidence && (
               <div className="flex flex-col gap-2">
                 <div className="flex items-baseline justify-between">
                   <label htmlFor="confidence" className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
@@ -138,6 +143,7 @@ export function SettingsPanel() {
                 />
                 <p className="text-ink-faint text-xs">{t('settings.confidenceHint')}</p>
               </div>
+              )}
 
               <button
                 type="button"

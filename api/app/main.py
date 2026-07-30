@@ -364,6 +364,8 @@ async def process(
         # verbatim quote from the technician.
         rapport_complet = f"[photo] {report.resume}"
         warnings.append("image_input")
+        if not report.has_data():
+            warnings.append("no_report_content")
         await _log(
             "extracted", "info", message="ok (image)",
             duration_ms=int((time.time() - t1) * 1000),
@@ -389,6 +391,11 @@ async def process(
             duration_ms=int((time.time() - t1) * 1000), **ctx,
         )
         raise HTTPException(502, f"extraction failed: {exc}") from exc
+
+    # "salut" extracts to an all-null report. Without this the pipeline appends
+    # an empty Sheet row and answers "✅ Rapport enregistré" for a greeting.
+    if not report.has_data():
+        warnings.append("no_report_content")
 
     await _log(
         "extracted", "info", message="ok",

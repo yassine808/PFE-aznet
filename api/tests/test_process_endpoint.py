@@ -50,6 +50,15 @@ def test_voice_mode(monkeypatch):
     assert body["rapport_complet"].startswith("نصبنا")
 
 
+def test_greeting_flagged_as_no_report_content(monkeypatch):
+    """"Salut" extracts cleanly with every field null — n8n must not call that a report."""
+    greeting = ExtractedReport(resume="Le technicien salue l'équipe.")
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t, profile=None: (greeting, "test/stub"))
+    r = client.post("/process", data={"text": "salam"})
+    assert r.status_code == 200
+    assert r.json()["warnings"] == ["no_report_content"]
+
+
 def test_neither_input_rejected():
     assert client.post("/process").status_code == 422
 
