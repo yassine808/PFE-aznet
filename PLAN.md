@@ -46,7 +46,8 @@ Telegram (polling)  +  WhatsApp Cloud API (webhook)
      └─ Reformulator: professional French summary
                  │ JSON
                  ▼
-     n8n: reply to technician → append row → Google Sheets
+     n8n: reply to technician → `Rapport exploitable ?` → append row → Google Sheets
+          ├─ no_report_content (a greeting) → replies, appends nothing
           ├─ end-of-day email to chef de chantier + resp. technique
           └─ failed writes park in `failed_writes`, drained by the 5-min cron
 
@@ -57,7 +58,9 @@ Dashboard (React, login required) ◄─ /reports ─ FastAPI ◄─ Google Shee
 
 JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'activité, goulottes_m, cables_m, bureaux_termines, panneaux_raccordes, autres_travaux, observations, rapport_complet, lien_audio (+ `canal`, `confidence`, `flag_review` added in Sprint 2).
 
-**Reply-first ordering is deliberate:** the technician gets their summary before the Sheet append, so a Sheets outage never costs them their reply.
+**Reply-first ordering is deliberate:** the technician gets their summary before the Sheet append, so a Sheets outage never costs them their reply. The `Rapport exploitable ?` gate therefore sits *after* the reply, never before it.
+
+**A clean extraction is not the same as a report.** "Salam" extracts perfectly — every field `null` plus a polite `resume` — so the API emits a `no_report_content` warning when no data field was filled. Without it the pipeline answered "✅ Rapport enregistré" to a greeting and wrote a row of blanks (fixed 2026-07-30).
 
 ## 4. Timeline (Jul 15 → Aug 31)
 
@@ -109,6 +112,7 @@ Report polish, rehearsal, slack for slippage.
 | Free-tier quotas | Volume tiny (~5–10 reports/day); adapter pattern swaps provider in minutes |
 | Timeline slip | Cut-line order: dashboard → benchmark wave 2 → Teams option. Core (voice→Sheet+notif, form) protected. Fallback = Option B scope |
 | Solo dev, report squeeze | Report written 2h/day in parallel from Sprint 1, not at the end |
+| Deploying a fix that never ran | The API is a **built image** (`build: ./api`), so `docker compose restart` re-runs old code — use `up -d --build api`. n8n keeps its own copy of the workflow in its volume, so editing `n8n/aznet-complete.json` changes nothing until it is re-imported. Both bit on 2026-07-30; verify inside the container / via the n8n API, not by assuming |
 
 ## 6. Scope guard (MoSCoW)
 

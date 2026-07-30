@@ -11,7 +11,7 @@ Hard deadline: Aug 31 2026. Dashboard is built and running (`Dashboard/`; the ol
 ## Phase 1 — Pipeline (Sprint 2, no dashboard needed)
 - [x] Treat voice messages and forwarded audios the same (n8n: match message.voice OR message.audio) — both workflows
 - [x] Access control: allowlist employees + director; outsider gets one automated HR-contact reply. Same table gets a role column so boss behavior differs from employees (both changeable in settings later) — `Access control` node in both workflows; fill ALLOWLIST with real user IDs
-- [x] Error logs: n8n error trigger → `POST /logs` (Postgres, not a sheet tab) — band 2 of `n8n/aznet-complete.json`; set the workflow as its own Error Workflow after import
+- [x] Error logs: n8n error trigger → `POST /logs` (Postgres, not a sheet tab) — band 2 of `n8n/aznet-complete.json`; set the workflow as its own Error Workflow after import — **re-check this after every import or API push**, it lives in the workflow's `settings` and the public API silently drops keys it does not accept (set again 2026-07-30)
 - [x] Low-confidence STT → flag_review=true column in the Sheet (not just backend log) — `Append Sheet row` node writes flag_review + confidence
 - [x] End-of-day cron: assemble today's transcriptions + messages → LLM report → email — `api/app/jobs.py` (`daily_report`, plus `weekly_report`) + `POST /daily-report` (photos + .docx still open)
 
@@ -24,7 +24,7 @@ Hard deadline: Aug 31 2026. Dashboard is built and running (`Dashboard/`; the ol
 ## Phase 3 — Nice-to-haves (Sprint 3 buffer, only if ahead)
 - [x] GitHub-style contribution heatmap — `Dashboard/src/components/contribution-graph.tsx`, on Overview, Daily and Weekly; today is outlined, clicking a day deep-links into the Inbox.
 - [x] Weekly rollup report — Weekly panel: per-day and per-technician totals, week picker on the year graph, LLM narrative via `POST /daily-report` over the week's rows. Monthly still open.
-- [x] Settings + Automation panels — refresh interval, confidence threshold, table density; plus daily/weekly trigger times, notification recipients with a live SMTP **Test** button, and report format (txt/md/docx). Stored server-side in `app_settings` via `GET|PUT /settings`. **Times are stored but not yet enforced** — n8n's `scheduleTrigger` nodes still hold the real cron; wiring n8n to read `/settings` is open.
+- [x] Settings + Automation panels — refresh interval, confidence threshold, table density; plus daily/weekly trigger times, notification recipients with a live SMTP **Test** button, and report format (txt/md/docx). Stored server-side in `app_settings` via `GET|PUT /settings`. Times are stored **and enforced**: the cron bands moved out of n8n into `api/app/jobs.py`, which re-reads `app_settings` on every 30 s tick, so an edited hour takes effect without a restart.
 - [ ] Daily stat: % spoken Darija words vs French (post-PFE, zero cahier value)
 - [ ] Image generation from report via free API (post-PFE or cut — burns free-tier quota)
 
@@ -50,7 +50,9 @@ Full config walkthrough: `docs/setup-guide.md`.
 - [ ] Boss commands: `directeur` role sends "/rapport" text → bot replies with today's rollup on demand (reuses `/daily-report`)
 - [ ] **Message commands — edit by reply.** Technician replies to one of their own messages with `/modify {nouveau texte}`; the bot re-runs extraction on the new text and updates *that* Sheet row instead of appending a new one. Needs: (a) store the origin message id per row (`tg:chat:msgid` / `wa:wamid` — already minted for the dedupe guard, currently thrown away after the claim) plus its Sheet row number, in `processed_messages`; (b) an n8n branch that detects `reply_to_message` / `context.id` + a `/`-prefixed body before the normal audio/text fork; (c) `PATCH /reports/{row}` already exists for the write-back. Same branch is the natural home for `/supprimer` and the `/rapport` boss command below.
 - [ ] **Assistant persona from leaked-system-prompt techniques** — mine <https://github.com/yassine808/system_prompts_leaks> for prompt structure that production assistants actually use (role framing, refusal/uncertainty wording, formatting discipline, anti-hallucination phrasing) and fold the useful parts into all three prompt sites: text extraction, STT post-processing, and the audio/vision paths (`app/extraction.py` `_INSTRUCTIONS`, the image instructions in `benchmark/run_model_benchmark.py`, `app/daily_report.py`). Identity is **"l'assistant AZnet"** — never Claude, ChatGPT, Gemini or any vendor name, in any language. Keep the existing hard rule (`null` for absent fields, never invent) as the top constraint; borrowed phrasing must not dilute it. Verify with the `t04_hallucination_trap` / `t08_no_quantities_at_all` benchmark cases before and after.
-- [ ] Ack via emoji reaction instead of "⏳ Traitement en cours..." message: react on the sent voice note (TG `setMessageReaction`, WA `POST /messages type=reaction` on the wamid) — less chat noise, same signal
+- [x] Ack via emoji reaction instead of "⏳ Traitement en cours..." message: react on the sent voice note (TG `setMessageReaction`, WA `POST /messages type=reaction` on the wamid) — less chat noise, same signal. Flips to a green check when the summary lands, and is cleared when the pipeline fails.
+- [x] **Don't call a greeting a report** — "hi" extracted cleanly (all fields `null`), so n8n replied "✅ Rapport enregistré" and appended a blank row. `ExtractedReport.has_data()` + a `no_report_content` warning + the `Rapport exploitable ?` IF node before `Append Sheet row` (2026-07-30).
+- [ ] **Secrets still hardcoded in `n8n/aznet-complete.json`** (TO-DO-2 item 11): the Google Sheet document ID in `Append Sheet row`, and `<HR_EMAIL>` in both HR reply nodes. Move to `$env` alongside the keys already in the root `.env`.
 
 ## Dashboard v2 (rebuilt from scratch 2026-07-26 in `Dashboard/`)
 - [x] Design system first: `PRODUCT.md` + `DESIGN.md`, OKLCH tokens, Tailwind v4 CSS-first theming, light/dark authored independently, FR/EN/AR with RTL
@@ -62,7 +64,7 @@ Full config walkthrough: `docs/setup-guide.md`.
 - [x] Automation panel: trigger times, notification recipients + SMTP test, report format
 - [x] Ops resilience: stale-while-revalidate cache so panels keep their data across navigation; uptime sampler above the router, persisted to `service_samples`; CSS-keyframe status pulse that React re-renders cannot restart
 - [x] API-down alarm: masthead flashes red and beeps (WebAudio, no asset), with a mute toggle
-- [ ] Enforce the stored schedule: n8n `scheduleTrigger` nodes should read `/settings` instead of hardcoded times
+- [x] Enforce the stored schedule — done by moving the cron bands into `api/app/jobs.py` (they read `app_settings` every tick) rather than teaching n8n to read `/settings`. The Automation page can also show what ran and force a re-run, which a cron node cannot.
 - [ ] Verify the dashboard visually — never done; Playwright's Chrome is not installed (`npx playwright install chrome`)
 
 ## Notes

@@ -8,6 +8,6 @@
 - [x] confidence level, only the admin who can view+ edit that setting, other change the rest.
 - [x] emoji instead of "⏳ Traitement en cours..." (only works on whatsapp)
 - [x] verify Access control
-- [ ] never hardcode anything sensitive (passwords, emails , especially in the n8n workflow).
+- [ ] never hardcode anything sensitive (passwords, emails , especially in the n8n workflow). Still open in `n8n/aznet-complete.json`: the Google Sheet document ID in `Append Sheet row`, and `<HR_EMAIL>` in `TG HR reply` + `WA HR reply`. Tokens and keys are already `$env`. Note `Dashboard/.env` still carries a second copy of `N8N_API_KEY` — the dev proxy reads it there, but the API now has its own.
 - [ ] use UX-UI skill
 - [x] add the deployment keys to the root `.env`: `N8N_API_KEY` (move the value out of `Dashboard/.env`), `N8N_URL=http://n8n:5678`, a real `POSTGRES_PASSWORD` (default is still pfe/pfe and the port is now closed), `COOKIE_SECURE=true`, `WEB_PORT=8080`
