@@ -314,7 +314,7 @@ export function AutomationPage() {
   const addEmail = () => {
     const address = newEmail.trim()
     // Deliberately loose: the Test button is the real validation, not a regex.
-    if (!address || !address.includes('@') || values.emails.includes(address)) return
+    if (!address?.includes('@') || values.emails.includes(address)) return
     set('emails', [...values.emails, address])
     setNewEmail('')
   }

@@ -168,7 +168,8 @@ export function CommandPalette({
             <div
               ref={listRef}
               id="cmd-list"
-              role="listbox" // NOSONAR(typescript:S6819): real ARIA combobox listbox — no native <select> fits icon+shortcut rows
+              // real ARIA combobox listbox — no native <select> fits icon+shortcut rows
+              role="listbox" // NOSONAR
               className="max-h-80 overflow-y-auto p-2"
             >
               {hits.length === 0 ? (
