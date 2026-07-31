@@ -20,7 +20,7 @@ The STT benchmark (`benchmark/run_benchmark.py`) exists as a script but **the da
 | Provider | Model | Type | Notes |
 |---|---|---|---|
 | `groq` | Whisper-large-v3 | Cloud API (Groq free tier) | Used in production since March 2026. Returns `avg_logprob` for confidence. 30 RPM / 14K RPD limit |
-| `gemini` | Gemini 2.5 Flash native audio | Cloud API (free tier) | Useful fallback. Returns no logprob. 1,500 RPM |
+| `gemini` | Gemini native audio (`gemini_model`, currently flash-lite) | Cloud API (free tier) | Useful fallback. Returns no logprob. 1,500 RPM |
 | `hf-darija` | HF Inference API Darija fine-tune | Cloud API (free) | Not yet tested. Depends on which Darija model exists on HF. Only added if Groq is insufficient for Darija |
 
 ## Benchmark Script (`run_benchmark.py`)

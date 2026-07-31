@@ -28,7 +28,7 @@ status: current
 - `POST /daily-report` — today's Sheet rows → LLM → French manager email
 - `POST /generate-image` — illustrated summary card from a report
 - STT provider selection & execution (strategy pattern, `api/app/providers/`)
-- LLM extraction: Gemini structured output primary → Groq JSON fallback
+- LLM extraction: ranked per-modality chains (`config.py`), text alternates Groq/Gemini, image is Google-only
 - Image extraction: vision model → schema directly (no intermediate transcription)
 - Profile injection: technician background paragraph injected into extraction prompt
 - Schema validation (`ExtractedReport`, `api/app/schemas.py`)
@@ -77,14 +77,14 @@ Registry (__init__.py): @register("groq") / @register("gemini") / @register("hf-
 | Provider | Engine | Confidence | Notes |
 |---|---|---|---|
 | `groq` | Whisper-large-v3 (Groq free tier) | derived from `avg_logprob` | current default (`stt_provider` in config) |
-| `gemini` | Gemini 2.5 Flash native audio | `None` (no logprob exposed) | |
+| `gemini` | Gemini native audio via `gemini_model` (flash-lite) | `None` (no logprob exposed) | |
 | `hf-darija` | HF Inference API Darija fine-tune | `None` | checkpoint provisional, benchmark pending |
 
 ## Extraction Pipeline
 
-See [[Extraction Pipeline]] for full detail. Two ordered fallback chains, one per input shape:
-- `extraction_text_chain`: Gemini 2.5 Flash (structured output) → Groq Llama 3.3 70B (JSON mode)
-- `extraction_image_chain`: Google-only (Gemini 2.5 Flash vision) — no free Groq vision model
+See [[Extraction Pipeline]] for full detail. Two ordered fallback chains, one per input shape (ranked 2026-07-27 by `benchmark/run_model_benchmark.py`):
+- `extraction_text_chain`: `groq gpt-oss-120b` → `gemini flash-lite-latest` → `gemini 3.6-flash` (alternates vendors so free-tier quotas meter separately)
+- `extraction_image_chain`: Google-only — `gemini 3.6-flash` → `gemini 3.5-flash-lite` → `gemini flash-lite-latest` (no free Groq vision model)
 
 Profiles: one short French paragraph per technician, rebuilt nightly at 03:00, injected as labelled context into the extraction prompt.
 
@@ -99,14 +99,14 @@ Profiles: one short French paragraph per technician, rebuilt nightly at 03:00, i
 
 ## n8n Workflow (current)
 
-Single workflow `n8n/aznet-complete.json` with four labelled bands:
+Single workflow `n8n/aznet-complete.json` with two labelled bands:
 
 | Band | Triggers | Role |
 |---|---|---|
-| Réception | Every 15s (TG poll), 2 WA webhooks | voice/text/image → `/process` → reply → Sheet |
-| Maintenance | Every 5 min, Daily 03:00 | drain retry queue, prune logs >30d |
-| Rapport quotidien | N/A (moved to API scheduler) | |
+| Réception | Every 15s (TG poll), 2 WA webhooks | dedupe → access control → voice/text/image → `/process` → reply → Sheet |
 | Erreurs | Error Trigger | crash → `POST /logs` |
+
+The maintenance and daily/weekly report bands moved to the API scheduler (`api/app/jobs.py`) on 2026-07-29 — a cron node cannot show an operator what it produced or let them re-run it. After every import or API push, re-set **Settings → Error Workflow → this same workflow**: it lives in the workflow's `settings` and the public API silently drops keys it does not accept.
 
 Legacy workflows (single-channel `legacy-*.json`) kept for reference only — never activate alongside the unified flow.
 
@@ -144,26 +144,33 @@ Technician (Telegram / WhatsApp)
     │ voice note / photo / text
     ▼
 n8n Reception (unified workflow)
-    │ download media (TG / WA)
+    │ mint correlation_id → POST /logs/claim (dedupe)
+    │ GET /technicians/lookup → authorized? (persons ⟷ technicians)
+    │   ├─ outsider → one HR-contact reply, then silence
+    │   └─ employee → download media (TG / WA) → Media or text? → Audio or image?
     ▼
 POST /process (FastAPI)
-    ├─ Audio → STT (Groq Whisper / Gemini Audio)
-    ├─ Image → Vision model (no transcription)
+    ├─ Audio → STT (Groq Whisper / Gemini / HF) → raw text
+    ├─ Image → Vision model (no transcription, flag_review=true)
     └─ Text → direct extraction
     │
     ▼
-LLM Extraction (Gemini → Groq fallback)
-    │ + profile context from persons.profile
+LLM Extraction (ranked chains, profile context from persons.profile)
     ▼
 JSON response → n8n
-    ├─ ✅ Reply on originating channel
+    ├─ ✅ Reply on originating channel (reply-first ordering)
+    ├─ `Rapport exploitable ?` (has_data → no_report_content?)
     ├─ Append row → Google Sheets (Rapports tab)
-    └─ (on failure) Queue → drain retry → Sheet
+    └─ (on failure) failed_writes queue → drained every 5 min
 
-Manager Dashboard (React, /Dashboard)
+Scheduled jobs (API scheduler, jobs.py):
+    ├─ sheet-queue drain (5 min) · prune logs (03:00) · profiles (03:00)
+    └─ daily email (Mon–Sat) · weekly email (weekly_day/time)
+
+Manager Dashboard (React, login required)
     ├─ GET /reports → inline corrections → PATCH /reports/{row}
     ├─ Logs n8n panel → POST|GET /logs
-    ├─ Automation → read/write /settings
+    ├─ Automation → GET|PUT /settings · GET /jobs · POST /jobs/{name}/run
     └─ Access control → /technicians CRUD
 ```
 

@@ -68,7 +68,7 @@ Gives a **stable** `https://<TAILSCALE_HOSTNAME>`. Put it in `.env` as `WEBHOOK_
 |---|------|-----------|
 | 1 | **Telegram Trigger** | Updates = `message`. Emits `message.voice.file_id` for voice notes. |
 | 2 | **Telegram** → Resource *File*, Operation *Get File* | File ID = `={{ $json.message.voice.file_id }}` → downloads audio into binary property `data`. |
-| 3 | **HTTP Request** | `POST` `http://host.docker.internal:8000/process` (dev; becomes `http://api:8000/process` once `api/` is in compose). Body = *multipart-form-data*, one **binary** field named `audio`, input data field `data`. |
+| 3 | **HTTP Request** | `POST` `http://host.docker.internal:8000/process` (host-dev; `http://api:8000/process` in compose). Body = *multipart-form-data*, one **binary** field named `audio`, input data field `data`. |
 
 Metadata n8n adds later (not the API's job): `date`/`heure` = now; `technicien` = `message.from.first_name` or a `chat_id`→name map; `lien_audio` (cahier marks it *optional*) — Telegram's file URL embeds the bot token and isn't durable, so upload the audio to Google Drive (you already hold Google creds for Sheets) and store that link, or store the raw `file_id` as a quick fallback.
 
@@ -113,7 +113,7 @@ The API decides nothing about routing: it takes exactly one of `audio`, `image` 
 
 The reception workflows append the full row to the `Rapports` tab (date, heure, technicien, role, all extracted fields, rapport_complet, confidence, `flag_review`, lien_audio). `flag_review` is `true` when the API returned `low_confidence_transcription`, `short_transcription` or `image_input` — the dashboard's review queue filters on it. Photo-derived rows are always flagged: there is no transcription to sanity-check them against, so a human should glance at every one.
 
-For an image there is no raw text, so `rapport_complet` holds the model's own summary prefixed with `[photo] `. The prefix matters: without it the column looks like something the technician actually said. Replace `REPLACE_WITH_SPREADSHEET_ID` and attach a Google Sheets credential.
+For an image there is no raw text, so `rapport_complet` holds the model's own summary prefixed with `[photo] `. The prefix matters: without it the column looks like something the technician actually said. The append reads the spreadsheet id from `$env.GOOGLE_SHEET_ID` (root `.env`) — no placeholder to replace. Attach a Google Sheets credential.
 
 ## 7. Error workflow
 

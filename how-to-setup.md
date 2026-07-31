@@ -65,9 +65,9 @@ Open the n8n UI: <http://localhost:5678>
 
 Edit `.env` at the repo root. **Never commit this file.**
 
-### 3a. Groq (STT + LLM fallback)
+### 3a. Groq (STT + text extraction primary)
 
-**Used for:** Transcribing Darija voice notes (Whisper-large-v3) + JSON extraction fallback (Llama 3.3 70B).
+**Used for:** Transcribing Darija voice notes (Whisper-large-v3) + structured JSON extraction primary (gpt-oss-120b).
 
 | Step | What to do |
 |------|-----------|
@@ -78,13 +78,13 @@ Edit `.env` at the repo root. **Never commit this file.**
 | 5 | Copy the key starting with `gsk_...` |
 | 6 | Paste into `.env`: `GROQ_API_KEY=gsk_...` |
 
-**Free tier:** 30 req/min on Whisper-large-v3, 30 req/min on Llama 3.3 — more than enough for a pilot.
+**Free tier:** 30 req/min on Whisper-large-v3, 30 req/min on gpt-oss-120b — more than enough for a pilot.
 
 ---
 
-### 3b. Gemini (primary LLM + STT candidate)
+### 3b. Gemini (LLM fallback + STT candidate)
 
-**Used for:** Structured JSON extraction (primary) + Darija audio transcription (benchmark).
+**Used for:** Structured JSON extraction (fallback in the text chain) + Darija audio transcription (benchmark).
 
 | Step | What to do |
 |------|-----------|
@@ -95,7 +95,7 @@ Edit `.env` at the repo root. **Never commit this file.**
 | 5 | Copy the key starting with `AIza...` or `AQ.` |
 | 6 | Paste into `.env`: `GEMINI_API_KEY=AIza...` |
 
-**Free tier:** Gemini 2.5 Flash has 1500 req/day free — plenty.
+**Free tier:** flash-lite (the extraction fallback) has 1500 req/day free — plenty. The bigger flash models are quota-limited on the free tier (the 2026-07-27 benchmark saw gemini-3.6-flash 503 after a few calls), which is why they sit at the end of the chains.
 
 ---
 
@@ -385,7 +385,7 @@ The recommended approach: import the merged file.
 1. n8n UI → **Workflows** → **Add Workflow**
 2. Click the three dots (`···`) → **Import from File**
 3. Pick **`n8n/aznet-complete.json`**
-4. The editor shows four labelled bands (Réception, Maintenance, Rapport quotidien, Gestionnaire d'erreurs)
+4. The editor shows two labelled bands (Réception, Gestionnaire d'erreurs) — the maintenance and daily/weekly report bands moved to the API scheduler (`api/app/jobs.py`)
 
 ### 8.2 Configure credentials
 

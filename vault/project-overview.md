@@ -11,7 +11,7 @@ status: current
 
 **Subject:** End-of-studies project (PFE) at Aznet.ma  
 **Deadline:** August 31, 2026  
-**Current date:** July 29, 2026  
+**Current date:** July 31, 2026  
 **Source of truth:** `PLAN.md` and `docs/cahier-des-charges.md`
 
 A pipeline that takes voice notes in Moroccan Darija from cabling technicians (via Telegram or WhatsApp), transcribes them, extracts structured data using LLMs, writes to Google Sheets, and emails a professional French summary to managers.
@@ -27,7 +27,7 @@ A pipeline that takes voice notes in Moroccan Darija from cabling technicians (v
 
 1. **n8n does the reply before the Sheet append** — a failed write must never cost the technician their summary. Failed writes go to a Postgres retry queue drained every 5 minutes.
 2. **Darija STT** uses a strategy pattern (Groq Whisper primary, Gemini Audio fallback, HF Darija fine-tune pending benchmark).
-3. **Two extraction fallback chains**: text chain alternates vendors (Gemini structured output → Groq JSON mode); image chain is Google-only (no free Groq vision model).
+3. **Two extraction fallback chains** (ranked 2026-07-27): text chain alternates vendors (Groq gpt-oss-120b → Gemini flash-lite → Gemini 3.6-flash); image chain is Google-only (no free Groq vision model).
 4. **No silent fallbacks** — if all engines in a chain fail, the API returns 502 so n8n can flag the row. Never invented data.
 5. **Image input**: vision model reads the photo and fills the schema directly (no intermediate transcription). Always `flag_review=true`.
 6. **Technician profiles**: one French paragraph per technician, rebuilt nightly at 03:00 from their past reports, injected into extraction prompts as labelled context.
@@ -37,9 +37,9 @@ A pipeline that takes voice notes in Moroccan Darija from cabling technicians (v
 ## Tech Stack
 
 - **Backend API**: Python 3.9, FastAPI, pydantic-settings, uvicorn
-- **STT**: Groq Whisper-large-v3 (default), Gemini 2.5 Flash (fallback)
-- **LLM**: Google Gemini 2.5 Flash (structured output), Groq Llama 3.3 70B (JSON mode)
-- **Image generation**: Google Gemini 2.5 Flash
+- **STT**: Groq Whisper-large-v3 (default), Gemini (flash-lite native audio), HF Darija fine-tune (benchmark pending)
+- **LLM**: ranked chains (`extraction_text_chain` / `extraction_image_chain` in `config.py`) — text: Groq gpt-oss-120b → Gemini flash-lite → Gemini 3.6-flash; image: Google-only 3.6-flash chain
+- **Image generation**: Google `gemini-3.1-flash-image` → `nano-banana-pro` → `3-pro-image` (click-only, never a cron)
 - **Email**: smtplib + Gmail SMTP App Password
 - **Database**: PostgreSQL 15 (optional — logs/auth disabled if `DATABASE_URL` unset)
 - **Orchestration**: n8n (self-hosted, single unified workflow)
@@ -55,7 +55,7 @@ A pipeline that takes voice notes in Moroccan Darija from cabling technicians (v
 | WhatsApp voice → STT → Sheet | ✅ Built | Live since 2026-07-23 |
 | Text (typed report) mode | ✅ Built | `/process` accepts `text` field |
 | Image/photo input | ✅ Built | Vision model, no transcription, `flag_review=true` |
-| LLM extraction (Gemini → Groq) | ✅ Built | Two-chained fallback |
+| LLM extraction (ranked chains) | ✅ Built | Text alternates Groq/Gemini; image is Google-only |
 | Technician profiles | ✅ Built | `api/app/memory.py`, rebuilt at 03:00 |
 | Google Sheets append | ✅ Built | Done by n8n, retry queue for failures |
 | Google Sheets read/write (dashboard) | ✅ Built | `GET|PATCH /reports` |
@@ -68,7 +68,7 @@ A pipeline that takes voice notes in Moroccan Darija from cabling technicians (v
 | STT benchmark | 🟡 Pending | Dataset `benchmark/dataset/audio/` still empty |
 | n8n dashboards | 🟡 N/A | Dashboard has its own panel; n8n UI is admin only |
 | AI search on reports | ❌ Not planned | Sheets search is sufficient |
-| Automated testing on CI | 🟡 Manual | No CI configured (run `pytest` manually) |
+| Automated testing on CI | 🟡 Blocked | `.github/workflows/ci.yml` exists but every job reports a GitHub Actions **billing block** ("recent account payments have failed") — fix billing or make the repo public |
 | Public deployment | 🟡 Pilot | Docker Compose on local machine, Tailscale Funnel |
 
 ## Channels

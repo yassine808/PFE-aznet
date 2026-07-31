@@ -17,7 +17,7 @@ _PROMPT = (
 
 @register("gemini")
 class GeminiAudioProvider(TranscriptionProvider):
-    """Gemini 2.5 Flash native audio input (AI Studio free tier)."""
+    """Gemini native audio input (AI Studio free tier, `gemini_model` = flash-lite-latest)."""
 
     name = "gemini"
 

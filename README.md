@@ -28,8 +28,8 @@ flowchart TB
 
     %% ── The five models (4 and 5 fire outside this path) ─────────
     KIND -- audio --> STT["**1. STT**<br/>groq whisper-large-v3<br/>→ gemini → hf-darija"]:::ai
-    KIND -- image --> VIS["**3. Vision**<br/>gemini 3.6-flash chain<br/><i>photo → schema, one call</i>"]:::ai
-    KIND -- text --> TXT["**2. Extraction**<br/>groq gpt-oss-120b<br/>→ gemini flash-lite"]:::ai
+    KIND -- image --> VIS["**3. Vision**<br/>gemini 3.6-flash<br/>→ 3.5-flash-lite → flash-lite<br/><i>photo → schema, one call</i>"]:::ai
+    KIND -- text --> TXT["**2. Extraction**<br/>groq gpt-oss-120b<br/>→ gemini flash-lite → 3.6-flash"]:::ai
     STT --> TXT
 
     PROF[(persons.profile)]:::db -. "injected as context<br/>never a source of values" .-> TXT & VIS
@@ -46,10 +46,11 @@ flowchart TB
 
     %% ── Scheduled jobs ───────────────────────────────────────────
     C1[/"18:30 Mon–Sat"/]:::cron --> MAIL["POST /daily-report<br/>→ Gmail SMTP"]:::api
+    C3[/"weekly_day / weekly_time"/]:::cron --> MAIL2["POST /daily-report<br/>week span → Gmail SMTP"]:::api
     C2[/"03:00 daily"/]:::cron --> PRUNE[prune logs 30 j]:::api
     C2 --> REFRESH["**5. Profils**<br/>POST /profiles/refresh<br/><i>reads the Sheet</i>"]:::ai
     SHEET -.-> REFRESH --> PROF
-    MAIL --> BOSS([Chef de chantier]):::actor
+    MAIL & MAIL2 --> BOSS([Chef de chantier]):::actor
 
     %% ── Dashboard ────────────────────────────────────────────────
     ADMIN([Directeur · Chefs]):::actor --> LOGIN{{"POST /auth/login<br/>bcrypt + session cookie"}}:::api
@@ -113,7 +114,7 @@ ADMIN_EMAIL=you@aznet.ma    # seeds the first director account, only while `user
 ADMIN_PASSWORD=...          # min 8 characters
 ```
 
-Then import `n8n/aznet-complete.json` — one import covers all four workflows.
+Then import `n8n/aznet-complete.json` — one import covers the reception band (Telegram + WhatsApp → `/process` → reply → Sheets) plus the error-handler band. After import, set **Settings → Error Workflow → this same workflow** (one manual step; the public API silently drops `settings` keys it does not accept, so re-check it after every push).
 
 No Docker yet? Instant dev run: `npx n8n` (Node 20+). See `n8n/README.md` for webhook tunnel options.
 
@@ -124,11 +125,11 @@ No Docker yet? Instant dev run: `npx n8n` (Node 20+). See `n8n/README.md` for we
 - [x] Sprint 2: **full dual-channel E2E** (2026-07-23) — Telegram + WhatsApp voice/text → `/process` → Google Sheets row → ✅ reply on the originating channel. Unified n8n workflow, access control + roles, dedupe, failure replies, low-confidence flagging, error-tab workflow, end-of-day report cron.
 - [x] Sprint 2: **manager dashboard v1** — React (`web/`) + FastAPI `/reports` endpoints; report list, technicien/chantier/date filters, review queue on `flag_review`, confidence %, click-to-edit cells writing back to Sheets.
 - [x] Sprint 2: **dashboard redesign v2** (2026-07-24) — neutral/monochrome Efferd-style app-shell (framed KPI panels, gradient bars + glowing channel step-line), light/dark theme + FR/EN/AR language switch (RTL) from JSON locales (`web/src/locales/`), 16 metrics across Activité/Production/Qualité/Cadence (incl. WoW deltas, Darija-voice share, API uptime from `/health`), per-technician summary, recent-reports/health/activity bottom row.
-- [x] Sprint 2: **resilience + observability** (2026-07-25) — reply-first ordering so a Sheets outage can no longer swallow a report (failed writes park in a Postgres retry queue, drained every 5 min); durable WhatsApp idempotency (was in-memory, wiped on restart); retries + timeouts on `/process`; global error workflow wired to `POST /logs`; per-stage pipeline logging joined by `correlation_id` across n8n and the API, surfaced in a new **Logs n8n** dashboard panel (live tail, filters, 30-day retention); all four workflows merged into a single importable `n8n/aznet-complete.json`.
+- [x] Sprint 2: **resilience + observability** (2026-07-25) — reply-first ordering so a Sheets outage can no longer swallow a report (failed writes park in a Postgres retry queue, drained every 5 min); durable WhatsApp idempotency (was in-memory, wiped on restart); retries + timeouts on `/process`; global error workflow wired to `POST /logs`; per-stage pipeline logging joined by `correlation_id` across n8n and the API, surfaced in a new **Logs n8n** dashboard panel (live tail, filters, 30-day retention); every workflow merged into a single importable `n8n/aznet-complete.json`.
 - [x] Sprint 2: **five models + prompt library** (2026-07-27) — text/vision/image-generation chains ranked by `benchmark/run_model_benchmark.py`; prompts moved out of Python into versioned Markdown with a shared `00-soul.md` identity.
 - [x] Sprint 2: **one person across channels + nightly profiles** (2026-07-29) — `persons`/`technicians` split so a colleague's memory follows them, not their phone number; the n8n allowlist now reads the table; a fifth model writes a short profile at 03:00 from their own past reports and it is injected into extraction as labelled context.
 - [x] Sprint 2: **dashboard accounts** (2026-07-29) — login (bcrypt + revocable Postgres sessions), roles `directeur`/`chef`, every endpoint gated on the API, `X-API-Key` for n8n, and an audit trail (actions with before → after, time per page) in the new **Équipe** panel. New **Journaux** panel renders the live pipeline log.
-- [ ] Before publishing the dashboard: narrow `allow_origins`, rate-limit `/auth/login`
+- [x] Publish-readiness hardening (2026-07-30) — `cors_origins` narrowed from `*` to the Vite dev origins, `/auth/login` throttled (8 failures / 5 min per client address, honoring `trusted_proxy_hops`), sessions stored server-side.
 - [ ] STT benchmark → pick default provider (`benchmark/`)
 - [ ] Durable Drive audio links, `/rapport` boss command
 - [ ] Sprint 3: pilot + docs + PFE report

@@ -7,7 +7,7 @@ Decides the primary transcription engine with evidence. Results feed PLAN.md §8
 | Adapter | Model | Access |
 |---|---|---|
 | `groq` | Whisper-large-v3 | Groq API free tier |
-| `gemini` | Gemini 2.5 Flash (native audio) | AI Studio free tier |
+| `gemini` | Gemini native audio (`gemini_model`, currently flash-lite) | AI Studio free tier |
 | `hf-darija` | Whisper fine-tuned on Darija (pick best available on HF) | HF Inference / local |
 
 ## Dataset recording protocol (Week 0 — do this now)

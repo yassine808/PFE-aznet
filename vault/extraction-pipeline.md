@@ -24,7 +24,7 @@ All prompts are **versioned Markdown files** (`api/app/prompts/`), loaded by `Pr
 | Prompt file | Role |
 |---|---|
 | `00-soul.md` | Prepended to every model-facing prompt. Identity, never-invent rule, absence ≠ zero rule |
-| `extraction.md` | Main extraction instruction with French schema fields |
+| `extraction-text.md` / `extraction-image.md` | Extraction instructions with French schema fields (one per input shape) |
 | `stt-vocabulary.md` | **No soul added.** Whisper reads `prompt` as transcript prefix, not instructions; soul would be echoed into transcript |
 | `daily-report.md` | Aggregation of today's rows → French email |
 | `image-generation.md` | Image generation prompt for summary cards |
@@ -44,16 +44,19 @@ Two ordered fallback chains (`config.py`), tried left to right:
 ### Text extraction (`extraction_text_chain`)
 
 ```
-1. Gemini 2.5 Flash (structured output) → preferred, cheaper
-2. Groq Llama 3.3 70B (JSON mode) → fallback
+1. Groq gpt-oss-120b (JSON mode) → primary
+2. Gemini flash-lite-latest (structured output) → other vendor
+3. Gemini 3.6-flash → last: accurate but runs out of free quota after a few calls
 ```
 
-The chain alternates vendors (Gemini and Groq meter free tiers separately). If both fail, a combined `ExtractionError` is raised → HTTP 502.
+Ranked 2026-07-27 by `benchmark/run_model_benchmark.py` over the ten cases in `benchmark/dataset/text_cases.json` (gpt-oss-120b 100%, 0 invented, 1.6 s). The chain alternates vendors (Gemini and Groq meter free tiers separately). If all of them fail, a combined `ExtractionError` is raised → HTTP 502.
 
 ### Image extraction (`extraction_image_chain`)
 
 ```
-1. Gemini 2.5 Flash (vision) → only option
+1. Gemini 3.6-flash (vision) → primary
+2. Gemini 3.5-flash-lite → fallback
+3. Gemini flash-lite-latest → last fallback
 ```
 
 Google-only because the free Groq catalogue has no vision model. `flag_review=true` always. The model fills the schema in one call — no intermediate transcription. `rapport_complet` gets `[photo] ` prefix so it's never mistaken for a quote.

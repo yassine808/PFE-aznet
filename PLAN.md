@@ -12,9 +12,9 @@
 | Scope | Hybrid: n8n orchestration (per cahier) + custom-coded AI service + web app (for PFE substance) |
 | Code boundary | **Option A** — you code: FastAPI AI service (STT + LLM extraction + French reformulation), React web form, manager dashboard. n8n does: **Telegram** reception, Sheets writes, notifications |
 | Reception channel | **Telegram Bot API + WhatsApp Cloud API — both live** (unified n8n workflow, one import: `n8n/aznet-complete.json`). Telegram first (no Meta friction); WhatsApp brought up E2E 2026-07-23 (System User token = no expiry, published app, WABA `subscribed_apps`, manual GET-echo webhook since n8n's WhatsApp Trigger fails Meta's challenge, media download via HTTP node). Cahier §5 *"passerelle équivalente"* satisfied and then some. Channel-agnostic: both feed one `/process` + one Sheet; reply goes back on the originating channel |
-| STT (Darija) | Week-1 **benchmark** via `TranscriptionProvider` adapter interface: Groq Whisper-large-v3, Gemini 2.5 Flash native audio, 1 HF Darija fine-tune. Benchmark picks the primary |
+| STT (Darija) | Week-1 **benchmark** via `TranscriptionProvider` adapter interface: Groq Whisper-large-v3, Gemini native audio (uses `gemini_model`, currently flash-lite), 1 HF Darija fine-tune. Benchmark picks the primary; until the dataset is recorded, `stt_provider=groq` by assumption |
 | Test dataset | 15–20 **self-simulated** Darija voice notes + hand-written reference transcriptions. Wave 2 with real technician notes if director provides |
-| LLM | **Gemini 2.5 Flash** primary (structured JSON output, strong French) + **Groq Llama 3.3 70B** fallback adapter |
+| LLM | **Ranked chains, one per input shape** (benchmark 2026-07-27 over 10 Darija/French cases): text = `groq gpt-oss-120b → gemini flash-lite → gemini-3.6-flash` (alternates vendors so free-tier quotas meter separately); image = Google-only `gemini-3.6-flash → 3.5-flash-lite → flash-lite` (no free Groq vision model); image card = `gemini-3.1-flash-image → nano-banana-pro → 3-pro-image` (click-only, never a cron); profiles = same text chain |
 | Backend/Frontend | **FastAPI (Python)** + **React (TypeScript)**, web only (Electron dropped) |
 | Hosting | Dev: Docker Compose (n8n) + FastAPI hot-reload local + **Cloudflare tunnel** for webhooks. Front: Vercel free. Pilot: same compose on aznet server if available, else Oracle Always Free VM |
 
@@ -33,27 +33,45 @@
 Technician
    │ voice note (Darija) / photo / typed text
    ▼
-Telegram (polling)  +  WhatsApp Cloud API (webhook)
+Telegram (polling)  +  WhatsApp Cloud API (webhook via Tailscale Funnel)
    └─────────┬───────────┘
-                 ▼
-              n8n (Docker)
-                 │  Media or text?  →  Audio or image?
-                 ▼
-     FastAPI AI Service   (exactly one of audio | image | text)
-     ├─ audio → TranscriptionProvider (Groq / Gemini / HF) → text
-     ├─ image → vision chain, photo → schema in one call
-     ├─ text  → extraction chain (ordered, cross-vendor fallback)
-     └─ Reformulator: professional French summary
-                 │ JSON
-                 ▼
-     n8n: reply to technician → `Rapport exploitable ?` → append row → Google Sheets
-          ├─ no_report_content (a greeting) → replies, appends nothing
-          ├─ end-of-day email to chef de chantier + resp. technique
-          └─ failed writes park in `failed_writes`, drained by the 5-min cron
+             ▼
+          n8n (Docker) — unified workflow (reception + error handler)
+             │ mint correlation_id → POST /logs/claim (dedupe)
+             │ GET /technicians/lookup → authorized?  (persons ⟷ technicians)
+             │   ├─ outsider → one HR-contact reply, then silence
+             │   └─ employee → Media or text?  →  Audio or image?
+             ▼
+ FastAPI AI Service   (exactly one of audio | image | text)
+ ├─ audio → STT (groq whisper-large-v3 → gemini → hf-darija) → text
+ ├─ image → vision chain, photo → schema in one call (flag_review=true)
+ ├─ text  → extraction chain (ranked, cross-vendor fallback)
+ └─ extraction prompt ← persons.profile (nightly model, context only)
+             │ JSON (ExtractedReport)
+             ▼
+ n8n: ✅ reply to technician (originating channel)   ← reply FIRST
+             │
+             ▼
+      `Rapport exploitable ?`  (has_data → no_report_content?)
+             │
+             ▼
+      append row → Google Sheets (Rapports)
+           └─ write failed → failed_writes (Postgres) → drain every 5 min
 
-     nightly 03:00 cron → profile model → persons.profile → injected into extraction
+ API scheduler (jobs.py, 30 s tick, times from app_settings):
+   ├─ sheet-queue drain       — every 5 min
+   ├─ prune logs/samples      — 03:00, 30-day retention
+   ├─ refresh profiles        — 03:00, reads the Sheet
+   ├─ daily report email      — Mon–Sat, default 18:30, Gmail SMTP
+   └─ weekly report email     — weekly_day/weekly_time (0 = Monday)
 
-Dashboard (React, login required) ◄─ /reports ─ FastAPI ◄─ Google Sheets API
+ Dashboard (React, login required — sessions in Postgres, X-API-Key for n8n)
+   ├─ GET /reports · PATCH /reports/{row}      → Sheets read/write
+   ├─ GET /jobs · POST /jobs/{name}/run        → run + re-run scheduler jobs
+   ├─ POST /generate-image                     → illustrated summary card (click only)
+   ├─ GET/PUT /settings · POST /notify/test    → automation + SMTP proof
+   ├─ POST|GET /logs · GET /n8n/*              → live pipeline + n8n tails
+   └─ GET/POST/DELETE /technicians …           → access control
 ```
 
 JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'activité, goulottes_m, cables_m, bureaux_termines, panneaux_raccordes, autres_travaux, observations, rapport_complet, lien_audio (+ `canal`, `confidence`, `flag_review` added in Sprint 2).
@@ -74,7 +92,7 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 ### Sprint 1 — AI core + benchmark (Jul 20 – Aug 1)
 - [x] FastAPI skeleton, `TranscriptionProvider` interface + 3 adapters (groq / gemini / hf-darija)
 - [~] Benchmark harness: WER/CER harness written (`benchmark/run_benchmark.py`) but **cannot run without the audio dataset**, so the primary STT is still unpicked. The *extraction* side is measured: `benchmark/run_model_benchmark.py` ranks text and vision models on 10 hand-written Darija/French cases, and that table sets `extraction_text_chain` / `extraction_image_chain`.
-- [x] Extraction: Pydantic schema, Gemini structured output (`response_schema=ExtractedReport`), French reformulation prompt, ordered per-modality fallback chains
+- [x] Extraction: Pydantic schema, ordered per-modality fallback chains (text: `groq gpt-oss-120b` → `gemini flash-lite` → `3.6-flash`; image: `3.6-flash` → `3.5-flash-lite` → `flash-lite`), French reformulation prompt
 - [x] Unit tests (53, no API keys or DB needed) + golden-set eval on extraction (the benchmark's 10 cases, two of which exist purely to catch invented quantities)
 - **Exit:** `/process` endpoint audio→structured JSON works; benchmark results table done
 - Report in parallel: état de l'art (STT Darija, LLM extraction, outils)

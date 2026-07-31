@@ -47,7 +47,7 @@ Columns match the `ExtractedReport` schema + metadata added by n8n:
 | Transcription (brute) | Arabic/Latin raw text | API transcription |
 | Modèle (transcription) | e.g. whisper-large-v3 | API transcription |
 | Confiance transcription | logprob or null | API transcription |
-| Modèle (extraction) | e.g. gemini-2.5-flash | API extraction |
+| Modèle (extraction) | e.g. gpt-oss-120b (the chain member that answered) | API extraction |
 | Provider (extraction) | groq or gemini | API extraction |
 | Nombre de tentatives | retry count | API extraction |
 | Délai (secondes) | wall-clock processing time | API extraction |

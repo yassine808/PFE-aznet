@@ -130,7 +130,7 @@ docker compose up -d n8n postgres
 | HF Inference API | varies by model | only if hf-darija is the chosen STT |
 | Telegram Bot API | unlimited | one bot, polling every 15s |
 | WhatsApp Cloud API | 1,000 messages/day (free tier) | <20/day |
-| n8n | unlimited (self-hosted) | one workflow, 4 active bands |
+| n8n | unlimited (self-hosted) | one workflow, 2 active bands (reception + error handler) |
 | Postgres 15 | unlimited (self-hosted) | <100 MB |
 | Tailscale Funnel | 1 tunnel (free) | 1 HTTPS tunnel |
 | Gmail SMTP | 500/day | 1 email/day |

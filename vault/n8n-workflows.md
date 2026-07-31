@@ -11,42 +11,52 @@ status: current
 
 ## Source of Truth
 
-Single unified workflow: **`n8n/aznet-complete.json`**
+Single unified workflow: **`n8n/aznet-complete.json`** — **reception + error handler** since 2026-07-29 (the maintenance and daily/weekly report bands moved into the API's own scheduler, `api/app/jobs.py`, so the dashboard can show what ran and re-run it).
 
 Legacy workflows (`n8n/legacy-*.json`) are kept for reference only. Never import them alongside the unified flow — they overlap on triggers, Sheet appends, and Telegram nodes.
 
 ## Unified Workflow Structure
 
-One file, four labelled bands, one Telegram polling trigger:
+One file, two labelled bands, one Telegram polling trigger:
 
 ```mermaid
 graph TD
     A[TG Poll 15s] --> B{New message?}
-    B -->|Yes| C[Download media]
-    C --> D[POST /process]
-    D --> E{Success?}
-    E -->|Yes| F[Reply TG/WA]
-    E -->|No| G[Post error log]
-    F --> H[Append to Sheet]
-    H --> I[End]
+    B -->|Yes| C1[Claim dedupe]
+    C1 --> C2[Access control lookup]
+    C2 -->|outsider| R1[HR-contact reply]
+    C2 -->|employee| D[Download media]
+    D --> E{Media or text?}
+    E -->|audio/image| F[POST /process]
+    E -->|text| F
+    F --> G{Success?}
+    G -->|Yes| H[Reply TG/WA - first]
+    G -->|No| I[Reply error + flag row]
+    H --> J{Rapport exploitable?}
+    J -->|yes| K[Append to Sheet]
+    J -->|no| L[End - nothing appended]
+    K -->|write failed| M[failed_writes queue]
+    M -->|5 min drain| K
 
-    J[WA Webhook 1] --> C
-    K[WA Webhook 2] --> C
+    N[WA Webhook 1] --> C1
+    O[WA Webhook 2] --> C1
+
+    P[Error Trigger] --> Q[POST /logs]
 ```
 
 ### Band breakdown
 
 | Band | Triggers | Nodes | Purpose |
 |---|---|---|---|
-| **Réception** | TG Poll (15s) + 2 WA Webhooks | 10+ | Main path: download → `/process` → reply → Sheet |
-| **Maintenance** | Cron (5 min) + Cron (03:00) | 3 | Drain retry queue, prune old logs |
-| **Rapport quotidien** | N/A (moved to API scheduler) | — | Now handled by `api/app/jobs.py` |
+| **Réception** | TG Poll (15s) + 2 WA Webhooks | 10+ | Main path: dedupe → access control → download → `/process` → reply → Sheet |
 | **Erreurs** | Error Trigger | 1 | Any unhandled crash → `POST /logs` |
+
+The maintenance (drain, prune) and daily/weekly report bands are handled by `api/app/jobs.py` — see [[architecture]] §Scheduled jobs.
 
 **Trigger details:**
 - **Telegram:** Polling (`getUpdates` every 15 seconds), outbound-only (no open ports). TG Trigger node configured with the bot token
 - **WhatsApp:** Two Webhook nodes (message + status updates) at the shared URL `https://<TAILSCALE_HOSTNAME>/webhook/whatsapp/receive`
-- **Error:** Error Trigger node links to this workflow. Requires one manual setup step: **Settings → Error Workflow → select this same workflow**. Otherwise the Error Trigger never fires.
+- **Error:** Error Trigger node links to this workflow. Requires one manual setup step: **Settings → Error Workflow → select this same workflow** — and it must be re-checked after every import or API push, because it lives in the workflow's `settings` and the public API silently drops keys it does not accept. Otherwise the Error Trigger never fires.
 
 ### Key design decisions (n8n layer)
 
