@@ -211,7 +211,6 @@ class UserIn(BaseModel):
     email: str
     name: str
     password: str
-    role: str = "chef"
 
 
 @app.get("/users")
@@ -228,8 +227,10 @@ def list_users(caller: dict = Depends(auth.require_human)) -> dict:
 
 @app.post("/users")
 def add_user(payload: UserIn, caller: dict = Depends(auth.require_director)) -> dict:
+    # Only the .env-seeded account is ever "directeur" — every account created
+    # here is a chef, regardless of what the client sends.
     try:
-        user = auth.create_user(payload.email, payload.name, payload.password, payload.role)
+        user = auth.create_user(payload.email, payload.name, payload.password, "chef")
     except auth.AuthError as exc:
         raise HTTPException(422, str(exc)) from exc
     except logs.LogStoreError as exc:

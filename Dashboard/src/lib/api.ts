@@ -427,12 +427,8 @@ export const whoami = (s?: AbortSignal) => get<{ user: Account | null }>('/auth/
 
 export const listUsers = (s?: AbortSignal) => get<{ users: Account[] }>('/users', s)
 
-export const createUser = (input: {
-  email: string
-  name: string
-  password: string
-  role: string
-}) => post<Account>('/users', input)
+export const createUser = (input: { email: string; name: string; password: string }) =>
+  post<Account>('/users', input)
 
 export async function deleteUser(id: number): Promise<void> {
   const res = await fetch(`${BASE}/users/${id}`, { method: 'DELETE' })

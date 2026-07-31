@@ -16,8 +16,6 @@ import { cn } from '@/lib/utils'
  * never has to be trusted with it. It only decides what to *offer*.
  */
 
-const ROLES = ['chef', 'directeur'] as const
-
 /** Actions the director asked to count, in the order they matter. */
 const HEADLINE = ['flag_cleared', 'report_edited', 'settings_saved', 'report_generated'] as const
 
@@ -290,7 +288,7 @@ function Activity({ data }: { data: History }) {
 
 function NewAccountForm({ onDone }: { onDone: () => void }) {
   const { t } = useI18n()
-  const [values, setValues] = useState({ email: '', name: '', password: '', role: 'chef' })
+  const [values, setValues] = useState({ email: '', name: '', password: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -331,23 +329,6 @@ function NewAccountForm({ onDone }: { onDone: () => void }) {
           />
         </label>
       ))}
-
-      <label className="flex flex-col gap-1.5">
-        <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
-          {t('team.roleLabel')}
-        </span>
-        <select
-          value={values.role}
-          onChange={set('role')}
-          className="border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-        >
-          {ROLES.map((r) => (
-            <option key={r} value={r}>
-              {t(`team.role.${r}`)}
-            </option>
-          ))}
-        </select>
-      </label>
 
       <button
         type="submit"
