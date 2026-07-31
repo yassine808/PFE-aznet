@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { FlagIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
 import { api, useApi, type ReportRow } from '@/lib/api'
-import { isFlagged, num } from '@/lib/metrics'
+import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
+import { ActivityGraphSection } from '@/components/activity-graph-section'
 import { cn } from '@/lib/utils'
 
 function LedgerRow({
@@ -64,6 +65,7 @@ export function ReportsPage() {
 
   const [query, setQuery] = useState('')
   const [onlyFlagged, setOnlyFlagged] = useState(false)
+  const [date, setDate] = useState('')
 
   const fmt = useMemo(
     () => new Intl.NumberFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'),
@@ -77,6 +79,7 @@ export function ReportsPage() {
     return [...reports.data.reports]
       .reverse()
       .filter((r) => (onlyFlagged ? isFlagged(r.flag_review) : true))
+      .filter((r) => (date ? toISODate(r.date) === date : true))
       .filter((r) =>
         q
           ? [r.technicien, r.chantier, r.client, r.resume, r.observations]
@@ -84,7 +87,7 @@ export function ReportsPage() {
               .some((v) => String(v).toLowerCase().includes(q))
           : true,
       )
-  }, [reports.data, query, onlyFlagged])
+  }, [reports.data, query, onlyFlagged, date])
 
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
 
@@ -136,11 +139,27 @@ export function ReportsPage() {
           {t('metric.flagged')}
         </button>
 
+        {date && (
+          <button
+            type="button"
+            onClick={() => setDate('')}
+            className="text-ink-faint hover:text-ink text-xs underline underline-offset-4"
+          >
+            {t('inbox.all')}
+          </button>
+        )}
+
         <span className="tabular text-ink-faint text-xs">{fmt.format(rows.length)}</span>
       </div>
 
+      <ActivityGraphSection
+        rows={reports.data?.reports ?? []}
+        date={date || todayISO()}
+        onSelectDay={(iso) => setDate(iso)}
+      />
+
       {rows.length === 0 ? (
-        <EmptyState body={query || onlyFlagged ? t('reports.noMatch') : undefined} />
+        <EmptyState body={query || onlyFlagged || date ? t('reports.noMatch') : undefined} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[46rem] border-collapse text-start">

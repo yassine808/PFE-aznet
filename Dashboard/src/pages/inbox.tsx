@@ -8,11 +8,12 @@ import {
   TextAlignLeftIcon,
 } from '@phosphor-icons/react'
 import { api, patchReport, useApi, type ReportRow } from '@/lib/api'
-import { isFlagged, num, toISODate } from '@/lib/metrics'
+import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ChannelIcon } from '@/components/channel-icon'
+import { ActivityGraphSection } from '@/components/activity-graph-section'
 import { cn } from '@/lib/utils'
 
 /** Fields the manager is allowed to correct before the row feeds the day's report. */
@@ -306,6 +307,12 @@ export function InboxPage({ initialDate }: { initialDate?: string }) {
 
         <span className="tabular text-ink-faint text-xs">{rows.length}</span>
       </div>
+
+      <ActivityGraphSection
+        rows={all}
+        date={date || todayISO()}
+        onSelectDay={(iso) => setDate(iso)}
+      />
 
       {rows.length === 0 ? (
         <EmptyState body={t('reports.noMatch')} />
