@@ -98,3 +98,41 @@ Three parallel audits covered `api/` (all 15 modules + tests), `Dashboard/` (all
 - WhatsApp still in Meta test mode; pilot runs on Tailscale, not the aznet server.
 
 **Quick wins this week** (highest impact/time): items 1, 2, 5, 6, 13, 14, 23 — and then the demo deliverable (SMTP + user guide).
+
+---
+
+# Suggested TO-DO additions (2026-07-31)
+
+Candidates for the TO-DO list, mapped to the audit findings (nothing duplicates existing items).
+
+## Security (the 🔴 set from the audit)
+
+- Gate the 4 unauthenticated endpoint groups: `GET /logs`, `POST /process`, `PATCH /sheet-queue/{id}`, `POST|GET /service-samples` (main.py)
+- Cap upload size on `/process` (audio/image) at ~25 MB + content-type check
+- Move `'pfe-aznet-verify'` WhatsApp verify token to `$env.WHATSAPP_VERIFY_TOKEN` in the n8n workflow
+- Rotate weak `ADMIN_PASSWORD` + clean the n8n admin URL fragment in the `WEBHOOK_URL` comment in `.env`
+
+## Reliability
+
+- STT fallback chain (groq → gemini) so a Groq outage doesn't kill the main path
+- Wrap the STT call in `run_in_threadpool` — it currently blocks the whole event loop
+- Add per-job timeouts to the scheduler thread (a hung model call stalls the 5-min Sheet drain)
+- Prune `sessions`/`processed_messages`/`user_actions` (only logs/samples are swept today)
+
+## Dashboard
+
+- Fix the skip-link/`#main` hash-router conflict (navigates back to Overview)
+- Auto sign-out on 401 (session deleted server-side → currently stuck on error states)
+- Dedupe polling: `ServerStatus` ignores the Manual-refresh setting; pages + OpsProvider fetch the same endpoints
+- Build the `queue` nav item — it's a dead stub in the router
+- Focus trap in the command palette + settings dialog
+
+## Pipeline/data
+
+- n8n crash-safe dedupe: currently a crash after extraction permanently drops that message (advance `lastUpdateId` only after `/process` succeeds)
+- Per-report manager notification via WhatsApp (spec §7) — email only exists today, and SMTP is unset
+
+## Spec/deliverables (for the Aug 31 deadline)
+
+- Write the 1-page user guide (spec §10 deliverable)
+- Record the STT benchmark dataset (~15-20 real Darija clips) — everything else is blocked on it
