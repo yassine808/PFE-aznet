@@ -52,7 +52,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: api/requirements.txt
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: pip install ruff
       # Rule set pinned in api/ruff.toml — bugs only, not style. See the file.
       - name: Ruff
@@ -104,6 +104,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # compose reads env_file: .env, gitignored — .env.example has the same keys.
+      - run: cp .env.example .env
       - name: Validate compose file
         run: docker compose config --quiet
 
