@@ -210,6 +210,66 @@ def hallucination_detail(expected: Dict[str, Any], actual: Dict[str, Any]) -> Tu
     return invented, len(nulls)
 
 
+def _run_case(engine, model: str, case: dict, image: object, sleep_s: float, csv_file, writer) -> dict:
+    """Score one model against one case, print progress, write the CSV row. Any
+    exception from the engine is recorded as a failed row, not raised: a dead
+    model is a result to report, not a reason to abort the whole run.
+    """
+    expected = case["expected"]
+    try:
+        actual, latency = call_with_retry(engine, model, case["text"], image)
+        acc, detail = extraction_accuracy(expected, actual)
+        invented, nulls = hallucination_detail(expected, actual)
+        wrong = [k for k, ok in detail.items() if not ok]
+        row = {
+            "model": model, "case": case["id"], "accuracy": round(acc, 3),
+            "latency_s": round(latency, 2), "invented": invented, "expected_nulls": nulls,
+            "wrong_fields": "|".join(wrong), "error": "",
+        }
+        # ASCII only: the Windows console is cp1252 and a UnicodeEncodeError
+        # here would kill the run on exactly the cases that found a mistake.
+        print(f"  {case['id']:<24} acc={acc:.0%} {latency:5.2f}s "
+              f"{'invented=' + str(invented) if invented else ''} {'WRONG: ' + ','.join(wrong) if wrong else ''}",
+              flush=True)
+    except Exception as exc:  # noqa: BLE001 - a dead model is a result, not a crash
+        row = {
+            "model": model, "case": case["id"], "accuracy": "", "latency_s": "",
+            "invented": "", "expected_nulls": "", "wrong_fields": "",
+            "error": str(exc)[:300],
+        }
+        print(f"  {case['id']:<24} ERROR {str(exc)[:160]}", flush=True)
+    writer.writerow(row)
+    csv_file.flush()
+    time.sleep(sleep_s)
+    return row
+
+
+def _print_leaderboard(models: List[str], rows: List[dict]) -> None:
+    """Accuracy first, then hallucinations, then latency: a fast model that
+    invents quantities is worse than a slow one that says null.
+    """
+    print(f"\n{'model':<32} {'acc':>6} {'invented':>9} {'p50 s':>7} {'fail':>5}")
+    print("-" * 64)
+    summary = []
+    for model in models:
+        got = [r for r in rows if r["model"] == model and r["error"] == ""]
+        failed = sum(1 for r in rows if r["model"] == model and r["error"])
+        if not got:
+            print(f"{model:<32} {'—':>6} {'—':>9} {'—':>7} {failed:>5}")
+            continue
+        accs = sorted(float(r["accuracy"]) for r in got)
+        lats = sorted(float(r["latency_s"]) for r in got)
+        acc = sum(accs) / len(accs)
+        inv = sum(int(r["invented"]) for r in got)
+        p50 = lats[len(lats) // 2]
+        summary.append((acc, -inv, -p50, model))
+        print(f"{model:<32} {acc:>5.0%} {inv:>9} {p50:>7.2f} {failed:>5}")
+
+    if summary:
+        summary.sort(reverse=True)
+        print(f"\nwinner: {summary[0][3]}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["text", "image"], default="text")
@@ -243,61 +303,12 @@ def main() -> int:
         engine = engine_for(model)
         print(f"\n=== {model} ({args.mode}) ===", flush=True)
         for case in cases:
-            expected = case["expected"]
-            try:
-                actual, latency = call_with_retry(engine, model, case["text"], images.get(case["id"]))
-                acc, detail = extraction_accuracy(expected, actual)
-                invented, nulls = hallucination_detail(expected, actual)
-                wrong = [k for k, ok in detail.items() if not ok]
-                row = {
-                    "model": model, "case": case["id"], "accuracy": round(acc, 3),
-                    "latency_s": round(latency, 2), "invented": invented, "expected_nulls": nulls,
-                    "wrong_fields": "|".join(wrong), "error": "",
-                }
-                rows.append(row)
-                writer.writerow(row)
-                csv_file.flush()
-                # ASCII only: the Windows console is cp1252 and a UnicodeEncodeError
-                # here would kill the run on exactly the cases that found a mistake.
-                print(f"  {case['id']:<24} acc={acc:.0%} {latency:5.2f}s "
-                      f"{'invented=' + str(invented) if invented else ''} {'WRONG: ' + ','.join(wrong) if wrong else ''}",
-                      flush=True)
-            except Exception as exc:  # noqa: BLE001 — a dead model is a result, not a crash
-                row = {
-                    "model": model, "case": case["id"], "accuracy": "", "latency_s": "",
-                    "invented": "", "expected_nulls": "", "wrong_fields": "",
-                    "error": str(exc)[:300],
-                }
-                rows.append(row)
-                writer.writerow(row)
-                csv_file.flush()
-                print(f"  {case['id']:<24} ERROR {str(exc)[:160]}", flush=True)
-            time.sleep(args.sleep)
+            row = _run_case(engine, model, case, images.get(case["id"]), args.sleep, csv_file, writer)
+            rows.append(row)
 
     csv_file.close()
 
-    # Leaderboard. Accuracy first, then hallucinations, then latency: a fast
-    # model that invents quantities is worse than a slow one that says null.
-    print(f"\n{'model':<32} {'acc':>6} {'invented':>9} {'p50 s':>7} {'fail':>5}")
-    print("-" * 64)
-    summary = []
-    for model in models:
-        got = [r for r in rows if r["model"] == model and r["error"] == ""]
-        failed = sum(1 for r in rows if r["model"] == model and r["error"])
-        if not got:
-            print(f"{model:<32} {'—':>6} {'—':>9} {'—':>7} {failed:>5}")
-            continue
-        accs = sorted(float(r["accuracy"]) for r in got)
-        lats = sorted(float(r["latency_s"]) for r in got)
-        acc = sum(accs) / len(accs)
-        inv = sum(int(r["invented"]) for r in got)
-        p50 = lats[len(lats) // 2]
-        summary.append((acc, -inv, -p50, model))
-        print(f"{model:<32} {acc:>5.0%} {inv:>9} {p50:>7.2f} {failed:>5}")
-
-    if summary:
-        summary.sort(reverse=True)
-        print(f"\nwinner: {summary[0][3]}")
+    _print_leaderboard(models, rows)
     print(f"csv: {csv_path}")
     return 0
 

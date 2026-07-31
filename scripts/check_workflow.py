@@ -64,6 +64,21 @@ def check_node(node: dict) -> List[str]:
     return problems
 
 
+def _check_connections(wf: dict, names: set) -> List[str]:
+    """Every connection must point at a node that exists — a rename that misses
+    one edge leaves a branch that silently never runs.
+    """
+    problems: List[str] = []
+    for src, conn in (wf.get("connections") or {}).items():
+        if src not in names:
+            problems.append(f"connection from unknown node {src!r}")
+        for branch in conn.get("main", []):
+            for edge in branch or []:
+                if edge.get("node") not in names:
+                    problems.append(f"{src} -> unknown node {edge.get('node')!r}")
+    return problems
+
+
 def main() -> int:
     if not WORKFLOW.exists():
         print(f"{WORKFLOW} not found")
@@ -79,16 +94,8 @@ def main() -> int:
     for node in nodes:
         problems.extend(check_node(node))
 
-    # Every connection must point at a node that exists — a rename that misses
-    # one edge leaves a branch that silently never runs.
     names = {n.get("name") for n in nodes}
-    for src, conn in (wf.get("connections") or {}).items():
-        if src not in names:
-            problems.append(f"connection from unknown node {src!r}")
-        for branch in conn.get("main", []):
-            for edge in branch or []:
-                if edge.get("node") not in names:
-                    problems.append(f"{src} -> unknown node {edge.get('node')!r}")
+    problems.extend(_check_connections(wf, names))
 
     if problems:
         print(f"{WORKFLOW.name}: {len(problems)} problem(s)\n")

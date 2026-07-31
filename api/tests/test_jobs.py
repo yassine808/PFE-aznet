@@ -62,7 +62,8 @@ def test_drain_keeps_row_when_sheet_refuses(monkeypatch):
 
     out = jobs.drain_sheet_queue()
 
-    assert out["written"] == 0 and out["failed"][0]["id"] == 7
+    assert out["written"] == 0
+    assert out["failed"][0]["id"] == 7
     assert resolved == [(7, False, "quota")]  # attempt counted, row still pending
 
 
@@ -72,7 +73,8 @@ def test_daily_report_without_rows_sends_nothing(monkeypatch):
 
     out = jobs.send_daily_report("2026-07-29")
 
-    assert out["rows"] == 0 and out["sent_to"] == []
+    assert out["rows"] == 0
+    assert out["sent_to"] == []
 
 
 def test_run_records_failure_instead_of_raising(monkeypatch):
@@ -81,7 +83,8 @@ def test_run_records_failure_instead_of_raising(monkeypatch):
 
     status = jobs.run("boom")
 
-    assert status["ok"] is False and "nope" in status["error"]
+    assert status["ok"] is False
+    assert "nope" in status["error"]
     assert jobs.status()  # the panel still has something to show
 
 
@@ -107,7 +110,8 @@ def test_jobs_endpoints(monkeypatch):
     assert {j["name"] for j in listed.json()["jobs"]} >= set(jobs.JOBS)
 
     ran = client.post("/jobs/prune_logs/run")
-    assert ran.status_code == 200 and ran.json()["result"] == {"logs_deleted": 3}
+    assert ran.status_code == 200
+    assert ran.json()["result"] == {"logs_deleted": 3}
     assert client.post("/jobs/nope/run").status_code == 404
 
 
@@ -130,7 +134,8 @@ def test_weekly_report_covers_the_whole_week(monkeypatch):
     out = jobs.send_weekly_report("2026-07-31")  # a Friday
 
     assert seen == {"label": "2026-07-27 → 2026-07-31", "n": 2}
-    assert out["rows"] == 2 and out["sent_to"] == ["chef@aznet.ma"]
+    assert out["rows"] == 2
+    assert out["sent_to"] == ["chef@aznet.ma"]
 
 
 def test_weekly_due_only_on_the_configured_day(monkeypatch):

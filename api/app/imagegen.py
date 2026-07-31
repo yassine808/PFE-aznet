@@ -34,15 +34,9 @@ _TOTALS = (
 )
 
 
-def summarise(rows: List[Dict[str, Any]]) -> str:
-    """Turn Sheet rows into the factual block the prompt renders.
-
-    Computed here, in Python, rather than asking the model to add up the rows:
-    a model that does arithmetic on the way to drawing will eventually draw a
-    total nobody measured.
-    """
+def _accumulate_totals(rows: List[Dict[str, Any]]) -> Dict[str, float]:
+    """Sum each numeric field across rows; a non-numeric cell is skipped, not fatal."""
     totals = {key: 0.0 for key, _ in _TOTALS}
-    chantiers, techniciens = [], []
     for row in rows:
         for key, _ in _TOTALS:
             raw = row.get(key)
@@ -50,10 +44,24 @@ def summarise(rows: List[Dict[str, Any]]) -> str:
                 totals[key] += float(str(raw).replace(",", ".")) if raw not in (None, "") else 0.0
             except (TypeError, ValueError):
                 continue  # a non-numeric cell is a data problem, not a drawing problem
-        for value, bucket in ((row.get("chantier"), chantiers), (row.get("technicien"), techniciens)):
-            text = (value or "").strip()
-            if text and text not in bucket:
-                bucket.append(text)
+    return totals
+
+
+def _unique_names(rows: List[Dict[str, Any]], field: str) -> List[str]:
+    """Distinct, order-preserving, non-empty values of `field` across rows."""
+    return list(dict.fromkeys((row.get(field) or "").strip() for row in rows if (row.get(field) or "").strip()))
+
+
+def summarise(rows: List[Dict[str, Any]]) -> str:
+    """Turn Sheet rows into the factual block the prompt renders.
+
+    Computed here, in Python, rather than asking the model to add up the rows:
+    a model that does arithmetic on the way to drawing will eventually draw a
+    total nobody measured.
+    """
+    totals = _accumulate_totals(rows)
+    chantiers = _unique_names(rows, "chantier")
+    techniciens = _unique_names(rows, "technicien")
 
     lines = [f"Rapports: {len(rows)}", f"Techniciens: {len(techniciens)}", f"Chantiers: {len(chantiers)}"]
     for key, label in _TOTALS:

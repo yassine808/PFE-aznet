@@ -35,6 +35,30 @@ RESULT_COLUMNS = ["file", "provider", "wer", "cer", "latency_s",
                   "extraction_acc", "field_detail", "hypothesis", "error"]
 
 
+def _validate_row(row: dict, i: int) -> List[str]:
+    """Structural checks for one references.csv row. Returns problem strings."""
+    if not (row.get("file") or "").strip():
+        return [f"line {i}: empty 'file'"]
+
+    problems = []
+    audio = AUDIO_DIR / row["file"]
+    if not audio.exists():
+        problems.append(f"line {i}: {audio.name} missing from dataset/audio/")
+    if audio.suffix.lower() not in MIME_TYPES:
+        problems.append(f"line {i}: unsupported extension {audio.suffix}")
+    if row.get("noise") not in NOISE_LEVELS:
+        problems.append(f"line {i}: noise must be one of {sorted(NOISE_LEVELS)}")
+    if not (row.get("reference_transcription") or "").strip():
+        problems.append(f"line {i}: empty reference_transcription")
+    try:
+        expected = json.loads(row.get("expected_json") or "")
+        if not isinstance(expected, dict) or not expected:
+            problems.append(f"line {i}: expected_json must be a non-empty JSON object")
+    except json.JSONDecodeError as exc:
+        problems.append(f"line {i}: expected_json is not valid JSON ({exc})")
+    return problems
+
+
 def load_references() -> List[dict]:
     """Read and validate references.csv. Raises on structural problems."""
     if not REFERENCES.exists():
@@ -46,24 +70,7 @@ def load_references() -> List[dict]:
 
     problems = []
     for i, row in enumerate(rows, start=2):  # line numbers incl. header
-        if not (row.get("file") or "").strip():
-            problems.append(f"line {i}: empty 'file'")
-            continue
-        audio = AUDIO_DIR / row["file"]
-        if not audio.exists():
-            problems.append(f"line {i}: {audio.name} missing from dataset/audio/")
-        if audio.suffix.lower() not in MIME_TYPES:
-            problems.append(f"line {i}: unsupported extension {audio.suffix}")
-        if row.get("noise") not in NOISE_LEVELS:
-            problems.append(f"line {i}: noise must be one of {sorted(NOISE_LEVELS)}")
-        if not (row.get("reference_transcription") or "").strip():
-            problems.append(f"line {i}: empty reference_transcription")
-        try:
-            expected = json.loads(row.get("expected_json") or "")
-            if not isinstance(expected, dict) or not expected:
-                problems.append(f"line {i}: expected_json must be a non-empty JSON object")
-        except json.JSONDecodeError as exc:
-            problems.append(f"line {i}: expected_json is not valid JSON ({exc})")
+        problems.extend(_validate_row(row, i))
     if problems:
         raise ValueError("references.csv validation failed:\n  " + "\n  ".join(problems))
     return rows
@@ -82,7 +89,7 @@ def run(providers: List[str], with_extraction: bool) -> List[dict]:
         expected = json.loads(row["expected_json"])
 
         for name in providers:
-            record = {c: None for c in RESULT_COLUMNS}
+            record = dict.fromkeys(RESULT_COLUMNS)
             record.update({"file": row["file"], "provider": name})
             try:
                 info = get_provider(name).transcribe(blob, mime)
@@ -97,7 +104,7 @@ def run(providers: List[str], with_extraction: bool) -> List[dict]:
                     acc, detail = extraction_accuracy(expected, report.model_dump())
                     record["extraction_acc"] = round(acc, 4)
                     record["field_detail"] = json.dumps(detail, ensure_ascii=False)
-            except (TranscriptionError, Exception) as exc:  # noqa: BLE001 — record and continue, one bad call must not kill the run
+            except Exception as exc:  # noqa: BLE001 - record and continue, one bad call must not kill the run
                 record["error"] = f"{type(exc).__name__}: {exc}"
                 print(f"  !! {row['file']} × {name}: {record['error']}")
             results.append(record)

@@ -165,7 +165,7 @@ def _login_allowed(client: str) -> bool:
     return len(hits) < LOGIN_MAX_FAILURES
 
 
-@app.post("/auth/login")
+@app.post("/auth/login", responses={429: {"description": "Too many failed attempts"}, 502: {"description": "Log store unreachable"}, 401: {"description": "Invalid credentials"}})
 def login(payload: LoginIn, response: Response, request: Request) -> dict:
     client = _client_ip(request)
     if not _login_allowed(client):
@@ -213,7 +213,7 @@ class UserIn(BaseModel):
     password: str
 
 
-@app.get("/users")
+@app.get("/users", responses={502: {"description": "Log store unreachable"}})
 def list_users(caller: dict = Depends(auth.require_human)) -> dict:
     """Every account for the director; only their own for a chef."""
     try:
@@ -225,7 +225,7 @@ def list_users(caller: dict = Depends(auth.require_human)) -> dict:
     return {"users": users}
 
 
-@app.post("/users")
+@app.post("/users", responses={422: {"description": "Invalid input"}, 502: {"description": "Log store unreachable"}})
 def add_user(payload: UserIn, caller: dict = Depends(auth.require_director)) -> dict:
     # Only the .env-seeded account is ever "directeur" — every account created
     # here is a chef, regardless of what the client sends.
@@ -239,7 +239,7 @@ def add_user(payload: UserIn, caller: dict = Depends(auth.require_director)) -> 
     return user
 
 
-@app.delete("/users/{user_id}")
+@app.delete("/users/{user_id}", responses={422: {"description": "Cannot delete own account"}, 502: {"description": "Log store unreachable"}})
 def remove_user(user_id: int, caller: dict = Depends(auth.require_director)) -> dict:
     if user_id == caller["id"]:
         # Deleting yourself locks everyone out if you are the only director, and
@@ -253,7 +253,7 @@ def remove_user(user_id: int, caller: dict = Depends(auth.require_director)) -> 
     return {"deleted": deleted}
 
 
-@app.get("/history")
+@app.get("/history", responses={502: {"description": "Log store unreachable"}})
 def user_history(
     user_id: Optional[int] = None, limit: int = 100, caller: dict = Depends(auth.require_human)
 ) -> dict:
@@ -279,7 +279,86 @@ def track_visit(payload: VisitIn, caller: dict = Depends(auth.require_human)) ->
     return {"ok": True}
 
 
-@app.post("/process", response_model=ProcessResponse)
+async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dict):
+    """Audio branch of /process: STT then a couple of quality warnings.
+
+    Returns (transcription, rapport_complet, warnings). Raises HTTPException on
+    empty input, an unknown provider name, or a transcription failure.
+    """
+    blob = await audio.read()
+    if not blob:
+        raise HTTPException(422, "Empty audio file")
+    engine = provider or settings.stt_provider
+    t0 = time.time()
+    try:
+        transcription = get_provider(engine).transcribe(
+            blob, audio.content_type or "audio/ogg"
+        )
+    except ValueError as exc:  # unknown provider name
+        await _log("api", "error", message=f"unknown provider: {exc}", **ctx)
+        raise HTTPException(422, str(exc)) from exc
+    except TranscriptionError as exc:
+        await _log(
+            "transcribed", "error", message=f"transcription failed: {exc}",
+            duration_ms=int((time.time() - t0) * 1000),
+            payload={"engine": engine}, **ctx,
+        )
+        raise HTTPException(502, f"transcription failed: {exc}") from exc
+
+    rapport_complet = transcription.text
+    warnings: List[str] = []
+    if len(rapport_complet) < MIN_USABLE_CHARS:
+        warnings.append("short_transcription")
+    if transcription.confidence is not None and transcription.confidence < LOW_CONFIDENCE_THRESHOLD:
+        warnings.append("low_confidence_transcription")
+    await _log(
+        "transcribed", "warn" if warnings else "info",
+        message=", ".join(warnings) or "ok",
+        duration_ms=int((time.time() - t0) * 1000),
+        payload={"engine": engine, "chars": len(rapport_complet)}, **ctx,
+    )
+    return transcription, rapport_complet, warnings
+
+
+async def _extract_from_image(image: UploadFile, sender_profile: Optional[str], ctx: dict) -> ProcessResponse:
+    """Image branch of /process. The vision model reads the photo and fills the
+    schema in one call, so there is no intermediate transcription to store or
+    to get wrong twice — this returns the full ProcessResponse directly.
+    """
+    blob = await image.read()
+    if not blob:
+        raise HTTPException(422, "Empty image file")
+    t1 = time.time()
+    try:
+        report, model_used = await run_in_threadpool(
+            extraction.extract_report_from_image, blob,
+            image.content_type or "image/jpeg", sender_profile,
+        )
+    except extraction.ExtractionError as exc:
+        await _log(
+            "extracted", "error", message=f"image extraction failed: {exc}",
+            duration_ms=int((time.time() - t1) * 1000), **ctx,
+        )
+        raise HTTPException(502, f"image extraction failed: {exc}") from exc
+
+    # There is no raw text for a photo. The model's own summary is the most
+    # faithful thing to put in the column, marked so nobody reads it as a
+    # verbatim quote from the technician.
+    rapport_complet = f"[photo] {report.resume}"
+    warnings = ["image_input"]
+    if not report.has_data():
+        warnings.append("no_report_content")
+    await _log(
+        "extracted", "info", message="ok (image)",
+        duration_ms=int((time.time() - t1) * 1000),
+        payload={"model": model_used, "chantier": report.chantier, "bytes": len(blob)}, **ctx,
+    )
+    return ProcessResponse(
+        rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
+    )
+
+
+@app.post("/process", responses={422: {"description": "Invalid input"}, 502: {"description": "Upstream service error"}})
 async def process(
     audio: Optional[UploadFile] = File(None, description="Voice note (ogg/opus from WhatsApp)"),
     image: Optional[UploadFile] = File(None, description="Photo: notebook page, whiteboard, delivery note, or the work itself"),
@@ -306,76 +385,13 @@ async def process(
         await _log("api", "error", message=detail, **ctx)
         raise HTTPException(422, detail)
 
-    warnings: List[str] = []
-    transcription = None
-
     if audio is not None:
-        blob = await audio.read()
-        if not blob:
-            raise HTTPException(422, "Empty audio file")
-        engine = provider or settings.stt_provider
-        t0 = time.time()
-        try:
-            transcription = get_provider(engine).transcribe(
-                blob, audio.content_type or "audio/ogg"
-            )
-        except ValueError as exc:  # unknown provider name
-            await _log("api", "error", message=f"unknown provider: {exc}", **ctx)
-            raise HTTPException(422, str(exc)) from exc
-        except TranscriptionError as exc:
-            await _log(
-                "transcribed", "error", message=f"transcription failed: {exc}",
-                duration_ms=int((time.time() - t0) * 1000),
-                payload={"engine": engine}, **ctx,
-            )
-            raise HTTPException(502, f"transcription failed: {exc}") from exc
-        rapport_complet = transcription.text
-        if len(rapport_complet) < MIN_USABLE_CHARS:
-            warnings.append("short_transcription")
-        if transcription.confidence is not None and transcription.confidence < LOW_CONFIDENCE_THRESHOLD:
-            warnings.append("low_confidence_transcription")
-        await _log(
-            "transcribed", "warn" if warnings else "info",
-            message=", ".join(warnings) or "ok",
-            duration_ms=int((time.time() - t0) * 1000),
-            payload={"engine": engine, "chars": len(rapport_complet)}, **ctx,
-        )
+        transcription, rapport_complet, warnings = await _transcribe_audio(audio, provider, ctx)
     elif image is not None:
-        # The vision path skips the text step entirely: the model reads the
-        # photo and fills the schema in one call, so there is no intermediate
-        # transcription to store or to get wrong twice.
-        blob = await image.read()
-        if not blob:
-            raise HTTPException(422, "Empty image file")
-        t1 = time.time()
-        try:
-            report, model_used = await run_in_threadpool(
-                extraction.extract_report_from_image, blob,
-                image.content_type or "image/jpeg", sender_profile,
-            )
-        except extraction.ExtractionError as exc:
-            await _log(
-                "extracted", "error", message=f"image extraction failed: {exc}",
-                duration_ms=int((time.time() - t1) * 1000), **ctx,
-            )
-            raise HTTPException(502, f"image extraction failed: {exc}") from exc
-
-        # There is no raw text for a photo. The model's own summary is the most
-        # faithful thing to put in the column, marked so nobody reads it as a
-        # verbatim quote from the technician.
-        rapport_complet = f"[photo] {report.resume}"
-        warnings.append("image_input")
-        if not report.has_data():
-            warnings.append("no_report_content")
-        await _log(
-            "extracted", "info", message="ok (image)",
-            duration_ms=int((time.time() - t1) * 1000),
-            payload={"model": model_used, "chantier": report.chantier, "bytes": len(blob)}, **ctx,
-        )
-        return ProcessResponse(
-            rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
-        )
+        return await _extract_from_image(image, sender_profile, ctx)
     else:
+        transcription = None
+        warnings = []
         rapport_complet = (text or "").strip()
         if not rapport_complet:
             await _log("api", "error", message="Empty text", **ctx)
@@ -413,7 +429,7 @@ async def process(
 
 
 # No auth: dashboard + API run only on the admin's machine (localhost), decided 2026-07-23.
-@app.get("/reports")
+@app.get("/reports", responses={502: {"description": "Sheets read failed"}})
 def list_reports(caller: dict = Depends(auth.require_human)) -> dict:
     try:
         return {"reports": sheets.read_reports()}
@@ -426,7 +442,7 @@ class ReportPatch(BaseModel):
     value: Optional[str] = None
 
 
-@app.patch("/reports/{row}")
+@app.patch("/reports/{row}", responses={422: {"description": "Invalid input"}, 502: {"description": "Sheets write failed"}})
 def patch_report(row: int, payload: ReportPatch, caller: dict = Depends(auth.require_human)) -> dict:
     if row < 2:
         raise HTTPException(422, "row must be >= 2 (row 1 is the header)")
@@ -469,7 +485,7 @@ class DailyReportRequest(BaseModel):
     rows: List[dict] = Field(..., description="Lignes du Sheet pour la date donnée")
 
 
-@app.post("/daily-report", response_model=daily_report.DailyReportContent)
+@app.post("/daily-report", responses={422: {"description": "No rows for the given date"}, 502: {"description": "Daily report generation failed"}})
 def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(auth.require_user)) -> daily_report.DailyReportContent:
     auth.record(caller, "report_generated", target=payload.date)
     if not payload.rows:
@@ -488,7 +504,7 @@ class ImageCardRequest(BaseModel):
     extra: Optional[str] = Field(None, description="Consigne libre de l'utilisateur")
 
 
-@app.post("/generate-image")
+@app.post("/generate-image", responses={422: {"description": "No rows to illustrate"}, 502: {"description": "Image generation failed"}})
 async def generate_image(payload: ImageCardRequest, caller: dict = Depends(auth.require_human)) -> dict:
     auth.record(caller, "image_generated", target=getattr(payload, 'date', None))
     """Illustrated summary card for a day or week.
@@ -535,7 +551,7 @@ class LogEvent(BaseModel):
     payload: Optional[dict] = None
 
 
-@app.post("/logs")
+@app.post("/logs", responses={502: {"description": "Log store unreachable"}})
 def create_log(event: LogEvent, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         log_id = logs.write(**event.model_dump())
@@ -544,7 +560,7 @@ def create_log(event: LogEvent, caller: dict = Depends(auth.require_user)) -> di
     return {"ok": True, "id": log_id}
 
 
-@app.get("/logs")
+@app.get("/logs", responses={502: {"description": "Log store unreachable"}})
 def list_logs(
     limit: int = 200,
     level: Optional[str] = None,
@@ -565,7 +581,7 @@ def list_logs(
         raise HTTPException(502, str(exc)) from exc
 
 
-@app.delete("/logs")
+@app.delete("/logs", responses={502: {"description": "Log store unreachable"}})
 def prune_logs(days: int = logs.RETENTION_DAYS, caller: dict = Depends(auth.require_director)) -> dict:
     """Retention sweep, called by the daily cron workflow."""
     try:
@@ -579,7 +595,7 @@ class ClaimRequest(BaseModel):
     channel: Optional[str] = None
 
 
-@app.post("/logs/claim")
+@app.post("/logs/claim", responses={502: {"description": "Log store unreachable"}})
 def claim(payload: ClaimRequest, caller: dict = Depends(auth.require_user)) -> dict:
     """Idempotency gate. `fresh: false` means n8n must stop — already processed.
 
@@ -605,7 +621,7 @@ class FailedWrite(BaseModel):
     correlation_id: Optional[str] = None
 
 
-@app.post("/sheet-queue")
+@app.post("/sheet-queue", responses={502: {"description": "Log store unreachable"}})
 def queue_write(item: FailedWrite, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         return {"id": logs.queue_failed_write(item.payload, item.error, item.correlation_id)}
@@ -613,7 +629,7 @@ def queue_write(item: FailedWrite, caller: dict = Depends(auth.require_user)) ->
         raise HTTPException(502, str(exc)) from exc
 
 
-@app.get("/sheet-queue")
+@app.get("/sheet-queue", responses={502: {"description": "Log store unreachable"}})
 def list_queue(limit: int = 20, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         return {"pending": logs.pending_writes(limit)}
@@ -631,7 +647,7 @@ def list_jobs(caller: dict = Depends(auth.require_human)) -> dict:
     return {"jobs": jobs.status()}
 
 
-@app.post("/jobs/{name}/run")
+@app.post("/jobs/{name}/run", responses={404: {"description": "Unknown job"}})
 async def run_job(name: str, caller: dict = Depends(auth.require_human)) -> dict:
     """Run one job now. Never 500s on a job failure — the outcome is the payload.
 
@@ -682,12 +698,12 @@ async def _n8n_get(path: str) -> Any:
     return res.json()
 
 
-@app.get("/n8n/workflows")
+@app.get("/n8n/workflows", responses={502: {"description": "n8n unreachable or misconfigured"}})
 async def n8n_workflows(caller: dict = Depends(auth.require_human)) -> Any:
     return await _n8n_get("workflows")
 
 
-@app.get("/n8n/executions")
+@app.get("/n8n/executions", responses={502: {"description": "n8n unreachable or misconfigured"}})
 async def n8n_executions(limit: int = 20, caller: dict = Depends(auth.require_human)) -> Any:
     return await _n8n_get(f"executions?limit={int(limit)}")
 
@@ -705,7 +721,7 @@ class TechnicianIn(BaseModel):
     active: bool = True
 
 
-@app.get("/technicians")
+@app.get("/technicians", responses={502: {"description": "Log store unreachable"}})
 def list_technicians(caller: dict = Depends(auth.require_human)) -> dict:
     """People, each with their channel identities and remembered facts.
 
@@ -719,7 +735,7 @@ def list_technicians(caller: dict = Depends(auth.require_human)) -> dict:
         raise HTTPException(502, str(exc)) from exc
 
 
-@app.post("/technicians")
+@app.post("/technicians", responses={422: {"description": "Invalid input"}, 502: {"description": "Log store unreachable"}})
 def add_technician(payload: TechnicianIn, caller: dict = Depends(auth.require_human)) -> dict:
     try:
         created = logs.upsert_technician(
@@ -735,7 +751,7 @@ def add_technician(payload: TechnicianIn, caller: dict = Depends(auth.require_hu
         raise HTTPException(422 if "unknown channel" in detail or "required" in detail else 502, detail) from exc
 
 
-@app.delete("/technicians/{tech_id}")
+@app.delete("/technicians/{tech_id}", responses={502: {"description": "Log store unreachable"}})
 def remove_technician(tech_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     try:
         auth.record(caller, "technician_removed", target=str(tech_id))
@@ -744,7 +760,7 @@ def remove_technician(tech_id: int, caller: dict = Depends(auth.require_human)) 
         raise HTTPException(502, str(exc)) from exc
 
 
-@app.delete("/persons/{person_id}")
+@app.delete("/persons/{person_id}", responses={502: {"description": "Log store unreachable"}})
 def remove_person(person_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     """Delete a person, their identities and their memory."""
     try:
@@ -754,7 +770,7 @@ def remove_person(person_id: int, caller: dict = Depends(auth.require_human)) ->
         raise HTTPException(502, str(exc)) from exc
 
 
-@app.post("/persons/{person_id}/profile")
+@app.post("/persons/{person_id}/profile", responses={502: {"description": "Log store unreachable"}, 404: {"description": "Person not found"}})
 def refresh_one_profile(person_id: int, caller: dict = Depends(auth.require_human)) -> dict:
     """Regenerate a single profile. The dashboard's button, and the way to fix a
     wrong profile without waiting for the next cron."""
@@ -768,7 +784,7 @@ def refresh_one_profile(person_id: int, caller: dict = Depends(auth.require_huma
     return memory.refresh_person(person, sheets.read_reports())
 
 
-@app.post("/profiles/refresh")
+@app.post("/profiles/refresh", responses={502: {"description": "Log store unreachable"}})
 def refresh_all_profiles(caller: dict = Depends(auth.require_user)) -> dict:
     """Rebuild every profile. Called by the 03:00 cron in n8n.
 
@@ -784,7 +800,7 @@ def refresh_all_profiles(caller: dict = Depends(auth.require_user)) -> dict:
     return {"refreshed": sum(1 for r in results if r["updated"]), "results": results}
 
 
-@app.get("/technicians/lookup")
+@app.get("/technicians/lookup", responses={502: {"description": "Log store unreachable"}})
 def lookup_technician(channel: str, external_id: str, caller: dict = Depends(auth.require_user)) -> dict:
     """Authorization check for n8n: returns the technician or `found: false`."""
     try:
@@ -803,7 +819,7 @@ class SettingsIn(BaseModel):
     values: Dict[str, Any]
 
 
-@app.get("/settings")
+@app.get("/settings", responses={502: {"description": "Log store unreachable"}})
 def read_settings(caller: dict = Depends(auth.require_human)) -> dict:
     try:
         return {"settings": logs.get_settings()}
@@ -811,7 +827,7 @@ def read_settings(caller: dict = Depends(auth.require_human)) -> dict:
         raise HTTPException(502, str(exc)) from exc
 
 
-@app.put("/settings")
+@app.put("/settings", responses={502: {"description": "Log store unreachable"}})
 def write_settings(payload: SettingsIn, caller: dict = Depends(auth.require_human)) -> dict:
     auth.record(caller, "settings_saved", detail=payload.values)
     try:
@@ -824,7 +840,7 @@ class TestMailIn(BaseModel):
     to: str
 
 
-@app.post("/notify/test")
+@app.post("/notify/test", responses={422: {"description": "SMTP not configured"}, 502: {"description": "Mail relay error"}})
 def send_test_mail(payload: TestMailIn, caller: dict = Depends(auth.require_human)) -> dict:
     auth.record(caller, "test_mail_sent", target=payload.to)
     """Send one plain-text probe so an address can be verified before it matters.
@@ -864,7 +880,7 @@ class SamplesIn(BaseModel):
     samples: List[SampleIn]
 
 
-@app.post("/service-samples")
+@app.post("/service-samples", responses={502: {"description": "Log store unreachable"}})
 def post_samples(payload: SamplesIn) -> dict:
     try:
         return {"written": logs.record_samples([s.model_dump() for s in payload.samples])}
@@ -872,7 +888,7 @@ def post_samples(payload: SamplesIn) -> dict:
         raise HTTPException(502, str(exc)) from exc
 
 
-@app.get("/service-samples")
+@app.get("/service-samples", responses={502: {"description": "Log store unreachable"}})
 def get_samples(hours: int = 1) -> dict:
     try:
         return {"samples": logs.read_samples(hours)}
@@ -885,7 +901,7 @@ class ResolveRequest(BaseModel):
     error: Optional[str] = None
 
 
-@app.patch("/sheet-queue/{write_id}")
+@app.patch("/sheet-queue/{write_id}", responses={502: {"description": "Log store unreachable"}})
 def resolve_queue_item(write_id: int, payload: ResolveRequest) -> dict:
     try:
         logs.resolve_write(write_id, payload.ok, payload.error)

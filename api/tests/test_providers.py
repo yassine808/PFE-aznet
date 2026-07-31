@@ -29,8 +29,9 @@ def test_missing_api_key_fails_loudly(name, monkeypatch):
     monkeypatch.setattr(config.settings, "groq_api_key", None)
     monkeypatch.setattr(config.settings, "gemini_api_key", None)
     monkeypatch.setattr(config.settings, "hf_token", None)
+    provider_instance = get_provider(name)
     with pytest.raises(TranscriptionError, match="not configured"):
-        get_provider(name).transcribe(b"fake-audio", "audio/ogg")
+        provider_instance.transcribe(b"fake-audio", "audio/ogg")
 
 
 class TestConfidenceFromSegments:

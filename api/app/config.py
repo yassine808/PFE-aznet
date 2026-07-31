@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     # the reverse proxy: a proxy that injects it would hand an unauthenticated
     # n8n admin API to anyone who can reach the public URL, whereas these routes
     # sit behind require_human like the rest of the dashboard.
-    n8n_url: str = "http://n8n:5678"
+    n8n_url: str = "http://n8n:5678"  # NOSONAR — internal docker-compose service name, not internet-reachable
     n8n_api_key: Optional[str] = None
 
     # How many trusted proxies sit in front of this API, used to pick the real

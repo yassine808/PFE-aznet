@@ -27,6 +27,9 @@ class ExtractionError(RuntimeError):
     pass
 
 
+DEFAULT_IMAGE_MIME_TYPE = "image/jpeg"
+
+
 # Prompts are Markdown in app/prompts/, loaded once and cached. `_INSTRUCTIONS`
 # stays exported under its old name: benchmark/run_model_benchmark.py imports it,
 # and the benchmark must score exactly what production sends.
@@ -72,7 +75,7 @@ def _call_gemini(
     model: str,
     text: Optional[str] = None,
     image: Optional[bytes] = None,
-    mime_type: str = "image/jpeg",
+    mime_type: str = DEFAULT_IMAGE_MIME_TYPE,
     profile: Optional[str] = None,
 ) -> ExtractedReport:
     if not settings.gemini_api_key:
@@ -104,7 +107,7 @@ def _call_groq(
     model: str,
     text: Optional[str] = None,
     image: Optional[bytes] = None,
-    mime_type: str = "image/jpeg",
+    mime_type: str = DEFAULT_IMAGE_MIME_TYPE,
     profile: Optional[str] = None,
 ) -> ExtractedReport:
     if image is not None:
@@ -141,7 +144,7 @@ def _run_chain(
     chain: str,
     text: Optional[str] = None,
     image: Optional[bytes] = None,
-    mime_type: str = "image/jpeg",
+    mime_type: str = DEFAULT_IMAGE_MIME_TYPE,
     profile: Optional[str] = None,
 ) -> Tuple[ExtractedReport, str]:
     """Try each `provider:model` in order. Returns (report, winning model id)."""
@@ -176,7 +179,7 @@ def extract_report_with_model(text: str, profile: Optional[str] = None) -> Tuple
 
 
 def extract_report_from_image(
-    image: bytes, mime_type: str = "image/jpeg", profile: Optional[str] = None
+    image: bytes, mime_type: str = DEFAULT_IMAGE_MIME_TYPE, profile: Optional[str] = None
 ) -> Tuple[ExtractedReport, str]:
     """Vision path — a photographed note or a picture of the work itself."""
     return _run_chain(settings.extraction_image_chain, image=image, mime_type=mime_type, profile=profile)
