@@ -4,9 +4,13 @@ WORKDIR /app
 
 # psycopg2-binary ships a wheel, so no gcc/libpq-dev layer is needed.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --only-binary :all: -r requirements.txt
 
-COPY app ./app
+# Port 8000 and /app are both fine unprivileged: no <1024 bind, no root-owned
+# write path.
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+COPY --chown=appuser:appuser app ./app
+USER appuser
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

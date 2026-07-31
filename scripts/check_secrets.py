@@ -48,35 +48,37 @@ PATTERNS: List[Tuple[str, str]] = [
 ]
 
 # name = "literal"  /  name: 'literal'  /  NAME=literal
+# Matches any identifier assignment; the keyword check happens in Python
+# (looks_like_secret_name) rather than in the regex, so there is no
+# quantifier-then-alternation backtracking risk on adversarial input.
 ASSIGNMENT = re.compile(
-    r"""(?i)\b([A-Z0-9_]*(?:SECRET|PASSWORD|PASSWD|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|
-        PRIVATE[_-]?KEY|CREDENTIAL|AUTH)[A-Z0-9_]*)\s*[:=]\s*(["']?)([^\s"',;)]{6,})\2""",
-    re.VERBOSE,
+    r"""\b([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(["']?)([^\s"',;)]{6,})\2""",
 )
 
-PLACEHOLDER = re.compile(
-    r"""(?ix)
-    ^(
-      .*\$\{.*\}.* | .*\{\{.*\}\}.* | <.*> | \$[a-z_.]+ |  # interpolation / $env.X
-      (your|my|some|the)[-_]?.* |                          # your-key-here
-      .*x{3,}.* | .*\.{3,}.* | .*\*{3,}.* | changeme | placeholder |
-      example.* | dummy.* | test.* | fake.* | sample.* |
-      none | null | true | false | undefined |
-      process\.env.* | os\.environ.* | env\..* | settings\..*
-    )$""",
+SECRET_NAME_KEYWORDS = (
+    "SECRET", "PASSWORD", "PASSWD", "TOKEN", "APIKEY", "ACCESSKEY",
+    "PRIVATEKEY", "CREDENTIAL", "AUTH",
 )
+
+# Prefixes/whole-value markers that mean "this is a placeholder", checked with
+# plain string ops instead of `.*x.*y.*`-shaped regexes (superlinear on long lines).
+PLACEHOLDER_SUBSTRINGS = ("${", "{{", "}}", "xxx", "...", "***")
+PLACEHOLDER_WHOLE_VALUES = {
+    "changeme", "placeholder", "none", "null", "true", "false", "undefined",
+}
+PLACEHOLDER_PREFIXES = (
+    "your", "your-", "your_", "my-", "my_", "some-", "some_", "the-", "the_",
+    "example", "dummy", "test", "fake", "sample",
+    "process.env", "os.environ", "env.", "settings.",
+)
+PLACEHOLDER_RE = re.compile(r"^(<.*>|\$[a-z_.]+)$", re.IGNORECASE)
 
 # Values that are structurally code or prose, not credentials.
-NOT_A_SECRET = re.compile(
-    r"""(?ix)^(
-      [a-z]+([-_][a-z]+)* |     # bare identifier / hyphenated prose: session-based
-      [0-9]+ |                  # a number: timeout = 300
-      [a-z_]+\.[a-z_]+\(.* |    # a call: secrets.token_urlsafe(32)
-      create[A-Z].* | /.* | .*\(.* | .*/.* |
-      (str|int|bool|float|Optional.*|List.*|Field.*) |
-      .*\.(py|ts|tsx|json|md|yml|yaml)
-    )$""",
+NOT_A_SECRET_WHOLE_RE = re.compile(
+    r"^([a-z]+(?:[-_][a-z]+)*|\d+|str|int|bool|float)$", re.IGNORECASE
 )
+NOT_A_SECRET_PREFIXES = ("create",)
+NOT_A_SECRET_SUFFIXES = (".py", ".ts", ".tsx", ".json", ".md", ".yml", ".yaml")
 
 
 def looks_like_credential(value: str) -> bool:
@@ -99,8 +101,51 @@ def tracked_files() -> List[str]:
     return [f for f in out.splitlines() if f]
 
 
+def looks_like_secret_name(name: str) -> bool:
+    normalized = name.upper().replace("_", "").replace("-", "")
+    return any(kw in normalized for kw in SECRET_NAME_KEYWORDS)
+
+
 def is_placeholder(value: str) -> bool:
-    return bool(PLACEHOLDER.match(value) or NOT_A_SECRET.match(value))
+    if not value:
+        return True
+    low = value.lower()
+    if any(s in low for s in PLACEHOLDER_SUBSTRINGS):
+        return True
+    if low in PLACEHOLDER_WHOLE_VALUES:
+        return True
+    if low.startswith(PLACEHOLDER_PREFIXES):
+        return True
+    if PLACEHOLDER_RE.match(value):
+        return True
+    if NOT_A_SECRET_WHOLE_RE.match(value):
+        return True
+    if low.startswith(NOT_A_SECRET_PREFIXES) or low.endswith(NOT_A_SECRET_SUFFIXES):
+        return True
+    return "(" in value or "/" in value
+
+
+def _pattern_findings(path: str, lineno: str, line: str) -> List[str]:
+    findings = []
+    for label, pat in PATTERNS:
+        m = re.search(pat, line)
+        # A marker inside backticks is documentation quoting the shape of a
+        # credential ("starts with `-----BEGIN PRIVATE KEY-----`"), not one.
+        if m and not (line[: m.start()].endswith("`") or line[m.end() :].startswith("`")):
+            findings.append(f"{path}:{lineno}: {label} -> {m.group(0)[:24]}...")
+    return findings
+
+
+def _assignment_finding(path: str, lineno: str, line: str) -> str | None:
+    m = ASSIGNMENT.search(line)
+    if not m:
+        return None
+    name, value = m.group(1), m.group(3)
+    if not looks_like_secret_name(name):
+        return None
+    if is_placeholder(value) or not looks_like_credential(value):
+        return None
+    return f"{path}:{lineno}: hardcoded {name} -> {value[:16]}..."
 
 
 def scan(path: str) -> List[str]:
@@ -109,24 +154,17 @@ def scan(path: str) -> List[str]:
         return []
     try:
         text = p.read_text(encoding="utf-8", errors="replace")
-    except (OSError, IsADirectoryError):
+    except OSError:
         return []
 
     findings = []
     for lineno, line in enumerate(text.splitlines(), 1):
         if len(line) > 4000:  # minified bundle or embedded blob
             continue
-        for label, pat in PATTERNS:
-            m = re.search(pat, line)
-            # A marker inside backticks is documentation quoting the shape of a
-            # credential ("starts with `-----BEGIN PRIVATE KEY-----`"), not one.
-            if m and not (line[: m.start()].endswith("`") or line[m.end() :].startswith("`")):
-                findings.append(f"{path}:{lineno}: {label} -> {m.group(0)[:24]}...")
-        m = ASSIGNMENT.search(line)
-        if m:
-            name, value = m.group(1), m.group(3)
-            if not is_placeholder(value) and looks_like_credential(value):
-                findings.append(f"{path}:{lineno}: hardcoded {name} -> {value[:16]}...")
+        findings.extend(_pattern_findings(path, str(lineno), line))
+        assignment_finding = _assignment_finding(path, str(lineno), line)
+        if assignment_finding:
+            findings.append(assignment_finding)
     return findings
 
 

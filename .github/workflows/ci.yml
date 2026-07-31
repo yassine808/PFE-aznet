@@ -35,7 +35,7 @@ jobs:
       - name: Committed credentials (tracked files)
         run: python scripts/check_secrets.py
       - name: Gitleaks (full history)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,8 +52,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: api/requirements.txt
-      - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: pip install ruff
+      - run: "pip install --only-binary=:all: -r requirements.txt -r requirements-dev.txt"
+      - run: "pip install --only-binary=:all: ruff"
       # Rule set pinned in api/ruff.toml — bugs only, not style. See the file.
       - name: Ruff
         run: ruff check app/ tests/
@@ -75,12 +75,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: Dashboard/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: TypeScript
-        run: npx tsc -b --noEmit
+        run: npm exec --ignore-scripts -- tsc -b --noEmit
       # Warnings do not fail the build; errors do. The current tree is warning-only.
       - name: Oxlint
-        run: npx oxlint
+        run: npm exec --ignore-scripts -- oxlint
       # The build is the real gate: tsc does not catch a broken import path,
       # a missing asset or a Tailwind v4 token that does not resolve.
       - name: Build
@@ -153,7 +153,7 @@ jobs:
       contents: read
       security-events: write
     container:
-      image: semgrep/semgrep
+      image: semgrep/semgrep:1.172.0
     steps:
       - uses: actions/checkout@v4
       # Unauthenticated public ruleset — no Semgrep AppSec Platform account,
@@ -177,7 +177,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Trivy fs scan
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -199,7 +199,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Trivy config scan
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: config
           scan-ref: .
@@ -222,7 +222,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - run: pip install "bandit[sarif]"
+      - run: 'pip install --only-binary=:all: "bandit[sarif]"'
       - name: Bandit
         continue-on-error: true
         run: bandit -r api/ scripts/ benchmark/ -f sarif -o bandit.sarif
@@ -243,7 +243,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - run: pip install pip-audit
+      - run: "pip install --only-binary=:all: pip-audit"
       - name: pip-audit
         continue-on-error: true
         run: pip-audit -r requirements.txt
@@ -261,7 +261,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: Dashboard/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: npm audit
         continue-on-error: true
         run: npm audit --audit-level=high
@@ -277,7 +277,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Hadolint
         continue-on-error: true
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
         with:
           dockerfile: ${{ matrix.dockerfile }}
 
@@ -288,4 +288,4 @@ jobs:
       - uses: actions/checkout@v4
       - name: actionlint
         continue-on-error: true
-        uses: reviewdog/action-actionlint@v1
+        uses: reviewdog/action-actionlint@50842263c20a7c46bd0065b9e624d3c569db061e # v1.73.0
