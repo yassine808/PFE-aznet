@@ -400,9 +400,9 @@ googleapis-common-protos==1.75.0 \
     # via
     #   -r requirements.txt
     #   google-api-core
-groq==1.0.0 \
-    --hash=sha256:66cb7bb729e6eb644daac7ce8efe945e99e4eb33657f733ee6f13059ef0c25a9 \
-    --hash=sha256:6e22bf92ffad988f01d2d4df7729add66b8fd5dbfb2154b5bbf3af245b72c731
+groq==1.6.0 \
+    --hash=sha256:c4237ecf0053ba85fd926bb31cb4b178996310474b4618867994e3e40d8e3c02 \
+    --hash=sha256:fa16db582455db324adcff1b5908519474736872e28cd5c8fa2b8bef6860e12a
     # via -r requirements.txt
 h11==0.16.0 \
     --hash=sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1 \
