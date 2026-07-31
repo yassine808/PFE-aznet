@@ -53,7 +53,7 @@ jobs:
           cache: pip
           cache-dependency-path: api/requirements.txt
       - run: "pip install --only-binary=:all: -r requirements.txt -r requirements-dev.txt"
-      - run: "pip install --only-binary=:all: ruff"
+      - run: "pip install --only-binary=:all: ruff==0.16.1"
       # Rule set pinned in api/ruff.toml — bugs only, not style. See the file.
       - name: Ruff
         run: ruff check app/ tests/
@@ -222,7 +222,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - run: 'pip install --only-binary=:all: "bandit[sarif]"'
+      - run: 'pip install --only-binary=:all: "bandit[sarif]==1.8.6"'
       - name: Bandit
         continue-on-error: true
         run: bandit -r api/ scripts/ benchmark/ -f sarif -o bandit.sarif
@@ -243,7 +243,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - run: "pip install --only-binary=:all: pip-audit"
+      - run: "pip install --only-binary=:all: pip-audit==2.9.0"
       - name: pip-audit
         continue-on-error: true
         run: pip-audit -r requirements.txt

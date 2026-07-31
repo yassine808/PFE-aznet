@@ -52,7 +52,7 @@ PATTERNS: List[Tuple[str, str]] = [
 # (looks_like_secret_name) rather than in the regex, so there is no
 # quantifier-then-alternation backtracking risk on adversarial input.
 ASSIGNMENT = re.compile(
-    r"""\b([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(["']?)([^\s"',;)]{6,})\2""",
+    r"""\b([A-Za-z_]\w*)\s*[:=]\s*(["']?)([^\s"',;)]{6,})\2""",
 )
 
 SECRET_NAME_KEYWORDS = (
@@ -74,8 +74,9 @@ PLACEHOLDER_PREFIXES = (
 PLACEHOLDER_RE = re.compile(r"^(<.*>|\$[a-z_.]+)$", re.IGNORECASE)
 
 # Values that are structurally code or prose, not credentials.
+# "str"/"int"/"bool"/"float" are already covered by the bare-word alternative below.
 NOT_A_SECRET_WHOLE_RE = re.compile(
-    r"^([a-z]+(?:[-_][a-z]+)*|\d+|str|int|bool|float)$", re.IGNORECASE
+    r"^([a-z]+(?:[-_][a-z]+)*|\d+)$", re.IGNORECASE
 )
 NOT_A_SECRET_PREFIXES = ("create",)
 NOT_A_SECRET_SUFFIXES = (".py", ".ts", ".tsx", ".json", ".md", ".yml", ".yaml")
