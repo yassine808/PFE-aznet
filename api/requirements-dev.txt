@@ -382,9 +382,9 @@ google-auth-httplib2==0.3.1 \
     # via
     #   -r requirements.txt
     #   google-api-python-client
-google-genai==1.47.0 \
-    --hash=sha256:e3851237556cbdec96007d8028b4b1f2425cdc5c099a8dc36b72a57e42821b60 \
-    --hash=sha256:ecece00d0a04e6739ea76cc8dad82ec9593d9380aaabef078990e60574e5bf59
+google-genai==2.14.0 \
+    --hash=sha256:a9d1f4f362d76280f1be1340fcb3c86e63dbca128f6a4ae09d86ab47ff7148e8 \
+    --hash=sha256:ae7172cdd35695189b516b33a878e4132e5daa2dbc03a5b44cddfa8a82fad664
     # via -r requirements.txt
 googleapis-common-protos==1.75.0 \
     --hash=sha256:53a062ff3c32552fbd62c11fe23768b78e4ddf0494d5e5fd97d3f4689c75fbbd \
