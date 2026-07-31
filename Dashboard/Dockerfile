@@ -2,7 +2,7 @@
 # image that is thrown away, and only the static output ships. `git pull &&
 # docker compose up -d --build` is then the whole deploy on a box that has
 # nothing but docker and git.
-FROM node:20-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /app
 # Copy the manifests first: this layer only rebuilds when dependencies change,
 # so an edit to a component does not reinstall node_modules.
