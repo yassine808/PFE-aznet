@@ -51,6 +51,46 @@ function Gate() {
   return user ? <Dashboard /> : <LoginPage />
 }
 
+/** Renders the page for the current route. A switch, not a ternary chain, so
+ *  adding a route is one case rather than one more branch to thread through. */
+function RouteView({
+  route,
+  params,
+  navigate,
+}: {
+  readonly route: Route
+  readonly params: Record<string, string>
+  readonly navigate: ReturnType<typeof useRoute>[1]
+}) {
+  const { t } = useI18n()
+  switch (route) {
+    case 'overview':
+      return <OverviewPage onOpenDay={(iso) => navigate('inbox', { date: iso })} />
+    case 'inbox':
+      return <InboxPage initialDate={params.date} />
+    case 'reports':
+      return <ReportsPage />
+    case 'daily':
+      return <DailyReportPage />
+    case 'weekly':
+      return <WeeklyReportPage />
+    case 'automation':
+      return <AutomationPage />
+    case 'access':
+      return <AccessControlPage />
+    case 'logs':
+      return <LogsPage />
+    case 'team':
+      return <TeamPage />
+    default:
+      return (
+        <section className="py-16">
+          <p className="text-ink-faint max-w-[65ch] text-sm">{t('state.empty.body')}</p>
+        </section>
+      )
+  }
+}
+
 function Dashboard() {
   const [loc, navigate] = useRoute()
   const { t } = useI18n()
@@ -80,29 +120,7 @@ function Dashboard() {
             </header>
           )}
 
-          {route === 'overview' ? (
-            <OverviewPage onOpenDay={(iso) => navigate('inbox', { date: iso })} />
-          ) : route === 'inbox' ? (
-            <InboxPage initialDate={params.date} />
-          ) : route === 'reports' ? (
-            <ReportsPage />
-          ) : route === 'daily' ? (
-            <DailyReportPage />
-          ) : route === 'weekly' ? (
-            <WeeklyReportPage />
-          ) : route === 'automation' ? (
-            <AutomationPage />
-          ) : route === 'access' ? (
-            <AccessControlPage />
-          ) : route === 'logs' ? (
-            <LogsPage />
-          ) : route === 'team' ? (
-            <TeamPage />
-          ) : (
-            <section className="py-16">
-              <p className="text-ink-faint max-w-[65ch] text-sm">{t('state.empty.body')}</p>
-            </section>
-          )}
+          <RouteView route={route} params={params} navigate={navigate} />
         </motion.div>
       </AppShell>
     </OpsProvider>

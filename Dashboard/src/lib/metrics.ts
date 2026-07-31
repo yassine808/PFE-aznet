@@ -18,9 +18,9 @@ export function isFlagged(v?: string): boolean {
 export function toISODate(v?: string): string | null {
   if (!v) return null
   const raw = v.trim()
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw)
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
-  const dmy = raw.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{4})/)
+  const dmy = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})/.exec(raw)
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
   return null
 }
@@ -49,7 +49,7 @@ export interface Totals {
 
 /** "20:15" -> 1215 minutes past midnight. Returns null when the cell is unusable. */
 export function minutesOf(heure?: string): number | null {
-  const m = (heure ?? '').trim().match(/^(\d{1,2})[:h.](\d{2})/)
+  const m = /^(\d{1,2})[:h.](\d{2})/.exec((heure ?? '').trim())
   if (!m) return null
   const h = Number(m[1])
   const min = Number(m[2])
@@ -116,7 +116,7 @@ export function computeMetrics(rows: ReportRow[]): Metrics {
   // Showing an empty axis when reports exist would read as "the pipeline is dead".
   const knownDays = [
     ...new Set(dated.map((d) => d.iso).filter((d): d is string => d !== null)),
-  ].sort()
+  ].sort((a, b) => a.localeCompare(b))
   const dayISO = todayRows.length ? today : (knownDays.at(-1) ?? null)
   const dayRows = dayISO ? dated.filter((d) => d.iso === dayISO).map((d) => d.row) : []
 

@@ -32,7 +32,7 @@ const SAMPLE_MS = 60_000
  * that looked like downtime. Here it runs for as long as the app is open, and
  * every sample is written to Postgres so the record outlives the browser tab.
  */
-export function OpsProvider({ children }: { children: ReactNode }) {
+export function OpsProvider({ children }: { readonly children: ReactNode }) {
   const { locale } = useI18n()
   const { settings } = useSettings()
   const poll = settings.refreshMs || undefined

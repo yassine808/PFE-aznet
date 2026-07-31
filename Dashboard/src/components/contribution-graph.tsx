@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { toISODate } from '@/lib/metrics'
 import type { ReportRow } from '@/lib/api'
 
@@ -34,23 +34,23 @@ export function ContributionGraph({
   selectedDay,
   cellHeight,
 }: {
-  rows: ReportRow[]
+  readonly rows: ReportRow[]
   /** Calendar year to render. Defaults to a rolling 53 weeks ending today. */
-  year?: number
-  onSelectDay?: (iso: string) => void
-  onSelectWeek?: (mondayIso: string) => void
-  selectedWeek?: string
+  readonly year?: number
+  readonly onSelectDay?: (iso: string) => void
+  readonly onSelectWeek?: (mondayIso: string) => void
+  readonly selectedWeek?: string
   /** ISO day to outline as the current selection, e.g. the Daily panel's date. */
-  selectedDay?: string
+  readonly selectedDay?: string
   /**
    * Fixed row height in px. Default cells are square, so height is dictated by
    * however wide the panel is; set this when the graph is the main object on
    * the page and should read taller than 53 columns of width would allow.
    */
-  cellHeight?: number
+  readonly cellHeight?: number
 }) {
   const { t, locale, dir } = useI18n()
-  const intlLocale = locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'
+  const intlLocale = intlLocaleOf(locale)
 
   const counts = useMemo(() => {
     const map = new Map<string, number>()
@@ -103,7 +103,9 @@ export function ContributionGraph({
   const level = (count: number) => {
     if (count === 0) return 0
     const ratio = count / max
-    return ratio <= 0.25 ? 1 : ratio <= 0.5 ? 2 : ratio <= 0.75 ? 3 : 4
+    if (ratio <= 0.25) return 1
+    if (ratio <= 0.5) return 2
+    return ratio <= 0.75 ? 3 : 4
   }
 
   // Month label sits above the first column whose Monday starts a new month.
@@ -111,9 +113,9 @@ export function ContributionGraph({
     const fmtMonth = new Intl.DateTimeFormat(intlLocale, { month: 'short' })
     return weeks.map((w, i) => {
       const prev = weeks[i - 1]
-      return !prev || prev.monday.getMonth() !== w.monday.getMonth()
-        ? fmtMonth.format(w.monday)
-        : ''
+      const label =
+        !prev || prev.monday.getMonth() !== w.monday.getMonth() ? fmtMonth.format(w.monday) : ''
+      return { key: isoOf(w.monday), label }
     })
   }, [weeks, intlLocale])
 
@@ -121,9 +123,10 @@ export function ContributionGraph({
   const dayLabels = useMemo(() => {
     const fmtDay = new Intl.DateTimeFormat(intlLocale, { weekday: 'short' })
     const monday = weekStart(new Date())
-    return Array.from({ length: 7 }, (_, i) =>
-      i % 2 === 0 ? fmtDay.format(new Date(monday.getTime() + i * DAY_MS)) : '',
-    )
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(monday.getTime() + i * DAY_MS)
+      return { key: isoOf(date), label: i % 2 === 0 ? fmtDay.format(date) : '' }
+    })
   }, [intlLocale])
 
   const fmtDate = new Intl.DateTimeFormat(intlLocale, { dateStyle: 'medium' })
@@ -140,12 +143,11 @@ export function ContributionGraph({
    * selection is a thick accent outline. Outline, not ring — ring-offset would
    * need a solid offset colour, and these cells sit on a transparent panel.
    */
-  const mark = (iso: string) =>
-    iso === selectedDay
-      ? ' outline outline-2 outline-accent'
-      : iso === todayIso
-        ? ' outline outline-1 outline-ink-muted'
-        : ''
+  const mark = (iso: string) => {
+    if (iso === selectedDay) return ' outline outline-2 outline-accent'
+    if (iso === todayIso) return ' outline outline-1 outline-ink-muted'
+    return ''
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -161,24 +163,24 @@ export function ContributionGraph({
             className="grid shrink-0 gap-[2px] pt-[14px]"
             style={{ gridTemplateRows: rowTemplate }}
           >
-            {dayLabels.map((d, i) => (
+            {dayLabels.map((d) => (
               <span
-                key={i}
+                key={d.key}
                 className="text-ink-faint flex items-center text-[8px] leading-none capitalize"
               >
-                {d}
+                {d.label}
               </span>
             ))}
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="grid auto-cols-fr grid-flow-col gap-[2px]">
-              {monthLabels.map((label, i) => (
+              {monthLabels.map((m) => (
                 <span
-                  key={i}
+                  key={m.key}
                   className="text-ink-faint overflow-visible text-[8px] whitespace-nowrap capitalize"
                 >
-                  {label}
+                  {m.label}
                 </span>
               ))}
             </div>

@@ -2,6 +2,13 @@ import { api, useApi } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { LiveDot } from '@/components/live-dot'
 
+type ServerStatusLevel = 'up' | 'partial' | 'down'
+
+function levelOf(up: boolean, partial: boolean): ServerStatusLevel {
+  if (up) return 'up'
+  return partial ? 'partial' : 'down'
+}
+
 /**
  * Whole-stack reachability, not one service.
  *
@@ -30,16 +37,24 @@ export function ServerStatus() {
 
   const up = apiUp && n8nUp
   const partial = apiUp !== n8nUp
+  const level = levelOf(up, partial)
+  const textClass = { up: 'text-ink-muted', partial: 'text-status-warn', down: 'text-status-fail' }[
+    level
+  ]
+  const tone = { up: 'ok', partial: 'warn', down: 'fail' }[level] as 'ok' | 'warn' | 'fail'
+  const label = {
+    up: t('server.running'),
+    partial: t('server.partial'),
+    down: t('server.stopped'),
+  }[level]
 
   return (
     <span
-      className={`flex items-center gap-2 text-xs ${up ? 'text-ink-muted' : partial ? 'text-status-warn' : 'text-status-fail'}`}
+      className={`flex items-center gap-2 text-xs ${textClass}`}
       title={`API ${apiUp ? 'up' : 'down'} · n8n ${n8nUp ? 'up' : 'down'}`}
     >
-      <LiveDot tone={up ? 'ok' : partial ? 'warn' : 'fail'} live={up} />
-      <span className="truncate">
-        {up ? t('server.running') : partial ? t('server.partial') : t('server.stopped')}
-      </span>
+      <LiveDot tone={tone} live={up} />
+      <span className="truncate">{label}</span>
     </span>
   )
 }

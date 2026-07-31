@@ -23,9 +23,9 @@ export function AppShell({
   onNavigate,
   children,
 }: {
-  route: Route
-  onNavigate: (r: Route) => void
-  children: ReactNode
+  readonly route: Route
+  readonly onNavigate: (r: Route) => void
+  readonly children: ReactNode
 }) {
   const { t, locale, setLocale } = useI18n()
   const { theme, toggle } = useTheme()
@@ -201,11 +201,8 @@ export function AppShell({
           <ServerStatus />
 
           <div className="flex items-center justify-between gap-2">
-            <div
-              className="border-line flex rounded-md border p-0.5"
-              role="group"
-              aria-label={t('lang.label')}
-            >
+            <fieldset className="border-line m-0 flex rounded-md border p-0.5">
+              <legend className="sr-only">{t('lang.label')}</legend>
               {LOCALES.map((l: Locale) => (
                 <button
                   key={l}
@@ -222,7 +219,7 @@ export function AppShell({
                   {LOCALE_LABEL[l]}
                 </button>
               ))}
-            </div>
+            </fieldset>
 
             <div className="flex items-center gap-2">
               <SettingsPanel />

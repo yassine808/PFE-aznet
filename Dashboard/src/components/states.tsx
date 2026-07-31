@@ -3,11 +3,17 @@ import { useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 /** Skeletons match the shape of what is coming, so nothing jumps when data lands. */
-export function Skeleton({ className }: { className?: string }) {
+export function Skeleton({ className }: { readonly className?: string }) {
   return <div className={cn('bg-line/70 animate-pulse rounded', className)} />
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  readonly message: string
+  readonly onRetry?: () => void
+}) {
   const { t } = useI18n()
   return (
     <div className="border-status-fail/30 bg-status-fail/5 flex flex-col items-start gap-3 rounded-lg border p-5">
@@ -30,7 +36,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   )
 }
 
-export function EmptyState({ body }: { body?: string }) {
+export function EmptyState({ body }: { readonly body?: string }) {
   const { t } = useI18n()
   return (
     <div className="py-10">

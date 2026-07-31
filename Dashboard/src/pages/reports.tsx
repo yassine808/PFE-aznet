@@ -3,7 +3,7 @@ import { motion } from 'motion/react'
 import { FlagIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
 import { api, useApi, type ReportRow } from '@/lib/api'
 import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ActivityGraphSection } from '@/components/activity-graph-section'
@@ -15,10 +15,10 @@ function LedgerRow({
   threshold,
   pad,
 }: {
-  r: ReportRow
-  fmt: Intl.NumberFormat
-  threshold: number
-  pad: string
+  readonly r: ReportRow
+  readonly fmt: Intl.NumberFormat
+  readonly threshold: number
+  readonly pad: string
 }) {
   const flagged = isFlagged(r.flag_review)
   const confidence = num(r.confidence)
@@ -68,7 +68,7 @@ export function ReportsPage() {
   const [date, setDate] = useState('')
 
   const fmt = useMemo(
-    () => new Intl.NumberFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'),
+    () => new Intl.NumberFormat(intlLocaleOf(locale)),
     [locale],
   )
 

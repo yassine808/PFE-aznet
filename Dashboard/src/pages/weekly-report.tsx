@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
 import { exportReport, type ReportFormat } from '@/lib/report-export'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ContributionGraph, isoOf as iso, weekStart } from '@/components/contribution-graph'
 
@@ -24,15 +24,9 @@ export function WeeklyReportPage() {
   const settings = useApi('settings', api.settings)
   const format = (settings.data?.settings.report_format ?? 'markdown') as ReportFormat
 
-  const fmt = useMemo(
-    () => new Intl.NumberFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'),
-    [locale],
-  )
+  const fmt = useMemo(() => new Intl.NumberFormat(intlLocaleOf(locale)), [locale])
   const dayName = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR', {
-        weekday: 'short',
-      }),
+    () => new Intl.DateTimeFormat(intlLocaleOf(locale), { weekday: 'short' }),
     [locale],
   )
 
@@ -213,7 +207,8 @@ export function WeeklyReportPage() {
             />
           </div>
 
-          <div className="flex shrink-0 flex-col gap-1" role="group" aria-label={t('weekly.year')}>
+          <fieldset className="m-0 flex shrink-0 flex-col gap-1 border-0 p-0">
+            <legend className="sr-only">{t('weekly.year')}</legend>
             {years.map((y) => (
               <button
                 key={y}
@@ -230,7 +225,7 @@ export function WeeklyReportPage() {
                 {y}
               </button>
             ))}
-          </div>
+          </fieldset>
         </div>
       </section>
 
@@ -261,7 +256,7 @@ export function WeeklyReportPage() {
             </h2>
             <div className="grid grid-cols-7 gap-2">
               {week.perDay.map((rows, i) => (
-                <div key={i} className="flex flex-col items-center gap-2">
+                <div key={iso(days[i])} className="flex flex-col items-center gap-2">
                   <div className="flex h-24 w-full items-end">
                     <motion.div
                       className="bg-accent w-full rounded-t-[4px]"

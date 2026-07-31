@@ -9,7 +9,7 @@ import {
   refreshProfile,
   useApi,
 } from '@/lib/api'
-import type { Technician } from '@/lib/api'
+import type { Async, Technician } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { ChannelIcon } from '@/components/channel-icon'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -87,11 +87,8 @@ export function AccessControlPage() {
             <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
               {t('inbox.channel')}
             </span>
-            <div
-              className="border-line flex rounded-md border p-0.5"
-              role="group"
-              aria-label={t('inbox.channel')}
-            >
+            <fieldset className="border-line m-0 flex rounded-md border p-0.5">
+              <legend className="sr-only">{t('inbox.channel')}</legend>
               {CHANNELS.map((c) => (
                 <button
                   key={c}
@@ -109,7 +106,7 @@ export function AccessControlPage() {
                   {c}
                 </button>
               ))}
-            </div>
+            </fieldset>
           </div>
 
           <Field
@@ -152,25 +149,11 @@ export function AccessControlPage() {
         {error && <p className="text-status-fail text-xs break-all">{error}</p>}
       </form>
 
-      {list.error ? (
-        <ErrorState message={list.error} onRetry={list.reload} />
-      ) : list.loading ? (
-        <Skeleton className="h-40" />
-      ) : (list.data?.technicians.length ?? 0) === 0 ? (
-        <EmptyState body={t('access.empty')} />
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {list.data?.technicians.map((person) => (
-            <PersonCard
-              key={person.id}
-              person={person}
-              onRemoveIdentity={remove}
-              onRemovePerson={removePerson}
-              onReload={list.reload}
-            />
-          ))}
-        </ul>
-      )}
+      <TechniciansList
+        list={list}
+        onRemoveIdentity={remove}
+        onRemovePerson={removePerson}
+      />
 
       <p className="text-ink-faint max-w-[70ch] text-xs">{t('access.enforceNote')}</p>
     </motion.div>
@@ -185,16 +168,44 @@ export function AccessControlPage() {
  * every row (the confusion this refactor exists to remove) or need a rowspan
  * that breaks on mobile.
  */
+function TechniciansList({
+  list,
+  onRemoveIdentity,
+  onRemovePerson,
+}: {
+  readonly list: Async<{ technicians: Technician[] }>
+  readonly onRemoveIdentity: (id: number) => void
+  readonly onRemovePerson: (id: number) => void
+}) {
+  const { t } = useI18n()
+  if (list.error) return <ErrorState message={list.error} onRetry={list.reload} />
+  if (list.loading) return <Skeleton className="h-40" />
+  if ((list.data?.technicians.length ?? 0) === 0) return <EmptyState body={t('access.empty')} />
+  return (
+    <ul className="flex flex-col gap-3">
+      {list.data?.technicians.map((person) => (
+        <PersonCard
+          key={person.id}
+          person={person}
+          onRemoveIdentity={onRemoveIdentity}
+          onRemovePerson={onRemovePerson}
+          onReload={list.reload}
+        />
+      ))}
+    </ul>
+  )
+}
+
 function PersonCard({
   person,
   onRemoveIdentity,
   onRemovePerson,
   onReload,
 }: {
-  person: Technician
-  onRemoveIdentity: (id: number) => void
-  onRemovePerson: (id: number) => void
-  onReload: () => void
+  readonly person: Technician
+  readonly onRemoveIdentity: (id: number) => void
+  readonly onRemovePerson: (id: number) => void
+  readonly onReload: () => void
 }) {
   const { t } = useI18n()
   const [pending, setPending] = useState(false)
@@ -280,11 +291,11 @@ function Field({
   onChange,
   placeholder,
 }: {
-  id: string
-  label: string
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
+  readonly id: string
+  readonly label: string
+  readonly value: string
+  readonly onChange: (v: string) => void
+  readonly placeholder?: string
 }) {
   return (
     <div className="flex min-w-40 flex-col gap-1.5">

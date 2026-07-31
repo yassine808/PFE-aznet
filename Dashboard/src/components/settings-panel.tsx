@@ -12,17 +12,17 @@ function Segmented<T extends string | number>({
   onChange,
   label,
 }: {
-  value: T
-  options: { v: T; label: string }[]
-  onChange: (v: T) => void
-  label: string
+  readonly value: T
+  readonly options: { v: T; label: string }[]
+  readonly onChange: (v: T) => void
+  readonly label: string
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
         {label}
-      </span>
-      <div className="border-line flex rounded-md border p-0.5" role="group" aria-label={label}>
+      </legend>
+      <div className="border-line flex rounded-md border p-0.5">
         {options.map((o) => (
           <button
             key={String(o.v)}
@@ -40,7 +40,7 @@ function Segmented<T extends string | number>({
           </button>
         ))}
       </div>
-    </div>
+    </fieldset>
   )
 }
 

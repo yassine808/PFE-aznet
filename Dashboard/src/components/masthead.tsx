@@ -8,6 +8,24 @@ import { cn } from '@/lib/utils'
 
 export type SystemState = 'nominal' | 'degraded' | 'down'
 
+function skinFor(state: SystemState) {
+  if (state === 'down') return 'bg-status-fail text-white'
+  if (state === 'degraded')
+    return 'bg-slate-100 text-slate-950 ring-1 ring-slate-300 ring-inset dark:ring-slate-400'
+  return 'bg-slate-900 text-slate-50 dark:bg-slate-850'
+}
+
+function stateLabelFor(state: SystemState, t: (key: string) => string) {
+  if (state === 'down') return t('status.unreachable')
+  if (state === 'degraded') return t('state.degraded')
+  return t('status.live')
+}
+
+function toneFor(state: SystemState) {
+  if (state === 'down') return 'fail'
+  return state === 'degraded' ? 'ink' : 'ok'
+}
+
 /**
  * The one Committed surface in the system: a full-bleed slab that carries the day.
  * Healthy it is ink; degraded it takes the warning colour; down it goes red edge to
@@ -19,10 +37,10 @@ export function Masthead({
   headlineLabel,
   meta,
 }: {
-  state: SystemState
-  headline: string
-  headlineLabel: string
-  meta: { label: string; value: string }[]
+  readonly state: SystemState
+  readonly headline: string
+  readonly headlineLabel: string
+  readonly meta: { label: string; value: string }[]
 }) {
   const { t } = useI18n()
   const [muted, setMuted] = useState(false)
@@ -31,19 +49,8 @@ export function Masthead({
 
   // Attention is signalled by inverting the slab, not by hue: nominal is a dark
   // slab, degraded flips to a pale one in both themes, down is the only colour.
-  const skin =
-    state === 'down'
-      ? 'bg-status-fail text-white'
-      : state === 'degraded'
-        ? 'bg-slate-100 text-slate-950 ring-1 ring-slate-300 ring-inset dark:ring-slate-400'
-        : 'bg-slate-900 text-slate-50 dark:bg-slate-850'
-
-  const stateLabel =
-    state === 'down'
-      ? t('status.unreachable')
-      : state === 'degraded'
-        ? t('state.degraded')
-        : t('status.live')
+  const skin = skinFor(state)
+  const stateLabel = stateLabelFor(state, t)
 
   return (
     <motion.section
@@ -72,7 +79,7 @@ export function Masthead({
         <div>
           <p className="flex items-center gap-2 text-xs font-medium tracking-wide uppercase opacity-80">
             <LiveDot
-              tone={state === 'down' ? 'fail' : state === 'degraded' ? 'ink' : 'ok'}
+              tone={toneFor(state)}
               live={state !== 'down'}
             />
             {stateLabel}

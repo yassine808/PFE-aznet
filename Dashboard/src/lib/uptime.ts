@@ -18,7 +18,12 @@ function asState(raw: string): ServiceState | null {
  * it forward would invent uptime nobody observed, which is the one thing an
  * availability chart must never do.
  */
-export function timeline(samples: ServiceSample[], service: string): (ServiceState | null)[] {
+export interface TimelineSlot {
+  ts: number
+  state: ServiceState | null
+}
+
+export function timeline(samples: ServiceSample[], service: string): TimelineSlot[] {
   const now = Math.floor(Date.now() / SLOT_MS) * SLOT_MS
   const byBucket = new Map<number, ServiceState>()
 
@@ -32,15 +37,15 @@ export function timeline(samples: ServiceSample[], service: string): (ServiceSta
     byBucket.set(Math.floor(t / SLOT_MS) * SLOT_MS, state)
   }
 
-  return Array.from(
-    { length: SLOTS },
-    (_, i) => byBucket.get(now - (SLOTS - 1 - i) * SLOT_MS) ?? null,
-  )
+  return Array.from({ length: SLOTS }, (_, i) => {
+    const ts = now - (SLOTS - 1 - i) * SLOT_MS
+    return { ts, state: byBucket.get(ts) ?? null }
+  })
 }
 
 /** Share of recorded slots that were healthy. Null when nothing was recorded. */
-export function availability(slots: (ServiceState | null)[]): number | null {
-  const seen = slots.filter((s): s is ServiceState => s !== null)
+export function availability(slots: TimelineSlot[]): number | null {
+  const seen = slots.filter((s): s is TimelineSlot & { state: ServiceState } => s.state !== null)
   if (seen.length === 0) return null
-  return Math.round((seen.filter((s) => s === 'ok').length / seen.length) * 100)
+  return Math.round((seen.filter((s) => s.state === 'ok').length / seen.length) * 100)
 }

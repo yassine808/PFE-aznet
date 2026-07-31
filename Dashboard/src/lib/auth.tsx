@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -28,7 +29,7 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | null>(null)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const [user, setUser] = useState<Account | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -57,11 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  const value = useMemo(() => ({ user, loading, signIn, signOut }), [user, loading, signIn, signOut])
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

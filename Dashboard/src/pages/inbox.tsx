@@ -17,7 +17,7 @@ import { ActivityGraphSection } from '@/components/activity-graph-section'
 import { cn } from '@/lib/utils'
 
 /** Fields the manager is allowed to correct before the row feeds the day's report. */
-const EDITABLE: { field: keyof ReportRow & string; labelKey: string; long?: boolean }[] = [
+const EDITABLE: { field: keyof ReportRow; labelKey: string; long?: boolean }[] = [
   { field: 'resume', labelKey: 'inbox.field.resume', long: true },
   { field: 'chantier', labelKey: 'col.chantier' },
   { field: 'goulottes_m', labelKey: 'metric.goulottes' },
@@ -25,7 +25,7 @@ const EDITABLE: { field: keyof ReportRow & string; labelKey: string; long?: bool
   { field: 'observations', labelKey: 'inbox.field.observations', long: true },
 ]
 
-function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
+function MessageCard({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: () => void }) {
   const { t } = useI18n()
   // Cards read as messages by default; editing is opt-in per message.
   const [editing, setEditing] = useState(false)
@@ -101,7 +101,9 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
           src={r.lien_audio}
           className="mt-3 h-9 w-full max-w-md"
           aria-label={t('inbox.audio')}
-        />
+        >
+          <track kind="captions" />
+        </audio>
       )}
 
       {/* Read view: the generated summary and figures as they stand today. */}
@@ -218,7 +220,7 @@ function MessageCard({ r, onSaved }: { r: ReportRow; onSaved: () => void }) {
   )
 }
 
-export function InboxPage({ initialDate }: { initialDate?: string }) {
+export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
   const { t } = useI18n()
   const { settings } = useSettings()
   const reports = useApi('reports', api.reports, settings.refreshMs || undefined)
@@ -334,16 +336,17 @@ function Filter({
   options,
   allLabel,
 }: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  options: string[]
-  allLabel: string
+  readonly label: string
+  readonly value: string
+  readonly onChange: (v: string) => void
+  readonly options: string[]
+  readonly allLabel: string
 }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">{label}</span>
-      <div className="border-line flex rounded-md border p-0.5" role="group" aria-label={label}>
+      <fieldset className="border-line m-0 flex rounded-md border p-0.5">
+        <legend className="sr-only">{label}</legend>
         <button
           type="button"
           onClick={() => onChange('')}
@@ -373,7 +376,7 @@ function Filter({
             {o}
           </button>
         ))}
-      </div>
+      </fieldset>
     </div>
   )
 }

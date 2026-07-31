@@ -1,5 +1,10 @@
 import type { Health, LogEntry, LogStats, N8nWorkflow } from '@/lib/api'
 
+const INTL_LOCALE: Record<string, string> = { ar: 'ar-MA', en: 'en-GB', fr: 'fr-FR' }
+function intlTag(locale: string): string {
+  return INTL_LOCALE[locale] ?? 'fr-FR'
+}
+
 export type ServiceState = 'ok' | 'warn' | 'fail' | 'idle'
 
 export interface ServiceRow {
@@ -24,12 +29,7 @@ function ageMs(iso?: string | null): number | null {
 export function formatAge(iso: string | null | undefined, locale: string): string {
   const age = ageMs(iso)
   if (age === null) return '—'
-  const rtf = new Intl.RelativeTimeFormat(
-    locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR',
-    {
-      numeric: 'auto',
-    },
-  )
+  const rtf = new Intl.RelativeTimeFormat(intlTag(locale), { numeric: 'auto' })
   const min = Math.round(age / 60_000)
   if (min < 60) return rtf.format(-min, 'minute')
   const h = Math.round(min / 60)
@@ -39,6 +39,155 @@ export function formatAge(iso: string | null | undefined, locale: string): strin
 
 function lastOfChannel(logs: LogEntry[], channel: string): LogEntry | undefined {
   return logs.find((l) => l.channel === channel)
+}
+
+function apiRow(health: Health | null, healthError: string | null): ServiceRow {
+  let state: ServiceState = 'idle'
+  let captionKey = 'state.loading'
+  if (healthError) {
+    state = 'fail'
+    captionKey = 'svc.unreachable'
+  } else if (health) {
+    state = 'ok'
+    captionKey = 'svc.up'
+  }
+  return {
+    key: 'api',
+    labelKey: 'svc.api',
+    state,
+    captionKey,
+    detail: health ? `v${health.version}` : undefined,
+  }
+}
+
+function n8nRow(
+  n8nReachable: boolean,
+  workflow: N8nWorkflow | undefined,
+  lastExecution: { status: string; startedAt: string } | null,
+  locale: string,
+): ServiceRow {
+  const wfActive = workflow?.active ?? false
+  let state: ServiceState = 'warn'
+  let captionKey = 'svc.disarmed'
+  if (!n8nReachable) {
+    state = 'fail'
+    captionKey = 'svc.unreachable'
+  } else if (wfActive) {
+    state = 'ok'
+    captionKey = 'svc.armed'
+  }
+  return {
+    key: 'n8n',
+    labelKey: 'svc.n8n',
+    state,
+    captionKey,
+    detail: lastExecution ? formatAge(lastExecution.startedAt, locale) : undefined,
+  }
+}
+
+function channelRow(
+  key: string,
+  labelKey: string,
+  channel: string,
+  logs: LogEntry[],
+  locale: string,
+): ServiceRow {
+  const last = lastOfChannel(logs, channel)
+  const age = ageMs(last?.ts)
+  let state: ServiceState = 'ok'
+  let captionKey = 'svc.lastMessage'
+  if (!last) {
+    state = 'idle'
+    captionKey = 'svc.noTraffic'
+  } else if (last.level === 'error') {
+    state = 'fail'
+    captionKey = 'svc.lastFailed'
+  } else if (age !== null && age > 48 * HOUR) {
+    state = 'warn'
+  }
+  return { key, labelKey, state, captionKey, detail: last ? formatAge(last.ts, locale) : undefined }
+}
+
+function aiRow(logs: LogEntry[], health: Health | null): ServiceRow {
+  const aiLogs = logs.filter((l) => l.stage === 'transcribed' || l.stage === 'extracted')
+  const aiErrors = aiLogs.filter((l) => l.level === 'error').length
+  const durations = aiLogs
+    .map((l) => l.duration_ms)
+    .filter((d): d is number => typeof d === 'number' && d > 0)
+  const median =
+    durations.length > 0
+      ? [...durations].sort((a, b) => a - b)[Math.floor(durations.length / 2)]
+      : null
+
+  let state: ServiceState = 'ok'
+  let captionKey = 'svc.up'
+  if (aiLogs.length === 0) {
+    state = 'idle'
+    captionKey = 'svc.noTraffic'
+  } else if (aiErrors > 0) {
+    state = 'warn'
+    captionKey = 'svc.someErrors'
+  }
+
+  return {
+    key: 'ai',
+    labelKey: 'svc.ai',
+    state,
+    captionKey,
+    detail: [
+      health?.stt_default,
+      median !== null ? `${(median / 1000).toFixed(1)}s` : null,
+      aiErrors ? `${aiErrors} err` : null,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  }
+}
+
+function sheetsRow(logs: LogEntry[], stats: LogStats | null, reportsOk: boolean): ServiceRow {
+  const sheetLogs = logs.filter((l) => l.stage === 'sheet_written')
+  const sheetErrors = sheetLogs.filter((l) => l.level === 'error').length
+  const pending = stats?.pending_sheet_writes ?? 0
+
+  let state: ServiceState = 'ok'
+  let captionKey = 'svc.up'
+  if (!reportsOk) {
+    state = 'fail'
+    captionKey = 'svc.unreachable'
+  } else if (pending > 0) {
+    state = 'warn'
+    captionKey = 'svc.queued'
+  } else if (sheetErrors > 0) {
+    state = 'warn'
+    captionKey = 'svc.someErrors'
+  }
+
+  return {
+    key: 'sheets',
+    labelKey: 'svc.sheets',
+    state,
+    captionKey,
+    detail: pending > 0 ? `${pending}` : undefined,
+  }
+}
+
+function postgresRow(logs: LogEntry[], stats: LogStats | null, logsError: string | null): ServiceRow {
+  let state: ServiceState = 'idle'
+  let captionKey = 'state.loading'
+  if (logsError) {
+    state = 'fail'
+    captionKey = 'svc.unreachable'
+  } else if (stats) {
+    state = 'ok'
+    captionKey = 'svc.up'
+  }
+  return {
+    key: 'postgres',
+    labelKey: 'svc.postgres',
+    state,
+    captionKey,
+    detail: stats ? `${logs.length} · ${stats.retention_days}j` : undefined,
+  }
 }
 
 /**
@@ -76,102 +225,15 @@ export function buildServices(input: {
     locale,
   } = input
 
-  const rows: ServiceRow[] = []
-
-  // ── API ────────────────────────────────────────────────────────────────
-  rows.push({
-    key: 'api',
-    labelKey: 'svc.api',
-    state: healthError ? 'fail' : health ? 'ok' : 'idle',
-    captionKey: healthError ? 'svc.unreachable' : health ? 'svc.up' : 'state.loading',
-    detail: health ? `v${health.version}` : undefined,
-  })
-
-  // ── n8n orchestrator ───────────────────────────────────────────────────
-  const wfActive = workflow?.active ?? false
-  rows.push({
-    key: 'n8n',
-    labelKey: 'svc.n8n',
-    state: !n8nReachable ? 'fail' : wfActive ? 'ok' : 'warn',
-    captionKey: !n8nReachable ? 'svc.unreachable' : wfActive ? 'svc.armed' : 'svc.disarmed',
-    detail: lastExecution ? formatAge(lastExecution.startedAt, locale) : undefined,
-  })
-
-  // ── Reception channels ─────────────────────────────────────────────────
-  for (const [key, labelKey, channel] of [
-    ['telegram', 'svc.telegram', 'telegram'],
-    ['whatsapp', 'svc.whatsapp', 'whatsapp'],
-  ] as const) {
-    const last = lastOfChannel(logs, channel)
-    const age = ageMs(last?.ts)
-    const state: ServiceState = !last
-      ? 'idle'
-      : last.level === 'error'
-        ? 'fail'
-        : age !== null && age > 48 * HOUR
-          ? 'warn'
-          : 'ok'
-    rows.push({
-      key,
-      labelKey,
-      state,
-      captionKey: !last ? 'svc.noTraffic' : state === 'fail' ? 'svc.lastFailed' : 'svc.lastMessage',
-      detail: last ? formatAge(last.ts, locale) : undefined,
-    })
-  }
-
-  // ── AI: transcription + extraction ─────────────────────────────────────
-  const aiLogs = logs.filter((l) => l.stage === 'transcribed' || l.stage === 'extracted')
-  const aiErrors = aiLogs.filter((l) => l.level === 'error').length
-  const durations = aiLogs
-    .map((l) => l.duration_ms)
-    .filter((d): d is number => typeof d === 'number' && d > 0)
-  const median =
-    durations.length > 0
-      ? [...durations].sort((a, b) => a - b)[Math.floor(durations.length / 2)]
-      : null
-  rows.push({
-    key: 'ai',
-    labelKey: 'svc.ai',
-    state: aiLogs.length === 0 ? 'idle' : aiErrors > 0 ? 'warn' : 'ok',
-    captionKey: aiLogs.length === 0 ? 'svc.noTraffic' : aiErrors > 0 ? 'svc.someErrors' : 'svc.up',
-    detail: [
-      health?.stt_default,
-      median !== null ? `${(median / 1000).toFixed(1)}s` : null,
-      aiErrors ? `${aiErrors} err` : null,
-    ]
-      .filter(Boolean)
-      .join(' · '),
-  })
-
-  // ── Google Sheets ──────────────────────────────────────────────────────
-  const sheetLogs = logs.filter((l) => l.stage === 'sheet_written')
-  const sheetErrors = sheetLogs.filter((l) => l.level === 'error').length
-  const pending = stats?.pending_sheet_writes ?? 0
-  rows.push({
-    key: 'sheets',
-    labelKey: 'svc.sheets',
-    state: !reportsOk ? 'fail' : pending > 0 || sheetErrors > 0 ? 'warn' : 'ok',
-    captionKey: !reportsOk
-      ? 'svc.unreachable'
-      : pending > 0
-        ? 'svc.queued'
-        : sheetErrors > 0
-          ? 'svc.someErrors'
-          : 'svc.up',
-    detail: pending > 0 ? `${pending}` : undefined,
-  })
-
-  // ── PostgreSQL event store ─────────────────────────────────────────────
   // /logs answering at all proves the API reached Postgres: the API prints
   // "[logs] DISABLED" and returns an error when DATABASE_URL is unset.
-  rows.push({
-    key: 'postgres',
-    labelKey: 'svc.postgres',
-    state: logsError ? 'fail' : stats ? 'ok' : 'idle',
-    captionKey: logsError ? 'svc.unreachable' : stats ? 'svc.up' : 'state.loading',
-    detail: stats ? `${logs.length} · ${stats.retention_days}j` : undefined,
-  })
-
-  return rows
+  return [
+    apiRow(health, healthError),
+    n8nRow(n8nReachable, workflow, lastExecution, locale),
+    channelRow('telegram', 'svc.telegram', 'telegram', logs, locale),
+    channelRow('whatsapp', 'svc.whatsapp', 'whatsapp', logs, locale),
+    aiRow(logs, health),
+    sheetsRow(logs, stats, reportsOk),
+    postgresRow(logs, stats, logsError),
+  ]
 }

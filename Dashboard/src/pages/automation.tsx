@@ -18,11 +18,12 @@ import {
   runJob,
   sendTestMail,
   useApi,
+  type Async,
   type AppSettings,
   type JobStatus,
 } from '@/lib/api'
 import { FORMATS, type ReportFormat } from '@/lib/report-export'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
 
@@ -46,14 +47,16 @@ const JOB_ICONS: Record<string, typeof BroomIcon> = {
 // Order shown to the operator: the two mails they care about first, plumbing last.
 const JOB_ORDER = ['daily_report', 'weekly_report', 'sheet_queue', 'profiles', 'prune_logs']
 
+const FORMAT_EXT: Record<ReportFormat, string> = { txt: '.txt', markdown: '.md', docx: '.docx' }
+
 function Band({
   title,
   hint,
   children,
 }: {
-  title: string
-  hint?: string
-  children: React.ReactNode
+  readonly title: string
+  readonly hint?: string
+  readonly children: React.ReactNode
 }) {
   return (
     <section className="flex min-w-0 flex-col gap-4">
@@ -78,12 +81,7 @@ function Band({
 function useAgo() {
   const { locale } = useI18n()
   return useMemo(() => {
-    const rtf = new Intl.RelativeTimeFormat(
-      locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR',
-      {
-        numeric: 'auto',
-      },
-    )
+    const rtf = new Intl.RelativeTimeFormat(intlLocaleOf(locale), { numeric: 'auto' })
     return (iso: string) => {
       const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000)
       if (seconds < 60) return rtf.format(-seconds, 'second')
@@ -143,9 +141,9 @@ function JobCard({
   onRan,
   children,
 }: {
-  job: JobStatus
-  onRan: () => void
-  children?: React.ReactNode
+  readonly job: JobStatus
+  readonly onRan: () => void
+  readonly children?: React.ReactNode
 }) {
   const { t } = useI18n()
   const ago = useAgo()
@@ -235,6 +233,28 @@ function JobCard({
   )
 }
 
+function JobsBand({
+  jobs,
+  ordered,
+  controls,
+}: {
+  readonly jobs: Async<{ jobs: JobStatus[] }>
+  readonly ordered: JobStatus[]
+  readonly controls: Record<string, React.ReactNode>
+}) {
+  if (jobs.error) return <ErrorState message={jobs.error} onRetry={jobs.reload} />
+  if (!ordered.length) return <Skeleton className="h-64 rounded-xl" />
+  return (
+    <ul className="grid gap-3 lg:grid-cols-2">
+      {ordered.map((job) => (
+        <JobCard key={job.name} job={job} onRan={jobs.reload}>
+          {controls[job.name]}
+        </JobCard>
+      ))}
+    </ul>
+  )
+}
+
 export function AutomationPage() {
   const { t, locale } = useI18n()
   const stored = useApi('settings', api.settings)
@@ -267,12 +287,7 @@ export function AutomationPage() {
   }
 
   const days = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat(
-      locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR',
-      {
-        weekday: 'long',
-      },
-    )
+    const fmt = new Intl.DateTimeFormat(intlLocaleOf(locale), { weekday: 'long' })
     // 2026-06-01 is a Monday, so index 0 lands on Monday — same base as the
     // scheduler's `datetime.weekday()`, which is what makes 4 mean Friday in both.
     return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2026, 5, 1 + i)))
@@ -401,19 +416,7 @@ export function AutomationPage() {
       <p className="text-ink-faint max-w-[70ch] text-sm">{t('automation.intro')}</p>
 
       <Band title={t('automation.jobs')} hint={t('automation.jobsHint')}>
-        {jobs.error ? (
-          <ErrorState message={jobs.error} onRetry={jobs.reload} />
-        ) : ordered.length ? (
-          <ul className="grid gap-3 lg:grid-cols-2">
-            {ordered.map((job) => (
-              <JobCard key={job.name} job={job} onRan={jobs.reload}>
-                {CONTROLS[job.name]}
-              </JobCard>
-            ))}
-          </ul>
-        ) : (
-          <Skeleton className="h-64 rounded-xl" />
-        )}
+        <JobsBand jobs={jobs} ordered={ordered} controls={CONTROLS} />
       </Band>
 
       <Band title={t('automation.recipients')} hint={t('automation.recipientsHint')}>
@@ -512,7 +515,8 @@ export function AutomationPage() {
       </Band>
 
       <Band title={t('automation.format')} hint={t('automation.formatHint')}>
-        <div className="border-line flex w-fit rounded-md border p-0.5" role="group">
+        <fieldset className="border-line m-0 flex w-fit rounded-md border p-0.5">
+          <legend className="sr-only">{t('automation.format')}</legend>
           {FORMATS.map((f) => (
             <button
               key={f}
@@ -526,10 +530,10 @@ export function AutomationPage() {
                   : 'text-ink-faint hover:text-ink',
               )}
             >
-              {f === 'txt' ? '.txt' : f === 'markdown' ? '.md' : '.docx'}
+              {FORMAT_EXT[f]}
             </button>
           ))}
-        </div>
+        </fieldset>
       </Band>
 
       {error && <ErrorState message={error} onRetry={save} />}

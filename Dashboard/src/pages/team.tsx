@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { PlusIcon, TrashIcon } from '@phosphor-icons/react'
-import { api, createUser, deleteUser, useApi, type Account, type History } from '@/lib/api'
+import {
+  api,
+  createUser,
+  deleteUser,
+  useApi,
+  type Account,
+  type Async,
+  type History,
+} from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { daysAgoISO } from '@/lib/metrics'
@@ -80,36 +88,60 @@ export function TeamPage() {
 
       {error && <p className="text-status-fail text-xs">{error}</p>}
 
-      {users.error ? (
-        <ErrorState message={users.error} onRetry={users.reload} />
-      ) : users.loading ? (
-        <Skeleton className="h-24" />
-      ) : (users.data?.users.length ?? 0) === 0 ? (
-        <EmptyState body={t('team.empty')} />
-      ) : (
-        <ul className="flex flex-wrap gap-3">
-          {users.data?.users.map((account) => (
-            <AccountChip
-              key={account.id}
-              account={account}
-              active={focus === account.id}
-              canDelete={isDirector && account.id !== user?.id}
-              onSelect={() => setSelected(account.id)}
-              onDelete={() => remove(account.id)}
-            />
-          ))}
-        </ul>
-      )}
+      <UsersBlock
+        users={users}
+        focus={focus}
+        isDirector={isDirector}
+        currentUserId={user?.id}
+        onSelect={setSelected}
+        onDelete={remove}
+      />
 
-      {hist.error ? (
-        <ErrorState message={hist.error} onRetry={hist.reload} />
-      ) : hist.loading && !hist.data ? (
-        <Skeleton className="h-64" />
-      ) : hist.data ? (
-        <Activity data={hist.data} />
-      ) : null}
+      <HistBlock hist={hist} />
     </motion.div>
   )
+}
+
+function UsersBlock({
+  users,
+  focus,
+  isDirector,
+  currentUserId,
+  onSelect,
+  onDelete,
+}: {
+  readonly users: Async<{ users: Account[] }>
+  readonly focus: number | null
+  readonly isDirector: boolean
+  readonly currentUserId: number | undefined
+  readonly onSelect: (id: number) => void
+  readonly onDelete: (id: number) => void
+}) {
+  const { t } = useI18n()
+  if (users.error) return <ErrorState message={users.error} onRetry={users.reload} />
+  if (users.loading) return <Skeleton className="h-24" />
+  if ((users.data?.users.length ?? 0) === 0) return <EmptyState body={t('team.empty')} />
+  return (
+    <ul className="flex flex-wrap gap-3">
+      {users.data?.users.map((account) => (
+        <AccountChip
+          key={account.id}
+          account={account}
+          active={focus === account.id}
+          canDelete={isDirector && account.id !== currentUserId}
+          onSelect={() => onSelect(account.id)}
+          onDelete={() => onDelete(account.id)}
+        />
+      ))}
+    </ul>
+  )
+}
+
+function HistBlock({ hist }: { readonly hist: Async<History> }) {
+  if (hist.error) return <ErrorState message={hist.error} onRetry={hist.reload} />
+  if (hist.loading && !hist.data) return <Skeleton className="h-64" />
+  if (hist.data) return <Activity data={hist.data} />
+  return null
 }
 
 function AccountChip({
@@ -119,11 +151,11 @@ function AccountChip({
   onSelect,
   onDelete,
 }: {
-  account: Account
-  active: boolean
-  canDelete: boolean
-  onSelect: () => void
-  onDelete: () => void
+  readonly account: Account
+  readonly active: boolean
+  readonly canDelete: boolean
+  readonly onSelect: () => void
+  readonly onDelete: () => void
 }) {
   const { t, locale } = useI18n()
   return (
@@ -162,7 +194,7 @@ function AccountChip({
   )
 }
 
-function Activity({ data }: { data: History }) {
+function Activity({ data }: { readonly data: History }) {
   const { t, locale } = useI18n()
 
   // 14 days, zero-filled here rather than in SQL: a day with no activity has to
@@ -286,7 +318,7 @@ function Activity({ data }: { data: History }) {
   )
 }
 
-function NewAccountForm({ onDone }: { onDone: () => void }) {
+function NewAccountForm({ onDone }: { readonly onDone: () => void }) {
   const { t } = useI18n()
   const [values, setValues] = useState({ email: '', name: '', password: '' })
   const [busy, setBusy] = useState(false)
@@ -309,6 +341,12 @@ function NewAccountForm({ onDone }: { onDone: () => void }) {
   const set = (k: keyof typeof values) => (e: { target: { value: string } }) =>
     setValues((v) => ({ ...v, [k]: e.target.value }))
 
+  const FIELD_TYPE: Record<'name' | 'email' | 'password', string> = {
+    name: 'text',
+    email: 'email',
+    password: 'password',
+  }
+
   return (
     <form
       onSubmit={submit}
@@ -320,7 +358,7 @@ function NewAccountForm({ onDone }: { onDone: () => void }) {
             {t(`team.${field}`)}
           </span>
           <input
-            type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'}
+            type={FIELD_TYPE[field]}
             value={values[field]}
             onChange={set(field)}
             required

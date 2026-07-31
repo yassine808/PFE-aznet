@@ -18,7 +18,8 @@ function slug(title: string) {
       .normalize('NFD')
       .replace(/[̀-ͯ]/g, '')
       .replace(/[^a-zA-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
+      .replace(/^-/, '')
+      .replace(/-$/, '')
       .toLowerCase()
       .slice(0, 60) || 'rapport'
   )

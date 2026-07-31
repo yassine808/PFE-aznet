@@ -13,10 +13,10 @@ export function ActivityGraphSection({
   date,
   onSelectDay,
 }: {
-  rows: ReportRow[]
+  readonly rows: ReportRow[]
   /** ISO day to outline; also picks which year the heatmap opens on. */
-  date: string
-  onSelectDay: (iso: string) => void
+  readonly date: string
+  readonly onSelectDay: (iso: string) => void
 }) {
   const { t } = useI18n()
 
@@ -37,7 +37,8 @@ export function ActivityGraphSection({
           <ContributionGraph rows={rows} year={year} onSelectDay={onSelectDay} selectedDay={date} />
         </div>
 
-        <div className="flex shrink-0 flex-col gap-1" role="group" aria-label={t('weekly.year')}>
+        <fieldset className="m-0 flex shrink-0 flex-col gap-1 border-0 p-0">
+          <legend className="sr-only">{t('weekly.year')}</legend>
           {years.map((y) => (
             <button
               key={y}
@@ -53,7 +54,7 @@ export function ActivityGraphSection({
               {y}
             </button>
           ))}
-        </div>
+        </fieldset>
       </div>
     </section>
   )

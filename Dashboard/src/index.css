@@ -117,8 +117,16 @@
 }
 
 @layer base {
+  /*
+    Scrollbar hidden, scrolling intact. Wheel, trackpad, keyboard, and touch all
+    still work; only the visual bar is suppressed, so nothing becomes
+    unreachable. Firefox and IE use the standard properties, WebKit needs the
+    pseudo-element.
+  */
   html {
     color-scheme: light;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
   html.dark {
@@ -132,17 +140,6 @@
   body {
     @apply bg-canvas text-ink font-sans antialiased;
     position: relative;
-  }
-
-  /*
-    Scrollbar hidden, scrolling intact. Wheel, trackpad, keyboard, and touch all
-    still work; only the visual bar is suppressed, so nothing becomes
-    unreachable. Firefox and IE use the standard properties, WebKit needs the
-    pseudo-element.
-  */
-  html {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
   }
 
   html::-webkit-scrollbar,

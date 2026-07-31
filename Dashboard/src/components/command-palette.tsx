@@ -44,10 +44,10 @@ export function CommandPalette({
   onNavigate,
   route,
 }: {
-  open: boolean
-  onClose: () => void
-  onNavigate: (r: Route) => void
-  route: Route
+  readonly open: boolean
+  readonly onClose: () => void
+  readonly onNavigate: (r: Route) => void
+  readonly route: Route
 }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')

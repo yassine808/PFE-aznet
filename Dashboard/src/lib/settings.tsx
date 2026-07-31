@@ -41,7 +41,7 @@ function initial(): Settings {
   }
 }
 
-export function SettingsProvider({ children }: { children: ReactNode }) {
+export function SettingsProvider({ children }: { readonly children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(initial)
 
   useEffect(() => {

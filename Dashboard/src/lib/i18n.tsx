@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import ar from '@/locales/ar.json'
 import en from '@/locales/en.json'
 import fr from '@/locales/fr.json'
@@ -7,6 +15,13 @@ export const LOCALES = ['fr', 'en', 'ar'] as const
 export type Locale = (typeof LOCALES)[number]
 
 export const LOCALE_LABEL: Record<Locale, string> = { fr: 'FR', en: 'EN', ar: 'ع' }
+
+const INTL_LOCALE: Record<Locale, string> = { fr: 'fr-FR', en: 'en-GB', ar: 'ar-MA' }
+
+/** Maps our three-locale app setting onto the BCP-47 tag Intl.* formatters expect. */
+export function intlLocaleOf(locale: Locale): string {
+  return INTL_LOCALE[locale]
+}
 
 // fr is the reference: every key exists here, and it is what a missing translation falls back to.
 const DICTIONARIES: Record<Locale, Record<string, string>> = { fr, en, ar }
@@ -25,17 +40,15 @@ function initialLocale(): Locale {
   return LOCALES.includes(stored as Locale) ? (stored as Locale) : 'fr'
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(initialLocale)
-  const dir = locale === 'ar' ? 'rtl' : 'ltr'
+export function I18nProvider({ children }: { readonly children: ReactNode }) {
+  const [locale, setLocale] = useState<Locale>(initialLocale)
+  const dir: 'ltr' | 'rtl' = locale === 'ar' ? 'rtl' : 'ltr'
 
   useEffect(() => {
     document.documentElement.lang = locale
     document.documentElement.dir = dir
     localStorage.setItem(STORAGE_KEY, locale)
   }, [locale, dir])
-
-  const setLocale = useCallback((l: Locale) => setLocaleState(l), [])
 
   // A missing key surfaces as the key itself. Silent fallback to a blank string hides gaps.
   // `{name}` placeholders are filled from `vars`; an unmatched one is left visible
@@ -51,9 +64,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     [locale],
   )
 
-  return (
-    <I18nContext.Provider value={{ locale, setLocale, dir, t }}>{children}</I18nContext.Provider>
-  )
+  const value = useMemo(() => ({ locale, setLocale, dir, t }), [locale, setLocale, dir, t])
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }
 
 export function useI18n() {

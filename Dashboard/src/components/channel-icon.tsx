@@ -13,7 +13,15 @@ import { DatabaseIcon, PlugsConnectedIcon, TableIcon, WaveformIcon } from '@phos
  * is legible at 13px in a way a literal Postgres elephant is not.
  */
 
-function BrandSvg({ size, className, d }: { size: number; className: string; d: string }) {
+function BrandSvg({
+  size,
+  className,
+  d,
+}: {
+  readonly size: number
+  readonly className: string
+  readonly d: string
+}) {
   return (
     <svg
       width={size}
@@ -35,7 +43,7 @@ const TELEGRAM =
   'M21.94 4.63a1.2 1.2 0 0 0-1.24-.2L2.9 11.6c-.5.2-.83.68-.82 1.22.01.53.36 1 .87 1.17l4.13 1.4 1.6 5.02c.06.2.18.37.34.5.02.02.05.03.07.05.16.11.35.17.55.17h.03c.28 0 .54-.12.73-.32l2.46-2.62 4.2 3.27c.21.17.47.25.73.25.14 0 .27-.02.4-.07.38-.14.66-.46.75-.85l3.4-15.06c.09-.42-.05-.85-.4-1.1ZM9.3 14.35l-.02.02-.63 3.32-1.02-3.2 8.9-4.87-7.23 4.73Zm1.29 4.02.35-1.86.86.67-1.21 1.19Zm7.55 1.1-6.2-4.83 7.2-7.02-1 11.85Z'
 
 /** n8n's node-graph mark: two endpoints feeding a hub, then one output. */
-function N8nMark({ size, className }: { size: number; className: string }) {
+function N8nMark({ size, className }: { readonly size: number; readonly className: string }) {
   return (
     <svg
       width={size}
@@ -64,9 +72,9 @@ export function ChannelIcon({
   size = 14,
   className = '',
 }: {
-  channel: string
-  size?: number
-  className?: string
+  readonly channel: string
+  readonly size?: number
+  readonly className?: string
 }) {
   switch (channel) {
     case 'whatsapp':
@@ -84,9 +92,9 @@ export function ServiceIcon({
   size = 14,
   className = '',
 }: {
-  service: string
-  size?: number
-  className?: string
+  readonly service: string
+  readonly size?: number
+  readonly className?: string
 }) {
   const common = { size, className: `shrink-0 ${className}` }
   switch (service) {

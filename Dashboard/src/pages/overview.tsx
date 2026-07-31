@@ -3,7 +3,7 @@ import { motion } from 'motion/react'
 import { api, useApi } from '@/lib/api'
 import { computeMetrics, formatUptime, isFlagged, minutesOf } from '@/lib/metrics'
 import { useOps } from '@/lib/ops-context'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { Masthead, type SystemState } from '@/components/masthead'
 import { DayRibbon, type Tick } from '@/components/day-ribbon'
@@ -21,9 +21,9 @@ function Band({
   aside,
   children,
 }: {
-  title: string
-  aside?: string
-  children: React.ReactNode
+  readonly title: string
+  readonly aside?: string
+  readonly children: React.ReactNode
 }) {
   return (
     <section className="flex min-w-0 flex-col gap-3">
@@ -38,7 +38,15 @@ function Band({
   )
 }
 
-function Quantity({ value, label, unit }: { value: string; label: string; unit?: string }) {
+function Quantity({
+  value,
+  label,
+  unit,
+}: {
+  readonly value: string
+  readonly label: string
+  readonly unit?: string
+}) {
   return (
     <div>
       <p className="tabular text-ink text-xl leading-none font-medium">
@@ -50,7 +58,7 @@ function Quantity({ value, label, unit }: { value: string; label: string; unit?:
   )
 }
 
-export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }) {
+export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) => void }) {
   const { t, dir, locale } = useI18n()
   const { services, health, healthError, stats } = useOps()
   const reports = useApi('reports', api.reports)
@@ -60,7 +68,7 @@ export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }
     [reports.data],
   )
   const fmt = useMemo(
-    () => new Intl.NumberFormat(locale === 'ar' ? 'ar-MA' : locale === 'en' ? 'en-GB' : 'fr-FR'),
+    () => new Intl.NumberFormat(intlLocaleOf(locale)),
     [locale],
   )
 
@@ -101,7 +109,12 @@ export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }
 
   const apiUp = !healthError && health?.status === 'ok'
   const anyDown = services.some((s) => s.state === 'fail')
-  const state: SystemState = !apiUp ? 'down' : anyDown || m.flagged > 0 ? 'degraded' : 'nominal'
+  let state: SystemState = 'nominal'
+  if (!apiUp) state = 'down'
+  else if (anyDown || m.flagged > 0) state = 'degraded'
+
+  const staleSuffix = m.dayIsStale ? ` · ${t('ribbon.stale')}` : ''
+  const dayRibbonAside = m.dayISO ? `${m.dayISO}${staleSuffix}` : undefined
 
   return (
     <motion.div
@@ -133,12 +146,7 @@ export function OverviewPage({ onOpenDay }: { onOpenDay: (iso: string) => void }
         variants={rise}
         className="grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
       >
-        <Band
-          title={t('ribbon.title')}
-          aside={
-            m.dayISO ? `${m.dayISO}${m.dayIsStale ? ` · ${t('ribbon.stale')}` : ''}` : undefined
-          }
-        >
+        <Band title={t('ribbon.title')} aside={dayRibbonAside}>
           <DayRibbon ticks={ticks} dir={dir} />
         </Band>
 

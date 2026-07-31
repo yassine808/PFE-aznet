@@ -2,7 +2,7 @@ import { api, useApi } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { LiveDot } from '@/components/live-dot'
 import { ServiceIcon } from '@/components/channel-icon'
-import { availability, timeline } from '@/lib/uptime'
+import { availability, timeline, type TimelineSlot } from '@/lib/uptime'
 import type { ServiceRow, ServiceState } from '@/lib/services'
 
 const SLOT_CLASS: Record<ServiceState, string> = {
@@ -18,7 +18,13 @@ const SLOT_CLASS: Record<ServiceState, string> = {
  * Columns carry a 1px gap so adjacent same-state minutes stay countable rather
  * than merging into one bar. Unrecorded minutes render as an empty track.
  */
-function UptimeStrip({ slots, pct }: { slots: (ServiceState | null)[]; pct: number | null }) {
+function UptimeStrip({
+  slots,
+  pct,
+}: {
+  readonly slots: TimelineSlot[]
+  readonly pct: number | null
+}) {
   const { t } = useI18n()
   return (
     <div className="flex items-center gap-3">
@@ -27,9 +33,9 @@ function UptimeStrip({ slots, pct }: { slots: (ServiceState | null)[]; pct: numb
         role="img"
         aria-label={t('uptime.lastHour')}
       >
-        {slots.map((s, i) => (
+        {slots.map(({ ts, state: s }) => (
           <span
-            key={i}
+            key={ts}
             className={`flex-1 rounded-[1px] ${s ? SLOT_CLASS[s] : 'bg-line/60'}`}
             title={s ? t(`svc.state.${s}`) : t('uptime.noRecord')}
           />
@@ -42,7 +48,7 @@ function UptimeStrip({ slots, pct }: { slots: (ServiceState | null)[]; pct: numb
   )
 }
 
-export function ServicesPanel({ rows }: { rows: ServiceRow[] }) {
+export function ServicesPanel({ rows }: { readonly rows: ServiceRow[] }) {
   const { t } = useI18n()
   // History comes from Postgres now, so it covers time the dashboard was closed.
   const samples = useApi('service-samples', api.samples, 60_000)
