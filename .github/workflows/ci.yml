@@ -52,7 +52,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: api/requirements.txt
-      - run: "pip install --only-binary=:all: -r requirements.txt -r requirements-dev.txt"
+      - run: "pip install --require-hashes --only-binary=:all: -r requirements.txt -r requirements-dev.txt"
       # Rule set pinned in api/ruff.toml — bugs only, not style. See the file.
       - name: Ruff
         run: ruff check app/ tests/

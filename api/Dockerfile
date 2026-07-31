@@ -1,4 +1,5 @@
-FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93
+# python:3.11-slim, pinned to digest (S8431 forbids tag+digest together)
+FROM python@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93
 
 WORKDIR /app
 
@@ -7,7 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 # Port 8000 and /app are both fine unprivileged: no <1024 bind, no root-owned
 # write path.
-RUN pip install --no-cache-dir --only-binary :all: -r requirements.txt \
+RUN pip install --no-cache-dir --require-hashes --only-binary :all: -r requirements.txt \
     && groupadd -r appuser && useradd -r -g appuser appuser
 COPY --chown=appuser:appuser app ./app
 USER appuser
