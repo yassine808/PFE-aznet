@@ -23,4 +23,5 @@
 - [ ] add AM/Pm in the frontend time.
 - [ ] in access control, no matter how i write the whatsapp phone number it always takes care of format and saves it as 2126.... or 2127.... (removes the + if there's any / replaces first 0 with 212)
 - [ ] add infos about each worker : %french/arabic, how many messages sent, etc
+- [ ] in overview panel, instead of Reports today, change it to (messages today) or something similar
 
