@@ -138,13 +138,13 @@ jobs:
         language: [javascript-typescript, python]
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4.37.3
         with:
           languages: ${{ matrix.language }}
           build-mode: none
       - name: Analyze
         continue-on-error: true
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4.37.3
 
   semgrep:
     name: Semgrep (OWASP Top 10)
@@ -161,7 +161,7 @@ jobs:
       - name: Semgrep scan
         continue-on-error: true
         run: semgrep scan --config=p/owasp-top-ten --sarif --output=semgrep.sarif
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4.37.3
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -183,7 +183,7 @@ jobs:
           scan-ref: .
           format: sarif
           output: trivy-fs.sarif
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4.37.3
         if: always()
         with:
           sarif_file: trivy-fs.sarif
@@ -205,7 +205,7 @@ jobs:
           scan-ref: .
           format: sarif
           output: trivy-config.sarif
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4.37.3
         if: always()
         with:
           sarif_file: trivy-config.sarif
@@ -226,7 +226,7 @@ jobs:
       - name: Bandit
         continue-on-error: true
         run: bandit -r api/ scripts/ benchmark/ -f sarif -o bandit.sarif
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4.37.3
         if: always()
         with:
           sarif_file: bandit.sarif
