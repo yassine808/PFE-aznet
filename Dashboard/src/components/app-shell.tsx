@@ -1,58 +1,22 @@
-import type { ReactNode } from 'react'
-import { motion } from 'motion/react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
-  CalendarBlankIcon,
-  ChartBarIcon,
-  ClockIcon,
+  ListIcon,
+  MagnifyingGlassIcon,
   MoonIcon,
-  RowsIcon,
-  IdentificationBadgeIcon,
   SignOutIcon,
-  PulseIcon,
-  StackIcon,
-  SunHorizonIcon,
   SunIcon,
-  TrayIcon,
-  UsersThreeIcon,
+  XIcon,
 } from '@phosphor-icons/react'
 import { LOCALES, LOCALE_LABEL, useI18n, type Locale } from '@/lib/i18n'
 import { useTheme } from '@/lib/theme'
 import { useAuth } from '@/lib/auth'
 import { ServerStatus } from '@/components/server-status'
 import { SettingsPanel } from '@/components/settings-panel'
+import { CommandPalette, useCommandPalette } from '@/components/command-palette'
+import { NAV, navItem } from '@/lib/nav'
 import { cn } from '@/lib/utils'
 import type { Route } from '@/lib/router'
-
-const NAV: {
-  section: string
-  items: { route: Route; labelKey: string; Icon: typeof ChartBarIcon }[]
-}[] = [
-  {
-    section: 'nav.section.read',
-    items: [
-      { route: 'overview', labelKey: 'nav.overview', Icon: ChartBarIcon },
-      { route: 'inbox', labelKey: 'nav.inbox', Icon: TrayIcon },
-      { route: 'reports', labelKey: 'nav.reports', Icon: RowsIcon },
-    ],
-  },
-  {
-    section: 'nav.section.reports',
-    items: [
-      { route: 'daily', labelKey: 'nav.daily', Icon: SunHorizonIcon },
-      { route: 'weekly', labelKey: 'nav.weekly', Icon: CalendarBlankIcon },
-    ],
-  },
-  {
-    section: 'nav.section.ops',
-    items: [
-      { route: 'automation', labelKey: 'nav.automation', Icon: ClockIcon },
-      { route: 'access', labelKey: 'nav.access', Icon: UsersThreeIcon },
-      { route: 'logs', labelKey: 'nav.logs', Icon: PulseIcon },
-      { route: 'queue', labelKey: 'nav.queue', Icon: StackIcon },
-      { route: 'team', labelKey: 'nav.team', Icon: IdentificationBadgeIcon },
-    ],
-  },
-]
 
 export function AppShell({
   route,
@@ -65,11 +29,96 @@ export function AppShell({
 }) {
   const { t, locale, setLocale } = useI18n()
   const { theme, toggle } = useTheme()
+  const [cmdOpen, setCmdOpen] = useCommandPalette()
+  const [drawer, setDrawer] = useState(false)
+
+  // A route change closes the drawer: on a phone the destination has to be
+  // visible immediately, not behind the panel that was just tapped.
+  useEffect(() => setDrawer(false), [route])
+
+  // Escape closes the drawer as well, so one key backs out of any overlay.
+  useEffect(() => {
+    if (!drawer) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [drawer])
+
+  const current = navItem(route)
+
+  const go = (r: Route) => {
+    onNavigate(r)
+    setDrawer(false)
+  }
 
   return (
     <div className="min-h-[100dvh] md:grid md:grid-cols-[15rem_1fr]">
-      {/* Logical borders, so the rail sits on the correct edge in Arabic without a second layout. */}
-      <nav className="border-line bg-surface/75 edge flex flex-col gap-8 border-b px-5 py-6 backdrop-blur-xl md:sticky md:top-0 md:h-[100dvh] md:border-b-0 md:border-e">
+      {/* First tab stop on the page: ten nav buttons is exactly the case skip links exist for. */}
+      <a
+        href="#main"
+        className="bg-surface text-ink border-line sr-only rounded-md border px-4 py-2 text-sm focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[60]"
+      >
+        {t('nav.skipToContent')}
+      </a>
+
+      {/* Mobile bar. Under md the rail is a drawer, so the page starts at the content
+          instead of ten links the reader has to scroll past every single time. */}
+      <div className="border-line bg-surface/85 edge sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-3 backdrop-blur-xl md:hidden">
+        <button
+          type="button"
+          onClick={() => setDrawer(true)}
+          aria-label={t('nav.open')}
+          aria-expanded={drawer}
+          aria-controls="nav-rail"
+          className="border-line text-ink-muted hover:text-ink -ms-1 flex size-11 cursor-pointer items-center justify-center rounded-md border transition-colors active:translate-y-px"
+        >
+          <ListIcon size={18} />
+        </button>
+
+        <p className="text-ink min-w-0 flex-1 truncate text-sm font-medium">
+          {current ? t(current.labelKey) : t('app.name')}
+        </p>
+
+        <button
+          type="button"
+          onClick={() => setCmdOpen(true)}
+          aria-label={t('cmd.open')}
+          className="border-line text-ink-muted hover:text-ink flex size-11 cursor-pointer items-center justify-center rounded-md border transition-colors active:translate-y-px"
+        >
+          <MagnifyingGlassIcon size={18} />
+        </button>
+      </div>
+
+      {/* Backdrop for the mobile drawer only; on md+ the rail is permanent. */}
+      <AnimatePresence>
+        {drawer && (
+          <motion.div
+            className="fixed inset-0 z-30 bg-slate-950/40 backdrop-blur-sm md:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setDrawer(false)}
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Logical borders and start/end offsets, so the rail sits on the correct edge
+          in Arabic without a second layout. */}
+      <nav
+        id="nav-rail"
+        aria-label={t('nav.label')}
+        className={cn(
+          'border-line bg-surface edge z-40 w-60 flex-col gap-8 px-5 py-6',
+          // Mobile: an overlay drawer, toggled by presence rather than by a transform.
+          // A translate needs ltr:/rtl: variants, and `[dir=ltr] &` outranks any
+          // `md:` override on specificity — which is what hid the rail everywhere.
+          'fixed top-0 bottom-0 start-0',
+          drawer ? 'flex' : 'hidden',
+          'md:bg-surface/75 md:sticky md:top-0 md:flex md:h-[100dvh] md:w-auto md:border-e md:backdrop-blur-xl',
+        )}
+      >
         <div className="flex items-center gap-3">
           <motion.img
             src="/az-bot.png"
@@ -80,13 +129,35 @@ export function AppShell({
             whileHover={{ scale: 1.06, rotate: -3 }}
             transition={{ type: 'spring', stiffness: 100, damping: 20 }}
           />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-ink text-sm font-semibold tracking-tight">{t('app.name')}</p>
             <p className="text-ink-faint truncate text-xs">{t('app.tagline')}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setDrawer(false)}
+            aria-label={t('nav.close')}
+            className="text-ink-muted hover:text-ink -me-1 flex size-9 cursor-pointer items-center justify-center rounded-md transition-colors md:hidden"
+          >
+            <XIcon size={18} />
+          </button>
         </div>
 
-        <div className="flex flex-1 flex-col gap-6">
+        {/* The palette is the fast path once the rail is memorised; the shortcut is
+            printed on it so it can be discovered without documentation. */}
+        <button
+          type="button"
+          onClick={() => setCmdOpen(true)}
+          className="border-line text-ink-faint hover:text-ink hidden cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 text-sm transition-colors md:flex"
+        >
+          <MagnifyingGlassIcon size={15} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-start">{t('cmd.open')}</span>
+          <kbd className="border-line rounded border px-1 py-px text-[0.625rem] tracking-wide">
+            ⌘K
+          </kbd>
+        </button>
+
+        <div className="flex flex-1 flex-col gap-6 overflow-y-auto">
           {NAV.map(({ section, items }) => (
             <div key={section} className="flex flex-col gap-1">
               <p className="text-ink-faint px-2 pb-1 text-[0.6875rem] font-medium tracking-wide uppercase">
@@ -98,10 +169,10 @@ export function AppShell({
                   <button
                     key={r}
                     type="button"
-                    onClick={() => onNavigate(r)}
+                    onClick={() => go(r)}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
-                      'relative flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors',
+                      'relative flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 text-sm transition-colors md:min-h-0 md:py-2',
                       'hover:text-ink active:translate-y-px',
                       active ? 'text-ink font-medium' : 'text-ink-muted',
                     )}
@@ -116,7 +187,7 @@ export function AppShell({
                     <Icon
                       size={17}
                       weight={active ? 'fill' : 'regular'}
-                      className={active ? 'text-accent' : ''}
+                      className={active ? 'text-accent shrink-0' : 'shrink-0'}
                     />
                     {t(labelKey)}
                   </button>
@@ -142,7 +213,7 @@ export function AppShell({
                   onClick={() => setLocale(l)}
                   aria-pressed={l === locale}
                   className={cn(
-                    'rounded px-2 py-1 text-xs transition-colors',
+                    'cursor-pointer rounded px-2 py-1 text-xs transition-colors',
                     l === locale
                       ? 'bg-slate-100 text-ink dark:bg-slate-850'
                       : 'text-ink-faint hover:text-ink',
@@ -160,7 +231,7 @@ export function AppShell({
                 onClick={toggle}
                 title={theme === 'dark' ? t('theme.toLight') : t('theme.toDark')}
                 aria-label={theme === 'dark' ? t('theme.toLight') : t('theme.toDark')}
-                className="border-line text-ink-muted hover:text-ink rounded-md border p-1.5 transition-colors active:translate-y-px"
+                className="border-line text-ink-muted hover:text-ink cursor-pointer rounded-md border p-1.5 transition-colors active:translate-y-px"
               >
                 {theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}
               </button>
@@ -170,9 +241,16 @@ export function AppShell({
         </div>
       </nav>
 
-      <main className="min-w-0 px-4 py-8 md:px-10 md:py-12">
+      <main id="main" tabIndex={-1} className="min-w-0 px-4 py-8 md:px-10 md:py-12">
         <div className="mx-auto max-w-[1400px]">{children}</div>
       </main>
+
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        onNavigate={onNavigate}
+        route={route}
+      />
     </div>
   )
 }
@@ -189,7 +267,7 @@ function SignOut() {
       onClick={() => void signOut()}
       title={`${user.name} — ${t('auth.signOut')}`}
       aria-label={t('auth.signOut')}
-      className="border-line text-ink-muted hover:text-ink flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors active:translate-y-px"
+      className="border-line text-ink-muted hover:text-ink flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors active:translate-y-px"
     >
       <SignOutIcon size={14} />
       <span className="hidden sm:inline">{user.name}</span>
