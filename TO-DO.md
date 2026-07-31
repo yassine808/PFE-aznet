@@ -79,10 +79,11 @@ Full config walkthrough: `docs/setup-guide.md`.
 - [x] emoji instead of "⏳ Traitement en cours..." (only works on whatsapp)
 - [x] verify Access control
 - [ ] never hardcode anything sensitive (passwords, emails , especially in the n8n workflow). `n8n/aznet-complete.json` is clean now — Sheet document ID and `HR_EMAIL` both read `$env` (`cb7672d`). Still open: `Dashboard/.env` carries a second copy of `N8N_API_KEY` — the dev proxy reads it there, but the API now has its own; drop the duplicate.
-- [ ] use UX-UI skill
+- [x] use UX-UI skill
 - [x] Better CI checks in github — `.github/workflows/ci.yml`: real gates (no more `|| true`), plus secret scan (`scripts/check_secrets.py` + gitleaks over full history), n8n expression lint (`scripts/check_workflow.py`), locale parity (`scripts/check_locales.py`), compose validation and a real Dashboard build. **The checks still cannot go green**: every job reports "The job was not started because recent account payments have failed or your spending limit needs to be increased" — an Actions billing block on the account. Fix billing, or make the repo public (unlimited free minutes) after the two items below.
 - [x] **Revoke the Telegram bot token** (BotFather → `/mybots` → API Token → Revoke), then update `.env` + the n8n Telegram credential. It was committed in `how-to-setup.md` for ~38 commits. History was rewritten 2026-07-30 and force-pushed, but old commits stay fetchable by SHA on GitHub until purged — revocation is the only step that actually neutralizes it.
 - [x] add the deployment keys to the root `.env`: `N8N_API_KEY` (move the value out of `Dashboard/.env`), `N8N_URL=http://n8n:5678`, a real `POSTGRES_PASSWORD` (default is still pfe/pfe and the port is now closed), `COOKIE_SECURE=true`, `WEB_PORT=8080`
+- [ ] add AM/Pm in the frontend time.
 
 ## Notes
 - "Add some solutions or critical things to be aware of" — captured in vault/roadmap.md cut-line + contradictions sections
