@@ -175,7 +175,7 @@
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '⏳' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '👀' }] }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-000000000009",
@@ -1495,7 +1495,7 @@
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '✅' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '👍' }] }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-900880000000",
@@ -1547,7 +1547,7 @@
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '❌' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '😢' }] }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-900880000002",
