@@ -168,7 +168,7 @@ def run(name: str) -> dict:
     try:
         result: dict = job()
         status = {"job": name, "ok": True, "result": result}
-    except Exception as exc:  # noqa: BLE001 - any failure is data, not a crash
+    except Exception as exc:  # any failure is data, not a crash  # noqa: BLE001
         status = {"job": name, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
     status["at"] = datetime.now().isoformat(timespec="seconds")
     status["seconds"] = round(time.time() - started, 2)

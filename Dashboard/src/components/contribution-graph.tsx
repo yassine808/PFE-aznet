@@ -149,6 +149,30 @@ export function ContributionGraph({
     return ''
   }
 
+  type Day = { date: Date; iso: string; count: number; inScope: boolean }
+  const renderDay = (d: Day) => {
+    if (!d.inScope) return <span key={d.iso} className={cellShape} />
+    if (!onSelectDay) {
+      return (
+        <span
+          key={d.iso}
+          className={`${cellShape} rounded-[2px] ${STEP[level(d.count)]}${mark(d.iso)}`}
+          title={`${fmtDate.format(d.date)} · ${d.count}`}
+        />
+      )
+    }
+    return (
+      <button
+        key={d.iso}
+        type="button"
+        onClick={() => onSelectDay(d.iso)}
+        className={`${cellShape} rounded-[2px] transition-transform hover:scale-125 ${STEP[level(d.count)]}${mark(d.iso)}`}
+        title={`${fmtDate.format(d.date)} · ${d.count}`}
+        aria-label={`${fmtDate.format(d.date)} · ${d.count}`}
+      />
+    )
+  }
+
   return (
     <div className="flex flex-col gap-2">
       {/*
@@ -189,49 +213,24 @@ export function ContributionGraph({
               {weeks.map((w) => {
                 const isoMonday = isoOf(w.monday)
                 const weekSelected = selectedWeek === isoMonday
+                // onSelectWeek and onSelectDay are never both passed by any caller today
+                // (see contribution-graph.tsx callers) — this component would need to drop
+                // the week-level button below if a caller ever combined the two, since a
+                // <button> cannot contain the per-day <button>s rendered further down.
+                const WeekWrapper = onSelectWeek ? 'button' : 'div'
                 return (
-                  <div
+                  <WeekWrapper
                     key={isoMonday}
-                    className={`grid min-w-0 gap-[2px] rounded-[3px] ${
+                    type={onSelectWeek ? 'button' : undefined}
+                    className={`grid min-w-0 gap-[2px] rounded-[3px] text-left ${
                       onSelectWeek ? 'cursor-pointer' : ''
                     } ${weekSelected ? 'ring-accent ring-2 ring-offset-1 ring-offset-transparent' : ''}`}
                     style={{ gridTemplateRows: rowTemplate }}
                     onClick={onSelectWeek ? () => onSelectWeek(isoMonday) : undefined}
-                    role={onSelectWeek ? 'button' : undefined}
-                    tabIndex={onSelectWeek ? 0 : undefined}
-                    onKeyDown={
-                      onSelectWeek
-                        ? (e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              onSelectWeek(isoMonday)
-                            }
-                          }
-                        : undefined
-                    }
                     aria-label={onSelectWeek ? `${t('weekly.week')} ${isoMonday}` : undefined}
                   >
-                    {w.days.map((d) =>
-                      !d.inScope ? (
-                        <span key={d.iso} className={cellShape} />
-                      ) : onSelectDay ? (
-                        <button
-                          key={d.iso}
-                          type="button"
-                          onClick={() => onSelectDay(d.iso)}
-                          className={`${cellShape} rounded-[2px] transition-transform hover:scale-125 ${STEP[level(d.count)]}${mark(d.iso)}`}
-                          title={`${fmtDate.format(d.date)} · ${d.count}`}
-                          aria-label={`${fmtDate.format(d.date)} · ${d.count}`}
-                        />
-                      ) : (
-                        <span
-                          key={d.iso}
-                          className={`${cellShape} rounded-[2px] ${STEP[level(d.count)]}${mark(d.iso)}`}
-                          title={`${fmtDate.format(d.date)} · ${d.count}`}
-                        />
-                      ),
-                    )}
-                  </div>
+                    {w.days.map(renderDay)}
+                  </WeekWrapper>
                 )
               })}
             </div>

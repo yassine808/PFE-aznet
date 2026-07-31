@@ -104,7 +104,7 @@ def run(providers: List[str], with_extraction: bool) -> List[dict]:
                     acc, detail = extraction_accuracy(expected, report.model_dump())
                     record["extraction_acc"] = round(acc, 4)
                     record["field_detail"] = json.dumps(detail, ensure_ascii=False)
-            except Exception as exc:  # noqa: BLE001 - record and continue, one bad call must not kill the run
+            except Exception as exc:  # record and continue, one bad call must not kill the run  # noqa: BLE001
                 record["error"] = f"{type(exc).__name__}: {exc}"
                 print(f"  !! {row['file']} × {name}: {record['error']}")
             results.append(record)

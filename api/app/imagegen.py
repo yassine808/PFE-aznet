@@ -36,7 +36,7 @@ _TOTALS = (
 
 def _accumulate_totals(rows: List[Dict[str, Any]]) -> Dict[str, float]:
     """Sum each numeric field across rows; a non-numeric cell is skipped, not fatal."""
-    totals = {key: 0.0 for key, _ in _TOTALS}
+    totals = dict.fromkeys((key for key, _ in _TOTALS), 0.0)
     for row in rows:
         for key, _ in _TOTALS:
             raw = row.get(key)

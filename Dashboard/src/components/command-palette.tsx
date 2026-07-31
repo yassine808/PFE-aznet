@@ -165,7 +165,12 @@ export function CommandPalette({
               </kbd>
             </div>
 
-            <div ref={listRef} id="cmd-list" role="listbox" className="max-h-80 overflow-y-auto p-2">
+            <div
+              ref={listRef}
+              id="cmd-list"
+              role="listbox" // NOSONAR(typescript:S6819): real ARIA combobox listbox — no native <select> fits icon+shortcut rows
+              className="max-h-80 overflow-y-auto p-2"
+            >
               {hits.length === 0 ? (
                 <p className="text-ink-faint px-3 py-6 text-center text-sm">{t('cmd.noResults')}</p>
               ) : (

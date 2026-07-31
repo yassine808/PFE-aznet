@@ -231,7 +231,7 @@ def _run_case(engine, model: str, case: dict, image: object, sleep_s: float, csv
         print(f"  {case['id']:<24} acc={acc:.0%} {latency:5.2f}s "
               f"{'invented=' + str(invented) if invented else ''} {'WRONG: ' + ','.join(wrong) if wrong else ''}",
               flush=True)
-    except Exception as exc:  # noqa: BLE001 - a dead model is a result, not a crash
+    except Exception as exc:  # a dead model is a result, not a crash  # noqa: BLE001
         row = {
             "model": model, "case": case["id"], "accuracy": "", "latency_s": "",
             "invented": "", "expected_nulls": "", "wrong_fields": "",

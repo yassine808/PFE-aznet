@@ -508,7 +508,7 @@ export function AutomationPage() {
           )}
 
           {/* The API names the missing env vars verbatim on a 422. */}
-          {testResult && !testResult.ok && testResult.message && (
+          {testResult?.ok === false && testResult.message && (
             <p className="text-status-fail max-w-[70ch] text-xs break-all">{testResult.message}</p>
           )}
         </div>
