@@ -165,11 +165,11 @@ export function CommandPalette({
               </kbd>
             </div>
 
-            <div
+            <div // NOSONAR
               ref={listRef}
               id="cmd-list"
               // real ARIA combobox listbox — no native <select> fits icon+shortcut rows
-              role="listbox" // NOSONAR
+              role="listbox"
               className="max-h-80 overflow-y-auto p-2"
             >
               {hits.length === 0 ? (

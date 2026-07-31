@@ -53,7 +53,6 @@ jobs:
           cache: pip
           cache-dependency-path: api/requirements.txt
       - run: "pip install --only-binary=:all: -r requirements.txt -r requirements-dev.txt"
-      - run: "pip install --only-binary=:all: ruff==0.16.1"
       # Rule set pinned in api/ruff.toml — bugs only, not style. See the file.
       - name: Ruff
         run: ruff check app/ tests/
