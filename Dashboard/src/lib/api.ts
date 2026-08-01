@@ -203,6 +203,8 @@ export async function patchReport(row: number, field: string, value: string): Pr
 export interface DailyReportContent {
   objet: string
   corps: string
+  /** Who asked for the report — an account name, or "automatique" for the scheduled mail. */
+  generated_by?: string
 }
 
 /**

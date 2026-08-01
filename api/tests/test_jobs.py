@@ -115,6 +115,17 @@ def test_jobs_endpoints(monkeypatch):
     assert client.post("/jobs/nope/run").status_code == 404
 
 
+def test_report_recipients_prefer_account_emails(monkeypatch):
+    """Account emails are the source of truth once accounts exist; the manual
+    list is only the fallback for installs without any."""
+    monkeypatch.setattr(jobs.logs, "account_emails", lambda: ["directeur@aznet.ma"])
+    monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": ["chef@aznet.ma"]})
+    assert jobs._report_recipients() == ["directeur@aznet.ma"]
+
+    monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
+    assert jobs._report_recipients() == ["chef@aznet.ma"]
+
+
 def test_weekly_report_covers_the_whole_week(monkeypatch):
     seen = {}
     rows = [
@@ -123,6 +134,8 @@ def test_weekly_report_covers_the_whole_week(monkeypatch):
         {"date": "2026-07-26", "resume": "dimanche d'avant"},  # previous week
     ]
     monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
+    # No account email rows (DB-free test) → falls back to the manual list.
+    monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": ["chef@aznet.ma"]})
     monkeypatch.setattr(
         jobs.daily_report, "generate_daily_report",

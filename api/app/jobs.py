@@ -108,6 +108,19 @@ def refresh_profiles() -> dict:
     }
 
 
+def _report_recipients() -> List[str]:
+    """Who the report goes to: every account's email (admin + site managers).
+
+    The `emails` app setting is the manual fallback, kept for installs where no
+    account row carries an email yet — once the org chart has accounts, the list
+    derives from the database and cannot drift from who can log in.
+    """
+    recipients = logs.account_emails()
+    if not recipients:
+        recipients = logs.get_settings().get("emails") or []
+    return recipients
+
+
 def send_daily_report(date: Optional[str] = None) -> dict:
     """Today's rows → French summary → the configured mailboxes."""
     day = date or datetime.now().strftime("%Y-%m-%d")
@@ -117,9 +130,11 @@ def send_daily_report(date: Optional[str] = None) -> dict:
         # an empty report teaches the manager to ignore the mail.
         return {"date": day, "rows": 0, "sent_to": [], "reason": "aucun rapport pour cette date"}
     content = daily_report.generate_daily_report(day, rows)
-    recipients = logs.get_settings().get("emails") or []
-    sent = mailer.send(recipients, content.objet, content.corps, html=True)
-    return {"date": day, "rows": len(rows), "sent_to": sent, "subject": content.objet}
+    sent = mailer.send(_report_recipients(), content.objet, content.corps, html=True)
+    return {
+        "date": day, "rows": len(rows), "sent_to": sent, "subject": content.objet,
+        "generated_by": "automatique",
+    }
 
 
 def send_weekly_report(end: Optional[str] = None) -> dict:
@@ -138,9 +153,11 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
     if not rows:
         return {"period": label, "rows": 0, "sent_to": [], "reason": "aucun rapport sur la période"}
     content = daily_report.generate_daily_report(label, rows)
-    recipients = logs.get_settings().get("emails") or []
-    sent = mailer.send(recipients, content.objet, content.corps, html=True)
-    return {"period": label, "rows": len(rows), "sent_to": sent, "subject": content.objet}
+    sent = mailer.send(_report_recipients(), content.objet, content.corps, html=True)
+    return {
+        "period": label, "rows": len(rows), "sent_to": sent, "subject": content.objet,
+        "generated_by": "automatique",
+    }
 
 
 JOBS: Dict[str, Callable[[], dict]] = {

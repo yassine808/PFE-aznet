@@ -187,6 +187,11 @@ export function WeeklyReportPage() {
           <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">
             {content.corps}
           </p>
+          <p className="text-ink-faint mt-3 text-xs">
+            {content.generated_by && content.generated_by !== 'automatique'
+              ? t('daily.generatedBy', { name: content.generated_by })
+              : t('daily.generatedAuto')}
+          </p>
         </section>
       )}
 

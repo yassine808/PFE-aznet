@@ -141,6 +141,8 @@
   "daily.copy": "نسخ",
   "daily.copied": "تم النسخ",
   "daily.noRows": "لا يوجد تقرير لهذا التاريخ.",
+  "daily.generatedBy": "أُنشئ بواسطة {name}",
+  "daily.generatedAuto": "أُنشئ تلقائيًا",
   "weekly.title": "التقرير الأسبوعي",
   "weekly.intro": "محسوب محليًا من الجدول: هذه مجاميع، وليست نصًا من النموذج.",
   "weekly.perDay": "حسب اليوم",

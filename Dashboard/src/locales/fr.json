@@ -141,6 +141,8 @@
   "daily.copy": "Copier",
   "daily.copied": "Copié",
   "daily.noRows": "Aucun rapport pour cette date.",
+  "daily.generatedBy": "Généré par {name}",
+  "daily.generatedAuto": "Généré automatiquement",
   "weekly.title": "Rapport hebdomadaire",
   "weekly.intro": "Calculé localement à partir du Sheet : ce sont des totaux, pas un texte rédigé par le modèle.",
   "weekly.perDay": "Par jour",

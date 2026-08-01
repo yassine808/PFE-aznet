@@ -485,15 +485,28 @@ class DailyReportRequest(BaseModel):
     rows: List[dict] = Field(..., description="Lignes du Sheet pour la date donnée")
 
 
+class DailyReportResponse(BaseModel):
+    """The generated report plus who asked for it — provenance rides alongside."""
+
+    objet: str
+    corps: str
+    generated_by: str
+
+
 @app.post("/daily-report", responses={422: {"description": "No rows for the given date"}, 502: {"description": "Daily report generation failed"}})
-def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(auth.require_user)) -> daily_report.DailyReportContent:
+def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(auth.require_user)) -> DailyReportResponse:
     auth.record(caller, "report_generated", target=payload.date)
     if not payload.rows:
         raise HTTPException(422, "No rows for the given date")
     try:
-        return daily_report.generate_daily_report(payload.date, payload.rows)
+        content = daily_report.generate_daily_report(payload.date, payload.rows)
     except daily_report.DailyReportError as exc:
         raise HTTPException(502, f"daily report failed: {exc}") from exc
+    # The scheduled mail is signed "automatique"; a manual run is signed by the
+    # account that asked — the dashboard shows it next to the panel.
+    return DailyReportResponse(
+        objet=content.objet, corps=content.corps, generated_by=caller["name"]
+    )
 
 
 class ImageCardRequest(BaseModel):
