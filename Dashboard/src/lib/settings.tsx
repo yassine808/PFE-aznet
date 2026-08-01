@@ -10,6 +10,7 @@ import {
 
 export const REFRESH_CHOICES = [15_000, 30_000, 60_000, 0] as const
 export type Density = 'comfortable' | 'compact'
+export type TimeFormat = '24h' | '12h'
 
 export interface Settings {
   /** Poll interval in ms. 0 means manual refresh only. */
@@ -17,9 +18,16 @@ export interface Settings {
   /** Extractions at or below this confidence are shown as weak. */
   confidence: number
   density: Density
+  /** Clock display: 24h is the local (Morocco) convention, 12h is a choice. */
+  timeFormat: TimeFormat
 }
 
-const DEFAULTS: Settings = { refreshMs: 60_000, confidence: 0.7, density: 'comfortable' }
+const DEFAULTS: Settings = {
+  refreshMs: 60_000,
+  confidence: 0.7,
+  density: 'comfortable',
+  timeFormat: '24h',
+}
 const STORAGE_KEY = 'aznet.settings'
 
 const SettingsContext = createContext<{

@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import { ArrowClockwiseIcon, XIcon } from '@phosphor-icons/react'
 import { api, dismissQueueItem, runJob, useApi } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
+import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
 
@@ -15,6 +16,7 @@ import { cn } from '@/lib/utils'
 export function QueuePage() {
   const list = useApi('sheet-queue', api.queue)
   const { t, locale } = useI18n()
+  const { settings } = useSettings()
   const [busy, setBusy] = useState<number | 'job' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -88,7 +90,7 @@ export function QueuePage() {
                     ? new Date(item.created_at).toLocaleString(locale, {
                         dateStyle: 'medium',
                         timeStyle: 'short',
-                        hour12: true,
+                        hour12: settings.timeFormat === '12h',
                       })
                     : '—'}
                 </span>
