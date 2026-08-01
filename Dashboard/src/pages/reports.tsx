@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { FlagIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
 import { api, useApi, type ReportRow } from '@/lib/api'
-import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
+import { isFlagged, num, toISODate, todayISO, ampm } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -22,12 +22,13 @@ function LedgerRow({
 }) {
   const flagged = isFlagged(r.flag_review)
   const confidence = num(r.confidence)
+  const { t } = useI18n()
 
   return (
     <tr className="border-line hover:bg-surface border-b transition-colors last:border-b-0">
       <td className={cn('tabular text-ink-faint pe-4 align-top text-xs whitespace-nowrap', pad)}>
         {r.date}
-        <span className="ms-2 opacity-70">{r.heure}</span>
+        <span className="ms-2 opacity-70">{ampm(r.heure, t('time.am'), t('time.pm'))}</span>
       </td>
       <td className={cn('text-ink pe-4 align-top text-sm whitespace-nowrap', pad)}>
         {r.technicien || '—'}

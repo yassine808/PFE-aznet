@@ -57,6 +57,17 @@ export function minutesOf(heure?: string): number | null {
   return h * 60 + min
 }
 
+/** "20:15" -> "8:15 PM". 12-hour with explicit marker, whatever the locale's
+ *  default is. Returns the raw string untouched when the cell is unusable. */
+export function ampm(v: string | undefined, am: string, pm: string): string {
+  const at = minutesOf(v)
+  if (at === null) return v ?? ''
+  const h = Math.floor(at / 60)
+  const m = at % 60
+  const h12 = h % 12 || 12
+  return `${h12}:${String(m).padStart(2, '0')} ${h < 12 ? am : pm}`
+}
+
 export interface Metrics {
   today: number
   week: number

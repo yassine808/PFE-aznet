@@ -137,6 +137,7 @@ export function Activity({ data }: { readonly data: History }) {
                     month: '2-digit',
                     hour: '2-digit',
                     minute: '2-digit',
+                    hour12: true,
                   })}
                 </span>
                 <span className="text-ink">{t(`team.action.${a.action}`)}</span>

@@ -8,7 +8,7 @@ import {
   TextAlignLeftIcon,
 } from '@phosphor-icons/react'
 import { api, patchReport, useApi, type ReportRow } from '@/lib/api'
-import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
+import { isFlagged, num, toISODate, todayISO, ampm } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -72,7 +72,7 @@ function MessageCard({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: 
         </span>
         <span className="text-ink text-sm font-medium">{r.technicien || '—'}</span>
         <span className="tabular text-ink-faint text-xs">
-          {r.date} {r.heure}
+          {r.date} {ampm(r.heure, t('time.am'), t('time.pm'))}
         </span>
         {flagged && (
           <span className="text-status-warn ms-auto flex items-center gap-1 text-xs">

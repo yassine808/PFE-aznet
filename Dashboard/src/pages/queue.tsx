@@ -88,6 +88,7 @@ export function QueuePage() {
                     ? new Date(item.created_at).toLocaleString(locale, {
                         dateStyle: 'medium',
                         timeStyle: 'short',
+                        hour12: true,
                       })
                     : '—'}
                 </span>
