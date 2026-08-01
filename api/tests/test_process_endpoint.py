@@ -170,7 +170,8 @@ def test_image_mode(monkeypatch):
     """Vision path returns the report directly — no transcription, and the
     rapport_complet column is marked so nobody reads it as a verbatim quote."""
     monkeypatch.setattr(
-        main.extraction, "extract_report_from_image", lambda blob, mime, profile=None: (REPORT, "gemini/test")
+        main.extraction, "extract_report_from_image",
+        lambda blob, mime, profile=None, caption=None: (REPORT, "gemini/test"),
     )
     r = client.post("/process", files={"image": ("note.jpg", b"\xff\xd8fake", "image/jpeg")})
     assert r.status_code == 200, r.text
@@ -181,13 +182,75 @@ def test_image_mode(monkeypatch):
 
 
 def test_image_extraction_failure_maps_to_502(monkeypatch):
-    def boom(blob, mime, profile=None):
+    def boom(blob, mime, profile=None, caption=None):
         raise ExtractionError("no vision model reachable")
 
     monkeypatch.setattr(main.extraction, "extract_report_from_image", boom)
     r = client.post("/process", files={"image": ("note.jpg", b"\xff\xd8fake", "image/jpeg")})
     assert r.status_code == 502
     assert "image extraction failed" in r.json()["detail"]
+
+
+def test_audio_caption_merged_before_extraction(monkeypatch):
+    """A Telegram voice note with a caption: the caption rides along into the
+    extraction input and the transcript column."""
+    seen = {}
+
+    def fake_extract(t, profile=None):
+        seen["text"] = t
+        return REPORT, "test/stub"
+
+    monkeypatch.setattr(main, "get_provider", lambda name: FakeProvider())
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", fake_extract)
+    r = client.post(
+        "/process",
+        data={"caption": "On a fini la salle 3"},
+        files={"audio": ("note.ogg", b"fake-bytes", "audio/ogg")},
+    )
+    assert r.status_code == 200
+    assert "On a fini la salle 3" in seen["text"]
+    assert seen["text"].startswith("نصبنا")
+    assert "On a fini la salle 3" in r.json()["rapport_complet"]
+
+
+def test_image_caption_passed_to_vision(monkeypatch):
+    """A photo with a caption: the caption is fed to the vision model too."""
+    seen = {}
+
+    def fake_vision(blob, mime, profile=None, caption=None):
+        seen["caption"] = caption
+        return REPORT, "gemini/test"
+
+    monkeypatch.setattr(main.extraction, "extract_report_from_image", fake_vision)
+    r = client.post(
+        "/process",
+        data={"caption": "plan du 2e étage"},
+        files={"image": ("note.jpg", b"\xff\xd8fake", "image/jpeg")},
+    )
+    assert r.status_code == 200
+    assert seen["caption"] == "plan du 2e étage"
+
+
+def test_caption_without_input_rejected():
+    """A caption is auxiliary — it never satisfies the exactly-one-input rule."""
+    r = client.post("/process", data={"caption": "rien d'autre"})
+    assert r.status_code == 422
+    assert "exactly one" in r.json()["detail"]
+
+
+def test_text_plus_caption_merged(monkeypatch):
+    seen = {}
+
+    def fake_extract(t, profile=None):
+        seen["text"] = t
+        return REPORT, "test/stub"
+
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", fake_extract)
+    r = client.post(
+        "/process", data={"text": "Installation de 150m de goulotte", "caption": "urgence"}
+    )
+    assert r.status_code == 200
+    assert seen["text"].endswith("urgence")
 
 
 def test_empty_image_rejected():

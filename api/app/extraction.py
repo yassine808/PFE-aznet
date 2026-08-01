@@ -71,12 +71,29 @@ def _profile_block(profile: Optional[str]) -> str:
     )
 
 
+def _caption_block(caption: Optional[str]) -> str:
+    """The caption that came with a photo, framed as part of the message.
+
+    Same logic as `_profile_block`: labelled as message content so the model
+    reads it, and explicitly tied to the photo so it cannot float free.
+    """
+    if not caption or not caption.strip():
+        return ""
+    return (
+        "\n\n## Légende envoyée avec la photo\n"
+        + caption.strip()
+        + "\n\nCette légende fait partie du message du technicien : elle décrit la photo. "
+        "Utilise-la comme une source de valeurs, au même titre que l'image."
+    )
+
+
 def _call_gemini(
     model: str,
     text: Optional[str] = None,
     image: Optional[bytes] = None,
     mime_type: str = DEFAULT_IMAGE_MIME_TYPE,
     profile: Optional[str] = None,
+    caption: Optional[str] = None,
 ) -> ExtractedReport:
     if not settings.gemini_api_key:
         raise ExtractionError("GEMINI_API_KEY not configured")
@@ -86,7 +103,7 @@ def _call_gemini(
     client = genai.Client(api_key=settings.gemini_api_key)
     if image is not None:
         contents = [types.Part.from_bytes(data=image, mime_type=mime_type),
-                    _IMAGE_INSTRUCTIONS + _profile_block(profile)]
+                    _IMAGE_INSTRUCTIONS + _caption_block(caption) + _profile_block(profile)]
     else:
         contents = _INSTRUCTIONS + _profile_block(profile) + "\n\n" + (text or "")
     try:
@@ -109,6 +126,7 @@ def _call_groq(
     image: Optional[bytes] = None,
     mime_type: str = DEFAULT_IMAGE_MIME_TYPE,
     profile: Optional[str] = None,
+    caption: Optional[str] = None,
 ) -> ExtractedReport:
     if image is not None:
         # Checked live against GET /models: the free Groq catalogue is text and
@@ -146,6 +164,7 @@ def _run_chain(
     image: Optional[bytes] = None,
     mime_type: str = DEFAULT_IMAGE_MIME_TYPE,
     profile: Optional[str] = None,
+    caption: Optional[str] = None,
 ) -> Tuple[ExtractedReport, str]:
     """Try each `provider:model` in order. Returns (report, winning model id)."""
     failures = []
@@ -155,7 +174,7 @@ def _run_chain(
             failures.append(f"{provider}: unknown provider")
             continue
         try:
-            return (engine(model, text=text, image=image, mime_type=mime_type, profile=profile),
+            return (engine(model, text=text, image=image, mime_type=mime_type, profile=profile, caption=caption),
                     f"{provider}/{model}")
         except ExtractionError as exc:
             failures.append(str(exc))
@@ -179,7 +198,16 @@ def extract_report_with_model(text: str, profile: Optional[str] = None) -> Tuple
 
 
 def extract_report_from_image(
-    image: bytes, mime_type: str = DEFAULT_IMAGE_MIME_TYPE, profile: Optional[str] = None
+    image: bytes,
+    mime_type: str = DEFAULT_IMAGE_MIME_TYPE,
+    profile: Optional[str] = None,
+    caption: Optional[str] = None,
 ) -> Tuple[ExtractedReport, str]:
-    """Vision path — a photographed note or a picture of the work itself."""
-    return _run_chain(settings.extraction_image_chain, image=image, mime_type=mime_type, profile=profile)
+    """Vision path — a photographed note or a picture of the work itself.
+
+    `caption` is the text sent alongside the photo (Telegram captions); it is
+    fed to the model as part of the message.
+    """
+    return _run_chain(
+        settings.extraction_image_chain, image=image, mime_type=mime_type, profile=profile, caption=caption
+    )

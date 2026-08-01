@@ -386,6 +386,10 @@
             {
               "name": "technicien",
               "value": "={{ $('Filtrer accès').item.json.technicien }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Filtrer accès').item.json.caption }}"
             }
           ]
         },
@@ -1359,6 +1363,10 @@
             {
               "name": "technicien",
               "value": "={{ $('Filtrer accès').item.json.technicien }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Filtrer accès').item.json.caption }}"
             }
           ]
         },

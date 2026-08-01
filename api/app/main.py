@@ -320,7 +320,9 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
     return transcription, rapport_complet, warnings
 
 
-async def _extract_from_image(image: UploadFile, sender_profile: Optional[str], ctx: dict) -> ProcessResponse:
+async def _extract_from_image(
+    image: UploadFile, sender_profile: Optional[str], caption: Optional[str], ctx: dict
+) -> ProcessResponse:
     """Image branch of /process. The vision model reads the photo and fills the
     schema in one call, so there is no intermediate transcription to store or
     to get wrong twice — this returns the full ProcessResponse directly.
@@ -332,7 +334,7 @@ async def _extract_from_image(image: UploadFile, sender_profile: Optional[str], 
     try:
         report, model_used = await run_in_threadpool(
             extraction.extract_report_from_image, blob,
-            image.content_type or "image/jpeg", sender_profile,
+            image.content_type or "image/jpeg", sender_profile, caption,
         )
     except extraction.ExtractionError as exc:
         await _log(
@@ -363,6 +365,7 @@ async def process(
     audio: Optional[UploadFile] = File(None, description="Voice note (ogg/opus from WhatsApp)"),
     image: Optional[UploadFile] = File(None, description="Photo: notebook page, whiteboard, delivery note, or the work itself"),
     text: Optional[str] = Form(None, description="Raw report text (web form mode)"),
+    caption: Optional[str] = Form(None, description="Text that came with the audio/image (Telegram captions) — merged into the input before extraction"),
     provider: Optional[str] = Form(None, description="STT engine override (benchmark use)"),
     correlation_id: Optional[str] = Form(None, description="Trace id minted by n8n at reception"),
     channel: Optional[str] = Form(None, description="telegram | whatsapp | form"),
@@ -385,14 +388,23 @@ async def process(
         await _log("api", "error", message=detail, **ctx)
         raise HTTPException(422, detail)
 
+    # A caption is auxiliary: it never satisfies the "exactly one input" rule,
+    # but once an input exists it rides along as part of the message. Telegram
+    # sends it when a technician records a voice note with a text caption.
+    caption = (caption or "").strip() or None
+
     if audio is not None:
         transcription, rapport_complet, warnings = await _transcribe_audio(audio, provider, ctx)
+        if caption:
+            rapport_complet = f"{rapport_complet}\n\n{caption}"
     elif image is not None:
-        return await _extract_from_image(image, sender_profile, ctx)
+        return await _extract_from_image(image, sender_profile, caption, ctx)
     else:
         transcription = None
         warnings = []
         rapport_complet = (text or "").strip()
+        if caption:
+            rapport_complet = f"{rapport_complet}\n\n{caption}".strip()
         if not rapport_complet:
             await _log("api", "error", message="Empty text", **ctx)
             raise HTTPException(422, "Empty text")
