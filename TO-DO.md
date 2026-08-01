@@ -27,5 +27,5 @@
 - [x] in overview panel, instead of Reports today, change it to (messages today) or something similar
 - [ ] in TEAM panel (accounts dashboard) show something like a flowchart with the admin on the very top, then site managers below it, then workers below it ( add a "+" to add more site manager if wanted to), then below each site manager show all the workers that belong to them with their name + phone number. merge this panel with access control.
 - [ ] Site name isn't auto-generated
-- [ ] the search (crtl+k) searches literally eveything. (even with typos etc, then show suggestion of what it can show instead)
+- [x] the search (crtl+k) searches literally eveything. (even with typos etc, then show suggestion of what it can show instead) — fuzzy subsequence matching, technicians indexed, "did you mean" fallback
 

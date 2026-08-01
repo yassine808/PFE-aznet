@@ -310,6 +310,7 @@
   "cmd.title": "Command palette",
   "cmd.placeholder": "Jump to a page...",
   "cmd.noResults": "No page matches.",
+  "cmd.didYouMean": "Did you mean:",
   "cmd.current": "current page",
   "nav.kw.overview": "home dashboard summary metrics",
   "nav.kw.inbox": "messages incoming voice photo processing",

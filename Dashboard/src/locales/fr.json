@@ -310,6 +310,7 @@
   "cmd.title": "Palette de commandes",
   "cmd.placeholder": "Aller à une page…",
   "cmd.noResults": "Aucune page ne correspond.",
+  "cmd.didYouMean": "Vous vouliez dire :",
   "cmd.current": "page actuelle",
   "nav.kw.overview": "accueil tableau de bord synthese metriques",
   "nav.kw.inbox": "messages recus vocaux photos traitement",

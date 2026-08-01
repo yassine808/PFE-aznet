@@ -310,6 +310,7 @@
   "cmd.title": "لوحة الأوامر",
   "cmd.placeholder": "الانتقال إلى صفحة...",
   "cmd.noResults": "لا توجد صفحة مطابقة.",
+  "cmd.didYouMean": "هل تقصد:",
   "cmd.current": "الصفحة الحالية",
   "nav.kw.overview": "الرئيسية لوحة ملخص مؤشرات",
   "nav.kw.inbox": "الرسائل الواردة صوت صورة معالجة",
