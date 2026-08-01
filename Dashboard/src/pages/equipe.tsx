@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { motion } from 'motion/react'
+import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
   ArrowsClockwiseIcon,
   PlusIcon,
   TrashIcon,
   UserMinusIcon,
+  XIcon,
 } from '@phosphor-icons/react'
 import {
   addPerson,
@@ -46,7 +47,7 @@ export function EquipePage() {
   const list = useApi('technicians', api.technicians)
 
   const [selected, setSelected] = useState<number | null>(null)
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState<'chef' | 'tech' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const isDirector = user?.role === 'directeur'
@@ -60,6 +61,14 @@ export function EquipePage() {
   const orphans = techs.filter((p) => !p.manager_id || !chefs.some((c) => c.id === p.manager_id))
 
   const focus = people.find((p) => p.id === selected) ?? null
+
+  // Escape closes the detail panel, matching the mobile nav drawer's affordance.
+  useEffect(() => {
+    if (!focus) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSelected(null)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [focus])
 
   const guard = (fn: () => Promise<unknown>) => async () => {
     setError(null)
@@ -84,22 +93,34 @@ export function EquipePage() {
       <div className="flex flex-wrap items-center gap-4">
         <p className="text-ink-faint max-w-[60ch] text-sm">{t('equipe.intro')}</p>
         {isDirector && (
-          <button
-            type="button"
-            onClick={() => setAdding((v) => !v)}
-            aria-expanded={adding}
-            className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent ms-auto flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
-          >
-            <PlusIcon size={13} weight="bold" />
-            {t('equipe.addChef')}
-          </button>
+          <span className="ms-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAdding((v) => (v === 'chef' ? null : 'chef'))}
+              aria-expanded={adding === 'chef'}
+              className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
+            >
+              <PlusIcon size={13} weight="bold" />
+              {t('equipe.addChef')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdding((v) => (v === 'tech' ? null : 'tech'))}
+              aria-expanded={adding === 'tech'}
+              className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
+            >
+              <PlusIcon size={13} weight="bold" />
+              {t('equipe.addTech')}
+            </button>
+          </span>
         )}
       </div>
 
       {adding && isDirector && (
-        <AddChefForm
+        <AddPersonForm
+          role={adding}
           onDone={() => {
-            setAdding(false)
+            setAdding(null)
             list.reload()
           }}
         />
@@ -125,17 +146,52 @@ export function EquipePage() {
         />
       )}
 
-      {focus && (
-        <Detail
-          person={focus}
-          chefs={chefs}
-          canEdit={isDirector}
-          isSelf={focus.id === user?.id}
-          onReload={list.reload}
-          onMove={move}
-          onError={setError}
-        />
-      )}
+      <AnimatePresence>
+        {focus && (
+          <motion.div
+            className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setSelected(null)}
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {focus && (
+          <motion.div
+            role="dialog"
+            aria-label={focus.name}
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 220, damping: 28 }}
+            className="border-line bg-surface edge fixed top-0 bottom-0 end-0 z-50 flex w-full max-w-md flex-col gap-6 overflow-y-auto border-s p-5 shadow-[0_16px_40px_-20px_oklch(0.146_0.008_245/0.45)]"
+          >
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              aria-label={t('nav.close')}
+              className="text-ink-faint hover:text-ink focus-visible:ring-accent absolute end-4 top-4 cursor-pointer rounded p-1 transition-colors outline-none focus-visible:ring-2"
+            >
+              <XIcon size={16} />
+            </button>
+
+            <Detail
+              person={focus}
+              chefs={chefs}
+              canEdit={isDirector}
+              isSelf={focus.id === user?.id}
+              onReload={list.reload}
+              onMove={move}
+              onError={setError}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <p className="text-ink-faint max-w-[70ch] text-xs">{t('access.enforceNote')}</p>
     </motion.div>
@@ -435,9 +491,9 @@ function Detail({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      className="border-line bg-surface edge flex flex-col gap-6 rounded-xl border p-5"
+      className="flex flex-col gap-6 pt-2"
     >
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 pe-8">
         <h2 className="text-ink text-sm font-medium">{person.name}</h2>
         <span className="text-ink-faint text-xs">{t(`equipe.role.${person.role ?? 'tech'}`)}</span>
         {person.email && <span className="text-ink-faint text-xs">{person.email}</span>}
@@ -672,7 +728,13 @@ function Identities({
 }
 
 /** The "+": a name, nothing else. Credentials are a separate, later step. */
-function AddChefForm({ onDone }: { readonly onDone: () => void }) {
+function AddPersonForm({
+  role,
+  onDone,
+}: {
+  readonly role: 'chef' | 'tech'
+  readonly onDone: () => void
+}) {
   const { t } = useI18n()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -684,7 +746,7 @@ function AddChefForm({ onDone }: { readonly onDone: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await addPerson({ name: name.trim(), role: 'chef' })
+      await addPerson({ name: name.trim(), role })
       setName('')
       onDone()
     } catch (err) {
@@ -718,7 +780,9 @@ function AddChefForm({ onDone }: { readonly onDone: () => void }) {
       >
         {t('equipe.create')}
       </button>
-      <p className="text-ink-faint w-full text-xs">{t('equipe.addChefNote')}</p>
+      <p className="text-ink-faint w-full text-xs">
+        {t(role === 'chef' ? 'equipe.addChefNote' : 'equipe.addTechNote')}
+      </p>
       {error && <p className="text-status-fail w-full text-xs break-all">{error}</p>}
     </form>
   )

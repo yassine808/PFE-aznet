@@ -62,9 +62,10 @@ export interface LogStats {
 export interface PendingWrite {
   id: number
   payload: Record<string, unknown>
-  error: string
+  last_error: string
   correlation_id?: string | null
   created_at?: string
+  attempts?: number
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -350,6 +351,19 @@ export async function runJob(name: string): Promise<JobStatus['last']> {
     throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
   }
   return res.json() as Promise<JobStatus['last']>
+}
+
+/** Drop a queued write after a human confirms it's a dead letter, not a Sheets blip. */
+export async function dismissQueueItem(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/sheet-queue/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ok: true }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
+  }
 }
 
 /** Operator preferences, stored server-side so any scheduler reads the same values. */

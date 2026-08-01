@@ -8,6 +8,7 @@ import { WeeklyReportPage } from '@/pages/weekly-report'
 import { EquipePage } from '@/pages/equipe'
 import { AutomationPage } from '@/pages/automation'
 import { LogsPage } from '@/pages/logs'
+import { QueuePage } from '@/pages/queue'
 import { LoginPage } from '@/pages/login'
 import { AuthProvider, useAuth, usePageTimer } from '@/lib/auth'
 import { OpsProvider } from '@/lib/ops-context'
@@ -76,6 +77,8 @@ function RouteView({
       return <AutomationPage />
     case 'logs':
       return <LogsPage />
+    case 'queue':
+      return <QueuePage />
     case 'equipe':
       return <EquipePage />
     default:

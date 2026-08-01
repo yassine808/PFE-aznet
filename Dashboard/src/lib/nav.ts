@@ -25,7 +25,8 @@ export interface NavItem {
  */
 export const NAV: { section: string; items: NavItem[] }[] = [
   {
-    section: 'nav.section.read',
+    // The day-to-day working view: what came in, one message at a time.
+    section: 'nav.section.overview',
     items: [
       {
         route: 'overview',
@@ -34,12 +35,15 @@ export const NAV: { section: string; items: NavItem[] }[] = [
         Icon: ChartBarIcon,
       },
       { route: 'inbox', labelKey: 'nav.inbox', keywordsKey: 'nav.kw.inbox', Icon: TrayIcon },
-      { route: 'reports', labelKey: 'nav.reports', keywordsKey: 'nav.kw.reports', Icon: RowsIcon },
     ],
   },
   {
+    // Everything that reads as "a report": the raw table and the two generated
+    // digests. Grouped together so "Reports" names one thing, not two — it used
+    // to also be the name of the section one level up from the Reports page.
     section: 'nav.section.reports',
     items: [
+      { route: 'reports', labelKey: 'nav.reports', keywordsKey: 'nav.kw.reports', Icon: RowsIcon },
       { route: 'daily', labelKey: 'nav.daily', keywordsKey: 'nav.kw.daily', Icon: SunHorizonIcon },
       {
         route: 'weekly',
@@ -50,7 +54,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     ],
   },
   {
-    section: 'nav.section.ops',
+    section: 'nav.section.admin',
     items: [
       {
         route: 'automation',
