@@ -232,9 +232,10 @@ export function AppShell({
               >
                 {theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}
               </button>
-              <SignOut />
             </div>
           </div>
+
+          <SignOut />
         </div>
       </nav>
 
@@ -252,22 +253,30 @@ export function AppShell({
   )
 }
 
-/** Who is signed in, and the way out. The name doubles as the reminder that
- *  every action from here is recorded against it. */
+/** Who is signed in, and the way out — two separate rows, since a name and an
+ *  action read as one confusing control when squeezed onto a single button. */
 function SignOut() {
   const { t } = useI18n()
   const { user, signOut } = useAuth()
   if (!user) return null
   return (
-    <button
-      type="button"
-      onClick={() => void signOut()}
-      title={`${user.name} — ${t('auth.signOut')}`}
-      aria-label={t('auth.signOut')}
-      className="border-line text-ink-muted hover:text-ink flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors active:translate-y-px"
-    >
-      <SignOutIcon size={14} />
-      <span className="hidden sm:inline">{user.name}</span>
-    </button>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 px-1">
+        <span className="bg-slate-100 text-ink-muted dark:bg-slate-850 flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium">
+          {user.name.slice(0, 1).toUpperCase()}
+        </span>
+        <span className="text-ink min-w-0 flex-1 truncate text-sm font-medium">{user.name}</span>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        aria-label={t('auth.signOut')}
+        className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors outline-none active:translate-y-px focus-visible:ring-2"
+      >
+        <SignOutIcon size={16} className="shrink-0" />
+        <span>{t('auth.signOut')}</span>
+      </button>
+    </div>
   )
 }
