@@ -205,6 +205,17 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value      JSONB NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Per-account dashboard preferences (clock format, density, confidence
+-- threshold): one JSONB blob per person, same key/JSON rationale as
+-- app_settings. One row, whole settings object — not key/value — because only
+-- the person's own browser ever reads it; there is no query that wants one key
+-- across accounts.
+CREATE TABLE IF NOT EXISTS person_settings (
+    person_id  BIGINT PRIMARY KEY REFERENCES persons(id) ON DELETE CASCADE,
+    value      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 
@@ -889,3 +900,32 @@ def put_settings(values: Dict[str, Any]) -> dict:
                 (key, json.dumps(value)),
             )
     return get_settings()
+
+
+# ── Per-account settings ────────────────────────────────────────────────────
+# One JSONB blob per person. The browser owns the defaults and merges what it
+# gets over them; the server just stores what each account chose.
+
+
+def get_person_settings(person_id: int) -> dict:
+    with _cursor() as cur:
+        cur.execute("SELECT value FROM person_settings WHERE person_id = %s", (person_id,))
+        row = _one(cur)
+    return dict(row)["value"] if row else {}
+
+
+def put_person_settings(person_id: int, values: Dict[str, Any]) -> dict:
+    """Merge every supplied key into the account's blob. Absent keys are left
+    untouched, never cleared — `||` on JSONB keeps what we already had."""
+    if not values:
+        return get_person_settings(person_id)
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO person_settings (person_id, value) VALUES (%s, %s)
+            ON CONFLICT (person_id) DO UPDATE
+                SET value = person_settings.value || EXCLUDED.value, updated_at = now()
+            """,
+            (person_id, json.dumps(values)),
+        )
+    return get_person_settings(person_id)

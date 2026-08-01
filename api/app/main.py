@@ -874,6 +874,38 @@ def write_settings(payload: SettingsIn, caller: dict = Depends(auth.require_huma
         raise HTTPException(502, str(exc)) from exc
 
 
+# ── Per-account settings ────────────────────────────────────────────────────
+# What this browser prefers: clock format, density, confidence threshold. The
+# browser keeps the defaults; the database keeps what each account chose, so
+# the preferences follow the person across browsers and machines instead of
+# being tied to one browser's localStorage.
+
+class MeSettingsIn(BaseModel):
+    values: Dict[str, Any]
+
+
+@app.get("/me/settings", responses={502: {"description": "Log store unreachable"}})
+def read_me_settings(caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        return {"settings": logs.get_person_settings(caller["id"])}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.put("/me/settings", responses={403: {"description": "Confidence is director-only"}, 502: {"description": "Log store unreachable"}})
+def write_me_settings(payload: MeSettingsIn, caller: dict = Depends(auth.require_human)) -> dict:
+    # The confidence threshold left the browser the day these settings became
+    # server-side, so it needs a real gate now: the dashboard hides the slider
+    # from non-directors, but the API must refuse the value too.
+    if "confidence" in payload.values and caller.get("role") != "directeur":
+        raise HTTPException(403, "le seuil de confiance est réservé au directeur")
+    auth.record(caller, "settings_saved", detail=payload.values)
+    try:
+        return {"settings": logs.put_person_settings(caller["id"], payload.values)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 class TestMailIn(BaseModel):
     to: str
 

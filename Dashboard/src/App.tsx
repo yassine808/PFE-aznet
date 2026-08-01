@@ -11,6 +11,7 @@ import { LogsPage } from '@/pages/logs'
 import { QueuePage } from '@/pages/queue'
 import { LoginPage } from '@/pages/login'
 import { AuthProvider, useAuth, usePageTimer } from '@/lib/auth'
+import { SettingsProvider } from '@/lib/settings'
 import { OpsProvider } from '@/lib/ops-context'
 import { useI18n } from '@/lib/i18n'
 import { useRoute, type Route } from '@/lib/router'
@@ -30,7 +31,11 @@ const TITLE_KEY: Record<Route, string> = {
 export default function App() {
   return (
     <AuthProvider>
-      <Gate />
+      {/* Inside AuthProvider on purpose: the settings live in the database now,
+          so the provider needs to know whose preferences to load. */}
+      <SettingsProvider>
+        <Gate />
+      </SettingsProvider>
     </AuthProvider>
   )
 }

@@ -375,6 +375,32 @@ export interface AppSettings {
   report_format?: string
 }
 
+/** This account's dashboard preferences, stored per person in the database.
+ *  Loose on purpose: the browser owns the shape and merges this over its own
+ *  defaults, so the API never needs to know about a new preference. */
+export interface MeSettings {
+  refreshMs?: number
+  confidence?: number
+  density?: string
+  timeFormat?: string
+}
+
+export const meSettings = (s?: AbortSignal) =>
+  get<{ settings: Partial<MeSettings> }>('/me/settings', s)
+
+export async function putMeSettings(values: Partial<MeSettings>): Promise<Partial<MeSettings>> {
+  const res = await fetch(`${BASE}/me/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(body.slice(0, 300) || `${res.status} ${res.statusText}`)
+  }
+  return ((await res.json()) as { settings: Partial<MeSettings> }).settings
+}
+
 export async function putSettings(values: Partial<AppSettings>): Promise<AppSettings> {
   const res = await fetch(`${BASE}/settings`, {
     method: 'PUT',
