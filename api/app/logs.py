@@ -679,6 +679,31 @@ def list_persons() -> List[dict]:
     return list(persons.values())
 
 
+def normalize_external_id(channel: str, external_id: str) -> str:
+    """Bring a channel identity to the form the rest of the pipeline expects.
+
+    WhatsApp numbers are phones, and operators type them every way imaginable
+    (`+212 6 61 23 45 67`, `0661234567`, `661234567`, `00212…`). One canonical
+    form — 12 digits starting `2126`/`2127` — makes the dedupe guard and the
+    directory lookup match regardless of how the number was keyed in. Telegram
+    chat ids are not phones and are left untouched.
+    """
+    if channel != "whatsapp":
+        return external_id.strip()
+    digits = "".join(c for c in external_id if c.isdigit())
+    if not digits:
+        return external_id.strip()
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("2120") and len(digits) == 13:
+        digits = "212" + digits[4:]
+    if digits.startswith("0"):
+        digits = "212" + digits[1:]
+    if len(digits) == 9 and digits.startswith(("6", "7")):
+        digits = "212" + digits
+    return digits
+
+
 def upsert_technician(
     channel: str, external_id: str, name: str, role: Optional[str] = None, active: bool = True
 ) -> dict:
@@ -696,7 +721,8 @@ def upsert_technician(
     """
     if channel not in CHANNELS:
         raise LogStoreError(f"unknown channel: {channel} (expected one of {', '.join(CHANNELS)})")
-    if not external_id.strip() or not name.strip():
+    external_id = normalize_external_id(channel, external_id)
+    if not external_id or not name.strip():
         raise LogStoreError("external_id and name are required")
 
     with _cursor() as cur:
@@ -790,7 +816,12 @@ def find_technician(channel: str, external_id: str) -> Optional[dict]:
     Filters on `active`: deactivating an identity in the dashboard has to
     actually revoke access. Without this an inactive row still answers
     `found: true` and the operator's click does nothing they can observe.
+
+    The incoming id goes through the same normalization as writes, or a sender
+    whose number was keyed in differently than the directory would be denied
+    — one form, stored and looked up alike.
     """
+    external_id = normalize_external_id(channel, external_id)
     with _cursor() as cur:
         cur.execute(
             """
@@ -906,7 +937,6 @@ def put_settings(values: Dict[str, Any]) -> dict:
 # One JSONB blob per person. The browser owns the defaults and merges what it
 # gets over them; the server just stores what each account chose.
 
-
 def get_person_settings(person_id: int) -> dict:
     with _cursor() as cur:
         cur.execute("SELECT value FROM person_settings WHERE person_id = %s", (person_id,))
@@ -929,3 +959,19 @@ def put_person_settings(person_id: int, values: Dict[str, Any]) -> dict:
             (person_id, json.dumps(values)),
         )
     return get_person_settings(person_id)
+
+
+def account_emails() -> List[str]:
+    """Emails of every account (admin + site managers), for the report mail.
+
+    `password_hash IS NOT NULL` is the whole of "this row is an account" since
+    the users table folded into persons; technicians never sign in and their
+    email stays NULL, so this is automatically "the people who should read the
+    end-of-day report" — no role list to keep in sync with the org chart.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT email FROM persons "
+            "WHERE email IS NOT NULL AND password_hash IS NOT NULL ORDER BY name"
+        )
+        return [dict(r)["email"] for r in cur.fetchall()]
