@@ -5,10 +5,9 @@ import { ReportsPage } from '@/pages/reports'
 import { InboxPage } from '@/pages/inbox'
 import { DailyReportPage } from '@/pages/daily-report'
 import { WeeklyReportPage } from '@/pages/weekly-report'
-import { AccessControlPage } from '@/pages/access-control'
+import { EquipePage } from '@/pages/equipe'
 import { AutomationPage } from '@/pages/automation'
 import { LogsPage } from '@/pages/logs'
-import { TeamPage } from '@/pages/team'
 import { LoginPage } from '@/pages/login'
 import { AuthProvider, useAuth, usePageTimer } from '@/lib/auth'
 import { OpsProvider } from '@/lib/ops-context'
@@ -22,10 +21,9 @@ const TITLE_KEY: Record<Route, string> = {
   daily: 'page.daily.title',
   weekly: 'page.weekly.title',
   automation: 'page.automation.title',
-  access: 'page.access.title',
   logs: 'page.logs.title',
   queue: 'page.queue.title',
-  team: 'page.team.title',
+  equipe: 'page.equipe.title',
 }
 
 export default function App() {
@@ -76,12 +74,10 @@ function RouteView({
       return <WeeklyReportPage />
     case 'automation':
       return <AutomationPage />
-    case 'access':
-      return <AccessControlPage />
     case 'logs':
       return <LogsPage />
-    case 'team':
-      return <TeamPage />
+    case 'equipe':
+      return <EquipePage />
     default:
       return (
         <section className="py-16">

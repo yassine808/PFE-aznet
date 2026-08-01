@@ -78,12 +78,27 @@ def _public(row: dict) -> dict:
 
 
 def list_users() -> List[dict]:
+    """Only the people who can actually sign in.
+
+    `password_hash IS NOT NULL` is the account filter now that accounts live in
+    `persons` alongside technicians. Without it this returns every colleague who
+    ever sent a voice note and calls them users.
+    """
     with logs._cursor() as cur:
-        cur.execute("SELECT * FROM users ORDER BY role, name")
+        cur.execute(
+            "SELECT * FROM persons WHERE password_hash IS NOT NULL ORDER BY role, name"
+        )
         return [_public(dict(r)) for r in cur.fetchall()]
 
 
 def create_user(email: str, name: str, password: str, role: str = "chef") -> dict:
+    """Give someone dashboard access, creating the person if they are new.
+
+    Matched on name, so granting access to a chef who already exists on the org
+    chart credentials *that* person rather than minting a second row for the
+    same human -- the whole reason `users` was folded into `persons`. Matching
+    on name is the same rule `logs.upsert_technician` uses; the two must agree.
+    """
     if role not in ROLES:
         raise AuthError(f"unknown role: {role} (expected one of {', '.join(ROLES)})")
     if not email.strip() or not name.strip():
@@ -92,26 +107,59 @@ def create_user(email: str, name: str, password: str, role: str = "chef") -> dic
         # The only password rule enforced. Composition rules (a digit, a symbol)
         # push people towards "Password1!" and buy less than length does.
         raise AuthError("password must be at least 8 characters")
+    email, name = email.strip().lower(), name.strip()
     with logs._cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO users (email, name, role, password_hash)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (email) DO NOTHING
-            RETURNING *
-            """,
-            (email.strip().lower(), name.strip(), role, hash_password(password)),
-        )
+        cur.execute("SELECT id, password_hash FROM persons WHERE lower(name) = lower(%s)", (name,))
+        existing = logs._one(cur)
+        if existing is not None:
+            if dict(existing)["password_hash"] is not None:
+                raise AuthError(f"{name} already has an account")
+            cur.execute(
+                """
+                UPDATE persons SET email = %s, password_hash = %s, role = %s, active = true
+                 WHERE id = %s RETURNING *
+                """,
+                (email, hash_password(password), role, dict(existing)["id"]),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO persons (email, name, role, password_hash)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (email) DO NOTHING
+                RETURNING *
+                """,
+                (email, name, role, hash_password(password)),
+            )
         row = logs._one(cur)
     if row is None:
-        raise AuthError(f"an account already exists for {email.strip().lower()}")
+        raise AuthError(f"an account already exists for {email}")
     return _public(dict(row))
 
 
 def delete_user(user_id: int) -> bool:
+    """Revoke dashboard access without deleting the human.
+
+    A DELETE here would take the person, their channel identities and their AI
+    profile with them (ON DELETE CASCADE) -- losing everything a colleague ever
+    told us because their login was withdrawn. Clearing the credentials drops
+    them out of `list_users` and off the accounts band; they stay on the chart.
+    `logs.delete_person` is still the way to remove a human entirely.
+    """
     with logs._cursor() as cur:
-        cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
-        return cur.rowcount > 0
+        cur.execute(
+            """
+            UPDATE persons SET email = NULL, password_hash = NULL
+             WHERE id = %s AND password_hash IS NOT NULL
+            """,
+            (user_id,),
+        )
+        if cur.rowcount == 0:
+            return False
+        # Their open browsers, closed on the next request. The whole reason
+        # sessions are rows and not JWTs.
+        cur.execute("DELETE FROM sessions WHERE user_id = %s", (user_id,))
+        return True
 
 
 def seed_admin() -> None:
@@ -125,7 +173,7 @@ def seed_admin() -> None:
     email = os.environ.get("ADMIN_EMAIL", "").strip()
     password = os.environ.get("ADMIN_PASSWORD", "")
     with logs._cursor() as cur:
-        cur.execute("SELECT count(*) AS n FROM users")
+        cur.execute("SELECT count(*) AS n FROM persons WHERE password_hash IS NOT NULL")
         existing = dict(logs._one(cur) or {"n": 0})["n"]
     if existing:
         # Said out loud because the three outcomes here -- seeded, refused,
@@ -158,10 +206,20 @@ def login(email: str, password: str) -> Optional[Dict[str, Any]]:
     real, and tells a chef whose account was disabled to keep guessing.
     """
     with logs._cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE email = %s", (email.strip().lower(),))
+        cur.execute("SELECT * FROM persons WHERE email = %s", (email.strip().lower(),))
         row = logs._one(cur)
         user = dict(row) if row else None
-    if user is None or not user["active"] or not verify_password(password, user["password_hash"]):
+    # `password_hash is None` is load-bearing, not defensive noise: since
+    # accounts folded into `persons`, most rows in this table are technicians
+    # with no credentials. verify_password would reach None.encode() and raise
+    # AttributeError -- which its except clause does not catch -- turning a
+    # technician's address into a 500 that says an account exists.
+    if (
+        user is None
+        or user["password_hash"] is None
+        or not user["active"]
+        or not verify_password(password, user["password_hash"])
+    ):
         return None
 
     token = secrets.token_urlsafe(32)
@@ -170,7 +228,7 @@ def login(email: str, password: str) -> Optional[Dict[str, Any]]:
             "INSERT INTO sessions (token, user_id, expires_at) VALUES (%s, %s, %s)",
             (token, user["id"], datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)),
         )
-        cur.execute("UPDATE users SET last_seen_at = now() WHERE id = %s", (user["id"],))
+        cur.execute("UPDATE persons SET last_seen_at = now() WHERE id = %s", (user["id"],))
     return {"user": _public(user), "token": token}
 
 
@@ -187,15 +245,16 @@ def user_for_token(token: Optional[str]) -> Optional[dict]:
     with logs._cursor() as cur:
         cur.execute(
             """
-            SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+            SELECT u.* FROM sessions s JOIN persons u ON u.id = s.user_id
              WHERE s.token = %s AND s.expires_at > now() AND u.active
+               AND u.password_hash IS NOT NULL
             """,
             (token,),
         )
         row = logs._one(cur)
         if row is None:
             return None
-        cur.execute("UPDATE users SET last_seen_at = now() WHERE id = %s", (dict(row)["id"],))
+        cur.execute("UPDATE persons SET last_seen_at = now() WHERE id = %s", (dict(row)["id"],))
     return _public(dict(row))
 
 

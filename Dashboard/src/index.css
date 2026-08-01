@@ -217,6 +217,73 @@
   }
 
   /*
+    Org-chart connectors (pages/equipe.tsx).
+
+    Pure CSS rather than an SVG overlay: the boxes are flex children whose widths
+    depend on the longest name, so an SVG would need a ResizeObserver and a
+    re-measure on every reflow, RTL flip and font swap. Pseudo-elements are laid
+    out by the same pass that positions the boxes, so they simply cannot
+    disagree with them.
+
+    Each node draws the half-rules above itself: ::before the inline-start half,
+    ::after the inline-end half plus the vertical stub down into the box. The
+    first node suppresses its start half and the last its end half, so the
+    horizontal rule spans centre-to-centre rather than overhanging the row. All
+    logical properties, so RTL is the same code and not a mirrored copy.
+  */
+  .org-branch > .org-node {
+    position: relative;
+    padding-block-start: 1.5rem;
+  }
+
+  .org-branch > .org-node::before,
+  .org-branch > .org-node::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inline-size: 50%;
+    block-size: 1.5rem;
+    border-block-start: 1px solid var(--line);
+  }
+
+  .org-branch > .org-node::before {
+    inset-inline-start: 0;
+  }
+
+  .org-branch > .org-node::after {
+    inset-inline-start: 50%;
+    border-inline-start: 1px solid var(--line);
+  }
+
+  /* The overhang trim. `:only-child` keeps a lone child's vertical stub while
+     dropping both horizontals — otherwise a chef with one technician gets a
+     rule stretching out to nothing on both sides. */
+  .org-branch > .org-node:first-child::before,
+  .org-branch > .org-node:only-child::before {
+    border-block-start-color: transparent;
+  }
+
+  .org-branch > .org-node:last-child::after,
+  .org-branch > .org-node:only-child::after {
+    border-block-start-color: transparent;
+  }
+
+  /* The stub leaving a parent on its way down to the rule above its children. */
+  .org-stem {
+    position: relative;
+    padding-block-end: 1.5rem;
+  }
+
+  .org-stem::after {
+    content: '';
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-start: 50%;
+    block-size: 1.5rem;
+    border-inline-start: 1px solid var(--line);
+  }
+
+  /*
     Slow breathing halo on the primary generate action.
     Deliberately soft and low-opacity rather than a neon ring: it should read as
     the button being alive, not as a glow effect. Sine easing so the cycle never

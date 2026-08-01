@@ -3,7 +3,6 @@ import {
   ChartBarIcon,
   ClockIcon,
   RowsIcon,
-  IdentificationBadgeIcon,
   PulseIcon,
   StackIcon,
   SunHorizonIcon,
@@ -59,20 +58,16 @@ export const NAV: { section: string; items: NavItem[] }[] = [
         keywordsKey: 'nav.kw.automation',
         Icon: ClockIcon,
       },
+      // One entry where there were two: accounts and bot authorisation are the
+      // same people since `users` folded into `persons`.
       {
-        route: 'access',
-        labelKey: 'nav.access',
-        keywordsKey: 'nav.kw.access',
+        route: 'equipe',
+        labelKey: 'nav.equipe',
+        keywordsKey: 'nav.kw.equipe',
         Icon: UsersThreeIcon,
       },
       { route: 'logs', labelKey: 'nav.logs', keywordsKey: 'nav.kw.logs', Icon: PulseIcon },
       { route: 'queue', labelKey: 'nav.queue', keywordsKey: 'nav.kw.queue', Icon: StackIcon },
-      {
-        route: 'team',
-        labelKey: 'nav.team',
-        keywordsKey: 'nav.kw.team',
-        Icon: IdentificationBadgeIcon,
-      },
     ],
   },
 ]

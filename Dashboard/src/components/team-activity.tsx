@@ -1,27 +1,19 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'motion/react'
-import { PlusIcon, TrashIcon } from '@phosphor-icons/react'
-import {
-  api,
-  createUser,
-  deleteUser,
-  useApi,
-  type Account,
-  type Async,
-  type History,
-} from '@/lib/api'
-import { useAuth } from '@/lib/auth'
+import { createUser, type Async, type History } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { daysAgoISO } from '@/lib/metrics'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
 
 /**
- * Dashboard accounts and what each one has done.
+ * What one account has done: headline counts, a 14-day graph, time per page and
+ * the action timeline.
  *
- * The director sees everyone; a chef sees only themself. That filtering is
- * enforced by the API — /users and /history both narrow by role — so this page
- * never has to be trusted with it. It only decides what to *offer*.
+ * Lifted out of the old `pages/team.tsx` when the org chart absorbed it. These
+ * blocks are unchanged — only their trigger moved, from a chip in a flat list to
+ * a box in the chart. They render for a directeur or a chef; a technician never
+ * signs in, so `pages/equipe.tsx` shows them their channels and profile instead
+ * rather than three panels that are permanently empty.
  */
 
 /** Actions the director asked to count, in the order they matter. */
@@ -33,168 +25,14 @@ function hhmm(seconds: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-export function TeamPage() {
-  const { t } = useI18n()
-  const { user } = useAuth()
-  const users = useApi('users', api.users)
-  const [selected, setSelected] = useState<number | null>(null)
-  const [adding, setAdding] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const isDirector = user?.role === 'directeur'
-  const focus = selected ?? user?.id ?? null
-  // Keyed by id so switching account refetches instead of showing the previous
-  // person's history under the new name.
-  const hist = useApi(`history:${focus}`, (s) => api.history(focus ?? undefined, s))
-
-  const remove = async (id: number) => {
-    try {
-      await deleteUser(id)
-      users.reload()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      className="flex flex-col gap-8 pt-8"
-    >
-      <div className="flex flex-wrap items-center gap-4">
-        <p className="text-ink-faint max-w-[60ch] text-sm">{t('team.intro')}</p>
-        {isDirector && (
-          <button
-            type="button"
-            onClick={() => setAdding((v) => !v)}
-            className="border-line text-ink-muted hover:text-ink ms-auto flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors"
-          >
-            <PlusIcon size={13} weight="bold" />
-            {t('team.add')}
-          </button>
-        )}
-      </div>
-
-      {adding && isDirector && (
-        <NewAccountForm
-          onDone={() => {
-            setAdding(false)
-            users.reload()
-          }}
-        />
-      )}
-
-      {error && <p className="text-status-fail text-xs">{error}</p>}
-
-      <UsersBlock
-        users={users}
-        focus={focus}
-        isDirector={isDirector}
-        currentUserId={user?.id}
-        onSelect={setSelected}
-        onDelete={remove}
-      />
-
-      <HistBlock hist={hist} />
-    </motion.div>
-  )
-}
-
-function UsersBlock({
-  users,
-  focus,
-  isDirector,
-  currentUserId,
-  onSelect,
-  onDelete,
-}: {
-  readonly users: Async<{ users: Account[] }>
-  readonly focus: number | null
-  readonly isDirector: boolean
-  readonly currentUserId: number | undefined
-  readonly onSelect: (id: number) => void
-  readonly onDelete: (id: number) => void
-}) {
-  const { t } = useI18n()
-  if (users.error) return <ErrorState message={users.error} onRetry={users.reload} />
-  if (users.loading) return <Skeleton className="h-24" />
-  if ((users.data?.users.length ?? 0) === 0) return <EmptyState body={t('team.empty')} />
-  return (
-    <ul className="flex flex-wrap gap-3">
-      {users.data?.users.map((account) => (
-        <AccountChip
-          key={account.id}
-          account={account}
-          active={focus === account.id}
-          canDelete={isDirector && account.id !== currentUserId}
-          onSelect={() => onSelect(account.id)}
-          onDelete={() => onDelete(account.id)}
-        />
-      ))}
-    </ul>
-  )
-}
-
-function HistBlock({ hist }: { readonly hist: Async<History> }) {
+export function HistBlock({ hist }: { readonly hist: Async<History> }) {
   if (hist.error) return <ErrorState message={hist.error} onRetry={hist.reload} />
   if (hist.loading && !hist.data) return <Skeleton className="h-64" />
   if (hist.data) return <Activity data={hist.data} />
   return null
 }
 
-function AccountChip({
-  account,
-  active,
-  canDelete,
-  onSelect,
-  onDelete,
-}: {
-  readonly account: Account
-  readonly active: boolean
-  readonly canDelete: boolean
-  readonly onSelect: () => void
-  readonly onDelete: () => void
-}) {
-  const { t, locale } = useI18n()
-  return (
-    <li
-      className={cn(
-        'flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors',
-        active ? 'border-accent bg-surface' : 'border-line hover:bg-surface',
-      )}
-    >
-      <button
-        type="button"
-        onClick={onSelect}
-        className="flex flex-col items-start gap-0.5 text-start"
-      >
-        <span className="text-ink text-sm">{account.name}</span>
-        <span className="text-ink-faint text-xs">
-          {account.email} · {t(`team.role.${account.role}`)}
-        </span>
-        <span className="text-ink-faint text-[0.6875rem]">
-          {account.last_seen_at
-            ? `${t('team.lastSeen')} ${new Date(account.last_seen_at).toLocaleString(locale)}`
-            : t('team.neverSeen')}
-        </span>
-      </button>
-      {canDelete && (
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label={`${t('team.remove')} ${account.name}`}
-          className="text-ink-faint hover:text-status-fail transition-colors"
-        >
-          <TrashIcon size={14} />
-        </button>
-      )}
-    </li>
-  )
-}
-
-function Activity({ data }: { readonly data: History }) {
+export function Activity({ data }: { readonly data: History }) {
   const { t, locale } = useI18n()
 
   // 14 days, zero-filled here rather than in SQL: a day with no activity has to
@@ -318,9 +156,22 @@ function Activity({ data }: { readonly data: History }) {
   )
 }
 
-function NewAccountForm({ onDone }: { readonly onDone: () => void }) {
+/**
+ * Credentials for someone who is already on the chart.
+ *
+ * `name` is passed in and read-only: the "+" created the person, this only adds
+ * their login. Editing it here would credential a *different* human — the API
+ * matches an account to a person by name.
+ */
+export function GrantAccessForm({
+  name,
+  onDone,
+}: {
+  readonly name: string
+  readonly onDone: () => void
+}) {
   const { t } = useI18n()
-  const [values, setValues] = useState({ email: '', name: '', password: '' })
+  const [values, setValues] = useState({ email: '', password: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -329,7 +180,7 @@ function NewAccountForm({ onDone }: { readonly onDone: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await createUser(values)
+      await createUser({ ...values, name })
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -338,45 +189,31 @@ function NewAccountForm({ onDone }: { readonly onDone: () => void }) {
     }
   }
 
-  const set = (k: keyof typeof values) => (e: { target: { value: string } }) =>
-    setValues((v) => ({ ...v, [k]: e.target.value }))
-
-  const FIELD_TYPE: Record<'name' | 'email' | 'password', string> = {
-    name: 'text',
-    email: 'email',
-    password: 'password',
-  }
-
   return (
-    <form
-      onSubmit={submit}
-      className="border-line bg-surface edge flex flex-wrap items-end gap-4 rounded-xl border p-5"
-    >
-      {(['name', 'email', 'password'] as const).map((field) => (
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+      {(['email', 'password'] as const).map((field) => (
         <label key={field} className="flex min-w-40 flex-col gap-1.5">
           <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
             {t(`team.${field}`)}
           </span>
           <input
-            type={FIELD_TYPE[field]}
+            type={field === 'email' ? 'email' : 'password'}
             value={values[field]}
-            onChange={set(field)}
+            onChange={(e) => setValues((v) => ({ ...v, [field]: e.target.value }))}
             required
             autoComplete={field === 'password' ? 'new-password' : undefined}
-            className="border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors"
+            className="border-line focus:border-accent focus-visible:ring-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors focus-visible:ring-2"
           />
         </label>
       ))}
-
       <button
         type="submit"
         disabled={busy}
-        className="bg-accent rounded-md px-3.5 py-2 text-sm text-white transition-transform active:translate-y-px disabled:opacity-50"
+        className="bg-accent focus-visible:ring-accent cursor-pointer rounded-md px-3.5 py-2 text-sm text-white transition-transform outline-none active:translate-y-px focus-visible:ring-2 disabled:opacity-50"
       >
-        {t('team.create')}
+        {t('equipe.grant')}
       </button>
-
-      {error && <p className="text-status-fail w-full text-xs">{error}</p>}
+      {error && <p className="text-status-fail w-full text-xs break-all">{error}</p>}
     </form>
   )
 }

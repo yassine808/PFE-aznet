@@ -244,11 +244,35 @@ export interface Technician {
   id: number
   name: string
   role?: string | null
+  /** Which chef they report to. Null = the chart's unassigned column. */
+  manager_id?: number | null
+  email?: string | null
+  /** Derived server-side from `password_hash IS NOT NULL` — the hash never ships. */
+  has_login?: boolean
+  active?: boolean
+  last_seen_at?: string | null
   /** Nightly summary written by the profile model. Null until the first run. */
   profile?: string | null
   profile_updated_at?: string | null
   identities: Identity[]
   created_at?: string
+}
+
+/** The org chart's "+": a chef with no channel and no login yet. */
+export const addPerson = (input: { name: string; role?: string }) =>
+  post<{ id: number; name: string; role: string }>('/persons', input)
+
+/** Reassign to a chef, or to nobody with null. One PATCH per drop. */
+export async function setManager(id: number, managerId: number | null): Promise<void> {
+  const res = await fetch(`${BASE}/persons/${id}/manager`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manager_id: managerId }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
+  }
 }
 
 export async function addTechnician(input: {

@@ -86,14 +86,38 @@ CREATE TABLE IF NOT EXISTS failed_writes (
 -- reports. Derived, never authoritative -- the reports in the Sheet are the
 -- record, this is a summary of them. Deleting it costs nothing; the next run
 -- rebuilds it.
+-- Credentials live here too, nullable. The earlier split (a separate `users`
+-- table) argued from lifecycle: a technician sends reports and never logs in, a
+-- chef logs in and never sends reports. That is an argument about *credentials*,
+-- not about identity -- it proves a technician needs no password, never that a
+-- technician and a chef are different kinds of thing. Two tables for one human
+-- meant every org-chart node was a LEFT JOIN plus a tiebreak rule for whose
+-- name and role won when they disagreed, which is precisely the disagreement
+-- _MIGRATE_PERSONS below records happening on live data.
+-- `password_hash IS NULL` is the whole of "this human cannot sign in".
+--
+-- `manager_id` is the org chart: it only ever points a tech at a chef. Nothing
+-- in Postgres forbids a cycle on a self-reference, but the renderer draws three
+-- fixed bands keyed on `role`, so a cycle has nowhere to be drawn and cannot
+-- hang anything. If the chart ever goes recursive, that guard has to be added.
 CREATE TABLE IF NOT EXISTS persons (
     id                 BIGSERIAL PRIMARY KEY,
     name               TEXT NOT NULL,
-    role               TEXT,
+    role               TEXT NOT NULL DEFAULT 'tech',   -- 'directeur' | 'chef' | 'tech'
+    manager_id         BIGINT REFERENCES persons(id) ON DELETE SET NULL,
+    email              TEXT UNIQUE,     -- NULL for everyone who never signs in
+    password_hash      TEXT,            -- NULL = no dashboard access, ever
+    active             BOOLEAN NOT NULL DEFAULT true,
+    last_seen_at       TIMESTAMPTZ,
     profile            TEXT,
     profile_updated_at TIMESTAMPTZ,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- The index on manager_id is NOT here: on an existing database the CREATE TABLE
+-- above is skipped but an index statement beside it would still run, against a
+-- table that has no manager_id until _MIGRATE_ACCOUNTS adds it. That error
+-- aborts the whole init_schema transaction -- schema and migration together --
+-- and the API comes up with `[logs] DISABLED`. It lives with its column.
 
 -- Who is allowed to send reports. This is the directory the reception workflow
 -- checks before processing: a sender absent from it is logged with
@@ -111,29 +135,13 @@ CREATE TABLE IF NOT EXISTS technicians (
     UNIQUE (channel, external_id)
 );
 
--- Dashboard accounts: the director and the chefs. Separate from `persons`
--- because a technician sends reports from WhatsApp and never logs in, while a
--- chef logs in and never sends reports -- different identifiers, different
--- lifecycles. A chef who is also a technician is two rows, correctly: those are
--- two roles, and only one of them should ever carry a password.
-CREATE TABLE IF NOT EXISTS users (
-    id            BIGSERIAL PRIMARY KEY,
-    email         TEXT NOT NULL UNIQUE,
-    name          TEXT NOT NULL,
-    role          TEXT NOT NULL DEFAULT 'chef',   -- 'directeur' | 'chef'
-    password_hash TEXT NOT NULL,
-    active        BOOLEAN NOT NULL DEFAULT true,
-    last_seen_at  TIMESTAMPTZ,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 -- Opaque session tokens rather than JWTs, so a session can actually be revoked:
 -- deleting the row logs that browser out on its next request. A signed token
 -- stays valid until it expires no matter what the database says, which is the
 -- wrong behaviour the day an account has to be shut off.
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
-    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id    BIGINT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -145,7 +153,7 @@ CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
 -- of what it did, which is the one thing an audit trail exists to prevent.
 CREATE TABLE IF NOT EXISTS user_actions (
     id         BIGSERIAL PRIMARY KEY,
-    user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    user_id    BIGINT REFERENCES persons(id) ON DELETE SET NULL,
     user_name  TEXT,
     action     TEXT NOT NULL,
     target     TEXT,
@@ -163,7 +171,7 @@ CREATE INDEX IF NOT EXISTS user_actions_user_idx ON user_actions (user_id, creat
 -- stayed open.
 CREATE TABLE IF NOT EXISTS page_visits (
     id         BIGSERIAL PRIMARY KEY,
-    user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    user_id    BIGINT REFERENCES persons(id) ON DELETE SET NULL,
     route      TEXT NOT NULL,
     seconds    INTEGER NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -340,11 +348,77 @@ END $$;
 """
 
 
+# Folds the old `users` table into `persons`. Same reasoning as above: the
+# CREATE above is `IF NOT EXISTS`, so a database that already has both tables
+# keeps them and the API starts querying columns that live on the wrong one.
+#
+# Guarded on `users` existing and re-runnable: once the table is dropped the
+# whole block is skipped. Ordering matters -- the FKs on sessions /
+# user_actions / page_visits still point at users(id) at this moment, so ids
+# have to be preserved rather than reallocated, and the constraints have to be
+# repointed before the drop.
+_MIGRATE_ACCOUNTS = """
+ALTER TABLE persons ADD COLUMN IF NOT EXISTS manager_id BIGINT REFERENCES persons(id) ON DELETE SET NULL;
+ALTER TABLE persons ADD COLUMN IF NOT EXISTS email TEXT UNIQUE;
+ALTER TABLE persons ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE persons ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE persons ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+UPDATE persons SET role = 'tech' WHERE role IS NULL;
+ALTER TABLE persons ALTER COLUMN role SET DEFAULT 'tech';
+ALTER TABLE persons ALTER COLUMN role SET NOT NULL;
+CREATE INDEX IF NOT EXISTS persons_manager_idx ON persons (manager_id);
+
+DO $$
+BEGIN
+IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users') THEN
+
+-- An account whose name already exists as a person IS that person: this is the
+-- whole point of folding, and it is why the chef who also sends voice notes
+-- stops being two boxes on the chart. Matched on name for the same reason
+-- upsert_technician does, and the two must keep agreeing.
+UPDATE persons p
+   SET email         = u.email,
+       password_hash = u.password_hash,
+       role          = u.role,
+       active        = u.active,
+       last_seen_at  = u.last_seen_at
+  FROM users u
+ WHERE lower(p.name) = lower(u.name)
+   AND p.password_hash IS NULL;
+
+-- Accounts with no matching person become persons, keeping their id so the
+-- audit trail and any live session still resolve. setval afterwards, or the
+-- next BIGSERIAL insert collides with a transplanted id.
+INSERT INTO persons (id, name, role, email, password_hash, active, last_seen_at, created_at)
+SELECT u.id, u.name, u.role, u.email, u.password_hash, u.active, u.last_seen_at, u.created_at
+  FROM users u
+ WHERE NOT EXISTS (SELECT 1 FROM persons p WHERE p.email = u.email)
+   AND NOT EXISTS (SELECT 1 FROM persons p WHERE p.id = u.id);
+PERFORM setval('persons_id_seq', GREATEST((SELECT max(id) FROM persons), 1));
+
+ALTER TABLE sessions     DROP CONSTRAINT IF EXISTS sessions_user_id_fkey;
+ALTER TABLE user_actions DROP CONSTRAINT IF EXISTS user_actions_user_id_fkey;
+ALTER TABLE page_visits  DROP CONSTRAINT IF EXISTS page_visits_user_id_fkey;
+ALTER TABLE sessions     ADD CONSTRAINT sessions_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES persons(id) ON DELETE CASCADE;
+ALTER TABLE user_actions ADD CONSTRAINT user_actions_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES persons(id) ON DELETE SET NULL;
+ALTER TABLE page_visits  ADD CONSTRAINT page_visits_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES persons(id) ON DELETE SET NULL;
+
+DROP TABLE users;
+
+END IF;
+END $$;
+"""
+
+
 def init_schema() -> None:
     """Create tables/indexes if absent, then migrate. Called once at API startup."""
     with _cursor() as cur:
         cur.execute(_SCHEMA)
         cur.execute(_MIGRATE_PERSONS)
+        cur.execute(_MIGRATE_ACCOUNTS)
 
 
 def write(
@@ -567,7 +641,18 @@ def list_persons() -> List[dict]:
     round trip at this size.
     """
     with _cursor() as cur:
-        cur.execute("SELECT * FROM persons ORDER BY name")
+        # Columns named, not `*`: since accounts folded into this table a
+        # `SELECT *` would ship password_hash to the browser. `has_login` is
+        # derived here so the dashboard can show who can sign in without the
+        # hash ever leaving Postgres.
+        cur.execute(
+            """
+            SELECT id, name, role, manager_id, email, active, last_seen_at,
+                   profile, profile_updated_at, created_at,
+                   (password_hash IS NOT NULL) AS has_login
+              FROM persons ORDER BY name
+            """
+        )
         persons = {}
         for raw in cur.fetchall():
             person = _iso(dict(raw))
@@ -607,9 +692,12 @@ def upsert_technician(
         cur.execute("SELECT * FROM persons WHERE name = %s", (name.strip(),))
         person = _one(cur)
         if person is None:
+            # `or "tech"`: role is NOT NULL since accounts folded in, and an
+            # auto-created sender must land as a technician with no manager --
+            # i.e. in the chart's "unassigned" column, never as a chef.
             cur.execute(
                 "INSERT INTO persons (name, role) VALUES (%s, %s) RETURNING *",
-                (name.strip(), role),
+                (name.strip(), role or "tech"),
             )
             person = _one(cur)
         elif role is not None and person["role"] != role:
@@ -632,6 +720,38 @@ def upsert_technician(
         row = _iso(dict(_one(cur) or {}))
     row["name"], row["role"] = person["name"], person["role"]
     return row
+
+
+def create_person(name: str, role: str = "chef") -> dict:
+    """A person with no channel and no login yet — the org chart's "+".
+
+    Name only on purpose: sketching the org must not require inventing a
+    password for everyone in it. `auth.grant_access` adds credentials later, and
+    a chef accepts technicians the moment the box exists.
+    """
+    if not name.strip():
+        raise LogStoreError("name is required")
+    with _cursor() as cur:
+        cur.execute(
+            "INSERT INTO persons (name, role) VALUES (%s, %s) RETURNING id", (name.strip(), role)
+        )
+        person_id = dict(_one(cur) or {})["id"]
+    return {"id": person_id, "name": name.strip(), "role": role}
+
+
+def set_manager(person_id: int, manager_id: Optional[int]) -> bool:
+    """Move someone under a chef, or out to unassigned with None.
+
+    Refuses self-parenting, the one cycle a three-band chart can actually
+    produce (A under A renders as a person who is their own crew). Deeper cycles
+    are not reachable: the renderer keys bands on `role`, so a chef never gets a
+    manager_id in the first place.
+    """
+    if manager_id is not None and manager_id == person_id:
+        raise LogStoreError("a person cannot report to themselves")
+    with _cursor() as cur:
+        cur.execute("UPDATE persons SET manager_id = %s WHERE id = %s", (manager_id, person_id))
+        return cur.rowcount > 0
 
 
 def delete_technician(tech_id: int) -> bool:

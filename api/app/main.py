@@ -721,6 +721,17 @@ class TechnicianIn(BaseModel):
     active: bool = True
 
 
+class NewPerson(BaseModel):
+    name: str
+    role: str = Field("chef", description="directeur | chef | tech")
+
+
+class NewManager(BaseModel):
+    # Explicitly Optional: null is the real value that moves someone back to
+    # the chart's unassigned column, not a missing field.
+    manager_id: Optional[int] = None
+
+
 @app.get("/technicians", responses={502: {"description": "Log store unreachable"}})
 def list_technicians(caller: dict = Depends(auth.require_human)) -> dict:
     """People, each with their channel identities and remembered facts.
@@ -768,6 +779,33 @@ def remove_person(person_id: int, caller: dict = Depends(auth.require_human)) ->
         return {"deleted": logs.delete_person(person_id)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/persons", responses={422: {"description": "Invalid input"}, 502: {"description": "Log store unreachable"}})
+def add_person(payload: NewPerson, caller: dict = Depends(auth.require_director)) -> dict:
+    """The org chart's "+": a chef with no channel and no login yet.
+
+    Director-only, like every other write that changes who is who.
+    """
+    try:
+        person = logs.create_person(payload.name, payload.role)
+        auth.record(caller, "person_added", target=payload.name, after=payload.role)
+        return person
+    except logs.LogStoreError as exc:
+        raise HTTPException(422 if "required" in str(exc) else 502, str(exc)) from exc
+
+
+@app.patch("/persons/{person_id}/manager", responses={404: {"description": "Person not found"}, 422: {"description": "Invalid input"}, 502: {"description": "Log store unreachable"}})
+def move_person(person_id: int, payload: NewManager, caller: dict = Depends(auth.require_director)) -> dict:
+    """Reassign someone to a chef, or to nobody with manager_id: null."""
+    try:
+        if not logs.set_manager(person_id, payload.manager_id):
+            raise HTTPException(404, f"no person {person_id}")
+        auth.record(caller, "person_reassigned", target=str(person_id),
+                    after=str(payload.manager_id))
+        return {"id": person_id, "manager_id": payload.manager_id}
+    except logs.LogStoreError as exc:
+        raise HTTPException(422 if "themselves" in str(exc) else 502, str(exc)) from exc
 
 
 @app.post("/persons/{person_id}/profile", responses={502: {"description": "Log store unreachable"}, 404: {"description": "Person not found"}})
