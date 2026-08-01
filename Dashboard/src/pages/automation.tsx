@@ -50,16 +50,18 @@ const JOB_ORDER = ['daily_report', 'weekly_report', 'sheet_queue', 'profiles', '
 const FORMAT_EXT: Record<ReportFormat, string> = { txt: '.txt', markdown: '.md', docx: '.docx' }
 
 function Band({
+  id,
   title,
   hint,
   children,
 }: {
+  readonly id?: string
   readonly title: string
   readonly hint?: string
   readonly children: React.ReactNode
 }) {
   return (
-    <section className="flex min-w-0 flex-col gap-4">
+    <section id={id} className="flex min-w-0 scroll-mt-16 flex-col gap-4">
       <div className="border-line flex flex-col gap-1 border-b pb-2">
         <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
           {title}
@@ -68,6 +70,60 @@ function Band({
       </div>
       {children}
     </section>
+  )
+}
+
+/**
+ * Jump nav + at-a-glance job health, sticky under the page header.
+ *
+ * The page used to be a scroll of three equal-weight sections with no way to
+ * tell "is anything broken" without reading every card. This answers that in
+ * one glance (colored dots, tooltip = job name) and gives a one-click way to
+ * reach Recipients/Format without scrolling past the job grid.
+ */
+function QuickNav({ t, jobs }: { readonly t: (k: string) => string; readonly jobs: JobStatus[] }) {
+  const ago = useAgo()
+  const outcome = useOutcome()
+  const sections: Array<[string, string]> = [
+    ['automation-jobs', t('automation.jobs')],
+    ['automation-recipients', t('automation.recipients')],
+    ['automation-format', t('automation.format')],
+  ]
+  return (
+    <div className="bg-canvas/95 border-line sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-1 py-3 backdrop-blur">
+      <nav className="flex items-center gap-1">
+        {sections.map(([id, label]) => (
+          <a
+            key={id}
+            href={`#${id}`}
+            className="text-ink-faint hover:text-ink hover:bg-line/40 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+      {jobs.length > 0 && (
+        <div className="ms-auto flex items-center gap-2.5">
+          {jobs.map((job) => {
+            const last = job.last
+            const title = last
+              ? `${t(`automation.job.${job.name}`)} — ${outcome(job) ?? ''} (${ago(last.at)})`
+              : `${t(`automation.job.${job.name}`)} — ${t('automation.job.never')}`
+            return (
+              <span
+                key={job.name}
+                title={title}
+                aria-label={title}
+                className={cn(
+                  'size-2 rounded-full',
+                  !last ? 'bg-line' : last.ok ? 'bg-status-ok' : 'bg-status-fail',
+                )}
+              />
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -170,10 +226,24 @@ function JobCard({
   const last = job.last
   const text = outcome(job)
 
+  // Left rail: instant scan of health across the grid without reading text —
+  // grey = never run, and ok/fail mirror the dot already used in QuickNav.
+  const rail = !last ? 'bg-line' : last.ok ? 'bg-status-ok' : 'bg-status-fail'
+
   return (
-    <li className="border-line bg-canvas flex flex-col gap-3 rounded-xl border p-4">
+    <li className="border-line bg-canvas relative flex flex-col gap-3 overflow-hidden rounded-xl border p-4 ps-5">
+      <span aria-hidden className={cn('absolute inset-y-0 start-0 w-1', rail)} />
       <div className="flex items-start gap-3">
-        <span className="border-line text-ink-muted mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border">
+        <span
+          className={cn(
+            'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border',
+            !last
+              ? 'border-line text-ink-muted'
+              : last.ok
+                ? 'border-status-ok/30 bg-status-ok/10 text-status-ok'
+                : 'border-status-fail/30 bg-status-fail/10 text-status-fail',
+          )}
+        >
           <Icon size={16} />
         </span>
 
@@ -415,11 +485,17 @@ export function AutomationPage() {
     >
       <p className="text-ink-faint max-w-[70ch] text-sm">{t('automation.intro')}</p>
 
-      <Band title={t('automation.jobs')} hint={t('automation.jobsHint')}>
+      <QuickNav t={t} jobs={ordered} />
+
+      <Band id="automation-jobs" title={t('automation.jobs')} hint={t('automation.jobsHint')}>
         <JobsBand jobs={jobs} ordered={ordered} controls={CONTROLS} />
       </Band>
 
-      <Band title={t('automation.recipients')} hint={t('automation.recipientsHint')}>
+      <Band
+        id="automation-recipients"
+        title={t('automation.recipients')}
+        hint={t('automation.recipientsHint')}
+      >
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex min-w-64 flex-1 flex-col gap-1.5">
