@@ -123,5 +123,15 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = Field(None, validation_alias=AliasChoices("SMTP_PASSWORD", "SMTP_PASS"))
     smtp_from: Optional[str] = None
 
+    # Outbound technician replies (POST /reply — the inbox's composer).
+    # n8n holds the credentials for reception; the API sends replies itself so
+    # the dashboard keeps working even while n8n is down. Same values as n8n's
+    # channel credentials: the Telegram bot token, and the WhatsApp System User
+    # token + the WABA phone number id. Optional: unset makes /reply answer 501
+    # with a precise message instead of the API refusing to boot.
+    telegram_bot_token: Optional[str] = None
+    whatsapp_access_token: Optional[str] = None
+    whatsapp_phone_number_id: Optional[str] = None
+
 
 settings = Settings()

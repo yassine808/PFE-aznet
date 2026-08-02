@@ -8,7 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import auth, daily_report, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, sheets
+from app import auth, daily_report, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError
@@ -934,6 +934,40 @@ def lookup_technician(channel: str, external_id: str, caller: dict = Depends(aut
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     return {"found": found is not None, "technician": found}
+
+
+# ── Technician replies ─────────────────────────────────────────────────────
+# The inbox composer. The API sends on the technician's own channels (Telegram
+# Bot API / WhatsApp Cloud API) so a manager's answer works without n8n. The
+# channel tokens are optional; when unset the endpoint answers 501 loudly.
+
+
+class ReplyIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200, description="Technician name as written in the Sheet")
+    text: str = Field(..., min_length=1, max_length=4000, description="Reply text")
+
+
+@app.post("/reply", responses={404: {"description": "No person with that name or no active channel"}, 422: {"description": "Invalid input"}, 501: {"description": "Channel tokens not configured"}, 502: {"description": "Channel refused the message"}})
+def send_reply(payload: ReplyIn, caller: dict = Depends(auth.require_human)) -> dict:
+    """Send a manager's reply to a technician, on every active channel of theirs."""
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(422, "text is required")
+    try:
+        person = logs.person_by_name(payload.name)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if person is None:
+        raise HTTPException(404, f"no technician named {payload.name!r}")
+    identities = [t for t in person.get("identities", []) if t.get("active")]
+    if not identities:
+        raise HTTPException(404, f"{payload.name} has no active channel")
+    try:
+        result = reply.reply_to_identities(identities, payload.text)
+    except reply.ReplyError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    auth.record(caller, "reply_sent", target=payload.name, detail=result)
+    return result
 
 
 # ── Operator settings ──────────────────────────────────────────────────────

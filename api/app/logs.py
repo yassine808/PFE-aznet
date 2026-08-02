@@ -855,6 +855,35 @@ def find_technician(channel: str, external_id: str) -> Optional[dict]:
     return _iso(dict(row)) if row else None
 
 
+def person_by_name(name: str) -> Optional[dict]:
+    """The person behind a Sheet name, with their channel identities.
+
+    The inbox replies by name because that is what the Sheet rows carry — n8n
+    resolved identities to people during access control, so Telegram and
+    WhatsApp both arrive here as the same string. Columns named (the hash
+    never rides out to the browser, same rule as list_persons).
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, name, role, manager_id, email, active, last_seen_at,
+                   profile, profile_updated_at, created_at
+              FROM persons WHERE name = %s
+            """,
+            (name.strip(),),
+        )
+        person = _one(cur)
+        if person is None:
+            return None
+        person = _iso(dict(person))
+        cur.execute(
+            "SELECT id, channel, external_id, active, person_id FROM technicians WHERE person_id = %s",
+            (person["id"],),
+        )
+        person["identities"] = [_iso(dict(raw)) for raw in cur.fetchall()]
+    return person
+
+
 def profile_for(name: Optional[str]) -> Optional[str]:
     """The profile of whoever is sending, by name.
 

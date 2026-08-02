@@ -200,6 +200,24 @@ export async function patchReport(row: number, field: string, value: string): Pr
   }
 }
 
+/** Outbound manager reply, sent by the API on the technician's own channels. */
+export interface ReplyResult {
+  delivered: { channel: string }[]
+}
+
+export async function sendReply(name: string, text: string): Promise<ReplyResult> {
+  const res = await fetch(`${BASE}/reply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, text }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(body.slice(0, 300) || res.statusText)
+  }
+  return (await res.json()) as ReplyResult
+}
+
 /**
  * One stored generated report: the same text the scheduler mailed and the
  * /rapport command answers with — per site manager, per period.

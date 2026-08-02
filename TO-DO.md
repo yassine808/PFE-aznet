@@ -15,7 +15,7 @@
 
 ## Dashboard v2 (rebuilt from scratch 2026-07-26 in `Dashboard/`)
 - [ ] Verify the dashboard visually — never done; Playwright's Chrome is not installed (`npx playwright install chrome`)
-- [ ] Inbox: give it better UI, show recent users, after i click on the user, it shows like a big window inside it in the left canals, and on the right the conversation + reply + add the modify button. make everything simple and clear.
+- [x] Inbox: give it better UI, show recent users, after i click on the user, it shows like a big window inside it in the left canals, and on the right the conversation + reply + add the modify button. make everything simple and clear. — left rail of recent technicians (count, channels, last date), right conversation window with per-message modify + a reply composer; replies are sent by the API on the technician's own channels via `POST /reply` (needs `TELEGRAM_BOT_TOKEN` + `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` in `.env`, same values as n8n's credentials; without them the composer answers 501 loudly)
 - [x] on each report generated, it emails the saved emails for the login (admin + Site manager) — see line 4 above
 - [x] make daily reports similar to weely reports — same stat panels (totals, production, per-tech)
 - [x] reports should show daily + weekly reports, not the messages — the Reports page now defaults to a "Rapports générés" tab (the stored per-manager daily/weekly reports from `manager_reports`); the message ledger moved to a second tab
