@@ -73,13 +73,21 @@ def drain_sheet_queue() -> dict:
             **report,
         }
         try:
-            sheets.append_report(row)
+            appended_row = sheets.append_report(row)
         except sheets.SheetsError as exc:
             # Left in the queue with the attempt counted, not dropped.
             logs.resolve_write(item["id"], False, str(exc))
             failed.append({"id": item["id"], "error": str(exc)})
             continue
         logs.resolve_write(item["id"], True)
+        # Link the parked message to the row it landed on, so a /modify reply
+        # can find it even when the happy path's append is the one that failed.
+        message_id = payload.get("message_id")
+        if message_id and appended_row:
+            try:
+                logs.link_message_row(message_id, appended_row)
+            except logs.LogStoreError:
+                pass  # best-effort like the append itself
         written += 1
     return {"pending": len(pending), "written": written, "failed": failed}
 

@@ -13,6 +13,12 @@ main.app.dependency_overrides[main.auth.require_human] = lambda: {
     "id": 1, "name": "Test", "role": "directeur"
 }
 
+# The /process audio path uploads to Google Drive for the durable lien_audio.
+# The real key exists on this machine and would trigger a network discovery
+# fetch on every voice test — these tests are about transcription, not Drive.
+# Drive behavior itself is covered in test_media_and_modify.py.
+main.drive.upload_audio = lambda filename, mime, data: "https://drive.google.com/uc?id=test"
+
 REPORT = ExtractedReport(
     chantier="Tour Atlas",
     goulottes_m=150,

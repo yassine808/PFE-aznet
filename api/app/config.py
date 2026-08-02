@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # dashboard backend (Sheets read/write; no auth — runs on the admin's PC only)
     sheet_id: Optional[str] = None
     google_service_account_json: str = "./credentials/service-account.json"
+    # Optional parent folder for the durable audio archive (app/drive.py). Unset
+    # = files land in the service account's Drive root.
+    google_drive_folder_id: Optional[str] = None
     # rolling alias, lite pool — pinned "gemini-2.5-flash" got retired (404, Jul 2026)
     # and the flagship "gemini-flash-latest" pool 503s under free-tier evening load;
     # lite is verified live and plenty for structured extraction (benchmark revisits)

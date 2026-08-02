@@ -1,14 +1,14 @@
 """FastAPI entrypoint — the single endpoint n8n and the web form call."""
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import auth, daily_report, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, reply, sheets
+from app import auth, daily_report, drive, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError
@@ -282,8 +282,8 @@ def track_visit(payload: VisitIn, caller: dict = Depends(auth.require_human)) ->
 async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dict):
     """Audio branch of /process: STT then a couple of quality warnings.
 
-    Returns (transcription, rapport_complet, warnings). Raises HTTPException on
-    empty input, an unknown provider name, or a transcription failure.
+    Returns (transcription, rapport_complet, warnings, blob). Raises HTTPException
+    on empty input, an unknown provider name, or a transcription failure.
     """
     blob = await audio.read()
     if not blob:
@@ -317,11 +317,12 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
         duration_ms=int((time.time() - t0) * 1000),
         payload={"engine": engine, "chars": len(rapport_complet)}, **ctx,
     )
-    return transcription, rapport_complet, warnings
+    return transcription, rapport_complet, warnings, blob
 
 
 async def _extract_from_image(
-    image: UploadFile, sender_profile: Optional[str], caption: Optional[str], ctx: dict
+    image: UploadFile, sender_profile: Optional[str], caption: Optional[str],
+    ctx: dict, message_id: Optional[str] = None,
 ) -> ProcessResponse:
     """Image branch of /process. The vision model reads the photo and fills the
     schema in one call, so there is no intermediate transcription to store or
@@ -355,6 +356,13 @@ async def _extract_from_image(
         duration_ms=int((time.time() - t1) * 1000),
         payload={"model": model_used, "chantier": report.chantier, "bytes": len(blob)}, **ctx,
     )
+    # Archive the photo in Postgres while the channel's ticket is still live —
+    # a webhook media URL dies within minutes, the DB copy does not.
+    try:
+        logs.save_media(ctx.get("channel"), None, message_id, "image",
+                        image.content_type, blob)
+    except logs.LogStoreError as exc:
+        await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
     return ProcessResponse(
         rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
     )
@@ -370,6 +378,7 @@ async def process(
     correlation_id: Optional[str] = Form(None, description="Trace id minted by n8n at reception"),
     channel: Optional[str] = Form(None, description="telegram | whatsapp | form"),
     technicien: Optional[str] = Form(None, description="Sender name, for log filtering"),
+    message_id: Optional[str] = Form(None, description="Channel message id (dedupe key, e.g. 'tg:123:456') — links the report to its origin message for /modify"),
 ) -> ProcessResponse:
     # Same trace id n8n threads through every stage, so the API's own errors
     # line up with the workflow's rows in the dashboard timeline.
@@ -393,12 +402,32 @@ async def process(
     # sends it when a technician records a voice note with a text caption.
     caption = (caption or "").strip() or None
 
+    lien_audio = None  # set only by the audio branch (Drive upload)
+
     if audio is not None:
-        transcription, rapport_complet, warnings = await _transcribe_audio(audio, provider, ctx)
+        transcription, rapport_complet, warnings, blob = await _transcribe_audio(audio, provider, ctx)
         if caption:
             rapport_complet = f"{rapport_complet}\n\n{caption}"
+        # Archive the voice note (Postgres) and mint its durable link (Drive).
+        # Both are best-effort: a log store outage or a Drive hiccup must never
+        # cost the technician their summary — the fallback is the previous
+        # behavior where n8n stored the channel's own file ticket.
+        try:
+            logs.save_media(ctx.get("channel"), None, message_id, "audio",
+                            audio.content_type, blob)
+        except logs.LogStoreError as exc:
+            await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
+        try:
+            if blob:
+                lien_audio = await run_in_threadpool(
+                    drive.upload_audio,
+                    f"audio-{message_id or correlation_id or int(time.time())}.ogg",
+                    audio.content_type or "audio/ogg", blob,
+                )
+        except drive.DriveError as exc:
+            await _log("api", "warn", message=f"drive upload failed: {exc}", **ctx)
     elif image is not None:
-        return await _extract_from_image(image, sender_profile, caption, ctx)
+        return await _extract_from_image(image, sender_profile, caption, ctx, message_id)
     else:
         transcription = None
         warnings = []
@@ -408,6 +437,12 @@ async def process(
         if not rapport_complet:
             await _log("api", "error", message="Empty text", **ctx)
             raise HTTPException(422, "Empty text")
+        # Text messages are archived too, so the conversation is recoverable
+        # even though the Sheet only keeps extracted reports.
+        try:
+            logs.save_message(ctx.get("channel"), None, message_id, rapport_complet)
+        except logs.LogStoreError as exc:
+            await _log("api", "warn", message=f"chat archive failed: {exc}", **ctx)
 
     t1 = time.time()
     try:
@@ -437,7 +472,108 @@ async def process(
         report=report,
         transcription=transcription,
         warnings=warnings,
+        lien_audio=lien_audio,
     )
+
+
+# ── media + chat archive (TO-DO #10: download audios/images/chat to the DB) ─
+
+@app.get("/media", responses={502: {"description": "Log store unreachable"}})
+def list_media(limit: int = 50, caller: dict = Depends(auth.require_human)) -> dict:
+    """Archive listing (metadata only, never the blobs)."""
+    try:
+        return {"media": logs.list_media(limit)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/media/{media_id}/file", responses={404: {"description": "Not found"}, 502: {"description": "Log store unreachable"}})
+def get_media_file(media_id: int, caller: dict = Depends(auth.require_human)) -> Response:
+    """One archived voice note / photo, for the dashboard's <audio>/<img> tags."""
+    try:
+        row = logs.get_media(media_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if row is None:
+        raise HTTPException(404, "media not found")
+    return Response(
+        content=row["data"],
+        media_type=row["mime_type"] or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="media-{row["id"]}"'},
+    )
+
+
+@app.get("/messages", responses={502: {"description": "Log store unreachable"}})
+def list_messages(
+    limit: int = 100, channel: Optional[str] = None, search: Optional[str] = None,
+    caller: dict = Depends(auth.require_human),
+) -> dict:
+    """Raw chat archive, newest first — the Sheet only keeps extracted reports."""
+    try:
+        return {"messages": logs.list_messages(limit, channel, search)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+class LinkIn(BaseModel):
+    message_id: str
+    row: Optional[int] = Field(None, description="1-based Sheet row; None clears the link")
+
+
+@app.post("/messages/link", responses={404: {"description": "Unknown message"}, 502: {"description": "Log store unreachable"}})
+def link_message(payload: LinkIn, caller: dict = Depends(auth.require_user)) -> dict:
+    """Record which Sheet row a message became (called by n8n after the append)."""
+    try:
+        linked = logs.link_message_row(payload.message_id, payload.row)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if not linked:
+        raise HTTPException(404, "message inconnu (pas encore traité)")
+    return {"linked": True, "message_id": payload.message_id, "row": payload.row}
+
+
+class ModifyIn(BaseModel):
+    message_id: str
+    action: Literal["modify", "supprimer"]
+    fields: Optional[Dict[str, Optional[str]]] = Field(
+        None, description="Column → value map; required for modify, ignored for supprimer"
+    )
+
+
+@app.post("/modify-command", responses={404: {"description": "Unknown message"}, 422: {"description": "Missing fields"}, 502: {"description": "Sheets or log store failure"}})
+def modify_command(payload: ModifyIn, caller: dict = Depends(auth.require_user)) -> dict:
+    """Backend of the /modify and /supprimer reply commands.
+
+    The technician replies to their own report message; n8n resolves the reply
+    to its origin message_id and calls here. The row number comes from the link
+    the append wrote (processed_messages.sheet_row), never from anything the
+    technician typed — same reason /rapport never parses the text.
+    """
+    try:
+        row = logs.message_row(payload.message_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if row is None:
+        raise HTTPException(404, "aucun rapport lié à ce message")
+
+    if payload.action == "supprimer":
+        try:
+            sheets.clear_row(row)
+        except sheets.SheetsError as exc:
+            raise HTTPException(502, f"sheets clear failed: {exc}") from exc
+        try:
+            logs.link_message_row(payload.message_id, None)  # unlink: nothing left to edit
+        except logs.LogStoreError:
+            pass  # the Sheet is the source of truth; the link is best-effort
+        return {"action": "supprimer", "row": row}
+
+    if not payload.fields:
+        raise HTTPException(422, "des champs sont requis pour /modify")
+    try:
+        sheets.update_report_fields(row, payload.fields)
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, f"sheets write failed: {exc}") from exc
+    return {"action": "modify", "row": row, "fields": sorted(payload.fields)}
 
 
 # No auth: dashboard + API run only on the admin's machine (localhost), decided 2026-07-23.

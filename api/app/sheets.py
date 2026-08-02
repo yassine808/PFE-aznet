@@ -4,6 +4,7 @@ Sheets stays the single source of truth (PLAN.md assumption 3): the dashboard
 reads rows through here and manual corrections write back to the same cells.
 Google client is lazy-imported so tests run without credentials.
 """
+import re
 from pathlib import Path
 from typing import List, Optional
 
@@ -62,6 +63,15 @@ def read_reports() -> List[dict]:
 
 def update_report_field(row: int, field: str, value: Optional[str]) -> None:
     """Write one cell back (manual correction). Column resolved from the header row."""
+    update_report_fields(row, {field: value})
+
+
+def update_report_fields(row: int, values: dict) -> None:
+    """Write several cells of one row in one batch call (the /modify write-back).
+
+    Column resolved from the header row like the single-cell variant, so a
+    column reordered in the Sheet moves the value with it.
+    """
     svc = _service()
     try:
         header_resp = (
@@ -71,14 +81,22 @@ def update_report_field(row: int, field: str, value: Optional[str]) -> None:
             .execute()
         )
         headers = header_resp.get("values", [[]])[0]
-        if field not in headers:
-            raise SheetsError(f"unknown column: {field}")
-        col = _col_letter(headers.index(field) + 1)
-        svc.spreadsheets().values().update(
+        data = []
+        for field, value in values.items():
+            if field not in headers:
+                raise SheetsError(f"unknown column: {field}")
+            col = _col_letter(headers.index(field) + 1)
+            data.append(
+                {
+                    "range": f"{RAPPORTS_TAB}!{col}{row}",
+                    "values": [[value if value is not None else ""]],
+                }
+            )
+        if not data:
+            return
+        svc.spreadsheets().values().batchUpdate(
             spreadsheetId=settings.sheet_id,
-            range=f"{RAPPORTS_TAB}!{col}{row}",
-            valueInputOption="USER_ENTERED",
-            body={"values": [[value if value is not None else ""]]},
+            body={"valueInputOption": "USER_ENTERED", "data": data},
         ).execute()
     except SheetsError:
         raise
@@ -86,12 +104,42 @@ def update_report_field(row: int, field: str, value: Optional[str]) -> None:
         raise SheetsError(f"sheets write failed: {exc}") from exc
 
 
-def append_report(values: dict) -> None:
-    """Append one report row to the Rapports tab.
+def clear_row(row: int) -> None:
+    """Empty every cell of a row (the /supprimer command).
 
-    Used only by the retry drain: the happy path still appends from n8n. Cells
-    are placed by header name, so a column reordered in the Sheet moves the value
-    with it instead of silently writing `chantier` into `client`.
+    The row stays in place on purpose: Google has no cheap positional delete
+    that would not shift every row number below it, which would invalidate
+    every stored message→row link at once. An emptied row keeps its place and
+    its row number; the reports the dashboard renders simply stop matching it.
+    """
+    svc = _service()
+    try:
+        header_resp = (
+            svc.spreadsheets()
+            .values()
+            .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
+            .execute()
+        )
+        ncols = max(1, len(header_resp.get("values", [[]])[0]))
+        svc.spreadsheets().values().clear(
+            spreadsheetId=settings.sheet_id,
+            range=f"{RAPPORTS_TAB}!A{row}:{_col_letter(ncols)}{row}",
+            body={},
+        ).execute()
+    except SheetsError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SheetsError(f"sheets clear failed: {exc}") from exc
+
+
+def append_report(values: dict) -> Optional[int]:
+    """Append one report row to the Rapports tab, returning its row number.
+
+    Used by the retry drain: the happy path still appends from n8n. Cells are
+    placed by header name, so a column reordered in the Sheet moves the value
+    with it instead of silently writing `chantier` into `client`. The returned
+    row number is the same positional numbering read_reports uses, which is
+    what lets the drain link the message to the row for /modify.
     """
     svc = _service()
     try:
@@ -105,17 +153,31 @@ def append_report(values: dict) -> None:
         if not headers:
             raise SheetsError("Rapports tab has no header row")
         row = [_cell(values.get(h)) for h in headers]
-        svc.spreadsheets().values().append(
-            spreadsheetId=settings.sheet_id,
-            range=RAPPORTS_TAB,
-            valueInputOption="USER_ENTERED",
-            insertDataOption="INSERT_ROWS",
-            body={"values": [row]},
-        ).execute()
+        resp = (
+            svc.spreadsheets()
+            .values()
+            .append(
+                spreadsheetId=settings.sheet_id,
+                range=RAPPORTS_TAB,
+                valueInputOption="USER_ENTERED",
+                insertDataOption="INSERT_ROWS",
+                body={"values": [row]},
+            )
+            .execute()
+        )
+        return _row_from_range(resp.get("updates", {}).get("updatedRange"))
     except SheetsError:
         raise
     except Exception as exc:  # noqa: BLE001
         raise SheetsError(f"sheets append failed: {exc}") from exc
+
+
+def _row_from_range(updated_range: Optional[str]) -> Optional[int]:
+    """'Rapports!A15:H15' → 15. Same positional numbering as read_reports."""
+    if not updated_range:
+        return None
+    m = re.search(r"!([A-Z]+)(\d+)", updated_range)
+    return int(m.group(2)) if m else None
 
 
 def _cell(value) -> str:

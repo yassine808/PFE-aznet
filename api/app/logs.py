@@ -234,6 +234,45 @@ CREATE TABLE IF NOT EXISTS manager_reports (
     PRIMARY KEY (manager_id, period)
 );
 CREATE INDEX IF NOT EXISTS manager_reports_mgr_idx ON manager_reports (manager_id, generated_at DESC);
+
+-- Media archive: every voice note / photo /document the pipeline receives,
+-- copied into Postgres while it is still downloadable. Telegram file_ids and
+-- WhatsApp media ids are tickets, not URLs — Meta's media URLs expire within
+-- minutes, so without a durable copy the only trace left of a technician's
+-- message is its transcript. Rows are small (Telegram caps voice notes at
+-- ~1.5 MB, photos at a few hundred KB), which keeps a BYTEA column honest.
+CREATE TABLE IF NOT EXISTS media_files (
+    id          BIGSERIAL PRIMARY KEY,
+    channel     TEXT,
+    external_id TEXT,
+    message_id  TEXT,
+    kind        TEXT NOT NULL,               -- 'audio' | 'image'
+    mime_type   TEXT,
+    size_bytes  INTEGER NOT NULL DEFAULT 0,
+    data        BYTEA NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS media_files_ts_idx ON media_files (created_at DESC);
+
+-- Raw chat archive: every typed message, so the conversation survives the
+-- Sheet (the Sheet only ever holds extracted reports).
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id          BIGSERIAL PRIMARY KEY,
+    channel     TEXT,
+    external_id TEXT,
+    message_id  TEXT,
+    text        TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS chat_messages_ts_idx ON chat_messages (created_at DESC);
+
+-- The /modify command: a technician replies to their own message and the row
+-- it became has to be found by the id of that message. The claim already
+-- stores `channel:msgid`; these two columns record which Sheet row it landed
+-- on, written by whoever performed the append (n8n on the happy path, the
+-- retry drain after a Sheets outage).
+ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_row BIGINT;
+ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ;
 """
 
 
@@ -595,6 +634,135 @@ def claim_message(message_id: str, channel: Optional[str] = None) -> bool:
             (message_id, channel),
         )
         return _one(cur) is not None
+
+
+# ── media + chat archive ───────────────────────────────────────────────────
+# Every voice note, photo and typed message is copied into Postgres as it
+# arrives (see the media_files / chat_messages comments in _SCHEMA for why).
+# These functions raise LogStoreError like the rest of the module; the /process
+# handler wraps them in best-effort calls because archiving must never cost a
+# technician their reply.
+
+
+def save_media(
+    channel: Optional[str],
+    external_id: Optional[str],
+    message_id: Optional[str],
+    kind: str,
+    mime_type: Optional[str],
+    data: bytes,
+) -> int:
+    with _cursor() as cur:
+        from psycopg2 import Binary  # lazy: tests run with no DB
+
+        cur.execute(
+            """
+            INSERT INTO media_files
+                (channel, external_id, message_id, kind, mime_type, size_bytes, data)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (channel, external_id, message_id, kind, mime_type, len(data), Binary(data)),
+        )
+        return (_one(cur) or {})["id"]
+
+
+def save_message(
+    channel: Optional[str],
+    external_id: Optional[str],
+    message_id: Optional[str],
+    text: str,
+) -> int:
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO chat_messages (channel, external_id, message_id, text)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+            """,
+            (channel, external_id, message_id, text),
+        )
+        return (_one(cur) or {})["id"]
+
+
+def list_media(limit: int = 50) -> List[dict]:
+    """Archive listing — metadata only, never the blob.
+
+    A dashboard grid does not need to download every file to know they exist;
+    GET /media/{id}/file fetches one on demand.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, channel, external_id, message_id, kind, mime_type, "
+            "size_bytes, created_at FROM media_files ORDER BY created_at DESC LIMIT %s",
+            (max(1, min(limit, 200)),),
+        )
+        rows = [_iso(dict(r)) for r in cur.fetchall()]
+    return rows
+
+
+def get_media(media_id: int) -> Optional[dict]:
+    """One archived file, blob included, for GET /media/{id}/file."""
+    with _cursor() as cur:
+        cur.execute("SELECT * FROM media_files WHERE id = %s", (media_id,))
+        row = _one(cur)
+    if row is None:
+        return None
+    out = _iso(dict(row))
+    out["data"] = bytes(out["data"])
+    return out
+
+
+def list_messages(
+    limit: int = 100, channel: Optional[str] = None, search: Optional[str] = None
+) -> List[dict]:
+    with _cursor() as cur:
+        where: List[str] = []
+        args: List[Any] = []
+        if channel:
+            where.append("channel = %s")
+            args.append(channel)
+        if search:
+            where.append("text ILIKE %s")
+            args.append("%" + search + "%")
+        sql = "SELECT id, channel, external_id, message_id, text, created_at FROM chat_messages"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY created_at DESC LIMIT %s"
+        args.append(max(1, min(limit, 500)))
+        cur.execute(sql, args)
+        rows = [_iso(dict(r)) for r in cur.fetchall()]
+    return rows
+
+
+# ── message → Sheet row link (the /modify command) ─────────────────────────
+# The /modify reply has to find the row its report landed on, and the only id
+# it carries is the origin message's — the same `channel:msgid` string the
+# claim stores. The link is written by whoever performed the append.
+
+def link_message_row(message_id: str, row: Optional[int]) -> bool:
+    """Remember which Sheet row a processed message landed on; None clears it.
+
+    Upsert-free by design: the row already exists (the claim inserted it), so
+    this is an UPDATE — clearing with None is how /supprimer unlinks a row.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "UPDATE processed_messages SET sheet_row = %s, linked_at = now() "
+            "WHERE message_id = %s",
+            (row, message_id),
+        )
+        return cur.rowcount > 0
+
+
+def message_row(message_id: str) -> Optional[int]:
+    """The Sheet row a message landed on, if anyone linked it."""
+    with _cursor() as cur:
+        cur.execute("SELECT sheet_row FROM processed_messages WHERE message_id = %s", (message_id,))
+        row = _one(cur)
+    if row is None or row["sheet_row"] is None:
+        return None
+    return int(row["sheet_row"])
 
 
 # ── sheet retry queue ──────────────────────────────────────────────────────
