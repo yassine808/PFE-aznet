@@ -30,5 +30,5 @@
 - [x] Site name isn't auto-generated — duplicate of line 22: the chantier is inserted by admin/site manager, never invented by the model
 - [x] the search (crtl+k) searches literally eveything. (even with typos etc, then show suggestion of what it can show instead) — fuzzy subsequence matching, technicians indexed, "did you mean" fallback
 - [] add notification that's unique for the users of the dashboard
-- [] add to do ,tasks which can be added with the reminder repitition
+- [] add panel for "to do" tasks which can be added with the reminder repitition
 
