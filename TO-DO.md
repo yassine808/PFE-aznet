@@ -3,7 +3,7 @@
 - [ ] Finish STT benchmark → pick default provider — **blocked on the dataset**: `benchmark/dataset/audio/` is still empty, so `stt_provider=groq` is an assumption, not a measurement. Harness is ready (`benchmark/run_benchmark.py`).
 - [x] Add email notif for the generated report — recipients derive from account emails (admin + site managers), manual list is the fallback
 - [ ] Daily stat: % spoken Darija words vs French (post-PFE, zero cahier value)
-- [ ] Generate image if needed from all the infos collected in the day
+- [x] Generate image if needed from all the infos collected in the day — "Carte illustrée" button on the Daily and Weekly pages: explicit click only, `POST /generate-image` (Gemini), the data-URI card is displayed and downloadable, never written to the Sheet
 
 ## Workflow improvements (discussed 2026-07-23, cheap → expensive)
 - [ ] Durable audio links: upload audio to Google Drive, store share link in `lien_audio` (file_id/media_id not durable; Meta media URLs expire ~5 min)
@@ -27,6 +27,6 @@
 - [x] add infos about each worker : %french/arabic, how many messages sent, etc — WorkerStats in the equipe detail panel (messages, % darija vs french, flagged count, last activity)
 - [x] in overview panel, instead of Reports today, change it to (messages today) or something similar
 - [x] in TEAM panel (accounts dashboard) show something like a flowchart with the admin on the very top, then site managers below it, then workers below it ( add a "+" to add more site manager if wanted to), then below each site manager show all the workers that belong to them with their name + phone number. merge this panel with access control. — the equipe page: three role bands, + buttons, drag-drop reassignment, channels + access merged
-- [ ] Site name isn't auto-generated
+- [x] Site name isn't auto-generated — duplicate of line 22: the chantier is inserted by admin/site manager, never invented by the model
 - [x] the search (crtl+k) searches literally eveything. (even with typos etc, then show suggestion of what it can show instead) — fuzzy subsequence matching, technicians indexed, "did you mean" fallback
 

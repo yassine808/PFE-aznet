@@ -215,6 +215,30 @@ export interface GeneratedReport {
   generated_by: string
 }
 
+/** An illustrated summary card, returned as a data URI — never written to the Sheet. */
+export interface GeneratedImage {
+  model: string
+  mime_type: string
+  data_uri: string
+}
+
+/**
+ * Renders the summary card for a period. A real image-model call against a
+ * metered free tier: only ever fired by an explicit click, never by a poll.
+ */
+export async function generateImage(rows: ReportRow[], title: string): Promise<GeneratedImage> {
+  const res = await fetch(`${BASE}/generate-image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows, title }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${body.slice(0, 300) || res.statusText}`)
+  }
+  return res.json() as Promise<GeneratedImage>
+}
+
 export interface DailyReportContent {
   objet: string
   corps: string

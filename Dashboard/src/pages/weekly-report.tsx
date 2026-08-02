@@ -8,6 +8,7 @@ import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ContributionGraph, isoOf as iso, weekStart } from '@/components/contribution-graph'
+import { ReportImageCard } from '@/components/report-image'
 
 const DAY_MS = 86_400_000
 
@@ -320,6 +321,12 @@ export function WeeklyReportPage() {
               ))}
             </ul>
           </section>
+
+          <ReportImageCard
+            rows={week.rows}
+            title={t('image.weekTitle', { start: iso(days[0]), end: iso(days[6]) })}
+            disabled={week.rows.length === 0}
+          />
         </>
       )}
     </motion.div>

@@ -7,6 +7,7 @@ import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ActivityGraphSection } from '@/components/activity-graph-section'
+import { ReportImageCard } from '@/components/report-image'
 
 export function DailyReportPage() {
   const { t, locale } = useI18n()
@@ -193,6 +194,12 @@ export function DailyReportPage() {
               ))}
             </ul>
           </section>
+
+          <ReportImageCard
+            rows={rows}
+            title={t('image.dayTitle', { date })}
+            disabled={rows.length === 0}
+          />
         </>
       )}
 
