@@ -35,7 +35,9 @@ câble réseau, panneau de brassage, prise RJ45, baie, bureau, étage, chantier.
 8. **`observations`** — problèmes, matériel manquant, accès bloqué, remarques.
 9. **`resume`** — 2 à 4 phrases, français professionnel, 3e personne, destiné au chef
    de chantier. Toujours rempli, même si tout le reste est `null` : dans ce cas il
-   explique pourquoi la journée n'a produit aucun chiffre.
+   explique pourquoi la journée n'a produit aucun chiffre. Sans mot de remplissage
+   ni hésitation (« probablement », « il semble que », « je pense ») : soit le fait
+   est établi, soit c'est une incertitude à porter dans `observations`.
 
 ## Rappel
 

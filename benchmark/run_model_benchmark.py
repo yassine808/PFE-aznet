@@ -9,6 +9,7 @@ Usage (from benchmark/, with the api venv):
     ../api/.venv/Scripts/python.exe run_model_benchmark.py --mode text
     ../api/.venv/Scripts/python.exe run_model_benchmark.py --mode image
     ../api/.venv/Scripts/python.exe run_model_benchmark.py --mode text --models gemini-3.6-flash,openai/gpt-oss-120b
+    ../api/.venv/Scripts/python.exe run_model_benchmark.py --mode text --models openai/gpt-oss-120b --cases t04_hallucination_trap,t08_no_quantities_at_all
 """
 import argparse
 import csv
@@ -274,10 +275,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["text", "image"], default="text")
     ap.add_argument("--models", help="comma-separated override of the candidate list")
+    ap.add_argument("--cases", help="comma-separated case ids; default is the whole dataset")
     ap.add_argument("--sleep", type=float, default=5.0, help="seconds between calls (free-tier rate limits)")
     args = ap.parse_args()
 
     cases = load_cases()
+    if args.cases:
+        wanted = {c.strip() for c in args.cases.split(",") if c.strip()}
+        cases = [c for c in cases if c["id"] in wanted]
+        if not cases:
+            ap.error(f"--cases matched nothing (wanted: {sorted(wanted)})")
     if args.models:
         models = [m.strip() for m in args.models.split(",") if m.strip()]
     else:

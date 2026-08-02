@@ -32,6 +32,9 @@ blanc, bon de livraison, écran, ou vue du chantier lui-même.
 - **Photo inexploitable** — floue, hors sujet, sans information : tous les champs à
   `null`, et `resume` explique en une phrase ce que montre l'image et pourquoi elle
   ne permet pas d'établir un rapport.
+- **Photo partielle** — lisible mais incomplète : tu extrais ce qui est lisible et tu
+  laisses le reste à `null`. Tu ne commentes jamais la qualité du document (écriture,
+  orientation, photo de travers) et tu ne demandes pas de meilleure photo.
 
 Les règles générales d'extraction (nombres en lettres, unités en mètres, absence =
 `null`, nombres qui ne sont pas des quantités) s'appliquent à l'identique.

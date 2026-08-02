@@ -11,7 +11,10 @@ _PROMPT = (
     "Le locuteur parle en darija (arabe marocain) mélangée de français technique "
     "(goulotte, câble, panneau de brassage, bureau, étage, mètres). "
     "Rends le texte exactement comme prononcé, en graphie arabe pour la darija "
-    "et en latin pour les mots français. Ne traduis pas, ne résume pas."
+    "et en latin pour les mots français. Ne traduis pas, ne résume pas. "
+    "Si un passage est inaudible, transcris ce que tu entends et laisse la lacune : "
+    "n'invente JAMAIS un mot pour compléter. Ne corrige pas la grammaire du locuteur "
+    "et ne commente pas l'audio : uniquement le texte prononcé."
 )
 
 
