@@ -521,6 +521,55 @@ def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(au
     )
 
 
+class RapportResponse(BaseModel):
+    """Answer to the technicians' /rapport command: the last generated report
+    of their site manager. `found: false` carries a short reason so n8n can
+    reply politely instead of parsing an error."""
+
+    found: bool
+    detail: Optional[str] = None
+    period: Optional[str] = None
+    objet: Optional[str] = None
+    corps: Optional[str] = None
+    generated_at: Optional[str] = None
+    generated_by: Optional[str] = None
+    manager_name: Optional[str] = None
+
+
+@app.get("/rapport", responses={500: {"description": "Log store failure"}})
+def latest_rapport(
+    channel: str,
+    external_id: str,
+    caller: dict = Depends(auth.require_user),
+) -> RapportResponse:
+    """A technician asks /rapport → the last generated report of their chef.
+
+    The sender resolves to a person, the person to their manager; the answer
+    comes from `manager_reports`, which the scheduler fills at the same moment
+    it mails — so the chat reply and the inbox show the same text. Machine
+    access (X-API-Key) is deliberate: n8n answers the command on the spot.
+    """
+    person = logs.find_technician(channel, external_id)
+    if person is None:
+        return RapportResponse(found=False, detail="inconnu")
+    manager_id = person.get("manager_id")
+    if not manager_id:
+        return RapportResponse(found=False, detail="pas de responsable")
+    manager = logs.person_by_id(manager_id)
+    report = logs.latest_manager_report(manager_id)
+    if report is None:
+        return RapportResponse(found=False, detail="aucun rapport")
+    return RapportResponse(
+        found=True,
+        period=report.get("period"),
+        objet=report.get("objet"),
+        corps=report.get("corps"),
+        generated_at=report.get("generated_at"),
+        generated_by=report.get("generated_by"),
+        manager_name=manager["name"] if manager else None,
+    )
+
+
 class ImageCardRequest(BaseModel):
     """Rows already extracted, plus what to call the card."""
 

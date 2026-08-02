@@ -109,7 +109,7 @@ def refresh_profiles() -> dict:
 
 
 def _report_recipients() -> List[str]:
-    """Who the report goes to: every account's email (admin + site managers).
+    """Who the company report goes to: every account's email (admin + site managers).
 
     The `emails` app setting is the manual fallback, kept for installs where no
     account row carries an email yet — once the org chart has accounts, the list
@@ -121,18 +121,96 @@ def _report_recipients() -> List[str]:
     return recipients
 
 
+def _manager_buckets(persons: List[dict], rows: List[dict]) -> Dict[int, List[dict]]:
+    """Bucket rows by the chef each sender reports to: manager person id → rows.
+
+    A row is attributed through the sender's name (the Sheet has no channel
+    ids), the same key the directory matches on. Rows whose sender resolves to
+    no person, or to a person without a chef, belong to nobody's team — they
+    only appear in the director's company-wide digest, so nothing a technician
+    actually sent can be lost because the org chart is incomplete.
+    """
+    by_name = {p["name"].strip().lower(): p for p in persons}
+    buckets: Dict[int, List[dict]] = {}
+    for row in rows:
+        person = by_name.get((row.get("technicien") or "").strip().lower())
+        manager_id = None
+        if person is not None:
+            # A chef's own rows land in their own report; a tech's rows land in
+            # their chef's. Unassigned or unknown senders stay with the director.
+            manager_id = person.get("manager_id") or (
+                person["id"] if person.get("role") == "chef" else None
+            )
+        if manager_id:
+            buckets.setdefault(manager_id, []).append(row)
+    return buckets
+
+
+def _report_mail(
+    recipients: List[str], period: str, rows: List[dict]
+) -> dict:
+    """Generate one digest and mail it. Returns what the jobs report back."""
+    if not rows:
+        return {"rows": 0, "sent_to": [], "reason": "aucun rapport"}
+    content = daily_report.generate_daily_report(period, rows)
+    sent = mailer.send(recipients, content.objet, content.corps, html=True)
+    return {
+        "rows": len(rows), "sent_to": sent, "subject": content.objet,
+        "generated_by": "automatique", "objet": content.objet, "corps": content.corps,
+    }
+
+
 def send_daily_report(date: Optional[str] = None) -> dict:
-    """Today's rows → French summary → the configured mailboxes."""
+    """Today's rows → one French summary per site manager, each to their inbox.
+
+    Reports became per-manager: the director gets the company-wide digest, and
+    every chef gets their team's. Each generated version is stored so the
+    technicians' /rapport command answers with the *same* text the mail showed.
+    """
     day = date or datetime.now().strftime("%Y-%m-%d")
     rows = [r for r in sheets.read_reports() if r.get("date") == day]
     if not rows:
         # Not an error: a Sunday with no reports is a normal outcome, and mailing
         # an empty report teaches the manager to ignore the mail.
         return {"date": day, "rows": 0, "sent_to": [], "reason": "aucun rapport pour cette date"}
-    content = daily_report.generate_daily_report(day, rows)
-    sent = mailer.send(_report_recipients(), content.objet, content.corps, html=True)
+    persons = logs.list_persons()
+    buckets = _manager_buckets(persons, rows)
+    by_id = {p["id"]: p for p in persons}
+
+    # The company digest goes to the director(s); without a director row the
+    # manual recipient list takes over, so an install without an org chart
+    # behaves exactly as before this split.
+    directors = [p for p in persons if p.get("role") == "directeur" and p.get("has_login") and p.get("email")]
+    director_rcpts = [p["email"] for p in directors] or _report_recipients()
+    company = _report_mail(director_rcpts, day, rows)
+
+    sent_all = set(company["sent_to"])
+    manager_reports = []
+    for manager_id, team in sorted(buckets.items()):
+        chef = by_id.get(manager_id)
+        if chef is None:
+            continue
+        rcpts = [chef["email"]] if chef.get("has_login") and chef.get("email") else []
+        result = _report_mail(rcpts, day, team)
+        if result["rows"]:
+            sent_all.update(result["sent_to"])
+            manager_reports.append(
+                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"]}
+            )
+            # Stored even when the chef has no email: the /rapport command
+            # answers from here, and a report a technician can read is worth
+            # generating even if no account row is set up yet.
+            logs.save_manager_report(
+                manager_id, day, result["objet"], result["corps"], result["generated_by"]
+            )
+
     return {
-        "date": day, "rows": len(rows), "sent_to": sent, "subject": content.objet,
+        "date": day,
+        "rows": len(rows),
+        "sent_to": sorted(sent_all),
+        "subject": company["subject"],
+        "managers": len(manager_reports),
+        "reports": manager_reports,
         "generated_by": "automatique",
     }
 
@@ -152,10 +230,38 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
     label = f"{first_day.strftime('%Y-%m-%d')} → {last_day.strftime('%Y-%m-%d')}"
     if not rows:
         return {"period": label, "rows": 0, "sent_to": [], "reason": "aucun rapport sur la période"}
-    content = daily_report.generate_daily_report(label, rows)
-    sent = mailer.send(_report_recipients(), content.objet, content.corps, html=True)
+    persons = logs.list_persons()
+    buckets = _manager_buckets(persons, rows)
+    by_id = {p["id"]: p for p in persons}
+
+    directors = [p for p in persons if p.get("role") == "directeur" and p.get("has_login") and p.get("email")]
+    director_rcpts = [p["email"] for p in directors] or _report_recipients()
+    company = _report_mail(director_rcpts, label, rows)
+
+    sent_all = set(company["sent_to"])
+    manager_reports = []
+    for manager_id, team in sorted(buckets.items()):
+        chef = by_id.get(manager_id)
+        if chef is None:
+            continue
+        rcpts = [chef["email"]] if chef.get("has_login") and chef.get("email") else []
+        result = _report_mail(rcpts, label, team)
+        if result["rows"]:
+            sent_all.update(result["sent_to"])
+            manager_reports.append(
+                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"]}
+            )
+            logs.save_manager_report(
+                manager_id, label, result["objet"], result["corps"], result["generated_by"]
+            )
+
     return {
-        "period": label, "rows": len(rows), "sent_to": sent, "subject": content.objet,
+        "period": label,
+        "rows": len(rows),
+        "sent_to": sorted(sent_all),
+        "subject": company["subject"],
+        "managers": len(manager_reports),
+        "reports": manager_reports,
         "generated_by": "automatique",
     }
 

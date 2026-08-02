@@ -134,7 +134,9 @@ def test_weekly_report_covers_the_whole_week(monkeypatch):
         {"date": "2026-07-26", "resume": "dimanche d'avant"},  # previous week
     ]
     monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
-    # No account email rows (DB-free test) → falls back to the manual list.
+    # No org chart rows in a DB-free test → the director's digest falls back to
+    # the manual recipient list, and nobody's team buckets exist.
+    monkeypatch.setattr(jobs.logs, "list_persons", lambda: [])
     monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": ["chef@aznet.ma"]})
     monkeypatch.setattr(
@@ -149,6 +151,67 @@ def test_weekly_report_covers_the_whole_week(monkeypatch):
     assert seen == {"label": "2026-07-27 → 2026-07-31", "n": 2}
     assert out["rows"] == 2
     assert out["sent_to"] == ["chef@aznet.ma"]
+    assert out["managers"] == 0
+
+
+def test_daily_report_is_per_manager(monkeypatch):
+    """The director gets the company digest; each chef gets their team's rows,
+    and every generated version is stored for the /rapport command."""
+    persons = [
+        {"id": 1, "name": "Directeur", "role": "directeur", "has_login": True, "email": "d@aznet.ma"},
+        {"id": 2, "name": "Chef A", "role": "chef", "has_login": True, "email": "a@aznet.ma"},
+        {"id": 3, "name": "Tech 1", "role": "tech", "has_login": False, "email": None, "manager_id": 2},
+        {"id": 4, "name": "Tech 2", "role": "tech", "has_login": False, "email": None, "manager_id": 2},
+    ]
+    rows = [
+        {"date": "2026-08-01", "technicien": "Tech 1", "resume": "salle 1"},
+        {"date": "2026-08-01", "technicien": "Tech 2", "resume": "salle 2"},
+        {"date": "2026-08-01", "technicien": "Inconnu", "resume": "libre"},
+    ]
+    generated, sent, stored = [], [], []
+
+    def fake_gen(label, r):
+        generated.append((label, sorted(row["resume"] for row in r)))
+        return jobs.daily_report.DailyReportContent(objet=f"Rapport {label}", corps="corps")
+
+    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
+    monkeypatch.setattr(jobs.logs, "list_persons", lambda: persons)
+    monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
+    monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
+    monkeypatch.setattr(jobs.daily_report, "generate_daily_report", fake_gen)
+    monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, html=False: sent.append(to) or to)
+    monkeypatch.setattr(jobs.logs, "save_manager_report", lambda mid, period, o, c, g="automatique": stored.append((mid, period)))
+
+    out = jobs.send_daily_report("2026-08-01")
+
+    # Company digest sees everything; Chef A's sees only their two techs.
+    assert ("2026-08-01", ["libre", "salle 1", "salle 2"]) in generated
+    assert ("2026-08-01", ["salle 1", "salle 2"]) in generated
+    assert out["managers"] == 1
+    assert out["reports"][0]["manager"] == "Chef A"
+    assert stored == [(2, "2026-08-01")]
+    assert sorted(out["sent_to"]) == ["a@aznet.ma", "d@aznet.ma"]
+
+
+def test_manager_buckets_ignore_unassigned_rows(monkeypatch):
+    """Rows from unknown senders or technicians without a chef never vanish:
+    they stay in the director's digest, they just have no team bucket."""
+    persons = [
+        {"id": 1, "name": "Directeur", "role": "directeur", "has_login": True, "email": "d@aznet.ma"},
+        {"id": 2, "name": "Chef B", "role": "chef", "has_login": True, "email": "b@aznet.ma"},
+        {"id": 3, "name": "Tech 1", "role": "tech", "has_login": False, "email": None, "manager_id": 2},
+        {"id": 4, "name": "Solo", "role": "tech", "has_login": False, "email": None, "manager_id": None},
+    ]
+    rows = [
+        {"technicien": "Tech 1", "resume": "sous Chef B"},
+        {"technicien": "Solo", "resume": "sans chef"},
+        {"technicien": "Inconnu", "resume": "inconnu"},
+    ]
+
+    buckets = jobs._manager_buckets(persons, rows)
+
+    assert set(buckets) == {2}
+    assert [r["resume"] for r in buckets[2]] == ["sous Chef B"]
 
 
 def test_weekly_due_only_on_the_configured_day(monkeypatch):

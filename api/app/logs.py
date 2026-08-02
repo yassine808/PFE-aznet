@@ -216,6 +216,23 @@ CREATE TABLE IF NOT EXISTS person_settings (
     value      JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- The last generated report per site manager, one row per period. The
+-- technicians' /rapport command answers from here: the reply must be the last
+-- *generated* version, not a regeneration — the daily mail and the command
+-- must show the same text, or the manager and their team are looking at two
+-- reports that disagree about the same day. Written by the scheduler only;
+-- dashboard manual runs stay company-wide on purpose.
+CREATE TABLE IF NOT EXISTS manager_reports (
+    manager_id   BIGINT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+    period       TEXT NOT NULL,
+    objet        TEXT NOT NULL,
+    corps        TEXT NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    generated_by TEXT NOT NULL DEFAULT 'automatique',
+    PRIMARY KEY (manager_id, period)
+);
+CREATE INDEX IF NOT EXISTS manager_reports_mgr_idx ON manager_reports (manager_id, generated_at DESC);
 """
 
 
@@ -975,3 +992,52 @@ def account_emails() -> List[str]:
             "WHERE email IS NOT NULL AND password_hash IS NOT NULL ORDER BY name"
         )
         return [dict(r)["email"] for r in cur.fetchall()]
+
+
+# ── Per-manager reports (the /rapport command) ──────────────────────────────
+
+def person_by_id(person_id: int) -> Optional[dict]:
+    """One person row, named columns — used to resolve a manager's identity."""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, name, role, manager_id, email, "
+            "(password_hash IS NOT NULL) AS has_login FROM persons WHERE id = %s",
+            (person_id,),
+        )
+        row = _one(cur)
+    return _iso(dict(row)) if row else None
+
+
+def save_manager_report(
+    manager_id: int, period: str, objet: str, corps: str, generated_by: str = "automatique"
+) -> None:
+    """Store the last generated report for a manager, one row per period.
+
+    UPSERT rather than INSERT: when a manager's report is regenerated for the
+    same period, the newest text wins — that is what "last version" means to
+    the /rapport command.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO manager_reports (manager_id, period, objet, corps, generated_by)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (manager_id, period) DO UPDATE
+                SET objet = EXCLUDED.objet, corps = EXCLUDED.corps,
+                    generated_by = EXCLUDED.generated_by, generated_at = now()
+            """,
+            (manager_id, period, objet, corps, generated_by),
+        )
+
+
+def latest_manager_report(manager_id: int) -> Optional[dict]:
+    """The newest stored report for a manager, whichever period it covers."""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT manager_id, period, objet, corps, generated_at, generated_by "
+            "FROM manager_reports WHERE manager_id = %s "
+            "ORDER BY generated_at DESC LIMIT 1",
+            (manager_id,),
+        )
+        row = _one(cur)
+    return _iso(dict(row)) if row else None
