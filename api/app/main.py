@@ -449,6 +449,20 @@ def list_reports(caller: dict = Depends(auth.require_human)) -> dict:
         raise HTTPException(502, f"sheets read failed: {exc}") from exc
 
 
+@app.get("/reports/generated", responses={502: {"description": "Log store unreachable"}})
+def list_generated_reports(caller: dict = Depends(auth.require_human)) -> dict:
+    """The daily + weekly reports the scheduler stored, newest first.
+
+    These are the exact texts that were mailed and that /rapport answers
+    with — the dashboard shows them so an operator sees the reports without
+    digging in an inbox.
+    """
+    try:
+        return {"reports": logs.list_manager_reports()}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, f"log store read failed: {exc}") from exc
+
+
 class ReportPatch(BaseModel):
     field: str
     value: Optional[str] = None

@@ -180,7 +180,10 @@ def test_daily_report_is_per_manager(monkeypatch):
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
     monkeypatch.setattr(jobs.daily_report, "generate_daily_report", fake_gen)
     monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, html=False: sent.append(to) or to)
-    monkeypatch.setattr(jobs.logs, "save_manager_report", lambda mid, period, o, c, g="automatique": stored.append((mid, period)))
+    monkeypatch.setattr(
+        jobs.logs, "save_manager_report",
+        lambda mid, period, o, c, g="automatique", pt="daily": stored.append((mid, period, pt)),
+    )
 
     out = jobs.send_daily_report("2026-08-01")
 
@@ -189,8 +192,42 @@ def test_daily_report_is_per_manager(monkeypatch):
     assert ("2026-08-01", ["salle 1", "salle 2"]) in generated
     assert out["managers"] == 1
     assert out["reports"][0]["manager"] == "Chef A"
-    assert stored == [(2, "2026-08-01")]
+    assert stored == [(2, "2026-08-01", "daily")]
     assert sorted(out["sent_to"]) == ["a@aznet.ma", "d@aznet.ma"]
+
+
+def test_weekly_report_stores_period_type(monkeypatch):
+    """The weekly run tags its stored rows 'weekly' so the dashboard's
+    generated-reports list can separate the two cadences."""
+    persons = [
+        {"id": 1, "name": "Directeur", "role": "directeur", "has_login": True, "email": "d@aznet.ma"},
+        {"id": 2, "name": "Chef B", "role": "chef", "has_login": True, "email": "b@aznet.ma"},
+        {"id": 3, "name": "Tech 1", "role": "tech", "has_login": False, "email": None, "manager_id": 2},
+    ]
+    rows = [
+        {"date": "2026-07-27", "technicien": "Tech 1", "resume": "lundi"},
+        {"date": "2026-07-31", "technicien": "Tech 1", "resume": "vendredi"},
+    ]
+    stored = []
+
+    def fake_gen(label, r):
+        return jobs.daily_report.DailyReportContent(objet="Hebdo", corps="…")
+
+    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
+    monkeypatch.setattr(jobs.logs, "list_persons", lambda: persons)
+    monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
+    monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
+    monkeypatch.setattr(jobs.daily_report, "generate_daily_report", fake_gen)
+    monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, html=False: to)
+    monkeypatch.setattr(
+        jobs.logs, "save_manager_report",
+        lambda mid, period, o, c, g="automatique", pt="daily": stored.append((mid, pt)),
+    )
+
+    out = jobs.send_weekly_report("2026-07-31")
+
+    assert out["managers"] == 1
+    assert stored == [(2, "weekly")]
 
 
 def test_manager_buckets_ignore_unassigned_rows(monkeypatch):

@@ -226,6 +226,7 @@ CREATE TABLE IF NOT EXISTS person_settings (
 CREATE TABLE IF NOT EXISTS manager_reports (
     manager_id   BIGINT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
     period       TEXT NOT NULL,
+    period_type  TEXT NOT NULL DEFAULT 'daily',
     objet        TEXT NOT NULL,
     corps        TEXT NOT NULL,
     generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1009,24 +1010,31 @@ def person_by_id(person_id: int) -> Optional[dict]:
 
 
 def save_manager_report(
-    manager_id: int, period: str, objet: str, corps: str, generated_by: str = "automatique"
+    manager_id: int,
+    period: str,
+    objet: str,
+    corps: str,
+    generated_by: str = "automatique",
+    period_type: str = "daily",
 ) -> None:
     """Store the last generated report for a manager, one row per period.
 
     UPSERT rather than INSERT: when a manager's report is regenerated for the
     same period, the newest text wins — that is what "last version" means to
-    the /rapport command.
+    the /rapport command. `period_type` separates daily from weekly periods
+    for the dashboard's generated-reports list.
     """
     with _cursor() as cur:
         cur.execute(
             """
-            INSERT INTO manager_reports (manager_id, period, objet, corps, generated_by)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO manager_reports (manager_id, period, period_type, objet, corps, generated_by)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (manager_id, period) DO UPDATE
-                SET objet = EXCLUDED.objet, corps = EXCLUDED.corps,
-                    generated_by = EXCLUDED.generated_by, generated_at = now()
+                SET period_type = EXCLUDED.period_type, objet = EXCLUDED.objet,
+                    corps = EXCLUDED.corps, generated_by = EXCLUDED.generated_by,
+                    generated_at = now()
             """,
-            (manager_id, period, objet, corps, generated_by),
+            (manager_id, period, period_type, objet, corps, generated_by),
         )
 
 
@@ -1034,10 +1042,33 @@ def latest_manager_report(manager_id: int) -> Optional[dict]:
     """The newest stored report for a manager, whichever period it covers."""
     with _cursor() as cur:
         cur.execute(
-            "SELECT manager_id, period, objet, corps, generated_at, generated_by "
+            "SELECT manager_id, period, period_type, objet, corps, generated_at, generated_by "
             "FROM manager_reports WHERE manager_id = %s "
             "ORDER BY generated_at DESC LIMIT 1",
             (manager_id,),
         )
         row = _one(cur)
     return _iso(dict(row)) if row else None
+
+
+def list_manager_reports() -> List[dict]:
+    """Every stored report, newest first, with the manager's name attached.
+
+    The dashboard's reports page renders daily + weekly versions from here —
+    the same rows the mail and the /rapport command use, so nothing a report
+    showed was generated twice with a different text. A manager whose person
+    row vanished keeps their row, under a placeholder name.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.manager_id, m.period, m.period_type, m.objet, m.corps,
+                   m.generated_at, m.generated_by,
+                   COALESCE(p.name, '—') AS manager_name
+            FROM manager_reports m
+            LEFT JOIN persons p ON p.id = m.manager_id
+            ORDER BY m.generated_at DESC
+            """
+        )
+        rows = [_iso(dict(r)) for r in cur.fetchall()]
+    return rows

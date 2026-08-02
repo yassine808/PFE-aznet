@@ -201,7 +201,7 @@ def send_daily_report(date: Optional[str] = None) -> dict:
             # answers from here, and a report a technician can read is worth
             # generating even if no account row is set up yet.
             logs.save_manager_report(
-                manager_id, day, result["objet"], result["corps"], result["generated_by"]
+                manager_id, day, result["objet"], result["corps"], result["generated_by"], "daily"
             )
 
     return {
@@ -252,7 +252,7 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
                 {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"]}
             )
             logs.save_manager_report(
-                manager_id, label, result["objet"], result["corps"], result["generated_by"]
+                manager_id, label, result["objet"], result["corps"], result["generated_by"], "weekly"
             )
 
     return {

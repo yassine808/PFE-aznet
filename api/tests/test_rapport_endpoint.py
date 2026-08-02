@@ -67,3 +67,34 @@ def test_manager_report_returned_with_identity(monkeypatch):
     assert body["found"] is True
     assert body["manager_name"] == "Chef A"
     assert body["corps"] == "Salle 1 terminée."
+
+
+def test_generated_reports_listed_newest_first(monkeypatch):
+    """The dashboard's reports page reads daily + weekly versions from the
+    same store the mail and /rapport use — a placeholder name when the
+    manager's person row is gone, so no report disappears from the list."""
+    monkeypatch.setattr(
+        main.logs, "list_manager_reports",
+        lambda: [
+            {"manager_id": 2, "manager_name": "Chef A", "period": "2026-08-01",
+             "period_type": "daily", "objet": "Rapport du 2026-08-01", "corps": "…",
+             "generated_at": "2026-08-01T18:31:00+00:00", "generated_by": "automatique"},
+            {"manager_id": 4, "manager_name": "—", "period": "2026-07-27 → 2026-08-01",
+             "period_type": "weekly", "objet": "Hebdo", "corps": "…",
+             "generated_at": "2026-08-01T09:00:00+00:00", "generated_by": "automatique"},
+        ],
+    )
+    r = client.get("/reports/generated")
+    assert r.status_code == 200
+    reports = r.json()["reports"]
+    assert [g["period_type"] for g in reports] == ["daily", "weekly"]
+    assert reports[1]["manager_name"] == "—"
+
+
+def test_generated_reports_surfaces_store_failure(monkeypatch):
+    def boom():
+        raise main.logs.LogStoreError("postgres down")
+
+    monkeypatch.setattr(main.logs, "list_manager_reports", boom)
+    r = client.get("/reports/generated")
+    assert r.status_code == 502

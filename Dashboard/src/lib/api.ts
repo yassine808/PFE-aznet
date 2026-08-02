@@ -200,6 +200,21 @@ export async function patchReport(row: number, field: string, value: string): Pr
   }
 }
 
+/**
+ * One stored generated report: the same text the scheduler mailed and the
+ * /rapport command answers with — per site manager, per period.
+ */
+export interface GeneratedReport {
+  manager_id: number
+  manager_name: string
+  period: string
+  period_type: 'daily' | 'weekly'
+  objet: string
+  corps: string
+  generated_at: string
+  generated_by: string
+}
+
 export interface DailyReportContent {
   objet: string
   corps: string
@@ -557,6 +572,7 @@ export const api = {
   n8n: n8nStatus,
   n8nExecutions,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
+  generatedReports: (s?: AbortSignal) => get<{ reports: GeneratedReport[] }>('/reports/generated', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),
   queue: (s?: AbortSignal) => get<{ pending: PendingWrite[] }>('/sheet-queue', s),
   jobs: (s?: AbortSignal) => get<{ jobs: JobStatus[] }>('/jobs', s),
