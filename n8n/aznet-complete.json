@@ -1,5 +1,5 @@
 {
-  "name": "aznet â€” pipeline complet (rÃ©ception + erreurs)",
+  "name": "aznet — pipeline complet (réception + erreurs)",
   "nodes": [
     {
       "id": "e1000000-0000-4000-8000-900000000000",
@@ -11,7 +11,7 @@
         -220
       ],
       "parameters": {
-        "content": "## 1 â€” RÃ©ception (Telegram + WhatsApp)\nPoll TG toutes les 15s + webhooks WA â†’ contrÃ´le d'accÃ¨s â†’ dÃ©dup â†’ /process â†’\n**rÃ©ponse au technicien D'ABORD**, puis Ã©criture Sheet (Ã©chec = file d'attente).\nLes nÅ“uds `Log *` en bas sont des feuilles : ils n'altÃ¨rent jamais le flux.",
+        "content": "## 1 — Réception (Telegram + WhatsApp)\nPoll TG toutes les 15s + webhooks WA → contrôle d'accès → dédup → /process →\n**réponse au technicien D'ABORD**, puis écriture Sheet (échec = file d'attente).\nLes nœuds `Log *` en bas sont des feuilles : ils n'altèrent jamais le flux.",
         "height": 180,
         "width": 900,
         "color": 7
@@ -69,7 +69,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Telegram: voice note, forwarded/uploaded audio, PHOTO, or typed text report.\n// Dedupe: processed message keys tracked in static data (poll restarts re-deliver).\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  if (!m) continue;\n  const key = 'tg:' + m.chat.id + ':' + m.message_id;\n  if (s.processedMsgs[key]) continue;\n  const media = m.voice ?? m.audio;\n  // photo arrives as an array of sizes, smallest first â€” the last one is the\n  // largest Telegram kept, and OCR of a handwritten page needs every pixel.\n  const photo = Array.isArray(m.photo) && m.photo.length ? m.photo[m.photo.length - 1] : null;\n  // \"send as file\" keeps full resolution and arrives as a document instead.\n  const imageDoc = m.document && String(m.document.mime_type ?? '').startsWith('image/') ? m.document : null;\n  const base = {\n    channel: 'telegram',\n    chat_id: m.chat.id,\n    message_id: m.message_id,\n    user_id: String(m.from?.id),\n    is_forwarded: Boolean(m.forward_date || m.forward_origin),\n    technicien: m.from?.first_name ?? String(m.from?.id),\n    caption: m.caption ?? null,\n  };\n  if (media) {\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'audio', file_ref: media.file_id } });\n  } else if (photo || imageDoc) {\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'image', file_ref: (photo ?? imageDoc).file_id } });\n  } else if (m.text && (!m.text.startsWith('/') || /^\/?(rapport|report)\b/i.test(m.text))) {\\n    // typed report (only the /rapport command passes through; other bot\\n    // commands like /start stay ignored as before)\\n    s.processedMsgs[key] = true;\\n    out.push({ json: { ...base, kind: 'text', text_input: m.text, file_ref: null } });\\n  }\n}\nreturn out;"
+        "jsCode": "// Telegram: voice note, forwarded/uploaded audio, PHOTO, or typed text report.\n// Dedupe: processed message keys tracked in static data (poll restarts re-deliver).\nconst s = $getWorkflowStaticData('global');\nconst updates = $input.first().json.result ?? [];\nif (updates.length) {\n  s.lastUpdateId = Math.max(...updates.map(u => u.update_id));\n}\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const u of updates) {\n  const m = u.message;\n  if (!m) continue;\n  const key = 'tg:' + m.chat.id + ':' + m.message_id;\n  const replyKey = m.reply_to_message?.message_id ? 'tg:' + m.chat.id + ':' + m.reply_to_message.message_id : null;\n  if (s.processedMsgs[key]) continue;\n  const media = m.voice ?? m.audio;\n  // photo arrives as an array of sizes, smallest first — the last one is the\n  // largest Telegram kept, and OCR of a handwritten page needs every pixel.\n  const photo = Array.isArray(m.photo) && m.photo.length ? m.photo[m.photo.length - 1] : null;\n  // \"send as file\" keeps full resolution and arrives as a document instead.\n  const imageDoc = m.document && String(m.document.mime_type ?? '').startsWith('image/') ? m.document : null;\n  const base = {\n    channel: 'telegram',\n    chat_id: m.chat.id,\n    message_id: m.message_id,\n    user_id: String(m.from?.id),\n    is_forwarded: Boolean(m.forward_date || m.forward_origin),\n    technicien: m.from?.first_name ?? String(m.from?.id),\n    caption: m.caption ?? null,\n    msg_key: key,\n    reply_to: replyKey,\n  };\n  if (media) {\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'audio', file_ref: media.file_id } });\n  } else if (photo || imageDoc) {\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'image', file_ref: (photo ?? imageDoc).file_id } });\n  } else if (m.text && (!m.text.startsWith('/') || /^\\/?(rapport|report)\\b/i.test(m.text) || /^\\/?(modify|modif|supprimer|suppression|delete|del)\\b/i.test(m.text))) {\n    // typed report (only the /rapport command passes through; other bot\n    // commands like /start stay ignored as before)\n    s.processedMsgs[key] = true;\n    out.push({ json: { ...base, kind: 'text', text_input: m.text, file_ref: null } });\n  }\n}\nreturn out;"
       },
       "id": "e1000000-0000-4000-8000-000000000004",
       "name": "Extract TG msgs",
@@ -82,7 +82,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// WhatsApp Cloud API webhook payload (manual webhook: wrapped in body).\n// Voice notes and forwarded audio both arrive as type 'audio'. Photos arrive as\n// type 'image'. Text reports supported.\n// Dedupe: Meta retries webhook deliveries on slow/failed responses.\nconst s = $getWorkflowStaticData('global');\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  for (const entry of item.json.body?.entry ?? []) {\n    for (const change of entry.changes ?? []) {\n      const v = change.value;\n      const contactName = v?.contacts?.[0]?.profile?.name;\n      for (const m of v?.messages ?? []) {\n        const key = 'wa:' + m.id;\n        if (s.processedMsgs[key]) continue;\n        const base = {\n          channel: 'whatsapp',\n          chat_id: m.from,\n          message_id: m.id,\n          user_id: String(m.from),\n          is_forwarded: Boolean(m.context?.forwarded),\n          technicien: contactName ?? m.from,\n          caption: m.audio?.caption ?? m.image?.caption ?? null,\n        };\n        if (m.type === 'audio' && m.audio?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'audio', file_ref: m.audio.id } });\n        } else if (m.type === 'image' && m.image?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'image', file_ref: m.image.id } });\n        } else if (m.type === 'text' && m.text?.body) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'text', text_input: m.text.body, file_ref: null } });\n        }\n      }\n    }\n  }\n}\nreturn out;"
+        "jsCode": "// WhatsApp Cloud API webhook payload (manual webhook: wrapped in body).\n// Voice notes and forwarded audio both arrive as type 'audio'. Photos arrive as\n// type 'image'. Text reports supported.\n// Dedupe: Meta retries webhook deliveries on slow/failed responses.\nconst s = $getWorkflowStaticData('global');\ns.processedMsgs = s.processedMsgs ?? {};\nconst out = [];\nfor (const item of $input.all()) {\n  for (const entry of item.json.body?.entry ?? []) {\n    for (const change of entry.changes ?? []) {\n      const v = change.value;\n      const contactName = v?.contacts?.[0]?.profile?.name;\n      for (const m of v?.messages ?? []) {\n        const key = 'wa:' + m.id;\n        const replyKey = m.context?.id ? 'wa:' + m.context.id : null;\n        if (s.processedMsgs[key]) continue;\n        const base = {\n          channel: 'whatsapp',\n          chat_id: m.from,\n          message_id: m.id,\n          user_id: String(m.from),\n          is_forwarded: Boolean(m.context?.forwarded),\n          technicien: contactName ?? m.from,\n          caption: m.audio?.caption ?? m.image?.caption ?? null,\n          msg_key: key,\n          reply_to: replyKey,\n        };\n        if (m.type === 'audio' && m.audio?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'audio', file_ref: m.audio.id } });\n        } else if (m.type === 'image' && m.image?.id) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'image', file_ref: m.image.id } });\n        } else if (m.type === 'text' && m.text?.body) {\n          s.processedMsgs[key] = true;\n          out.push({ json: { ...base, kind: 'text', text_input: m.text.body, file_ref: null } });\n        }\n      }\n    }\n  }\n}\nreturn out;"
       },
       "id": "e1000000-0000-4000-8000-000000000005",
       "name": "Extract WA msgs",
@@ -175,7 +175,7 @@
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accÃ¨s').item.json.chat_id, message_id: $('Filtrer accÃ¨s').item.json.message_id, reaction: [{ type: 'emoji', emoji: 'ðŸ‘€' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '👀' }] }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-000000000009",
@@ -199,7 +199,7 @@
         "nodeCredentialType": "whatsAppApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accÃ¨s').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accÃ¨s').item.json.message_id, emoji: 'â³' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accès').item.json.message_id, emoji: '⏳' } }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-000000000010",
@@ -231,7 +231,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $('Filtrer accÃ¨s').item.json.kind }}",
+              "leftValue": "={{ $('Filtrer accès').item.json.kind }}",
               "rightValue": "text",
               "operator": {
                 "type": "string",
@@ -262,7 +262,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $('Filtrer accÃ¨s').item.json.channel }}",
+              "leftValue": "={{ $('Filtrer accès').item.json.channel }}",
               "rightValue": "telegram",
               "operator": {
                 "type": "string",
@@ -286,7 +286,7 @@
     {
       "parameters": {
         "resource": "file",
-        "fileId": "={{ $('Filtrer accÃ¨s').item.json.file_ref }}"
+        "fileId": "={{ $('Filtrer accès').item.json.file_ref }}"
       },
       "id": "e1000000-0000-4000-8000-000000000013",
       "name": "TG Get Voice File",
@@ -310,7 +310,7 @@
       "parameters": {
         "resource": "media",
         "operation": "mediaUrlGet",
-        "mediaGetId": "={{ $('Filtrer accÃ¨s').item.json.file_ref }}"
+        "mediaGetId": "={{ $('Filtrer accès').item.json.file_ref }}"
       },
       "id": "e1000000-0000-4000-8000-000000000014",
       "name": "WA Get media URL",
@@ -381,15 +381,19 @@
             },
             {
               "name": "channel",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.channel }}"
+              "value": "={{ $('Filtrer accès').item.json.channel }}"
             },
             {
               "name": "technicien",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.technicien }}"
+              "value": "={{ $('Filtrer accès').item.json.technicien }}"
             },
             {
               "name": "caption",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.caption }}"
+              "value": "={{ $('Filtrer accès').item.json.caption }}"
+            },
+            {
+              "name": "message_id",
+              "value": "={{ $('Filtrer accès').item.json.msg_key }}"
             }
           ]
         },
@@ -420,7 +424,7 @@
           "parameters": [
             {
               "name": "text",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.text_input }}"
+              "value": "={{ $('Filtrer accès').item.json.text_input }}"
             },
             {
               "name": "correlation_id",
@@ -428,11 +432,15 @@
             },
             {
               "name": "channel",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.channel }}"
+              "value": "={{ $('Filtrer accès').item.json.channel }}"
             },
             {
               "name": "technicien",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.technicien }}"
+              "value": "={{ $('Filtrer accès').item.json.technicien }}"
+            },
+            {
+              "name": "message_id",
+              "value": "={{ $('Filtrer accès').item.json.msg_key }}"
             }
           ]
         },
@@ -476,7 +484,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $('Filtrer accÃ¨s').item.json.channel }}",
+              "leftValue": "={{ $('Filtrer accès').item.json.channel }}",
               "rightValue": "telegram",
               "operator": {
                 "type": "string",
@@ -499,10 +507,10 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $('Filtrer accÃ¨s').item.json.chat_id }}",
-        "text": "âŒ Erreur lors du traitement de votre rapport. Merci de rÃ©essayer dans quelques minutes.",
+        "chatId": "={{ $('Filtrer accès').item.json.chat_id }}",
+        "text": "❌ Erreur lors du traitement de votre rapport. Merci de réessayer dans quelques minutes.",
         "additionalFields": {
-          "reply_to_message_id": "={{ $('Filtrer accÃ¨s').item.json.message_id }}"
+          "reply_to_message_id": "={{ $('Filtrer accès').item.json.message_id }}"
         }
       },
       "id": "e1000000-0000-4000-8000-000000000020",
@@ -525,8 +533,8 @@
         "resource": "message",
         "operation": "send",
         "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
-        "recipientPhoneNumber": "={{ $('Filtrer accÃ¨s').item.json.chat_id }}",
-        "textBody": "âŒ Erreur lors du traitement de votre rapport. Merci de rÃ©essayer dans quelques minutes.",
+        "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
+        "textBody": "❌ Erreur lors du traitement de votre rapport. Merci de réessayer dans quelques minutes.",
         "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000021",
@@ -578,7 +586,7 @@
     {
       "parameters": {
         "chatId": "={{ $json.chat_id }}",
-        "text": "=Bonjour, ce service est rÃ©servÃ© aux employÃ©s d'aznet. Pour toute demande, merci de contacter les ressources humaines : {{ $env.HR_EMAIL }}",
+        "text": "=Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : {{ $env.HR_EMAIL }}",
         "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000023",
@@ -602,7 +610,7 @@
         "operation": "send",
         "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
         "recipientPhoneNumber": "={{ $json.chat_id }}",
-        "textBody": "=Bonjour, ce service est rÃ©servÃ© aux employÃ©s d'aznet. Pour toute demande, merci de contacter les ressources humaines : {{ $env.HR_EMAIL }}",
+        "textBody": "=Bonjour, ce service est réservé aux employés d'aznet. Pour toute demande, merci de contacter les ressources humaines : {{ $env.HR_EMAIL }}",
         "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000024",
@@ -638,9 +646,9 @@
           "value": {
             "date": "={{ $now.toFormat('yyyy-MM-dd') }}",
             "heure": "={{ $now.toFormat('HH:mm') }}",
-            "canal": "={{ $('Filtrer accÃ¨s').item.json.channel }}",
-            "technicien": "={{ $('Filtrer accÃ¨s').item.json.technicien }}",
-            "role": "={{ $('Filtrer accÃ¨s').item.json.role }}",
+            "canal": "={{ $('Filtrer accès').item.json.channel }}",
+            "technicien": "={{ $('Filtrer accès').item.json.technicien }}",
+            "role": "={{ $('Filtrer accès').item.json.role }}",
             "chantier": "={{ $('Process output').item.json.report.chantier }}",
             "client": "={{ $('Process output').item.json.report.client }}",
             "type_activite": "={{ $('Process output').item.json.report.type_activite }}",
@@ -654,7 +662,7 @@
             "rapport_complet": "={{ $('Process output').item.json.rapport_complet }}",
             "confidence": "={{ $('Process output').item.json.transcription?.confidence }}",
             "flag_review": "={{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') || ($('Process output').item.json.warnings ?? []).includes('short_transcription') || ($('Process output').item.json.warnings ?? []).includes('image_input') }}",
-            "lien_audio": "={{ $('Filtrer accÃ¨s').item.json.file_ref }}"
+            "lien_audio": "={{ $('Process output').item.json.lien_audio ?? $('Filtrer accès').item.json.file_ref }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -863,7 +871,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $('Filtrer accÃ¨s').item.json.channel }}",
+              "leftValue": "={{ $('Filtrer accès').item.json.channel }}",
               "rightValue": "telegram",
               "operator": {
                 "type": "string",
@@ -886,10 +894,10 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $('Filtrer accÃ¨s').item.json.chat_id }}",
-        "text": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'â„¹ï¸ Message reÃ§u â€” aucun rapport dÃ©tectÃ©. Envoie tes quantitÃ©s (chantier, mÃ¨tres, bureauxâ€¦) pour enregistrer un rapport.\\n\\n' : 'âœ… Rapport enregistrÃ©\\n\\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\nðŸŽ™ï¸ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\nâš ï¸ Confiance faible â€” Ã  vÃ©rifier dans le dashboard' : '' }}",
+        "chatId": "={{ $('Filtrer accès').item.json.chat_id }}",
+        "text": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
         "additionalFields": {
-          "reply_to_message_id": "={{ $('Filtrer accÃ¨s').item.json.message_id }}"
+          "reply_to_message_id": "={{ $('Filtrer accès').item.json.message_id }}"
         }
       },
       "id": "e1000000-0000-4000-8000-000000000027",
@@ -912,8 +920,8 @@
         "resource": "message",
         "operation": "send",
         "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
-        "recipientPhoneNumber": "={{ $('Filtrer accÃ¨s').item.json.chat_id }}",
-        "textBody": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'â„¹ï¸ Message reÃ§u â€” aucun rapport dÃ©tectÃ©. Envoie tes quantitÃ©s (chantier, mÃ¨tres, bureauxâ€¦) pour enregistrer un rapport.\\n\\n' : 'âœ… Rapport enregistrÃ©\\n\\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\nðŸŽ™ï¸ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\nâš ï¸ Confiance faible â€” Ã  vÃ©rifier dans le dashboard' : '' }}",
+        "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
+        "textBody": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
         "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000028",
@@ -942,7 +950,7 @@
           "conditions": [
             {
               "id": "rapport-command",
-              "leftValue": "={{ $('Filtrer accÃ¨s').item.json.text_input }}",
+              "leftValue": "={{ $('Filtrer accès').item.json.text_input }}",
               "rightValue": "/^\\/?(rapport|report)\\b/i",
               "operator": {
                 "type": "string",
@@ -972,11 +980,11 @@
           "parameters": [
             {
               "name": "channel",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.channel }}"
+              "value": "={{ $('Filtrer accès').item.json.channel }}"
             },
             {
               "name": "external_id",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.user_id }}"
+              "value": "={{ $('Filtrer accès').item.json.user_id }}"
             }
           ]
         },
@@ -1013,7 +1021,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $('Filtrer accÃ¨s').item.json.channel }}",
+              "leftValue": "={{ $('Filtrer accès').item.json.channel }}",
               "rightValue": "telegram",
               "operator": {
                 "type": "string",
@@ -1036,10 +1044,10 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $('Filtrer accÃ¨s').item.json.chat_id }}",
-        "text": "={{ $json.found ? 'ðŸ“‹ ' + $json.objet + '\\n\\n' + $json.corps : ($json.detail === 'inconnu' ? 'â„¹ï¸ Je ne te connais pas encore â€” contacte le directeur pour Ãªtre ajoutÃ©' : ($json.detail === 'pas de responsable' ? 'â„¹ï¸ Aucun responsable assignÃ© Ã  toi pour le moment' : 'â„¹ï¸ Aucun rapport gÃ©nÃ©rÃ© pour ton responsable pour le moment')) }}",
+        "chatId": "={{ $('Filtrer accès').item.json.chat_id }}",
+        "text": "={{ $json.found ? '📋 ' + $json.objet + '\\n\\n' + $json.corps : ($json.detail === 'inconnu' ? 'ℹ️ Je ne te connais pas encore — contacte le directeur pour être ajouté' : ($json.detail === 'pas de responsable' ? 'ℹ️ Aucun responsable assigné à toi pour le moment' : 'ℹ️ Aucun rapport généré pour ton responsable pour le moment')) }}",
         "additionalFields": {
-          "reply_to_message_id": "={{ $('Filtrer accÃ¨s').item.json.message_id }}"
+          "reply_to_message_id": "={{ $('Filtrer accès').item.json.message_id }}"
         }
       },
       "id": "e1000000-0000-4000-8000-000000000047",
@@ -1062,8 +1070,8 @@
         "resource": "message",
         "operation": "send",
         "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
-        "recipientPhoneNumber": "={{ $('Filtrer accÃ¨s').item.json.chat_id }}",
-        "textBody": "={{ $json.found ? 'ðŸ“‹ ' + $json.objet + '\\n\\n' + $json.corps : ($json.detail === 'inconnu' ? 'â„¹ï¸ Je ne te connais pas encore â€” contacte le directeur pour Ãªtre ajoutÃ©' : ($json.detail === 'pas de responsable' ? 'â„¹ï¸ Aucun responsable assignÃ© Ã  toi pour le moment' : 'â„¹ï¸ Aucun rapport gÃ©nÃ©rÃ© pour ton responsable pour le moment')) }}",
+        "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
+        "textBody": "={{ $json.found ? '📋 ' + $json.objet + '\\n\\n' + $json.corps : ($json.detail === 'inconnu' ? 'ℹ️ Je ne te connais pas encore — contacte le directeur pour être ajouté' : ($json.detail === 'pas de responsable' ? 'ℹ️ Aucun responsable assigné à toi pour le moment' : 'ℹ️ Aucun rapport généré pour ton responsable pour le moment')) }}",
         "additionalFields": {}
       },
       "id": "e1000000-0000-4000-8000-000000000048",
@@ -1215,7 +1223,7 @@
         365
       ],
       "parameters": {
-        "jsCode": "// The claim call replaced each payload with {fresh}; re-attach the original\n// message index-wise (an HTTP node emits one output per input, in order) and\n// carry the flag forward so the IF filters real messages, not bare booleans.\n// Explicit pairedItem keeps $('Filtrer accÃ¨s').item resolvable for batches.\nconst src = $('Correlate').all();\nreturn $input.all().map((item, i) => ({\n  json: { ...src[i].json, fresh: item.json.fresh !== false },\n  pairedItem: { item: i },\n}));"
+        "jsCode": "// The claim call replaced each payload with {fresh}; re-attach the original\n// message index-wise (an HTTP node emits one output per input, in order) and\n// carry the flag forward so the IF filters real messages, not bare booleans.\n// Explicit pairedItem keeps $('Filtrer accès').item resolvable for batches.\nconst src = $('Correlate').all();\nreturn $input.all().map((item, i) => ({\n  json: { ...src[i].json, fresh: item.json.fresh !== false },\n  pairedItem: { item: i },\n}));"
       }
     },
     {
@@ -1443,7 +1451,7 @@
         "url": "={{ $env.API_BASE_URL }}/sheet-queue",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({correlation_id: $('Restore message').item.json.correlation_id,error: 'sheet append failed',payload: {date: $now.toFormat('yyyy-MM-dd'),heure: $now.toFormat('HH:mm'),canal: $('Filtrer accÃ¨s').item.json.channel,technicien: $('Filtrer accÃ¨s').item.json.technicien,role: $('Filtrer accÃ¨s').item.json.role,lien_audio: $('Filtrer accÃ¨s').item.json.file_ref ?? '',report: $('Process output').item.json.report,warnings: $('Process output').item.json.warnings ?? [],confidence: $('Process output').item.json.transcription?.confidence ?? '',rapport_complet: $('Process output').item.json.rapport_complet}}) }}",
+        "jsonBody": "={{ JSON.stringify({correlation_id: $('Restore message').item.json.correlation_id,error: 'sheet append failed',payload: {date: $now.toFormat('yyyy-MM-dd'),heure: $now.toFormat('HH:mm'),canal: $('Filtrer accès').item.json.channel,technicien: $('Filtrer accès').item.json.technicien,role: $('Filtrer accès').item.json.role,lien_audio: $('Process output').item.json.lien_audio ?? ($('Filtrer accès').item.json.file_ref ?? ''),report: $('Process output').item.json.report,warnings: $('Process output').item.json.warnings ?? [],confidence: $('Process output').item.json.transcription?.confidence ?? '',rapport_complet: $('Process output').item.json.rapport_complet,message_id: $('Filtrer accès').item.json.msg_key}}) }}",
         "options": {
           "timeout": 10000
         },
@@ -1476,7 +1484,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $('Filtrer accÃ¨s').item.json.kind }}",
+              "leftValue": "={{ $('Filtrer accès').item.json.kind }}",
               "rightValue": "audio",
               "operator": {
                 "type": "string",
@@ -1508,15 +1516,19 @@
             },
             {
               "name": "channel",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.channel }}"
+              "value": "={{ $('Filtrer accès').item.json.channel }}"
             },
             {
               "name": "technicien",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.technicien }}"
+              "value": "={{ $('Filtrer accès').item.json.technicien }}"
             },
             {
               "name": "caption",
-              "value": "={{ $('Filtrer accÃ¨s').item.json.caption }}"
+              "value": "={{ $('Filtrer accès').item.json.caption }}"
+            },
+            {
+              "name": "message_id",
+              "value": "={{ $('Filtrer accès').item.json.msg_key }}"
             }
           ]
         },
@@ -1584,7 +1596,7 @@
         365
       ],
       "id": "filtrer-acces-000001",
-      "name": "Filtrer accÃ¨s"
+      "name": "Filtrer accès"
     },
     {
       "parameters": {},
@@ -1641,7 +1653,7 @@
         980
       ],
       "parameters": {
-        "content": "## 2 â€” Erreurs du workflow\nPoint d'entrÃ©e sÃ©parÃ© : ne se dÃ©clenche que si la bande 1 lÃ¨ve une erreur.\nÃ‰crit dans `pipeline_logs` (Postgres), **jamais** dans le Sheet â€” un handler\nqui Ã©crit chez Google ne peut pas signaler une panne de Google.\nâš  Ã€ activer : Settings â†’ Error Workflow â†’ *ce mÃªme workflow*.",
+        "content": "## 2 — Erreurs du workflow\nPoint d'entrée séparé : ne se déclenche que si la bande 1 lève une erreur.\nÉcrit dans `pipeline_logs` (Postgres), **jamais** dans le Sheet — un handler\nqui écrit chez Google ne peut pas signaler une panne de Google.\n⚠ À activer : Settings → Error Workflow → *ce même workflow*.",
         "height": 180,
         "width": 900,
         "color": 3
@@ -1653,7 +1665,7 @@
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accÃ¨s').item.json.chat_id, message_id: $('Filtrer accÃ¨s').item.json.message_id, reaction: [{ type: 'emoji', emoji: 'ðŸ‘' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '👍' }] }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-900880000000",
@@ -1677,7 +1689,7 @@
         "nodeCredentialType": "whatsAppApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accÃ¨s').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accÃ¨s').item.json.message_id, emoji: 'âœ…' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accès').item.json.message_id, emoji: '✅' } }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-900880000001",
@@ -1705,7 +1717,7 @@
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accÃ¨s').item.json.chat_id, message_id: $('Filtrer accÃ¨s').item.json.message_id, reaction: [{ type: 'emoji', emoji: 'ðŸ˜¢' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '😢' }] }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-900880000002",
@@ -1729,7 +1741,7 @@
         "nodeCredentialType": "whatsAppApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accÃ¨s').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accÃ¨s').item.json.message_id, emoji: 'âŒ' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accès').item.json.message_id, emoji: '❌' } }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-900880000003",
@@ -1781,6 +1793,183 @@
       "position": [
         8320,
         175
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "modify-command",
+              "leftValue": "={{ $('Filtrer accès').item.json.text_input }}",
+              "rightValue": "/^\\/?(modify|modif|supprimer|suppression|delete|del)\\b/i",
+              "operator": {
+                "type": "string",
+                "operation": "matchesRegex"
+              }
+            },
+            {
+              "id": "modify-reply",
+              "leftValue": "={{ $('Filtrer accès').item.json.reply_to }}",
+              "rightValue": "/^(tg:-?\\d+:\\d+|wa:\\S+)$/",
+              "operator": {
+                "type": "string",
+                "operation": "matchesRegex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000049",
+      "name": "Is /modify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5120,
+        930
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/modify-command",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message_id: $('Filtrer accès').item.json.reply_to, action: (/^\\/?(modify|modif|delete|del)\\b/i.test($('Filtrer accès').item.json.text_input)) ? 'modify' : 'supprimer' }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-00000000004a",
+      "name": "Modify command",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5120,
+        1160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Filtrer accès').item.json.channel }}",
+              "rightValue": "telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-00000000004b",
+      "name": "TG or WA? (modify)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5480,
+        1160
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Filtrer accès').item.json.chat_id }}",
+        "text": "={{ $json.detail === 'aucun rapport lié à ce message' ? '⚠️ Je ne trouve pas de rapport lié à ce message — réponds au message de ton propre rapport.' : ($json.detail === 'des champs sont requis pour /modify' ? '⚠️ Précise les champs à modifier, ex: /modify goulottes_m=10, localisation=Tour Atlas' : ($json.action === 'supprimer' ? '🗑️ Rapport supprimé.' : ($json.action === 'modify' ? '✅ Rapport modifié.' : '⚠️ Erreur technique — réessaie dans quelques minutes.'))) }}",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Filtrer accès').item.json.message_id }}"
+        }
+      },
+      "id": "e1000000-0000-4000-8000-00000000004c",
+      "name": "TG reply modify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        5840,
+        1075
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "rGmQZPu47DQnfLi5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
+        "textBody": "={{ $json.detail === 'aucun rapport lié à ce message' ? '⚠️ Je ne trouve pas de rapport lié à ce message — réponds au message de ton propre rapport.' : ($json.detail === 'des champs sont requis pour /modify' ? '⚠️ Précise les champs à modifier, ex: /modify goulottes_m=10, localisation=Tour Atlas' : ($json.action === 'supprimer' ? '🗑️ Rapport supprimé.' : ($json.action === 'modify' ? '✅ Rapport modifié.' : '⚠️ Erreur technique — réessaie dans quelques minutes.'))) }}",
+        "additionalFields": {}
+      },
+      "id": "e1000000-0000-4000-8000-00000000004d",
+      "name": "WA reply modify",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        5840,
+        1245
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "92WffvIPz3E22RW5",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/messages/link",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message_id: $('Filtrer accès').item.json.message_id, row: $json.rowNumber }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "e1000000-0000-4000-8000-00000000004e",
+      "name": "POST /messages/link",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8720,
+        625
       ]
     }
   ],
@@ -1914,7 +2103,7 @@
         ],
         [
           {
-            "node": "Media or text?",
+            "node": "Is /modify?",
             "type": "main",
             "index": 0
           }
@@ -2098,7 +2287,7 @@
       "main": [
         [
           {
-            "node": "Log sheet OK",
+            "node": "POST /messages/link",
             "type": "main",
             "index": 0
           }
@@ -2370,14 +2559,14 @@
       "main": [
         [
           {
-            "node": "Filtrer accÃ¨s",
+            "node": "Filtrer accès",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Filtrer accÃ¨s": {
+    "Filtrer accès": {
       "main": [
         [
           {
@@ -2442,6 +2631,64 @@
           }
         ],
         []
+      ]
+    },
+    "Is /modify?": {
+      "main": [
+        [
+          {
+            "node": "Modify command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Media or text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modify command": {
+      "main": [
+        [
+          {
+            "node": "TG or WA? (modify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG or WA? (modify)": {
+      "main": [
+        [
+          {
+            "node": "TG reply modify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WA reply modify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /messages/link": {
+      "main": [
+        [
+          {
+            "node": "Log sheet OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
