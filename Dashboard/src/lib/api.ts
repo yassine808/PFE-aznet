@@ -604,6 +604,68 @@ export async function postSamples(samples: { service: string; state: string }[])
   }
 }
 
+export interface NotificationItem {
+  id: number
+  kind: 'report' | 'review' | 'error' | 'reminder'
+  title: string
+  body?: string | null
+  /** Dashboard hash route the bell links to, e.g. '#/reports'. */
+  route?: string | null
+  ref_id?: string | null
+  created_at: string
+  read_at?: string | null
+}
+
+export interface TaskItem {
+  id: number
+  title: string
+  notes?: string | null
+  due_at?: string | null
+  repeat: 'none' | 'daily' | 'weekly' | 'monthly'
+  done_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const notifications = (s?: AbortSignal) =>
+  get<{ items: NotificationItem[]; unread: number }>('/notifications', s)
+
+/** Marks the given notifications read, or all of them when `ids` is omitted. */
+export const markNotificationsRead = (ids?: number[]) =>
+  post<{ marked: number }>('/notifications/read', { ids: ids ?? null })
+
+export const tasks = (s?: AbortSignal) => get<{ tasks: TaskItem[] }>('/tasks', s)
+
+export type TaskInput = {
+  title: string
+  notes?: string | null
+  due_at?: string | null
+  repeat?: TaskItem['repeat']
+}
+
+export const createTask = (input: TaskInput) =>
+  post<{ id: number; title: string; notes?: string | null; due_at?: string | null; repeat: string; done: boolean }>(
+    '/tasks',
+    input,
+  )
+
+export async function updateTask(
+  id: number,
+  fields: Partial<TaskInput> & { done?: boolean },
+): Promise<void> {
+  const res = await fetch(`${BASE}/tasks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+}
+
+export async function deleteTask(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/tasks/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+}
+
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
@@ -618,6 +680,8 @@ export const api = {
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),
   queue: (s?: AbortSignal) => get<{ pending: PendingWrite[] }>('/sheet-queue', s),
   jobs: (s?: AbortSignal) => get<{ jobs: JobStatus[] }>('/jobs', s),
+  notifications,
+  tasks,
 }
 
 export interface Async<T> {

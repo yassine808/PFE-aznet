@@ -1,6 +1,7 @@
 """FastAPI entrypoint — the single endpoint n8n and the web form call."""
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
@@ -74,6 +75,33 @@ async def _log(stage: str, level: str = "info", **kwargs) -> None:
     concurrent request. run_in_threadpool keeps the loop free.
     """
     await run_in_threadpool(logs.write_safe, stage, level, **kwargs)
+
+
+def _notify_report_event(
+    technicien: Optional[str], rapport_complet: str, warnings: List[str], ctx: dict
+) -> None:
+    """The bell: a chef learns about their team's report, and about the flagged
+    rows that need a human eye. Best-effort like every observability write — a
+    log store outage must not cost the technician their summary.
+    """
+    try:
+        if not warnings or not ({"low_confidence_transcription", "short_transcription",
+                                 "image_input"} & set(warnings)):
+            logs.notify_technician_manager(
+                technicien, "report",
+                f"Nouveau rapport — {technicien or 'inconnu'}",
+                (rapport_complet or "")[:300] or None, "#/reports",
+            )
+        else:
+            logs.notify_technician_manager(
+                technicien, "review",
+                f"Rapport à vérifier — {technicien or 'inconnu'}",
+                "Confiance faible ou entrée photo : à relire avant clôture.", "#/reports",
+            )
+    except logs.LogStoreError as exc:
+        # Notifications cannot be awaited here (sync helper) — write_safe via
+        # the regular log path, which is itself best-effort.
+        logs.write_safe("api", "warn", message=f"notification failed: {exc}", **ctx)
 
 
 @app.get("/health")
@@ -363,6 +391,8 @@ async def _extract_from_image(
                         image.content_type, blob)
     except logs.LogStoreError as exc:
         await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
+    if report.has_data():
+        _notify_report_event(ctx.get("technicien"), rapport_complet, warnings, ctx)
     return ProcessResponse(
         rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
     )
@@ -460,6 +490,8 @@ async def process(
     # an empty Sheet row and answers "✅ Rapport enregistré" for a greeting.
     if not report.has_data():
         warnings.append("no_report_content")
+    else:
+        _notify_report_event(technicien, rapport_complet, warnings, ctx)
 
     await _log(
         "extracted", "info", message="ok",
@@ -848,7 +880,19 @@ class FailedWrite(BaseModel):
 @app.post("/sheet-queue", responses={502: {"description": "Log store unreachable"}})
 def queue_write(item: FailedWrite, caller: dict = Depends(auth.require_user)) -> dict:
     try:
-        return {"id": logs.queue_failed_write(item.payload, item.error, item.correlation_id)}
+        queued_id = logs.queue_failed_write(item.payload, item.error, item.correlation_id)
+        # The bell: a write parked in the retry queue means the Sheet is (or
+        # was) behind — the directeur learns now, not at the daily digest.
+        try:
+            logs.notify_managers(
+                "error",
+                "Échec d'écriture Google Sheets",
+                f"Un rapport n'a pas pu être écrit (file d'attente {queued_id}).",
+                "#/logs", item.correlation_id,
+            )
+        except logs.LogStoreError as exc:
+            logs.write_safe("api", "warn", message=f"notification failed: {exc}")
+        return {"id": queued_id}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
 
@@ -859,6 +903,98 @@ def list_queue(limit: int = 20, caller: dict = Depends(auth.require_user)) -> di
         return {"pending": logs.pending_writes(limit)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+# ── Notifications + tasks (the bell and the to-do panel) ───────────────────
+# Notifications are strictly per-account rows; the API never broadcasts to
+# everybody at once. The task list is the opposite: one shared list, every
+# account can edit it, and the scheduler's reminders job rings every bell.
+
+
+class NotificationReadIn(BaseModel):
+    ids: Optional[List[int]] = Field(
+        None, description="Which notifications to mark read; omit for all"
+    )
+
+
+@app.get("/notifications", responses={502: {"description": "Log store unreachable"}})
+def list_notifications(limit: int = 50, caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        return {
+            "items": logs.list_notifications(caller["id"], limit),
+            "unread": logs.unread_notifications(caller["id"]),
+        }
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/notifications/read", responses={502: {"description": "Log store unreachable"}})
+def read_notifications(payload: NotificationReadIn, caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        return {"marked": logs.mark_notifications_read(caller["id"], payload.ids)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+class TaskIn(BaseModel):
+    title: str
+    notes: Optional[str] = None
+    due_at: Optional[datetime] = None
+    repeat: Literal["none", "daily", "weekly", "monthly"] = "none"
+
+
+class TaskPatchIn(BaseModel):
+    title: Optional[str] = None
+    notes: Optional[str] = None
+    due_at: Optional[datetime] = None
+    repeat: Optional[Literal["none", "daily", "weekly", "monthly"]] = None
+    done: Optional[bool] = None
+
+
+@app.get("/tasks", responses={502: {"description": "Log store unreachable"}})
+def list_tasks(caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        return {"tasks": logs.list_tasks()}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/tasks", responses={502: {"description": "Log store unreachable"}})
+def create_task(payload: TaskIn, caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        task_id = logs.create_task(payload.title, payload.notes, payload.due_at, payload.repeat)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    auth.record(caller, "task_created", target=str(task_id), detail={"title": payload.title})
+    return {"id": task_id, "title": payload.title, "notes": payload.notes,
+            "due_at": payload.due_at, "repeat": payload.repeat, "done": False}
+
+
+@app.patch("/tasks/{task_id}",
+           responses={404: {"description": "Unknown task"}, 502: {"description": "Log store unreachable"}})
+def update_task(task_id: int, payload: TaskPatchIn, caller: dict = Depends(auth.require_human)) -> dict:
+    fields = payload.model_dump(exclude_unset=True)
+    try:
+        updated = logs.update_task(task_id, fields)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if not updated:
+        raise HTTPException(404, "tâche inconnue")
+    auth.record(caller, "task_updated", target=str(task_id), detail=fields)
+    return {"ok": True, "id": task_id}
+
+
+@app.delete("/tasks/{task_id}",
+            responses={404: {"description": "Unknown task"}, 502: {"description": "Log store unreachable"}})
+def delete_task(task_id: int, caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        deleted = logs.delete_task(task_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if not deleted:
+        raise HTTPException(404, "tâche inconnue")
+    auth.record(caller, "task_deleted", target=str(task_id))
+    return {"ok": True}
 
 
 # ── Scheduled jobs ─────────────────────────────────────────────────────────

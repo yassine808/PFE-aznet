@@ -273,6 +273,42 @@ CREATE INDEX IF NOT EXISTS chat_messages_ts_idx ON chat_messages (created_at DES
 -- retry drain after a Sheets outage).
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_row BIGINT;
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ;
+
+-- Per-account in-app notifications (the dashboard bell). Every row is owned
+-- by exactly one person; pipeline events (a new report for the chef, a row
+-- flagged for review, a Sheets failure) land here beside task reminders, so
+-- each account sees its own history and nothing else.
+CREATE TABLE IF NOT EXISTS notifications (
+    id          BIGSERIAL PRIMARY KEY,
+    person_id   BIGINT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,          -- 'report' | 'review' | 'error' | 'reminder'
+    title       TEXT NOT NULL,
+    body        TEXT,
+    route       TEXT,                   -- dashboard hash route to jump to, e.g. '#/reports'
+    ref_id      TEXT,                   -- sheet row / correlation id for the jump target
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    read_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS notifications_person_idx
+    ON notifications (person_id, created_at DESC);
+
+-- Shared to-do list with recurring reminders. Global on purpose: the org is
+-- small enough that one list every account can edit beats five copies of it.
+-- `repeat` is how the scheduler advances due_at after firing a reminder;
+-- `last_notified_at` is the guard that makes a reminder fire exactly once per
+-- occurrence, however often the scheduler wakes.
+CREATE TABLE IF NOT EXISTS tasks (
+    id               BIGSERIAL PRIMARY KEY,
+    title            TEXT NOT NULL,
+    notes            TEXT,
+    due_at           TIMESTAMPTZ,
+    repeat           TEXT NOT NULL DEFAULT 'none' CHECK (repeat IN ('none','daily','weekly','monthly')),
+    done_at          TIMESTAMPTZ,
+    last_notified_at TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS tasks_due_idx ON tasks (due_at) WHERE done_at IS NULL;
 """
 
 
@@ -1269,3 +1305,262 @@ def list_manager_reports() -> List[dict]:
         )
         rows = [_iso(dict(r)) for r in cur.fetchall()]
     return rows
+
+
+# ── In-app notifications (the dashboard bell) ───────────────────────────────
+
+
+def create_notification(
+    person_id: int,
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    route: Optional[str] = None,
+    ref_id: Optional[str] = None,
+) -> None:
+    """Append one notification for one person."""
+    with _cursor() as cur:
+        cur.execute(
+            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (person_id, kind, title, body, route, ref_id),
+        )
+
+
+def account_people() -> List[dict]:
+    """Accounts (people who can sign in) — the audience of the bell.
+
+    Same rule as `account_emails`: `password_hash IS NOT NULL` is the whole of
+    "this row is an account". Technicians never sign in, so they neither read
+    the bell nor get reminder mail.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, name, email FROM persons "
+            "WHERE password_hash IS NOT NULL ORDER BY name"
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def notify_accounts(
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    route: Optional[str] = None,
+    ref_id: Optional[str] = None,
+) -> int:
+    """One notification for every account. Returns how many rows were written."""
+    people = account_people()
+    if not people:
+        return 0
+    with _cursor() as cur:
+        cur.executemany(
+            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            [(p["id"], kind, title, body, route, ref_id) for p in people],
+        )
+    return len(people)
+
+
+def notify_technician_manager(
+    technicien: Optional[str],
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    route: Optional[str] = None,
+    ref_id: Optional[str] = None,
+) -> Optional[int]:
+    """Bell target for a report: the sender's manager, nobody else.
+
+    Resolution key is the person's name — the same key the directory and the
+    channel tables use — and only an account manager gets the row (a manager
+    who never signs in cannot read a bell). When the sender is unknown or has
+    no manager (a directeur's own report), the notification escalates to every
+    manager account rather than dying silently. Returns the rows written, or
+    None when there is no account to notify.
+    """
+    manager_id: Optional[int] = None
+    if technicien:
+        with _cursor() as cur:
+            cur.execute(
+                "SELECT manager_id FROM persons WHERE name = %s ORDER BY id LIMIT 1",
+                (technicien,),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                manager_id = row[0]
+    if manager_id is not None:
+        with _cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM persons WHERE id = %s AND password_hash IS NOT NULL",
+                (manager_id,),
+            )
+            if cur.fetchone() is not None:
+                return create_notification(manager_id, kind, title, body, route, ref_id)
+    return notify_managers(kind, title, body, route, ref_id)
+
+
+def notify_managers(
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    route: Optional[str] = None,
+    ref_id: Optional[str] = None,
+) -> int:
+    """Notify every chef/directeur account about their team's activity.
+
+    The kind of event that concerns management (a new report, a row flagged
+    for review) has no business in a technician's bell, and a chef without an
+    account cannot read one anyway — so only accounts get rows.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, name FROM persons "
+            "WHERE password_hash IS NOT NULL AND role IN ('chef', 'directeur')"
+        )
+        people = [dict(r) for r in cur.fetchall()]
+    if not people:
+        return 0
+    with _cursor() as cur:
+        cur.executemany(
+            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            [(p["id"], kind, title, body, route, ref_id) for p in people],
+        )
+    return len(people)
+
+
+def list_notifications(person_id: int, limit: int = 50) -> List[dict]:
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, kind, title, body, route, ref_id, created_at, read_at "
+            "FROM notifications WHERE person_id = %s "
+            "ORDER BY created_at DESC LIMIT %s",
+            (person_id, limit),
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def unread_notifications(person_id: int) -> int:
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM notifications "
+            "WHERE person_id = %s AND read_at IS NULL",
+            (person_id,),
+        )
+        row = _one(cur)
+    return int(row["n"]) if row else 0
+
+
+def mark_notifications_read(person_id: int, ids: Optional[List[int]] = None) -> int:
+    """Mark the given ids read, or everything when ids is None. Returns count."""
+    with _cursor() as cur:
+        if ids:
+            cur.execute(
+                "UPDATE notifications SET read_at = now() "
+                "WHERE person_id = %s AND id = ANY(%s) AND read_at IS NULL",
+                (person_id, list(ids)),
+            )
+        else:
+            cur.execute(
+                "UPDATE notifications SET read_at = now() "
+                "WHERE person_id = %s AND read_at IS NULL",
+                (person_id,),
+            )
+        return cur.rowcount
+
+
+# ── Shared to-do tasks ──────────────────────────────────────────────────────
+
+
+_TASK_COLUMNS = ("title", "notes", "due_at", "repeat")
+
+
+def create_task(title: str, notes: Optional[str] = None,
+                due_at: Optional[datetime] = None, repeat: str = "none") -> int:
+    with _cursor() as cur:
+        cur.execute(
+            "INSERT INTO tasks (title, notes, due_at, repeat) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
+            (title, notes, due_at, repeat),
+        )
+        row = _one(cur)
+    return int(row["id"])
+
+
+def update_task(task_id: int, fields: dict) -> bool:
+    """Update whitelisted columns. `done` toggles done_at; done=false reopens."""
+    allowed = {k: v for k, v in fields.items() if k in _TASK_COLUMNS or k == "done"}
+    if not allowed:
+        return False
+    sets = []
+    values = []
+    if "done" in allowed:
+        if allowed.pop("done"):
+            sets.append("done_at = now()")
+        else:
+            sets.append("done_at = NULL")
+    for col in sorted(allowed):
+        sets.append(f"{col} = %s")
+        values.append(allowed[col])
+    sets.append("updated_at = now()")
+    values.append(task_id)
+    with _cursor() as cur:
+        cur.execute(
+            f"UPDATE tasks SET {', '.join(sets)} WHERE id = %s", values
+        )
+        return cur.rowcount > 0
+
+
+def delete_task(task_id: int) -> bool:
+    with _cursor() as cur:
+        cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
+        return cur.rowcount > 0
+
+
+def list_tasks() -> List[dict]:
+    """Every task, open first then done, each group by due date."""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, title, notes, due_at, repeat, done_at, "
+            "last_notified_at, created_at, updated_at FROM tasks "
+            "ORDER BY (done_at IS NOT NULL), COALESCE(due_at, 'infinity'::timestamptz)"
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def due_tasks(now: datetime) -> List[dict]:
+    """Tasks whose reminder is due and has not been fired for this occurrence.
+
+    The guard is `last_notified_at < due_at`: after a reminder fires, the job
+    stamps `last_notified_at = now` (and advances due_at for recurring tasks),
+    so a scheduler restart can never re-send the same reminder.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, title, notes, due_at, repeat FROM tasks "
+            "WHERE due_at IS NOT NULL AND due_at <= %s AND done_at IS NULL "
+            "AND (last_notified_at IS NULL OR last_notified_at < due_at) "
+            "ORDER BY due_at",
+            (now,),
+        )
+        # No _iso here: the scheduler formats due_at (strftime) before the
+        # bell text. list_tasks is the JSON path and keeps _iso.
+        return [dict(r) for r in cur.fetchall()]
+
+
+def stamp_task_notified(task_id: int, next_due: Optional[datetime]) -> None:
+    """Record that a reminder fired; `next_due` advances a recurring task."""
+    with _cursor() as cur:
+        if next_due is None:
+            cur.execute(
+                "UPDATE tasks SET last_notified_at = now(), updated_at = now() "
+                "WHERE id = %s",
+                (task_id,),
+            )
+        else:
+            cur.execute(
+                "UPDATE tasks SET due_at = %s, last_notified_at = now(), "
+                "updated_at = now() WHERE id = %s",
+                (next_due, task_id),
+            )

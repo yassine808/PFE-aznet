@@ -29,6 +29,6 @@
 - [x] in TEAM panel (accounts dashboard) show something like a flowchart with the admin on the very top, then site managers below it, then workers below it ( add a "+" to add more site manager if wanted to), then below each site manager show all the workers that belong to them with their name + phone number. merge this panel with access control. — the equipe page: three role bands, + buttons, drag-drop reassignment, channels + access merged
 - [x] Site name isn't auto-generated — duplicate of line 22: the chantier is inserted by admin/site manager, never invented by the model
 - [x] the search (crtl+k) searches literally eveything. (even with typos etc, then show suggestion of what it can show instead) — fuzzy subsequence matching, technicians indexed, "did you mean" fallback
-- [] add notification that's unique for the users of the dashboard
-- [] add panel for "to do" tasks which can be added with the reminder repitition
+- [x] add notification that's unique for the users of the dashboard — the bell: per-account rows (own team's new reports, rows flagged for review, Sheet write failures, task reminders), unread badge, mark-all-read; only the signed-in person sees their own
+- [x] add panel for "to do" tasks which can be added with the reminder repitition — the shared to-do page: title/notes/échéance/répétition (une fois, jour, semaine, mois); the scheduler rings every bell at échéance and emails the accounts, then advances the recurrence
 

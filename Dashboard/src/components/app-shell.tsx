@@ -13,6 +13,7 @@ import { useTheme } from '@/lib/theme'
 import { useAuth } from '@/lib/auth'
 import { ServerStatus } from '@/components/server-status'
 import { SettingsPanel } from '@/components/settings-panel'
+import { Bell } from '@/components/bell'
 import { CommandPalette, useCommandPalette } from '@/components/command-palette'
 import { NAV, navItem } from '@/lib/nav'
 import { cn } from '@/lib/utils'
@@ -78,6 +79,8 @@ export function AppShell({
         <p className="text-ink min-w-0 flex-1 truncate text-sm font-medium">
           {current ? t(current.labelKey) : t('app.name')}
         </p>
+
+        <Bell onNavigate={onNavigate} />
 
         <button
           type="button"
@@ -222,6 +225,7 @@ export function AppShell({
             </fieldset>
 
             <div className="flex items-center gap-2">
+              <Bell onNavigate={onNavigate} />
               <SettingsPanel />
               <button
                 type="button"

@@ -7,6 +7,7 @@ export const ROUTES = [
   'daily',
   'weekly',
   'automation',
+  'tasks',
   'logs',
   'queue',
   'equipe',

@@ -1,11 +1,22 @@
 from fastapi.testclient import TestClient
 
+import pytest
+
 import app.main as main
 from app.extraction import ExtractionError
 from app.providers.base import TranscriptionError, TranscriptionProvider
 from app.schemas import ExtractedReport, TranscriptionInfo
 
 client = TestClient(main.app)
+
+
+@pytest.fixture(autouse=True)
+def _silence_bell(monkeypatch):
+    """The bell is exercised in test_tasks_notifications.py. These tests are
+    about transcription/extraction — the real notification store would hit the
+    dev DB (or, worse, an unreachable one) for no assertion here."""
+    monkeypatch.setattr(main.logs, "notify_technician_manager", lambda *a, **k: None)
+    monkeypatch.setattr(main.logs, "notify_managers", lambda *a, **k: 0)
 
 # /generate-image is gated by require_human. Overriding the dependency rather
 # than logging in keeps the suite free of a database, same as the other modules.

@@ -1,6 +1,7 @@
 import {
   CalendarBlankIcon,
   ChartBarIcon,
+  CheckSquareIcon,
   ClockIcon,
   RowsIcon,
   PulseIcon,
@@ -61,6 +62,12 @@ export const NAV: { section: string; items: NavItem[] }[] = [
         labelKey: 'nav.automation',
         keywordsKey: 'nav.kw.automation',
         Icon: ClockIcon,
+      },
+      {
+        route: 'tasks',
+        labelKey: 'nav.tasks',
+        keywordsKey: 'nav.kw.tasks',
+        Icon: CheckSquareIcon,
       },
       // One entry where there were two: accounts and bot authorisation are the
       // same people since `users` folded into `persons`.

@@ -32,6 +32,7 @@ RETENTION_DAYS = 30
 DRAIN_INTERVAL_MINUTES = 5
 DRAIN_BATCH = 50
 NIGHTLY_HOUR = 3  # log prune + profile rebuild, while nobody is sending
+REMINDER_INTERVAL_SECONDS = 60  # task reminders fire within a minute of due
 
 # name -> last result, newest wins. Read by GET /jobs.
 _STATUS: Dict[str, dict] = {}
@@ -274,10 +275,81 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
     }
 
 
+def _next_occurrence(due: Optional[datetime], repeat: str) -> Optional[datetime]:
+    """The next due_at after a reminder fires, per the repeat rule.
+
+    Monthly clamps to the month's real length (Jan 31 → Feb 28), so a task
+    scheduled for the 31st never silently skips a short month.
+    """
+    if due is None or repeat == "none":
+        return None
+    if repeat == "daily":
+        return due + timedelta(days=1)
+    if repeat == "weekly":
+        return due + timedelta(days=7)
+    import calendar
+
+    month = due.month + 1
+    year = due.year + (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    day = min(due.day, calendar.monthrange(year, month)[1])
+    return due.replace(year=year, month=month, day=day)
+
+
+def send_reminders() -> dict:
+    """Fire every due task reminder: bell + mail, then advance the schedule.
+
+    One shot per occurrence — the `last_notified_at` guard in `logs.due_tasks`
+    makes this safe to run as often as the scheduler wakes, and a restart can
+    never re-send what already fired. The bell row goes to every account and
+    the mail to every account email, because the task list is shared.
+    """
+    now = datetime.now()
+    due = logs.due_tasks(now)
+    if not due:
+        return {"due": 0, "notified": 0, "emailed": 0, "failed": []}
+    accounts = logs.account_people()
+    emails = [p["email"] for p in accounts if p.get("email")]
+    notified, emailed, failed = [], [], []
+    for task in due:
+        title = task["title"]
+        body = f"Tâche à faire : {title}"
+        if task.get("notes"):
+            body += f"\n{task['notes']}"
+        if task.get("due_at"):
+            body += f"\nÉchéance : {task['due_at'].strftime('%d/%m/%Y %H:%M')}"
+        try:
+            logs.notify_accounts("reminder", title, body, "#/tasks", str(task["id"]))
+            notified.append(task["id"])
+        except logs.LogStoreError as exc:
+            failed.append({"id": task["id"], "error": str(exc)})
+            continue
+        if emails:
+            try:
+                mailer.send(emails, f"Rappel — {title}", body)
+                emailed.append(task["id"])
+            except mailer.MailError as exc:
+                # The bell already fired; a dead SMTP must not re-fire it next tick.
+                failed.append({"id": task["id"], "error": f"mail: {exc}"})
+        try:
+            logs.stamp_task_notified(
+                task["id"], _next_occurrence(task.get("due_at"), task.get("repeat") or "none")
+            )
+        except logs.LogStoreError as exc:
+            failed.append({"id": task["id"], "error": str(exc)})
+    return {
+        "due": len(due),
+        "notified": len(notified),
+        "emailed": len(emailed),
+        "failed": failed,
+    }
+
+
 JOBS: Dict[str, Callable[[], dict]] = {
     "sheet_queue": drain_sheet_queue,
     "prune_logs": prune_logs,
     "profiles": refresh_profiles,
+    "reminders": send_reminders,
     "daily_report": send_daily_report,
     "weekly_report": send_weekly_report,
 }
@@ -330,6 +402,8 @@ DAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanch
 def _schedule_label(name: str) -> str:
     if name == "sheet_queue":
         return f"toutes les {DRAIN_INTERVAL_MINUTES} min"
+    if name == "reminders":
+        return "chaque minute"
     if name in ("prune_logs", "profiles"):
         return f"chaque nuit à {NIGHTLY_HOUR:02d}:00"
     row = _settings_safe()
@@ -368,6 +442,8 @@ def _settings_safe() -> dict:
 def _due(now: datetime, last: Optional[datetime], name: str) -> bool:
     if name == "sheet_queue":
         return last is None or now - last >= timedelta(minutes=DRAIN_INTERVAL_MINUTES)
+    if name == "reminders":
+        return last is None or now - last >= timedelta(seconds=REMINDER_INTERVAL_SECONDS)
     if name in ("prune_logs", "profiles"):
         return now.hour == NIGHTLY_HOUR and (last is None or last.date() < now.date())
 

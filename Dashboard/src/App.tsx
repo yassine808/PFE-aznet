@@ -8,6 +8,7 @@ import { DailyReportPage } from '@/pages/daily-report'
 import { WeeklyReportPage } from '@/pages/weekly-report'
 import { EquipePage } from '@/pages/equipe'
 import { AutomationPage } from '@/pages/automation'
+import { TasksPage } from '@/pages/tasks'
 import { LogsPage } from '@/pages/logs'
 import { QueuePage } from '@/pages/queue'
 import { LoginPage } from '@/pages/login'
@@ -24,6 +25,7 @@ const TITLE_KEY: Record<Route, string> = {
   daily: 'page.daily.title',
   weekly: 'page.weekly.title',
   automation: 'page.automation.title',
+  tasks: 'page.tasks.title',
   logs: 'page.logs.title',
   queue: 'page.queue.title',
   equipe: 'page.equipe.title',
@@ -86,6 +88,8 @@ function RouteView({
       return <WeeklyReportPage />
     case 'automation':
       return <AutomationPage />
+    case 'tasks':
+      return <TasksPage />
     case 'logs':
       return <LogsPage />
     case 'queue':

@@ -8,11 +8,22 @@ header row.
 """
 from fastapi.testclient import TestClient
 
+import pytest
+
 import app.main as main
 from app.providers.base import TranscriptionInfo, TranscriptionProvider
 from app.schemas import ExtractedReport
 
 client = TestClient(main.app)
+
+
+@pytest.fixture(autouse=True)
+def _silence_bell(monkeypatch):
+    """The bell is exercised in test_tasks_notifications.py. These tests are
+    about archiving and Drive — the real notification store would hit the dev
+    DB (or, worse, an unreachable one) for no assertion here."""
+    monkeypatch.setattr(main.logs, "notify_technician_manager", lambda *a, **k: None)
+    monkeypatch.setattr(main.logs, "notify_managers", lambda *a, **k: 0)
 
 # /modify-command and /messages/link are machine-called by n8n, so they sit
 # behind require_user (the X-API-Key path), not require_human — same shape as
