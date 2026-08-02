@@ -379,5 +379,6 @@
   "team.action.person_added": "Person added",
   "team.action.person_reassigned": "Person reassigned",
   "page.equipe.title": "Team",
-  "page.equipe.sub": "Org chart and access"
+  "page.equipe.sub": "Org chart and access",
+  "page.login.title": "Sign in"
 }

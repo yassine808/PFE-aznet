@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { motion } from 'motion/react'
 import { AppShell } from '@/components/app-shell'
 import { OverviewPage } from '@/pages/overview'
@@ -49,10 +50,15 @@ export default function App() {
  */
 function Gate() {
   const { user, loading } = useAuth()
+  const { t } = useI18n()
   // Blank rather than the login screen while /auth/me is in flight: flashing
   // "sign in" on every refresh reads as having been logged out.
   if (loading) return <main className="bg-canvas min-h-screen" />
-  return user ? <Dashboard /> : <LoginPage />
+  if (!user) {
+    document.title = `${t('page.login.title')} — ${t('app.name')}`
+    return <LoginPage />
+  }
+  return <Dashboard />
 }
 
 /** Renders the page for the current route. A switch, not a ternary chain, so
@@ -102,6 +108,12 @@ function Dashboard() {
 
   // Above the router, so a page cannot unmount before reporting its own time.
   usePageTimer(route, true)
+
+  // The tab title follows the route so several open tabs are tellable apart;
+  // the in-page h1 below is the visible twin of this.
+  useEffect(() => {
+    document.title = `${t(TITLE_KEY[route])} — ${t('app.name')}`
+  }, [route, t])
 
   return (
     // Above the router: the uptime sampler must keep writing regardless of

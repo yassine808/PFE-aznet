@@ -379,5 +379,6 @@
   "team.action.person_added": "تمت إضافة شخص",
   "team.action.person_reassigned": "تمت إعادة تعيين شخص",
   "page.equipe.title": "الفريق",
-  "page.equipe.sub": "الهيكل التنظيمي والوصول"
+  "page.equipe.sub": "الهيكل التنظيمي والوصول",
+  "page.login.title": "تسجيل الدخول"
 }

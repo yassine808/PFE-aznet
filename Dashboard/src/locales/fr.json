@@ -379,5 +379,6 @@
   "team.action.person_added": "Personne ajoutée",
   "team.action.person_reassigned": "Personne réaffectée",
   "page.equipe.title": "Équipe",
-  "page.equipe.sub": "L'organigramme et les accès"
+  "page.equipe.sub": "L'organigramme et les accès",
+  "page.login.title": "Connexion"
 }

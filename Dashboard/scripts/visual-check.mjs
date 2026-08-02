@@ -1,9 +1,12 @@
 // Visual + smoke check for the dashboard. Logs in against the running stack
 // (compose nginx on 127.0.0.1:8080), walks every page, captures a full-page
 // screenshot and reports console errors + failed API requests per route.
+// Interaction probes: inbox rail switching + reply composer presence, and the
+// reports generated/messages tab switch. No writes are ever performed.
 //
 // Usage (from Dashboard/):
-//   node scripts/visual-check.mjs
+//   node scripts/visual-check.mjs            # fr locale
+//   LOCALE=ar node scripts/visual-check.mjs  # RTL pass
 //
 // Reads ADMIN_EMAIL / ADMIN_PASSWORD from the repo-root .env (the seeded
 // director account). Screenshots go to $TMP/dashboard-shots/.
@@ -36,10 +39,14 @@ if (!EMAIL || !PASSWORD) {
 }
 
 const ROUTES = ['overview', 'inbox', 'reports', 'daily', 'weekly', 'automation', 'equipe', 'logs', 'queue']
+const LOCALE = process.env.LOCALE ?? 'fr'
 const PROBLEMS = []
 
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+await page.addInitScript((locale) => {
+  localStorage.setItem('aznet.locale', locale)
+}, LOCALE)
 
 page.on('console', (msg) => {
   if (msg.type() === 'error') PROBLEMS.push(`console: ${msg.text().slice(0, 300)}`)
@@ -63,7 +70,11 @@ let failed = 0
 for (const route of ROUTES) {
   await page.evaluate((r) => { window.location.hash = `#/${r}` }, route)
   await page.waitForTimeout(3500)
-  const shot = join(SHOTS, `${route}.png`)
+  const title = await page.title()
+  if (!title.includes('—') || title === 'aznet — Rapports de chantier') {
+    PROBLEMS.push(`${route}: tab title not per-route ("${title}")`)
+  }
+  const shot = join(SHOTS, `${LOCALE}-${route}.png`)
   await page.screenshot({ path: shot, fullPage: true })
   console.log(`${route} -> ${shot}`)
   const issues = await page.evaluate(() => {
@@ -85,6 +96,43 @@ for (const route of ROUTES) {
     return out
   })
   for (const issue of issues) console.log(`  [${route}] ${issue}`)
+
+  if (route === 'inbox') {
+    const rail = page.locator('aside button[aria-pressed]')
+    if ((await rail.count()) === 0) {
+      console.log('  [inbox] no conversations to probe (empty data)')
+    } else {
+      const inactive = page.locator('aside button[aria-pressed="false"]').first()
+      if (await inactive.count()) {
+        const target = (await inactive.innerText()).split('\n')[0].trim()
+        await inactive.click()
+        await page.waitForTimeout(1200)
+        const header = (await page.locator('section h2').first().innerText()).trim()
+        if (header !== target) {
+          PROBLEMS.push(`inbox: rail switch did not open "${target}" (header is "${header}")`)
+        }
+      }
+      if (!(await page.locator('section textarea').count())) {
+        PROBLEMS.push('inbox: reply composer textarea missing')
+      }
+    }
+  }
+
+  if (route === 'reports') {
+    const tabs = page.locator('main fieldset:has(legend) button[aria-pressed]')
+    if ((await tabs.count()) === 2) {
+      await tabs.nth(1).click()
+      await page.waitForTimeout(1200)
+      const second = await tabs.nth(1).getAttribute('aria-pressed')
+      const first = await tabs.nth(0).getAttribute('aria-pressed')
+      if (second !== 'true' || first !== 'false') {
+        PROBLEMS.push(`reports: tab switch broken (generated=${first}, messages=${second})`)
+      }
+    } else {
+      console.log(`  [reports] unexpected tab bar: ${await tabs.count()} buttons`)
+    }
+  }
+
   const blocked = PROBLEMS.length
   await page.waitForTimeout(1500)
   if (PROBLEMS.length > blocked) failed++
