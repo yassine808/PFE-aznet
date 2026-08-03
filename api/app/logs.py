@@ -14,7 +14,7 @@ with no database and no API keys (see CLAUDE.md).
 """
 import json
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, cast
 
 from app.config import settings
@@ -1622,7 +1622,16 @@ def due_tasks(now: datetime) -> List[dict]:
     same reminder — and the window of the next occurrence opens later still,
     because the API refuses a lead as long as the repeat period (overlapping
     windows would re-fire every tick).
+
+    The scheduler wakes with a naive `datetime.now()`, but TIMESTAMPTZ columns
+    come back timezone-aware — comparing them raw raises TypeError. A naive
+    `now` is treated as UTC, which reproduces the old SQL comparison exactly
+    (psycopg2 sent the naive value and Postgres cast it in the session
+    timezone, UTC on this stack): the reminder fires at the wall-clock moment
+    the user picked, never a tick early or late because of the machine offset.
     """
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     with _cursor() as cur:
         cur.execute(
             "SELECT id, title, notes, due_at, repeat, "
