@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app import auth, daily_report, drive, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
@@ -936,11 +936,39 @@ def read_notifications(payload: NotificationReadIn, caller: dict = Depends(auth.
         raise HTTPException(502, str(exc)) from exc
 
 
+_UNIT_DAYS = {"day": 1, "week": 7, "month": 30}
+_REPEAT_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
+
+
 class TaskIn(BaseModel):
     title: str
     notes: Optional[str] = None
     due_at: Optional[datetime] = None
     repeat: Literal["none", "daily", "weekly", "monthly"] = "none"
+    remind_before_value: Optional[int] = Field(None, ge=0)
+    remind_before_unit: Optional[Literal["day", "week", "month"]] = None
+    repeat_every: Optional[int] = Field(None, ge=1)
+    repeat_unit: Optional[Literal["day", "week", "month"]] = None
+
+    @model_validator(mode="after")
+    def _task_pairs(self):
+        if (self.remind_before_value is None) != (self.remind_before_unit is None):
+            raise ValueError("remind_before_value et remind_before_unit vont ensemble")
+        if (self.repeat_every is None) != (self.repeat_unit is None):
+            raise ValueError("repeat_every et repeat_unit vont ensemble")
+        # A lead as long as the repeat period makes consecutive windows overlap
+        # (the next reminder would be due the moment the previous one fired),
+        # which the once-per-occurrence guard then re-fires every tick.
+        if self.remind_before_value and self.repeat != "none":
+            if self.repeat_unit:
+                period_days = self.repeat_every * _UNIT_DAYS[self.repeat_unit]
+            else:
+                period_days = _REPEAT_DAYS[self.repeat]
+            if _UNIT_DAYS[self.remind_before_unit] * self.remind_before_value >= period_days:
+                raise ValueError(
+                    "le rappel avant doit être plus court que la période de répétition"
+                )
+        return self
 
 
 class TaskPatchIn(BaseModel):
@@ -948,7 +976,19 @@ class TaskPatchIn(BaseModel):
     notes: Optional[str] = None
     due_at: Optional[datetime] = None
     repeat: Optional[Literal["none", "daily", "weekly", "monthly"]] = None
+    remind_before_value: Optional[int] = Field(None, ge=0)
+    remind_before_unit: Optional[Literal["day", "week", "month"]] = None
+    repeat_every: Optional[int] = Field(None, ge=1)
+    repeat_unit: Optional[Literal["day", "week", "month"]] = None
     done: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _task_pairs(self):
+        if (self.remind_before_value is None) != (self.remind_before_unit is None):
+            raise ValueError("remind_before_value et remind_before_unit vont ensemble")
+        if (self.repeat_every is None) != (self.repeat_unit is None):
+            raise ValueError("repeat_every et repeat_unit vont ensemble")
+        return self
 
 
 @app.get("/tasks", responses={502: {"description": "Log store unreachable"}})
@@ -962,12 +1002,20 @@ def list_tasks(caller: dict = Depends(auth.require_human)) -> dict:
 @app.post("/tasks", responses={502: {"description": "Log store unreachable"}})
 def create_task(payload: TaskIn, caller: dict = Depends(auth.require_human)) -> dict:
     try:
-        task_id = logs.create_task(payload.title, payload.notes, payload.due_at, payload.repeat)
+        task_id = logs.create_task(
+            payload.title, payload.notes, payload.due_at, payload.repeat,
+            payload.remind_before_value, payload.remind_before_unit,
+            payload.repeat_every, payload.repeat_unit,
+        )
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     auth.record(caller, "task_created", target=str(task_id), detail={"title": payload.title})
     return {"id": task_id, "title": payload.title, "notes": payload.notes,
-            "due_at": payload.due_at, "repeat": payload.repeat, "done": False}
+            "due_at": payload.due_at, "repeat": payload.repeat,
+            "remind_before_value": payload.remind_before_value,
+            "remind_before_unit": payload.remind_before_unit,
+            "repeat_every": payload.repeat_every, "repeat_unit": payload.repeat_unit,
+            "done": False}
 
 
 @app.patch("/tasks/{task_id}",

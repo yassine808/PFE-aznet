@@ -275,25 +275,31 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
     }
 
 
-def _next_occurrence(due: Optional[datetime], repeat: str) -> Optional[datetime]:
+def _next_occurrence(due: Optional[datetime], repeat: str,
+                     repeat_every: Optional[int] = None,
+                     repeat_unit: Optional[str] = None) -> Optional[datetime]:
     """The next due_at after a reminder fires, per the repeat rule.
 
-    Monthly clamps to the month's real length (Jan 31 → Feb 28), so a task
-    scheduled for the 31st never silently skips a short month.
+    `repeat_unit` carries a custom interval (every N days/weeks/months) and
+    beats the presets; monthly math clamps to the month's real length (Jan 31 →
+    Feb 28), so a task scheduled for the 31st never silently skips a short
+    month. Custom + preset both land here through the same `shift_months`, so
+    the clamping can only drift in one place.
     """
-    if due is None or repeat == "none":
+    if due is None or (repeat == "none" and repeat_unit is None):
         return None
+    if repeat_unit:
+        n = repeat_every or 1
+        if repeat_unit == "day":
+            return due + timedelta(days=n)
+        if repeat_unit == "week":
+            return due + timedelta(weeks=n)
+        return logs.shift_months(due, n)
     if repeat == "daily":
         return due + timedelta(days=1)
     if repeat == "weekly":
         return due + timedelta(days=7)
-    import calendar
-
-    month = due.month + 1
-    year = due.year + (month - 1) // 12
-    month = (month - 1) % 12 + 1
-    day = min(due.day, calendar.monthrange(year, month)[1])
-    return due.replace(year=year, month=month, day=day)
+    return logs.shift_months(due, 1)
 
 
 def send_reminders() -> dict:
@@ -318,6 +324,14 @@ def send_reminders() -> dict:
             body += f"\n{task['notes']}"
         if task.get("due_at"):
             body += f"\nÉchéance : {task['due_at'].strftime('%d/%m/%Y %H:%M')}"
+        lead_value = task.get("remind_before_value")
+        lead_unit = task.get("remind_before_unit")
+        if lead_value and lead_unit:
+            labels = {"day": "jour", "week": "semaine", "month": "mois"}
+            label = labels.get(lead_unit, lead_unit)
+            if lead_value > 1 and lead_unit != "month":
+                label += "s"
+            body += f"\nRappel : {lead_value} {label} avant l'échéance"
         try:
             logs.notify_accounts("reminder", title, body, "#/tasks", str(task["id"]))
             notified.append(task["id"])
@@ -333,7 +347,13 @@ def send_reminders() -> dict:
                 failed.append({"id": task["id"], "error": f"mail: {exc}"})
         try:
             logs.stamp_task_notified(
-                task["id"], _next_occurrence(task.get("due_at"), task.get("repeat") or "none")
+                task["id"],
+                _next_occurrence(
+                    task.get("due_at"),
+                    task.get("repeat") or "none",
+                    task.get("repeat_every"),
+                    task.get("repeat_unit"),
+                ),
             )
         except logs.LogStoreError as exc:
             failed.append({"id": task["id"], "error": str(exc)})

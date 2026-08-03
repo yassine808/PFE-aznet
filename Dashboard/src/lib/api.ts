@@ -616,12 +616,19 @@ export interface NotificationItem {
   read_at?: string | null
 }
 
+export type TaskRepeat = 'none' | 'daily' | 'weekly' | 'monthly'
+export type TaskUnit = 'day' | 'week' | 'month'
+
 export interface TaskItem {
   id: number
   title: string
   notes?: string | null
   due_at?: string | null
-  repeat: 'none' | 'daily' | 'weekly' | 'monthly'
+  repeat: TaskRepeat
+  remind_before_value?: number | null
+  remind_before_unit?: TaskUnit | null
+  repeat_every?: number | null
+  repeat_unit?: TaskUnit | null
   done_at?: string | null
   created_at: string
   updated_at: string
@@ -640,7 +647,11 @@ export type TaskInput = {
   title: string
   notes?: string | null
   due_at?: string | null
-  repeat?: TaskItem['repeat']
+  repeat?: TaskRepeat
+  remind_before_value?: number | null
+  remind_before_unit?: TaskUnit | null
+  repeat_every?: number | null
+  repeat_unit?: TaskUnit | null
 }
 
 export const createTask = (input: TaskInput) =>

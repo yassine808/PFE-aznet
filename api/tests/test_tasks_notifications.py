@@ -92,7 +92,9 @@ def test_mark_read_accepts_ids_and_all(monkeypatch):
 def test_task_crud(monkeypatch):
     monkeypatch.setattr(
         main.logs, "create_task",
-        lambda title, notes=None, due_at=None, repeat="none": 9,
+        lambda title, notes=None, due_at=None, repeat="none",
+        remind_before_value=None, remind_before_unit=None,
+        repeat_every=None, repeat_unit=None: 9,
     )
     r = client.post("/tasks", json={"title": "Envoyer devis", "repeat": "weekly"})
     assert r.status_code == 200
@@ -115,9 +117,72 @@ def test_task_crud(monkeypatch):
 
 
 def test_task_repeat_enum_enforced(monkeypatch):
-    monkeypatch.setattr(main.logs, "create_task", lambda title, notes=None, due_at=None, repeat="none": 1)
+    monkeypatch.setattr(
+        main.logs, "create_task",
+        lambda title, notes=None, due_at=None, repeat="none",
+        remind_before_value=None, remind_before_unit=None,
+        repeat_every=None, repeat_unit=None: 1,
+    )
     assert client.post("/tasks", json={"title": "x", "repeat": "annually"}).status_code == 422
     assert client.post("/tasks", json={"title": "x", "repeat": "monthly"}).status_code == 200
+
+
+def test_task_custom_interval_and_lead_accepted(monkeypatch):
+    seen = {}
+
+    def fake_create(title, notes=None, due_at=None, repeat="none",
+                    remind_before_value=None, remind_before_unit=None,
+                    repeat_every=None, repeat_unit=None):
+        seen.update(title=title, repeat=repeat, remind_before_value=remind_before_value,
+                    remind_before_unit=remind_before_unit, repeat_every=repeat_every,
+                    repeat_unit=repeat_unit)
+        return 10
+    monkeypatch.setattr(main.logs, "create_task", fake_create)
+    r = client.post("/tasks", json={
+        "title": "Facture fournisseur", "repeat": "none",
+        "remind_before_value": 3, "remind_before_unit": "day",
+        "repeat_every": 2, "repeat_unit": "week",
+    })
+    assert r.status_code == 200
+    assert seen == {"title": "Facture fournisseur", "repeat": "none",
+                    "remind_before_value": 3, "remind_before_unit": "day",
+                    "repeat_every": 2, "repeat_unit": "week"}
+
+
+def test_task_pair_fields_are_rejected_alone():
+    assert client.post("/tasks", json={"title": "x", "repeat_every": 3}).status_code == 422
+    assert client.post("/tasks", json={"title": "x", "repeat_unit": "day"}).status_code == 422
+    assert client.post("/tasks", json={"title": "x", "remind_before_value": 3}).status_code == 422
+    assert client.post("/tasks", json={"title": "x", "remind_before_unit": "day"}).status_code == 422
+
+
+def test_lead_must_be_shorter_than_repeat_period(monkeypatch):
+    monkeypatch.setattr(
+        main.logs, "create_task",
+        lambda title, notes=None, due_at=None, repeat="none",
+        remind_before_value=None, remind_before_unit=None,
+        repeat_every=None, repeat_unit=None: 1,
+    )
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "daily", "remind_before_value": 1,
+                        "remind_before_unit": "day"}
+    ).status_code == 422  # lead == period: windows would overlap
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "weekly", "remind_before_value": 7,
+                        "remind_before_unit": "day"}
+    ).status_code == 422
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "weekly", "remind_before_value": 6,
+                        "remind_before_unit": "day"}
+    ).status_code == 200
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "monthly", "remind_before_value": 2,
+                        "remind_before_unit": "week"}
+    ).status_code == 200
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "none", "remind_before_value": 30,
+                        "remind_before_unit": "day"}
+    ).status_code == 200  # one-shot: a lead can be arbitrarily long
 
 
 def test_tasks_store_down_is_502(monkeypatch):
@@ -314,3 +379,60 @@ def test_next_occurrence_rules():
     assert jobs._next_occurrence(jan31, "monthly") == datetime(2026, 2, 28, 8, 0)
     dec31 = datetime(2026, 12, 31, 8, 0)
     assert jobs._next_occurrence(dec31, "monthly") == datetime(2027, 1, 31, 8, 0)
+
+
+def test_next_occurrence_custom_intervals():
+    base = datetime(2026, 8, 2, 9, 0)
+    assert jobs._next_occurrence(base, "none", 3, "day") == base + timedelta(days=3)
+    assert jobs._next_occurrence(base, "none", 2, "week") == base + timedelta(days=14)
+    assert jobs._next_occurrence(base, "none", 2, "month") == datetime(2026, 10, 2, 9, 0)
+    assert jobs._next_occurrence(base, "none", None, None) is None
+    # The custom interval clamps monthly too: Jan 31 + 2 months → Mar 31.
+    jan31 = datetime(2026, 1, 31, 8, 0)
+    assert jobs._next_occurrence(jan31, "none", 2, "month") == datetime(2026, 3, 31, 8, 0)
+
+
+def test_notify_time_opens_the_window_early():
+    due = datetime(2026, 8, 10, 9, 0)
+    assert logs.notify_time(due, None, None) == due
+    assert logs.notify_time(due, 0, "day") == due
+    assert logs.notify_time(due, 3, "day") == datetime(2026, 8, 7, 9, 0)
+    assert logs.notify_time(due, 1, "week") == datetime(2026, 8, 3, 9, 0)
+    # Calendar-aware months: Mar 31 minus one month clamps to Feb 28.
+    assert logs.notify_time(datetime(2026, 3, 31, 9, 0), 1, "month") == datetime(2026, 2, 28, 9, 0)
+
+
+def test_send_reminders_fires_early_for_lead_time(monkeypatch):
+    due = [{"id": 4, "title": "Devis Atlas", "notes": None,
+            "due_at": datetime.now() + timedelta(days=2), "repeat": "none",
+            "remind_before_value": 3, "remind_before_unit": "day",
+            "repeat_every": None, "repeat_unit": None}]
+    bodies = []
+    monkeypatch.setattr(jobs.logs, "due_tasks", lambda now: due)
+    monkeypatch.setattr(jobs.logs, "account_people", lambda: [])
+    monkeypatch.setattr(
+        jobs.logs, "notify_accounts",
+        lambda *a, **k: bodies.append(a) or 1,
+    )
+    monkeypatch.setattr(jobs.logs, "stamp_task_notified", lambda *a, **k: None)
+    out = jobs.send_reminders()
+    assert out["due"] == 1 and out["notified"] == 1
+    assert "Rappel : 3 jours avant l'échéance" in bodies[0][2]
+    assert "Échéance" in bodies[0][2]
+
+
+def test_send_reminders_advances_custom_interval(monkeypatch):
+    due = [{"id": 5, "title": "Contrôle stock", "notes": None,
+            "due_at": datetime(2026, 8, 2, 9, 0), "repeat": "none",
+            "remind_before_value": None, "remind_before_unit": None,
+            "repeat_every": 3, "repeat_unit": "day"}]
+    stamped = []
+    monkeypatch.setattr(jobs.logs, "due_tasks", lambda now: due)
+    monkeypatch.setattr(jobs.logs, "account_people", lambda: [])
+    monkeypatch.setattr(jobs.logs, "notify_accounts", lambda *a, **k: 0)
+    monkeypatch.setattr(
+        jobs.logs, "stamp_task_notified",
+        lambda tid, nxt: stamped.append((tid, nxt)),
+    )
+    jobs.send_reminders()
+    assert stamped == [(5, datetime(2026, 8, 5, 9, 0))]

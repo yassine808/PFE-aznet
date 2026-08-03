@@ -14,7 +14,7 @@ with no database and no API keys (see CLAUDE.md).
 """
 import json
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, cast
 
 from app.config import settings
@@ -295,20 +295,59 @@ CREATE INDEX IF NOT EXISTS notifications_person_idx
 -- Shared to-do list with recurring reminders. Global on purpose: the org is
 -- small enough that one list every account can edit beats five copies of it.
 -- `repeat` is how the scheduler advances due_at after firing a reminder;
--- `last_notified_at` is the guard that makes a reminder fire exactly once per
--- occurrence, however often the scheduler wakes.
+-- `remind_before_value`/`remind_before_unit` open the reminder early (X
+-- days/weeks/months before the due moment); `repeat_every`/`repeat_unit` add
+-- custom intervals (every 3 days, every 2 weeks, ...) beside the presets.
+-- `last_notified_at` records the DUE MOMENT of the last occurrence that fired,
+-- not the firing time, so the once-per-occurrence guard `last_notified_at <
+-- due_at` survives advance reminders (a fire at due-3d must not re-fire every
+-- tick just because the stamp time is before the due moment).
 CREATE TABLE IF NOT EXISTS tasks (
-    id               BIGSERIAL PRIMARY KEY,
-    title            TEXT NOT NULL,
-    notes            TEXT,
-    due_at           TIMESTAMPTZ,
-    repeat           TEXT NOT NULL DEFAULT 'none' CHECK (repeat IN ('none','daily','weekly','monthly')),
-    done_at          TIMESTAMPTZ,
-    last_notified_at TIMESTAMPTZ,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                   BIGSERIAL PRIMARY KEY,
+    title                TEXT NOT NULL,
+    notes                TEXT,
+    due_at               TIMESTAMPTZ,
+    repeat               TEXT NOT NULL DEFAULT 'none' CHECK (repeat IN ('none','daily','weekly','monthly')),
+    remind_before_value  INT CHECK (remind_before_value IS NULL OR remind_before_value >= 0),
+    remind_before_unit   TEXT CHECK (remind_before_unit IN ('day','week','month')),
+    repeat_every         INT CHECK (repeat_every IS NULL OR repeat_every >= 1),
+    repeat_unit          TEXT CHECK (repeat_unit IN ('day','week','month')),
+    done_at              TIMESTAMPTZ,
+    last_notified_at     TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS tasks_due_idx ON tasks (due_at) WHERE done_at IS NULL;
+
+-- The live table predates these columns: CREATE TABLE IF NOT EXISTS is a no-op
+-- on it, so add the columns and their constraints explicitly. Postgres has no
+-- `ADD CONSTRAINT IF NOT EXISTS`, hence the pg_constraint lookups.
+DO $$ BEGIN
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS remind_before_value INT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS remind_before_unit TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat_every INT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat_unit TEXT;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_remind_before_value_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_remind_before_value_check
+            CHECK (remind_before_value IS NULL OR remind_before_value >= 0);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_remind_before_unit_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_remind_before_unit_check
+            CHECK (remind_before_unit IN ('day','week','month'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_repeat_every_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_repeat_every_check
+            CHECK (repeat_every IS NULL OR repeat_every >= 1);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_repeat_unit_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_repeat_unit_check
+            CHECK (repeat_unit IN ('day','week','month'));
+    END IF;
+END $$;
 """
 
 
@@ -1473,16 +1512,59 @@ def mark_notifications_read(person_id: int, ids: Optional[List[int]] = None) -> 
 # ── Shared to-do tasks ──────────────────────────────────────────────────────
 
 
-_TASK_COLUMNS = ("title", "notes", "due_at", "repeat")
+_TASK_COLUMNS = (
+    "title", "notes", "due_at", "repeat",
+    "remind_before_value", "remind_before_unit",
+    "repeat_every", "repeat_unit",
+)
+
+
+def shift_months(dt: datetime, n: int) -> datetime:
+    """Add n months (negative subtracts), clamping to the month's real length.
+
+    Jan 31 + 1 month → Feb 28, never March 3: a monthly task on the 31st must
+    not silently skip February. Shared by the repeat advance and the advance
+    reminder offset, so both sides of the calendar math cannot drift apart.
+    """
+    import calendar
+
+    month = dt.month + n
+    year = dt.year + (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    day = min(dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
+
+
+def notify_time(due_at: Optional[datetime], value: Optional[int],
+                unit: Optional[str]) -> Optional[datetime]:
+    """When this occurrence's reminder should fire: due minus the lead time.
+
+    The scheduler fires as soon as `notify_time(due_at) <= now`, which is the
+    whole of the "remind X days/weeks/months before" feature — with no lead the
+    window opens exactly at the due moment, preserving the old behaviour.
+    """
+    if due_at is None or not value or unit not in ("day", "week", "month"):
+        return due_at
+    if unit == "day":
+        return due_at - timedelta(days=value)
+    if unit == "week":
+        return due_at - timedelta(weeks=value)
+    return shift_months(due_at, -value)
 
 
 def create_task(title: str, notes: Optional[str] = None,
-                due_at: Optional[datetime] = None, repeat: str = "none") -> int:
+                due_at: Optional[datetime] = None, repeat: str = "none",
+                remind_before_value: Optional[int] = None,
+                remind_before_unit: Optional[str] = None,
+                repeat_every: Optional[int] = None,
+                repeat_unit: Optional[str] = None) -> int:
     with _cursor() as cur:
         cur.execute(
-            "INSERT INTO tasks (title, notes, due_at, repeat) "
-            "VALUES (%s, %s, %s, %s) RETURNING id",
-            (title, notes, due_at, repeat),
+            "INSERT INTO tasks (title, notes, due_at, repeat, "
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (title, notes, due_at, repeat, remind_before_value,
+             remind_before_unit, repeat_every, repeat_unit),
         )
         row = _one(cur)
     return int(row["id"])
@@ -1522,45 +1604,61 @@ def list_tasks() -> List[dict]:
     """Every task, open first then done, each group by due date."""
     with _cursor() as cur:
         cur.execute(
-            "SELECT id, title, notes, due_at, repeat, done_at, "
-            "last_notified_at, created_at, updated_at FROM tasks "
+            "SELECT id, title, notes, due_at, repeat, "
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "done_at, last_notified_at, created_at, updated_at FROM tasks "
             "ORDER BY (done_at IS NOT NULL), COALESCE(due_at, 'infinity'::timestamptz)"
         )
         return [_iso(dict(r)) for r in cur.fetchall()]
 
 
 def due_tasks(now: datetime) -> List[dict]:
-    """Tasks whose reminder is due and has not been fired for this occurrence.
+    """Tasks whose reminder window is open and not fired for this occurrence.
 
-    The guard is `last_notified_at < due_at`: after a reminder fires, the job
-    stamps `last_notified_at = now` (and advances due_at for recurring tasks),
-    so a scheduler restart can never re-send the same reminder.
+    The window opens at `notify_time(due_at)` (due minus the lead time), so an
+    advance reminder fires before the due moment. The guard is `last_notified_at
+    < window start`: after a fire the stamp records the occurrence's DUE MOMENT,
+    which always lies after the window start, so a restart can never re-send the
+    same reminder — and the window of the next occurrence opens later still,
+    because the API refuses a lead as long as the repeat period (overlapping
+    windows would re-fire every tick).
     """
     with _cursor() as cur:
         cur.execute(
-            "SELECT id, title, notes, due_at, repeat FROM tasks "
-            "WHERE due_at IS NOT NULL AND due_at <= %s AND done_at IS NULL "
-            "AND (last_notified_at IS NULL OR last_notified_at < due_at) "
-            "ORDER BY due_at",
-            (now,),
+            "SELECT id, title, notes, due_at, repeat, "
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "last_notified_at FROM tasks "
+            "WHERE due_at IS NOT NULL AND done_at IS NULL ORDER BY due_at",
         )
-        # No _iso here: the scheduler formats due_at (strftime) before the
-        # bell text. list_tasks is the JSON path and keeps _iso.
-        return [dict(r) for r in cur.fetchall()]
+        rows = [dict(r) for r in cur.fetchall()]
+    due = []
+    for row in rows:
+        when = notify_time(row["due_at"], row["remind_before_value"],
+                           row["remind_before_unit"])
+        last = row["last_notified_at"]
+        if when <= now and (last is None or last < when):
+            due.append(row)
+    return due
 
 
 def stamp_task_notified(task_id: int, next_due: Optional[datetime]) -> None:
-    """Record that a reminder fired; `next_due` advances a recurring task."""
+    """Record that a reminder fired; `next_due` advances a recurring task.
+
+    `last_notified_at = due_at` in the UPDATE refers to the OLD due value (all
+    SET expressions see the pre-update row), so the stamp always stores the
+    occurrence's due moment — the value the once-per-occurrence guard compares
+    against — regardless of how early the reminder fired.
+    """
     with _cursor() as cur:
         if next_due is None:
             cur.execute(
-                "UPDATE tasks SET last_notified_at = now(), updated_at = now() "
+                "UPDATE tasks SET last_notified_at = due_at, updated_at = now() "
                 "WHERE id = %s",
                 (task_id,),
             )
         else:
             cur.execute(
-                "UPDATE tasks SET due_at = %s, last_notified_at = now(), "
+                "UPDATE tasks SET due_at = %s, last_notified_at = due_at, "
                 "updated_at = now() WHERE id = %s",
                 (next_due, task_id),
             )
