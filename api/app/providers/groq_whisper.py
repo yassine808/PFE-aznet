@@ -1,6 +1,7 @@
 import io
 import math
 import time
+from functools import lru_cache
 
 from app import prompt_loader
 from app.config import settings
@@ -8,6 +9,17 @@ from app.schemas import TranscriptionInfo
 
 from . import register
 from .base import TranscriptionError, TranscriptionProvider
+
+
+@lru_cache(maxsize=1)
+def _client():
+    """One SDK client per process: it owns a keep-alive connection pool, so
+    building a fresh one per transcription would pay a TLS handshake on every
+    message. The API-key check stays per-call in transcribe(), so a missing
+    key still fails loudly without ever touching the cache."""
+    from groq import Groq  # lazy: keeps unit tests dependency-free
+
+    return Groq(api_key=settings.groq_api_key)
 
 
 def _confidence_from_segments(segments) -> "float | None":
@@ -38,9 +50,7 @@ class GroqWhisperProvider(TranscriptionProvider):
     def transcribe(self, audio: bytes, mime_type: str) -> TranscriptionInfo:
         if not settings.groq_api_key:
             raise TranscriptionError("GROQ_API_KEY not configured")
-        from groq import Groq  # lazy: keeps unit tests dependency-free
-
-        client = Groq(api_key=settings.groq_api_key)
+        client = _client()
         # Groq gates uploads on filename extension before decoding the bytes,
         # so the name must land in its accepted set. Telegram voice notes are
         # ogg/opus ("audio/ogg" or ".oga"); n8n/curl may send octet-stream.

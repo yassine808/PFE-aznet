@@ -9,6 +9,22 @@ export default defineConfig(() => {
     resolve: {
       alias: { '@': path.resolve(__dirname, './src') },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // Stable vendor chunks: react/motion/phosphor rarely change, so the
+          // immutable-cache header (nginx /assets/) keeps serving them from
+          // the browser after a deploy. Page chunks come from the lazy()
+          // splits in App.tsx; docx stays in the page chunk that uses it.
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+            if (id.includes('react')) return 'react'
+            if (id.includes('motion')) return 'motion'
+            if (id.includes('@phosphor-icons')) return 'phosphor'
+          },
+        },
+      },
+    },
     server: {
       port: 5173,
       // Target the compose stack's nginx, not the API directly: the api service

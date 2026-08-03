@@ -1,6 +1,5 @@
 import time
-
-import httpx
+from functools import lru_cache
 
 from app.config import settings
 from app.schemas import TranscriptionInfo
@@ -12,6 +11,17 @@ from .base import TranscriptionError, TranscriptionProvider
 # Exact checkpoint is pinned during Sprint 1 benchmark; this default is provisional.
 MODEL_ID = "BounharAbdelaziz/Morocco-Darija-STT-large-v1.6"
 API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
+
+
+@lru_cache(maxsize=1)
+def _http():
+    """One shared transport (keep-alive) instead of httpx.post, which builds a
+    fresh client — and a fresh TLS handshake — on every transcription. The
+    Authorization header is read from settings per call, so a rotated token
+    does not need a restart."""
+    import httpx
+
+    return httpx.Client(timeout=120)
 
 
 @register("hf-darija")
@@ -29,7 +39,7 @@ class HFDarijaProvider(TranscriptionProvider):
         }
         start = time.perf_counter()
         try:
-            r = httpx.post(API_URL, headers=headers, content=audio, timeout=120)
+            r = _http().post(API_URL, headers=headers, content=audio)
             r.raise_for_status()
             payload = r.json()
         except Exception as exc:  # noqa: BLE001

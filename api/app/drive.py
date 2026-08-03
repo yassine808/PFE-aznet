@@ -16,6 +16,7 @@ The `drive.file` scope is enough: files this account creates belong to it,
 and the reader permission is granted on its own file.
 """
 import io
+from functools import lru_cache
 from typing import Optional
 
 from app.config import settings
@@ -30,7 +31,7 @@ class DriveError(RuntimeError):
 _RETRIES = 3
 
 
-def _service():
+def _build_service():
     if not settings.google_service_account_json:
         raise DriveError("GOOGLE_SERVICE_ACCOUNT_JSON not configured")
     from pathlib import Path
@@ -48,6 +49,18 @@ def _service():
         str(key_path), scopes=["https://www.googleapis.com/auth/drive.file"]
     )
     return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+@lru_cache(maxsize=1)
+def _cached_service():
+    """One service per process — building re-downloads the discovery document.
+    Same pattern as sheets._cached_service; exceptions are never cached, so a
+    transient Google failure simply retries on the next call."""
+    return _build_service()
+
+
+def _service():
+    return _cached_service()
 
 
 def upload_audio(filename: str, mime_type: str, data: bytes) -> str:
