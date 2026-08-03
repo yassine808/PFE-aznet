@@ -401,7 +401,7 @@ def run(name: str) -> dict:
         f"job:{name}",
         "info" if status["ok"] else "error",
         message=status.get("error") or "ok",
-        detail=status.get("result"),
+        payload=status.get("result"),
     )
     return status
 

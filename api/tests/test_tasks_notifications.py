@@ -19,12 +19,24 @@ from app.schemas import ExtractedReport
 
 client = TestClient(main.app)
 
+# The override is also re-applied per-test below: module-level assignments in
+# other test files overwrite this one when their import lands later, and the
+# callers' ids must not silently depend on pytest's file ordering.
 main.app.dependency_overrides[main.auth.require_human] = lambda: {
     "id": 7, "name": "Yassine", "role": "directeur"
 }
 main.app.dependency_overrides[main.auth.require_user] = lambda: {
     "id": 7, "name": "Yassine", "role": "directeur"
 }
+
+
+@pytest.fixture(autouse=True)
+def _auth_as(monkeypatch):
+    """Pin this module's caller identity, whatever the import order was."""
+    monkeypatch.setitem(main.app.dependency_overrides, main.auth.require_human,
+                        lambda: {"id": 7, "name": "Yassine", "role": "directeur"})
+    monkeypatch.setitem(main.app.dependency_overrides, main.auth.require_user,
+                        lambda: {"id": 7, "name": "Yassine", "role": "directeur"})
 
 
 @pytest.fixture(autouse=True)
