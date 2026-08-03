@@ -23,6 +23,13 @@ def _silence_bell(monkeypatch):
 main.app.dependency_overrides[main.auth.require_human] = lambda: {
     "id": 1, "name": "Test", "role": "directeur"
 }
+# /process, GET /logs, /service-samples and /sheet-queue are gated by
+# require_user. Same override, declared here so this module stays hermetic —
+# relying on another module's module-level override would silently pass when
+# the real gate is broken (the full suite used to mask it by import order).
+main.app.dependency_overrides[main.auth.require_user] = lambda: {
+    "id": 1, "name": "Test", "role": "directeur"
+}
 
 # The /process audio path uploads to Google Drive for the durable lien_audio.
 # The real key exists on this machine and would trigger a network discovery
@@ -181,6 +188,107 @@ def test_unknown_provider_rejected(monkeypatch):
     )
     assert r.status_code == 422
     assert "Unknown STT provider" in r.json()["detail"]
+
+
+# ── upload caps (2026-08-03) ────────────────────────────────────────────────
+# A misdirected file must cost nothing: no engine call, no quota, no Sheet row.
+
+def test_audio_too_large_rejected(monkeypatch):
+    calls = []
+
+    def spy(name):
+        calls.append(name)
+        return FakeProvider()
+
+    monkeypatch.setattr(main, "get_provider", spy)
+    blob = b"\x00" * (main.MAX_AUDIO_BYTES + 1)
+    r = client.post("/process", files={"audio": ("big.ogg", blob, "audio/ogg")})
+    assert r.status_code == 422
+    assert "too large" in r.json()["detail"].lower()
+    assert calls == []  # the cap sits before any engine is touched
+
+
+def test_image_too_large_rejected(monkeypatch):
+    reached = []
+
+    def boom(blob, mime, profile=None, caption=None):
+        reached.append(1)
+        raise AssertionError("vision must not be reached")
+
+    monkeypatch.setattr(main.extraction, "extract_report_from_image", boom)
+    blob = b"\x00" * (main.MAX_IMAGE_BYTES + 1)
+    r = client.post("/process", files={"image": ("big.jpg", blob, "image/jpeg")})
+    assert r.status_code == 422
+    assert "too large" in r.json()["detail"].lower()
+    assert reached == []
+
+
+def test_right_at_the_cap_is_still_accepted(monkeypatch):
+    monkeypatch.setattr(main, "get_provider", lambda name: FakeProvider())
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t, profile=None: (REPORT, "test/stub"))
+    blob = b"\x00" * main.MAX_AUDIO_BYTES
+    r = client.post("/process", files={"audio": ("cap.ogg", blob, "audio/ogg")})
+    assert r.status_code == 200
+
+
+# ── STT fallback chain (2026-08-03) ─────────────────────────────────────────
+# Mirror of the extraction chain: ordered engines, first success wins, every
+# engine failing raises one combined error — a Groq outage must fall through
+# to Gemini instead of costing the technician their report.
+
+def _chain_providers():
+    class GroqDown(FakeProvider):
+        def transcribe(self, audio, mime_type):
+            raise TranscriptionError("groq quota exhausted")
+
+    class GeminiUp(FakeProvider):
+        def transcribe(self, audio, mime_type):
+            return TranscriptionInfo(text="نصبنا goulotte 150 متر", provider="gemini", latency_s=0.1)
+
+    return {"groq": GroqDown(), "gemini": GeminiUp()}
+
+
+def test_stt_chain_falls_back_to_next_engine(monkeypatch):
+    monkeypatch.setattr(main.settings, "stt_chain", "groq,gemini")
+    monkeypatch.setattr(main, "get_provider", lambda name: _chain_providers()[name])
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t, profile=None: (REPORT, "test/stub"))
+    r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
+    assert r.status_code == 200, r.text
+    assert r.json()["transcription"]["provider"] == "gemini"
+
+
+def test_stt_chain_all_engines_failing_502(monkeypatch):
+    monkeypatch.setattr(main.settings, "stt_chain", "groq,gemini")
+
+    class Down(FakeProvider):
+        def transcribe(self, audio, mime_type):
+            raise TranscriptionError("engine down")
+
+    monkeypatch.setattr(main, "get_provider", lambda name: Down())
+    r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert "groq" in detail and "gemini" in detail  # both failures named, no silent fallback
+
+
+def test_forced_provider_bypasses_the_chain(monkeypatch):
+    """The benchmark override (`provider=` form field) stays single-engine."""
+    seen = []
+
+    def spy(name):
+        seen.append(name)
+        return _chain_providers()[name]
+
+    monkeypatch.setattr(main.settings, "stt_chain", "groq,gemini")
+    monkeypatch.setattr(main, "get_provider", spy)
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t, profile=None: (REPORT, "test/stub"))
+    r = client.post(
+        "/process",
+        data={"provider": "gemini"},
+        files={"audio": ("note.ogg", b"q", "audio/ogg")},
+    )
+    assert r.status_code == 200, r.text
+    assert seen == ["gemini"]  # only the forced engine was consulted
 
 
 def test_image_mode(monkeypatch):

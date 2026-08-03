@@ -494,6 +494,12 @@ async function fail(res: Response): Promise<never> {
   } catch {
     /* not JSON — use the raw body */
   }
+  if (res.status === 401) {
+    // The session died mid-use: expired, or its row was deleted (revoked). No
+    // single panel can fix that — every poll would keep failing with the same
+    // 401 — so tell the app to drop the user back on the login screen.
+    window.dispatchEvent(new Event('aznet:unauthorized'))
+  }
   throw new Error(detail.slice(0, 300) || `${res.status} ${res.statusText}`)
 }
 

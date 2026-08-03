@@ -1195,6 +1195,42 @@ def prune_samples(days: int = RETENTION_DAYS) -> int:
         return cur.rowcount
 
 
+def prune_meta(days: int = RETENTION_DAYS) -> dict:
+    """Retention sweep for the tables that would otherwise grow forever: expired
+    sessions, idempotency claims, the audit trail and page visits.
+
+    Sessions prune on expiry (they are dead the moment `expires_at` passes)
+    rather than on age: an account that logs in every six days keeps a live
+    session past any age cutoff, and cutting it would force an early logout.
+    The others age out exactly like the pipeline logs — a 30-day audit trail is
+    the same bargain `pipeline_logs` makes.
+    """
+    with _cursor() as cur:
+        cur.execute("DELETE FROM sessions WHERE expires_at < now()")
+        sessions = cur.rowcount
+        cur.execute(
+            "DELETE FROM processed_messages WHERE processed_at < now() - (%s * interval '1 day')",
+            (days,),
+        )
+        claims = cur.rowcount
+        cur.execute(
+            "DELETE FROM user_actions WHERE created_at < now() - (%s * interval '1 day')",
+            (days,),
+        )
+        actions = cur.rowcount
+        cur.execute(
+            "DELETE FROM page_visits WHERE created_at < now() - (%s * interval '1 day')",
+            (days,),
+        )
+        visits = cur.rowcount
+    return {
+        "sessions_deleted": sessions,
+        "claims_deleted": claims,
+        "actions_deleted": actions,
+        "visits_deleted": visits,
+    }
+
+
 # ── Application settings ───────────────────────────────────────────────────
 # One row per key, JSON value. Small and generic on purpose: report schedule,
 # notification recipients and export format are operator preferences, not

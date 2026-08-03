@@ -299,7 +299,7 @@ HEADERS = ["date", "heure", "canal", "technicien", "chantier", "goulottes_m", "l
 
 def _fake_service(updated_range="Rapports!A17:Q17"):
     class _GetResp:
-        def execute(self):
+        def execute(self, **kwargs):
             return {"values": [HEADERS]}
 
     class Values:
@@ -338,7 +338,7 @@ def _fake_service(updated_range="Rapports!A17:Q17"):
         def __init__(self, body):
             self._body = body
 
-        def execute(self):
+        def execute(self, **kwargs):
             return self._body
 
     return Svc()

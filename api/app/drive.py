@@ -25,6 +25,11 @@ class DriveError(RuntimeError):
     pass
 
 
+# Same transient-throttle backoff as sheets.py: this runs on the /process path
+# and a 429 must not silently lose the durable audio link.
+_RETRIES = 3
+
+
 def _service():
     if not settings.google_service_account_json:
         raise DriveError("GOOGLE_SERVICE_ACCOUNT_JSON not configured")
@@ -68,11 +73,11 @@ def upload_audio(filename: str, mime_type: str, data: bytes) -> str:
                 ),
                 fields="id",
             )
-            .execute()
+            .execute(num_retries=_RETRIES)
         )
         svc.permissions().create(
             fileId=file["id"], body={"type": "anyone", "role": "reader"}
-        ).execute()
+        ).execute(num_retries=_RETRIES)
     except Exception as exc:  # noqa: BLE001 - one error type for callers
         raise DriveError(f"drive upload failed: {exc}") from exc
     return f"https://drive.google.com/uc?export=download&id={file['id']}"

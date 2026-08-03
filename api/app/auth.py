@@ -20,7 +20,6 @@ not a rewrite: `COOKIE_SECURE` and `SameSite` flip on, and the CORS origin
 narrows. What cannot be retrofitted -- hashing, revocable sessions, an API-side
 gate -- is done properly now.
 """
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -169,9 +168,14 @@ def seed_admin() -> None:
     requires being logged in, and logging in requires an account. Skipped
     forever once any row exists, so it cannot silently resurrect a deleted
     admin or reset a changed password.
+
+    Values come from Settings (config.py) rather than os.environ: the host-run
+    `uvicorn --reload` dev flow loads .env through pydantic-settings, so reading
+    the process environment here would seed a throwaway "admin" account that
+    only exists when running inside Docker.
     """
-    email = os.environ.get("ADMIN_EMAIL", "").strip()
-    password = os.environ.get("ADMIN_PASSWORD", "")
+    email = (settings.admin_email or "").strip()
+    password = settings.admin_password or ""
     with logs._cursor() as cur:
         cur.execute("SELECT count(*) AS n FROM persons WHERE password_hash IS NOT NULL")
         existing = dict(logs._one(cur) or {"n": 0})["n"]
@@ -185,7 +189,7 @@ def seed_admin() -> None:
         print("[auth] no accounts and no ADMIN_EMAIL/ADMIN_PASSWORD — dashboard login unusable")
         return
     try:
-        create_user(email, os.environ.get("ADMIN_NAME", "Directeur"), password, "directeur")
+        create_user(email, settings.admin_name or "Directeur", password, "directeur")
     except AuthError as exc:
         # Loud, but never fatal. A rejected seed password (too short) would
         # otherwise propagate out of startup and take the whole API down --

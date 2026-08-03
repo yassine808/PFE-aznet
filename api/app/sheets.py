@@ -12,6 +12,10 @@ from app.config import settings
 
 RAPPORTS_TAB = "Rapports"
 
+# Google's free tier throttles transiently; the client's own exponential
+# backoff (num_retries) absorbs that without a row lost to a 429.
+_RETRIES = 3
+
 
 class SheetsError(RuntimeError):
     pass
@@ -43,7 +47,7 @@ def read_reports() -> List[dict]:
             .spreadsheets()
             .values()
             .get(spreadsheetId=settings.sheet_id, range=RAPPORTS_TAB)
-            .execute()
+            .execute(num_retries=_RETRIES)
         )
     except SheetsError:
         raise
@@ -78,7 +82,7 @@ def update_report_fields(row: int, values: dict) -> None:
             svc.spreadsheets()
             .values()
             .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
-            .execute()
+            .execute(num_retries=_RETRIES)
         )
         headers = header_resp.get("values", [[]])[0]
         data = []
@@ -97,7 +101,7 @@ def update_report_fields(row: int, values: dict) -> None:
         svc.spreadsheets().values().batchUpdate(
             spreadsheetId=settings.sheet_id,
             body={"valueInputOption": "USER_ENTERED", "data": data},
-        ).execute()
+        ).execute(num_retries=_RETRIES)
     except SheetsError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -118,14 +122,14 @@ def clear_row(row: int) -> None:
             svc.spreadsheets()
             .values()
             .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
-            .execute()
+            .execute(num_retries=_RETRIES)
         )
         ncols = max(1, len(header_resp.get("values", [[]])[0]))
         svc.spreadsheets().values().clear(
             spreadsheetId=settings.sheet_id,
             range=f"{RAPPORTS_TAB}!A{row}:{_col_letter(ncols)}{row}",
             body={},
-        ).execute()
+        ).execute(num_retries=_RETRIES)
     except SheetsError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -147,7 +151,7 @@ def append_report(values: dict) -> Optional[int]:
             svc.spreadsheets()
             .values()
             .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
-            .execute()
+            .execute(num_retries=_RETRIES)
         )
         headers = header_resp.get("values", [[]])[0]
         if not headers:
@@ -163,7 +167,7 @@ def append_report(values: dict) -> Optional[int]:
                 insertDataOption="INSERT_ROWS",
                 body={"values": [row]},
             )
-            .execute()
+            .execute(num_retries=_RETRIES)
         )
         return _row_from_range(resp.get("updates", {}).get("updatedRange"))
     except SheetsError:

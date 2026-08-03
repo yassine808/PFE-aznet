@@ -34,6 +34,18 @@ DRAIN_BATCH = 50
 NIGHTLY_HOUR = 3  # log prune + profile rebuild, while nobody is sending
 REMINDER_INTERVAL_SECONDS = 60  # task reminders fire within a minute of due
 
+# Ceiling per job, generous but bounded: a hung Google/SMTP call must cost the
+# operator a visible failed run, not a frozen scheduler. Jobs not listed here
+# run inline (they are DB-only and fast).
+_TIMEOUT_SECONDS = {
+    "sheet_queue": 120,
+    "daily_report": 180,   # Sheet read + two LLM calls + SMTP
+    "weekly_report": 180,
+    "profiles": 300,       # one Sheet read + one LLM call per technician
+    "prune_logs": 120,
+    "reminders": 60,
+}
+
 # name -> last result, newest wins. Read by GET /jobs.
 _STATUS: Dict[str, dict] = {}
 _LOCK = threading.Lock()
@@ -94,10 +106,12 @@ def drain_sheet_queue() -> dict:
 
 
 def prune_logs() -> dict:
-    """Retention sweep on both time-series tables."""
+    """Retention sweep on the time-series tables *and* the never-pruned ones:
+    expired sessions, idempotency claims, the audit trail and page visits."""
     return {
         "logs_deleted": logs.prune(RETENTION_DAYS),
         "samples_deleted": logs.prune_samples(RETENTION_DAYS),
+        **logs.prune_meta(RETENTION_DAYS),
     }
 
 
@@ -383,16 +397,46 @@ def run(name: str) -> dict:
 
     The same path serves the scheduler and the dashboard's "Run now" button, so
     a manual run is visible in the panel exactly like an automatic one.
+
+    Jobs with a timeout run in a daemon worker thread: the scheduler must keep
+    ticking even when one job hangs on a slow upstream (a stuck Google call
+    must not freeze the 03:00 nightly band, nor delay every drain), and the
+    overrun is recorded as a failed run the operator can see and re-trigger.
     """
     job = JOBS.get(name)
     if job is None:
         raise KeyError(name)
     started = time.time()
+    timeout = _TIMEOUT_SECONDS.get(name)
+    if timeout is None:
+        return _execute(job, name, started)
+    result: Dict[str, dict] = {}
+    worker = threading.Thread(
+        target=_execute, args=(job, name, started, result), name=f"job-{name}", daemon=True
+    )
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        # The thread is a daemon: once it finishes (or the process exits) it
+        # dies, so an overrun cannot accumulate. Its status would have arrived
+        # too late to matter; the timeout record is the one the operator sees.
+        return _record(name, {"ok": False, "error": f"timed out after {timeout}s"}, started)
+    return result["status"]
+
+
+def _execute(job, name: str, started: float, result: Optional[Dict[str, dict]] = None) -> dict:
+    """Body shared by the direct and the timed path. Never raises."""
     try:
-        result: dict = job()
-        status = {"job": name, "ok": True, "result": result}
+        payload: dict = job()
+        status = {"job": name, "ok": True, "result": payload}
     except Exception as exc:  # any failure is data, not a crash  # noqa: BLE001
         status = {"job": name, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    if result is not None:
+        result["status"] = status
+    return _record(name, status, started)
+
+
+def _record(name: str, status: dict, started: float) -> dict:
     status["at"] = datetime.now().isoformat(timespec="seconds")
     status["seconds"] = round(time.time() - started, 2)
     with _LOCK:

@@ -7,6 +7,7 @@ must come back as a result rather than as an exception in the scheduler thread.
 from datetime import datetime
 
 import pytest
+import time
 from fastapi.testclient import TestClient
 
 import app.main as main
@@ -86,6 +87,32 @@ def test_run_records_failure_instead_of_raising(monkeypatch):
     assert status["ok"] is False
     assert "nope" in status["error"]
     assert jobs.status()  # the panel still has something to show
+
+
+def test_run_times_out_a_hung_job(monkeypatch):
+    """A job that hangs on a slow upstream must not freeze the scheduler: the
+    overrun is recorded as a failed run the operator can see and re-trigger."""
+    monkeypatch.setattr(jobs.logs, "write_safe", lambda *a, **k: None)
+    monkeypatch.setitem(jobs.JOBS, "hang", lambda: time.sleep(5))
+    monkeypatch.setitem(jobs._TIMEOUT_SECONDS, "hang", 0.2)
+
+    status = jobs.run("hang")
+
+    assert status["ok"] is False
+    assert "timed out" in status["error"]
+    assert jobs.status()  # the panel still has something to show
+
+
+def test_run_fast_job_with_timeout_config_keeps_result(monkeypatch):
+    """The timed path must not interfere with a job that finishes in time."""
+    monkeypatch.setattr(jobs.logs, "write_safe", lambda *a, **k: None)
+    monkeypatch.setitem(jobs.JOBS, "quick", lambda: {"done": 1})
+    monkeypatch.setitem(jobs._TIMEOUT_SECONDS, "quick", 5)
+
+    status = jobs.run("quick")
+
+    assert status["ok"] is True
+    assert status["result"] == {"done": 1}
 
 
 def test_due_skips_sunday_for_daily_report(monkeypatch):

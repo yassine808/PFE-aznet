@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 from app import auth, daily_report, drive, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
-from app.providers.base import TranscriptionError
+from app.providers.base import TranscriptionError, TranscriptionInfo
 from app.schemas import ProcessResponse
 
 @asynccontextmanager
@@ -61,6 +61,12 @@ app.add_middleware(
 
 MIN_USABLE_CHARS = 10
 LOW_CONFIDENCE_THRESHOLD = 0.5  # below this, flag for manual review in the dashboard
+
+# Upload caps enforced *before* anything leaves this process: a 100 MB Telegram
+# dump or a 30 MB "photo" must cost us nothing (no Sheet write, no quota burn),
+# and a request that big is certainly a misdirected file, not a voice note.
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+MAX_IMAGE_BYTES = 15 * 1024 * 1024
 
 # Wall-clock start of this process — the dashboard reads uptime from /health to
 # show an "API online / uptime" status tile (ops visibility on the admin PC).
@@ -311,17 +317,20 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
     """Audio branch of /process: STT then a couple of quality warnings.
 
     Returns (transcription, rapport_complet, warnings, blob). Raises HTTPException
-    on empty input, an unknown provider name, or a transcription failure.
+    on empty/oversized input, an unknown provider name, or a transcription failure.
     """
-    blob = await audio.read()
+    blob = await audio.read(MAX_AUDIO_BYTES + 1)
     if not blob:
         raise HTTPException(422, "Empty audio file")
-    engine = provider or settings.stt_provider
+    if len(blob) > MAX_AUDIO_BYTES:
+        raise HTTPException(422, f"Audio too large (max {MAX_AUDIO_BYTES // (1024 * 1024)} MB)")
     t0 = time.time()
     try:
-        transcription = get_provider(engine).transcribe(
-            blob, audio.content_type or "audio/ogg"
-        )
+        # STT is pure synchronous I/O (requests/genai/groq/httpx) — run it off the
+        # loop or one slow engine stalls every other concurrent request. The chain
+        # lives in _transcribe_engine, which does the ordered fallback so a dead
+        # engine never costs the technician their report.
+        transcription = await run_in_threadpool(_transcribe_engine, blob, audio.content_type, provider)
     except ValueError as exc:  # unknown provider name
         await _log("api", "error", message=f"unknown provider: {exc}", **ctx)
         raise HTTPException(422, str(exc)) from exc
@@ -329,10 +338,11 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
         await _log(
             "transcribed", "error", message=f"transcription failed: {exc}",
             duration_ms=int((time.time() - t0) * 1000),
-            payload={"engine": engine}, **ctx,
+            payload={"engine": provider or settings.stt_chain}, **ctx,
         )
         raise HTTPException(502, f"transcription failed: {exc}") from exc
 
+    engine = transcription.provider
     rapport_complet = transcription.text
     warnings: List[str] = []
     if len(rapport_complet) < MIN_USABLE_CHARS:
@@ -348,6 +358,32 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
     return transcription, rapport_complet, warnings, blob
 
 
+def _transcribe_engine(
+    blob: bytes, mime_type: Optional[str], forced: Optional[str]
+) -> TranscriptionInfo:
+    """Run the STT chain — synchronous, so callers wrap it in run_in_threadpool.
+
+    `forced` is the benchmark override (`provider=` form field) and bypasses the
+    chain exactly like the old single-engine path. The chain mirrors the
+    extraction design in app/extraction.py: ordered engines, first success wins,
+    every failure recorded, all of them failing raises one combined
+    TranscriptionError — never a silent fallback to "no report".
+    """
+    if forced:
+        # Unknown forced names must fail loudly (422 upstream): the benchmark
+        # needs to learn a typo, not silently fall back to another engine.
+        return get_provider(forced).transcribe(blob, mime_type or "audio/ogg")
+    failures: List[str] = []
+    for name in (part.strip() for part in settings.stt_chain.split(",") if part.strip()):
+        try:
+            return get_provider(name).transcribe(blob, mime_type or "audio/ogg")
+        except (TranscriptionError, ValueError) as exc:
+            # ValueError = unknown engine in the chain: a config typo must not
+            # take the remaining engines down with it, just be recorded.
+            failures.append(f"{name}: {exc}")
+    raise TranscriptionError("no STT engine succeeded — " + " | ".join(failures))
+
+
 async def _extract_from_image(
     image: UploadFile, sender_profile: Optional[str], caption: Optional[str],
     ctx: dict, message_id: Optional[str] = None,
@@ -356,9 +392,11 @@ async def _extract_from_image(
     schema in one call, so there is no intermediate transcription to store or
     to get wrong twice — this returns the full ProcessResponse directly.
     """
-    blob = await image.read()
+    blob = await image.read(MAX_IMAGE_BYTES + 1)
     if not blob:
         raise HTTPException(422, "Empty image file")
+    if len(blob) > MAX_IMAGE_BYTES:
+        raise HTTPException(422, f"Image too large (max {MAX_IMAGE_BYTES // (1024 * 1024)} MB)")
     t1 = time.time()
     try:
         report, model_used = await run_in_threadpool(
@@ -409,6 +447,7 @@ async def process(
     channel: Optional[str] = Form(None, description="telegram | whatsapp | form"),
     technicien: Optional[str] = Form(None, description="Sender name, for log filtering"),
     message_id: Optional[str] = Form(None, description="Channel message id (dedupe key, e.g. 'tg:123:456') — links the report to its origin message for /modify"),
+    caller: dict = Depends(auth.require_user),
 ) -> ProcessResponse:
     # Same trace id n8n threads through every stage, so the API's own errors
     # line up with the workflow's rows in the dashboard timeline.
@@ -824,6 +863,7 @@ def list_logs(
     stage: Optional[str] = None,
     correlation_id: Optional[str] = None,
     search: Optional[str] = None,
+    caller: dict = Depends(auth.require_user),
 ) -> dict:
     try:
         return {
@@ -1260,7 +1300,14 @@ def refresh_one_profile(person_id: int, caller: dict = Depends(auth.require_huma
     if person is None:
         raise HTTPException(404, f"person {person_id} not found")
     auth.record(caller, "profile_refreshed", target=person["name"])
-    return memory.refresh_person(person, sheets.read_reports())
+    # The profile is built from the person's own past reports, which live in the
+    # Sheet: a Google outage must surface as a 502 ("try the button again"),
+    # never as a 500 that looks like our bug.
+    try:
+        rows = sheets.read_reports()
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, f"sheet unreachable: {exc}") from exc
+    return memory.refresh_person(person, rows)
 
 
 @app.post("/profiles/refresh", responses={502: {"description": "Log store unreachable"}})
@@ -1274,7 +1321,12 @@ def refresh_all_profiles(caller: dict = Depends(auth.require_user)) -> dict:
         persons = logs.list_persons()
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
-    rows = sheets.read_reports()
+    # Same reasoning as refresh_one_profile: the Sheet is the input, and when it
+    # is down the job must say so instead of 500ing.
+    try:
+        rows = sheets.read_reports()
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, f"sheet unreachable: {exc}") from exc
     results = [memory.refresh_person(p, rows) for p in persons]
     return {"refreshed": sum(1 for r in results if r["updated"]), "results": results}
 
@@ -1426,7 +1478,7 @@ class SamplesIn(BaseModel):
 
 
 @app.post("/service-samples", responses={502: {"description": "Log store unreachable"}})
-def post_samples(payload: SamplesIn) -> dict:
+def post_samples(payload: SamplesIn, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         return {"written": logs.record_samples([s.model_dump() for s in payload.samples])}
     except logs.LogStoreError as exc:
@@ -1434,7 +1486,7 @@ def post_samples(payload: SamplesIn) -> dict:
 
 
 @app.get("/service-samples", responses={502: {"description": "Log store unreachable"}})
-def get_samples(hours: int = 1) -> dict:
+def get_samples(hours: int = 1, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         return {"samples": logs.read_samples(hours)}
     except logs.LogStoreError as exc:
@@ -1447,7 +1499,7 @@ class ResolveRequest(BaseModel):
 
 
 @app.patch("/sheet-queue/{write_id}", responses={502: {"description": "Log store unreachable"}})
-def resolve_queue_item(write_id: int, payload: ResolveRequest) -> dict:
+def resolve_queue_item(write_id: int, payload: ResolveRequest, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         logs.resolve_write(write_id, payload.ok, payload.error)
     except logs.LogStoreError as exc:
