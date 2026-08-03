@@ -1600,6 +1600,19 @@ def delete_task(task_id: int) -> bool:
         return cur.rowcount > 0
 
 
+def get_task(task_id: int) -> Optional[dict]:
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, title, notes, due_at, repeat, "
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "done_at, last_notified_at, created_at, updated_at FROM tasks "
+            "WHERE id = %s",
+            (task_id,),
+        )
+        row = cur.fetchone()
+        return _iso(dict(row)) if row else None
+
+
 def list_tasks() -> List[dict]:
     """Every task, open first then done, each group by due date."""
     with _cursor() as cur:

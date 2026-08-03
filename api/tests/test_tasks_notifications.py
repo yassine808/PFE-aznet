@@ -197,6 +197,87 @@ def test_lead_must_be_shorter_than_repeat_period(monkeypatch):
     ).status_code == 200  # one-shot: a lead can be arbitrarily long
 
 
+def test_lead_must_be_shorter_than_custom_interval(monkeypatch):
+    """The period guard applies to custom cadences too (repeat='none' +
+    repeat_unit), not just the presets — a long lead on a short custom
+    interval would overlap windows and re-ring every tick."""
+    monkeypatch.setattr(
+        main.logs, "create_task",
+        lambda title, notes=None, due_at=None, repeat="none",
+        remind_before_value=None, remind_before_unit=None,
+        repeat_every=None, repeat_unit=None: 1,
+    )
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "none", "repeat_every": 3,
+                        "repeat_unit": "day", "remind_before_value": 30,
+                        "remind_before_unit": "day"}
+    ).status_code == 422  # lead >> custom period
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "none", "repeat_every": 30,
+                        "repeat_unit": "day", "remind_before_value": 30,
+                        "remind_before_unit": "day"}
+    ).status_code == 422  # lead == custom period
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "none", "repeat_every": 30,
+                        "repeat_unit": "day", "remind_before_value": 29,
+                        "remind_before_unit": "day"}
+    ).status_code == 200
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "none", "repeat_every": 2,
+                        "repeat_unit": "week", "remind_before_value": 13,
+                        "remind_before_unit": "day"}
+    ).status_code == 200  # 13 days < 14-day period
+    assert client.post(
+        "/tasks", json={"title": "x", "repeat": "none", "repeat_every": 2,
+                        "repeat_unit": "week", "remind_before_value": 14,
+                        "remind_before_unit": "day"}
+    ).status_code == 422
+
+
+def test_patch_checks_lead_against_known_period(monkeypatch):
+    """PATCH validates the period when it carries the repeat (then the
+    resulting task is fully known); a repeat-less patch is checked against
+    the stored cadence; only pairs are enforced when there is no lead."""
+    monkeypatch.setattr(main.logs, "update_task", lambda tid, fields: True)
+    assert client.patch(
+        "/tasks/9", json={"remind_before_value": 30, "remind_before_unit": "day",
+                          "repeat": "daily"}
+    ).status_code == 422
+    assert client.patch(
+        "/tasks/9", json={"remind_before_value": 30, "remind_before_unit": "day",
+                          "repeat": "none"}
+    ).status_code == 200  # one-shot lead stays unbounded
+    # Repeat untouched: the stored task decides.
+    monkeypatch.setattr(
+        main.logs, "get_task",
+        lambda tid: {"repeat": "weekly", "repeat_every": None, "repeat_unit": None},
+    )
+    assert client.patch(
+        "/tasks/9", json={"remind_before_value": 30, "remind_before_unit": "day"}
+    ).status_code == 422  # stored weekly period is 7 days
+    assert client.patch(
+        "/tasks/9", json={"remind_before_value": 6, "remind_before_unit": "day"}
+    ).status_code == 200
+    monkeypatch.setattr(
+        main.logs, "get_task",
+        lambda tid: {"repeat": "none", "repeat_every": None, "repeat_unit": None},
+    )
+    assert client.patch(
+        "/tasks/9", json={"remind_before_value": 30, "remind_before_unit": "day"}
+    ).status_code == 200  # stored one-shot: any lead
+    # Clearing a lead clears both fields; the guard must not trip on None.
+    assert client.patch(
+        "/tasks/9", json={"remind_before_value": None, "remind_before_unit": None}
+    ).status_code == 200
+
+
+def test_patch_unknown_task_is_404_before_period_check(monkeypatch):
+    monkeypatch.setattr(main.logs, "get_task", lambda tid: None)
+    r = client.patch("/tasks/99", json={"remind_before_value": 3,
+                                        "remind_before_unit": "day"})
+    assert r.status_code == 404
+
+
 def test_tasks_store_down_is_502(monkeypatch):
     def boom(*a, **k):
         raise logs.LogStoreError("down")

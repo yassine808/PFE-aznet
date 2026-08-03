@@ -940,6 +940,24 @@ _UNIT_DAYS = {"day": 1, "week": 7, "month": 30}
 _REPEAT_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
 
 
+def _lead_period_error(remind_value, remind_unit, repeat, repeat_every, repeat_unit):
+    """A lead as long as the repeat period makes consecutive windows overlap
+    (the next reminder would be due the moment the previous one fired), which
+    the once-per-occurrence guard then re-fires every tick. The period is the
+    custom interval when one is set, else the preset; a one-shot task accepts
+    any lead. Returns the rejection message or None."""
+    recurring = (repeat not in (None, "none")) or repeat_unit is not None
+    if not remind_value or not recurring:
+        return None
+    if repeat_unit:
+        period_days = repeat_every * _UNIT_DAYS[repeat_unit]
+    else:
+        period_days = _REPEAT_DAYS[repeat]
+    if _UNIT_DAYS[remind_unit] * remind_value >= period_days:
+        return "le rappel avant doit être plus court que la période de répétition"
+    return None
+
+
 class TaskIn(BaseModel):
     title: str
     notes: Optional[str] = None
@@ -956,18 +974,10 @@ class TaskIn(BaseModel):
             raise ValueError("remind_before_value et remind_before_unit vont ensemble")
         if (self.repeat_every is None) != (self.repeat_unit is None):
             raise ValueError("repeat_every et repeat_unit vont ensemble")
-        # A lead as long as the repeat period makes consecutive windows overlap
-        # (the next reminder would be due the moment the previous one fired),
-        # which the once-per-occurrence guard then re-fires every tick.
-        if self.remind_before_value and self.repeat != "none":
-            if self.repeat_unit:
-                period_days = self.repeat_every * _UNIT_DAYS[self.repeat_unit]
-            else:
-                period_days = _REPEAT_DAYS[self.repeat]
-            if _UNIT_DAYS[self.remind_before_unit] * self.remind_before_value >= period_days:
-                raise ValueError(
-                    "le rappel avant doit être plus court que la période de répétition"
-                )
+        error = _lead_period_error(self.remind_before_value, self.remind_before_unit,
+                                   self.repeat, self.repeat_every, self.repeat_unit)
+        if error:
+            raise ValueError(error)
         return self
 
 
@@ -988,6 +998,12 @@ class TaskPatchIn(BaseModel):
             raise ValueError("remind_before_value et remind_before_unit vont ensemble")
         if (self.repeat_every is None) != (self.repeat_unit is None):
             raise ValueError("repeat_every et repeat_unit vont ensemble")
+        # Same overlap guard, but only when the patch itself carries the
+        # repeat: otherwise the stored cadence is invisible at validation time.
+        error = _lead_period_error(self.remind_before_value, self.remind_before_unit,
+                                   self.repeat, self.repeat_every, self.repeat_unit)
+        if error:
+            raise ValueError(error)
         return self
 
 
@@ -1022,6 +1038,23 @@ def create_task(payload: TaskIn, caller: dict = Depends(auth.require_human)) -> 
            responses={404: {"description": "Unknown task"}, 502: {"description": "Log store unreachable"}})
 def update_task(task_id: int, payload: TaskPatchIn, caller: dict = Depends(auth.require_human)) -> dict:
     fields = payload.model_dump(exclude_unset=True)
+    # When the patch changes the lead but carries no repeat, the validator
+    # could not see the stored cadence — and a lead as long as the stored
+    # period would overlap windows and silently kill every future reminder.
+    # Check the resulting state against the stored task before writing.
+    if "remind_before_value" in fields and "repeat" not in fields:
+        try:
+            stored = logs.get_task(task_id)
+        except logs.LogStoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        if stored is None:
+            raise HTTPException(404, "tâche inconnue")
+        error = _lead_period_error(
+            payload.remind_before_value, payload.remind_before_unit,
+            stored["repeat"], stored["repeat_every"], stored["repeat_unit"],
+        )
+        if error:
+            raise HTTPException(422, error)
     try:
         updated = logs.update_task(task_id, fields)
     except logs.LogStoreError as exc:

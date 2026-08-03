@@ -70,12 +70,7 @@ export interface PendingWrite {
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { signal })
-  if (!res.ok) {
-    // Surface the API's own message: "sheets read failed: ..." is far more
-    // actionable to the operator than a bare 502.
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<T>
 }
 
@@ -194,10 +189,7 @@ export async function patchReport(row: number, field: string, value: string): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ field, value }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
 }
 
 /** Outbound manager reply, sent by the API on the technician's own channels. */
@@ -211,10 +203,7 @@ export async function sendReply(name: string, text: string): Promise<ReplyResult
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, text }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(body.slice(0, 300) || res.statusText)
-  }
+  if (!res.ok) await fail(res)
   return (await res.json()) as ReplyResult
 }
 
@@ -250,10 +239,7 @@ export async function generateImage(rows: ReportRow[], title: string): Promise<G
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rows, title }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 300) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<GeneratedImage>
 }
 
@@ -278,10 +264,7 @@ export async function generateDailyReport(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date, rows }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 300) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<DailyReportContent>
 }
 
@@ -329,10 +312,7 @@ export async function setManager(id: number, managerId: number | null): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ manager_id: managerId }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
 }
 
 export async function addTechnician(input: {
@@ -346,23 +326,20 @@ export async function addTechnician(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<Technician>
 }
 
 /** Remove one channel handle. The person and their profile survive. */
 export async function deleteTechnician(id: number): Promise<void> {
   const res = await fetch(`${BASE}/technicians/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) await fail(res)
 }
 
 /** Remove the person and every handle they own. */
 export async function deletePerson(id: number): Promise<void> {
   const res = await fetch(`${BASE}/persons/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) await fail(res)
 }
 
 /**
@@ -371,10 +348,7 @@ export async function deletePerson(id: number): Promise<void> {
  */
 export async function refreshProfile(id: number): Promise<{ updated: boolean; reason?: string }> {
   const res = await fetch(`${BASE}/persons/${id}/profile`, { method: 'POST' })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<{ updated: boolean; reason?: string }>
 }
 
@@ -405,10 +379,7 @@ export interface JobStatus {
  */
 export async function runJob(name: string): Promise<JobStatus['last']> {
   const res = await fetch(`${BASE}/jobs/${name}/run`, { method: 'POST' })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<JobStatus['last']>
 }
 
@@ -419,10 +390,7 @@ export async function dismissQueueItem(id: number): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ok: true }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
 }
 
 /** Operator preferences, stored server-side so any scheduler reads the same values. */
@@ -453,10 +421,7 @@ export async function putMeSettings(values: Partial<MeSettings>): Promise<Partia
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(body.slice(0, 300) || `${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return ((await res.json()) as { settings: Partial<MeSettings> }).settings
 }
 
@@ -466,10 +431,7 @@ export async function putSettings(values: Partial<AppSettings>): Promise<AppSett
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return ((await res.json()) as { settings: AppSettings }).settings
 }
 
@@ -479,11 +441,7 @@ export async function sendTestMail(to: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ to }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    // The API names the missing env vars on a 422; surface that verbatim.
-    throw new Error(body.slice(0, 300) || `${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) await fail(res)  // the API names the missing env vars on a 422
 }
 
 // ── Accounts, sessions and history ────────────────────────────────────────
@@ -521,22 +479,31 @@ export interface History {
   total_seconds: number
 }
 
+/** Turn a non-OK response into a readable Error: our HTTPExceptions carry a
+ * string detail, pydantic validation errors an array of { msg } — both must
+ * end up as plain text, never "[object Object]". */
+async function fail(res: Response): Promise<never> {
+  const text = await res.text().catch(() => '')
+  let detail = text
+  try {
+    const parsed = JSON.parse(text) as { detail?: string | Array<{ msg?: string }> }
+    if (typeof parsed.detail === 'string') detail = parsed.detail
+    else if (Array.isArray(parsed.detail)) {
+      detail = parsed.detail.map((d) => d.msg).filter(Boolean).join(' ; ')
+    }
+  } catch {
+    /* not JSON — use the raw body */
+  }
+  throw new Error(detail.slice(0, 300) || `${res.status} ${res.statusText}`)
+}
+
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    let detail = text
-    try {
-      detail = (JSON.parse(text) as { detail?: string }).detail ?? text
-    } catch {
-      /* not JSON — use the raw body */
-    }
-    throw new Error(detail.slice(0, 300) || `${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<T>
 }
 
@@ -555,7 +522,7 @@ export const createUser = (input: { email: string; name: string; password: strin
 
 export async function deleteUser(id: number): Promise<void> {
   const res = await fetch(`${BASE}/users/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) await fail(res)
 }
 
 export const history = (userId?: number, s?: AbortSignal) =>
@@ -669,12 +636,12 @@ export async function updateTask(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
   })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) await fail(res)
 }
 
 export async function deleteTask(id: number): Promise<void> {
   const res = await fetch(`${BASE}/tasks/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) await fail(res)
 }
 
 export const api = {
