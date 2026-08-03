@@ -31,4 +31,3 @@
 - [x] the search (crtl+k) searches literally eveything. (even with typos etc, then show suggestion of what it can show instead) — fuzzy subsequence matching, technicians indexed, "did you mean" fallback
 - [x] add notification that's unique for the users of the dashboard — the bell: per-account rows (own team's new reports, rows flagged for review, Sheet write failures, task reminders), unread badge, mark-all-read; only the signed-in person sees their own
 - [x] add panel for "to do" tasks which can be added with the reminder repitition — the shared to-do page: title/notes/échéance/répétition (une fois, jour, semaine, mois); the scheduler rings every bell at échéance and emails the accounts, then advances the recurrence
-
