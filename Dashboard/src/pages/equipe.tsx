@@ -43,10 +43,16 @@ import { cn } from '@/lib/utils'
 
 const CHANNELS = ['telegram', 'whatsapp'] as const
 
+/** Reports per person, keyed by lower-cased name (the Sheet's own join key). */
+type Load = Map<string, { count: number; flagged: number }>
+
 export function EquipePage() {
   const { t } = useI18n()
   const { user } = useAuth()
   const list = useApi('technicians', api.technicians)
+  // Same cache key the Reports page uses, so this costs no extra request when
+  // the operator has already been there — and one otherwise.
+  const reports = useApi('reports', api.reports)
 
   const [selected, setSelected] = useState<number | null>(null)
   const [adding, setAdding] = useState<'chef' | 'tech' | null>(null)
@@ -63,6 +69,32 @@ export function EquipePage() {
   const orphans = techs.filter((p) => !p.manager_id || !chefs.some((c) => c.id === p.manager_id))
 
   const focus = people.find((p) => p.id === selected) ?? null
+
+  /**
+   * How much each person has actually sent, keyed by lower-cased name — the
+   * same key `_manager_buckets` uses server-side, because the Sheet carries a
+   * name and not a channel id.
+   *
+   * The chart used to answer only "who reports to whom", which is the one thing
+   * about an org that rarely changes. Volume is what a manager is looking for
+   * when they open it: who is carrying the week, and who has gone quiet.
+   */
+  const load = useMemo(() => {
+    const m = new Map<string, { count: number; flagged: number }>()
+    for (const r of reports.data?.reports ?? []) {
+      const key = (r.technicien ?? '').trim().toLowerCase()
+      if (!key) continue
+      const cur = m.get(key) ?? { count: 0, flagged: 0 }
+      cur.count += 1
+      if (isFlagged(r.flag_review)) cur.flagged += 1
+      m.set(key, cur)
+    }
+    return m
+  }, [reports.data])
+
+  // Bars are comparable across the chart or they are decoration, so every one
+  // is drawn against the busiest person rather than against its own row.
+  const peak = useMemo(() => Math.max(1, ...[...load.values()].map((v) => v.count)), [load])
 
   // Escape closes the detail panel, matching the mobile nav drawer's affordance.
   useEffect(() => {
@@ -143,6 +175,8 @@ export function EquipePage() {
           orphans={orphans}
           selected={selected}
           canEdit={isDirector}
+          load={load}
+          peak={peak}
           onSelect={setSelected}
           onMove={move}
         />
@@ -209,6 +243,8 @@ function Chart({
   orphans,
   selected,
   canEdit,
+  load,
+  peak,
   onSelect,
   onMove,
 }: {
@@ -218,10 +254,24 @@ function Chart({
   readonly orphans: Technician[]
   readonly selected: number | null
   readonly canEdit: boolean
+  readonly load: Load
+  readonly peak: number
   readonly onSelect: (id: number) => void
   readonly onMove: (personId: number, managerId: number | null) => void
 }) {
   const { t } = useI18n()
+  // A chef's bar is their crew's output, not their own: a site manager who
+  // sends nothing while their six technicians send forty is not idle.
+  const teamOf = (chef: Technician) =>
+    techs
+      .filter((p) => p.manager_id === chef.id)
+      .reduce(
+        (acc, p) => {
+          const s = load.get(p.name.trim().toLowerCase())
+          return { count: acc.count + (s?.count ?? 0), flagged: acc.flagged + (s?.flagged ?? 0) }
+        },
+        { count: 0, flagged: 0 },
+      )
   return (
     <div className="overflow-x-auto pb-2">
       <div className="flex min-w-max flex-col items-center gap-0">
@@ -233,6 +283,8 @@ function Chart({
               onSelect={onSelect}
               onMove={onMove}
               canEdit={canEdit}
+              stat={load.get(directeur.name.trim().toLowerCase())}
+              peak={peak}
             />
           </div>
         )}
@@ -249,6 +301,9 @@ function Chart({
                     onSelect={onSelect}
                     onMove={onMove}
                     canEdit={canEdit}
+                    stat={teamOf(chef)}
+                    peak={Math.max(peak, teamOf(chef).count)}
+                    crew={crew.length}
                     dropTarget
                   />
                 </div>
@@ -261,6 +316,8 @@ function Chart({
                         onSelect={onSelect}
                         onMove={onMove}
                         canEdit={canEdit}
+                        stat={load.get(p.name.trim().toLowerCase())}
+                        peak={peak}
                         draggable
                       />
                     </li>
@@ -288,6 +345,8 @@ function Chart({
                       onSelect={onSelect}
                       onMove={onMove}
                       canEdit={canEdit}
+                      stat={load.get(p.name.trim().toLowerCase())}
+                      peak={peak}
                       draggable
                     />
                   </li>
@@ -323,6 +382,9 @@ function Box({
   canEdit,
   draggable,
   dropTarget,
+  stat,
+  peak,
+  crew,
   onSelect,
   onMove,
 }: {
@@ -331,6 +393,9 @@ function Box({
   readonly canEdit: boolean
   readonly draggable?: boolean
   readonly dropTarget?: boolean
+  readonly stat?: { count: number; flagged: number }
+  readonly peak: number
+  readonly crew?: number
   readonly onSelect: (id: number) => void
   readonly onMove: (personId: number, managerId: number | null) => void
 }) {
@@ -406,9 +471,60 @@ function Box({
             </span>
           )}
         </span>
+
+        {/*
+          Load. A bar plus its own number, never the bar alone: the chart is
+          read at a glance for shape and then squinted at for the actual figure,
+          and a bar with no value is a shape you cannot act on.
+
+          Flagged reports are drawn as a second segment in the warning colour —
+          the Reserved Band Rule's exact sanctioned meaning — and the count is
+          in the title text too, so the split never rests on hue.
+        */}
+        {stat && stat.count > 0 && (
+          <span
+            className="mt-0.5 flex w-full items-center gap-2"
+            title={loadLabel(t, person.name, stat, crew)}
+          >
+            <span className="bg-line relative h-1 flex-1 overflow-hidden rounded-full">
+              <span
+                className="bg-accent absolute inset-y-0 start-0 rounded-full"
+                style={{ inlineSize: `${Math.max(4, (stat.count / peak) * 100)}%` }}
+              />
+              {stat.flagged > 0 && (
+                <span
+                  className="bg-status-warn absolute inset-y-0 start-0 rounded-full"
+                  style={{ inlineSize: `${Math.max(2, (stat.flagged / peak) * 100)}%` }}
+                />
+              )}
+            </span>
+            <span className="tabular text-ink-muted text-[0.625rem]">{stat.count}</span>
+            <span className="sr-only">{loadLabel(t, person.name, stat, crew)}</span>
+          </span>
+        )}
+
+        {crew !== undefined && crew > 0 && (
+          <span className="text-ink-faint text-[0.625rem]">
+            {t('equipe.crewCount', { count: crew })}
+          </span>
+        )}
       </button>
     </div>
   )
+}
+
+/** One sentence carrying everything the bar encodes, for the title and SR text. */
+function loadLabel(
+  t: (k: string, v?: Record<string, string | number>) => string,
+  name: string,
+  stat: { count: number; flagged: number },
+  crew?: number,
+): string {
+  const base =
+    crew === undefined
+      ? t('equipe.loadSelf', { name, count: stat.count })
+      : t('equipe.loadTeam', { name, count: stat.count })
+  return stat.flagged > 0 ? `${base} — ${t('equipe.loadFlagged', { count: stat.flagged })}` : base
 }
 
 function DropZone({

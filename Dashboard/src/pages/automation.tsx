@@ -73,6 +73,124 @@ function Band({
   )
 }
 
+const PLAN_HOURS = [0, 6, 12, 18, 24]
+
+/**
+ * Minutes since midnight for a job, or null when it has no fixed hour.
+ *
+ * Read out of `job.schedule` rather than mirrored from the scheduler's own
+ * constants: the API builds that label itself (`jobs._schedule_label`) and
+ * always writes ASCII digits, whatever locale the dashboard is in. Duplicating
+ * NIGHTLY_HOUR here would be a second copy of a number that already drifted
+ * once between Python and this page.
+ */
+function scheduledAt(job: JobStatus): number | null {
+  const m = /(\d{1,2}):(\d{2})/.exec(job.schedule)
+  if (!m) return null
+  return Number(m[1]) * 60 + Number(m[2])
+}
+
+/**
+ * The day, on one axis.
+ *
+ * The schedules were six sentences the operator had to read and assemble into
+ * a mental timeline ("nightly at 03:00", "Monday to Saturday at 18:30", "every
+ * five minutes"). This is the same 24-hour axis the Day Ribbon already uses for
+ * reports, so "when does this machine act" is answered by looking rather than
+ * by reading. Jobs with no fixed hour are not plotted — a tick would claim a
+ * time they do not have — they are named underneath as continuous.
+ */
+function DayPlan({ jobs }: { readonly jobs: JobStatus[] }) {
+  const { t, dir } = useI18n()
+  const pct = (minutes: number) => {
+    const p = (Math.min(Math.max(minutes, 0), 1440) / 1440) * 100
+    return dir === 'rtl' ? 100 - p : p
+  }
+  // Clustered by minute, not one marker per job: the profile rebuild and the log
+  // prune both fire at 03:00, and drawn independently the second sat exactly on
+  // top of the first — the axis showed four nightly jobs as three.
+  const clusters = new Map<number, JobStatus[]>()
+  for (const job of jobs) {
+    const at = scheduledAt(job)
+    if (at === null) continue
+    clusters.set(at, [...(clusters.get(at) ?? []), job])
+  }
+  const timed = [...clusters.entries()].sort((a, b) => a[0] - b[0])
+  const continuous = jobs.filter((job) => scheduledAt(job) === null)
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="relative h-14">
+        {/* Recessive gridlines, same hairline language as the Day Ribbon. */}
+        {PLAN_HOURS.map((h) => (
+          <span
+            key={h}
+            aria-hidden
+            className="bg-line absolute inset-y-0 w-px"
+            style={{ insetInlineStart: `${pct(h * 60)}%` }}
+          />
+        ))}
+        {timed.map(([at, group]) => {
+          const label = group
+            .map((job) => `${t(`automation.job.${job.name}`)} — ${job.schedule}`)
+            .join(' · ')
+          return (
+            <span
+              key={at}
+              title={label}
+              className="absolute top-0 flex -translate-x-1/2 flex-col items-center gap-1 rtl:translate-x-1/2"
+              style={{ insetInlineStart: `${pct(at)}%` }}
+            >
+              <span className="flex items-center gap-1">
+                {group.map((job) => {
+                  const Icon = JOB_ICONS[job.name] ?? ArrowClockwiseIcon
+                  return (
+                    <span
+                      key={job.name}
+                      className="border-line bg-surface text-ink-muted flex size-7 items-center justify-center rounded-full border"
+                    >
+                      <Icon size={13} />
+                    </span>
+                  )
+                })}
+              </span>
+              <span className="tabular text-ink-faint text-[0.625rem]">
+                {String(Math.floor(at / 60)).padStart(2, '0')}:
+                {String(at % 60).padStart(2, '0')}
+              </span>
+              <span className="sr-only">{label}</span>
+            </span>
+          )
+        })}
+      </div>
+
+      <div className="relative h-4">
+        {PLAN_HOURS.map((h) => (
+          <span
+            key={h}
+            aria-hidden
+            className="tabular text-ink-faint absolute top-0 -translate-x-1/2 text-[0.625rem] rtl:translate-x-1/2"
+            style={{ insetInlineStart: `${pct(h * 60)}%` }}
+          >
+            {String(h % 24).padStart(2, '0')}
+          </span>
+        ))}
+      </div>
+
+      {continuous.length > 0 && (
+        <p className="text-ink-faint flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <span>{t('automation.plan.continuous')}</span>
+          {continuous.map((job) => (
+            <span key={job.name} className="text-ink-muted">
+              {t(`automation.job.${job.name}`)} ({job.schedule})
+            </span>
+          ))}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /**
  * "il y a 4 min" from an ISO timestamp.
  *
@@ -245,6 +363,35 @@ function JobRow({
   )
 }
 
+/**
+ * A bordered group of rows.
+ *
+ * DESIGN.md prefers a label plus a rule to a container, and the page still uses
+ * that for its top-level sections — but the two mail jobs and the four
+ * housekeeping jobs are answers to different questions ("did the manager get
+ * their report?" vs "is the plumbing sound?"), and a single flat list of six
+ * made the operator re-sort them by eye every visit. One tonal step and a
+ * hairline is the cheapest thing that separates them.
+ */
+function Panel({
+  title,
+  children,
+}: {
+  readonly title: string
+  readonly children: React.ReactNode
+}) {
+  return (
+    <section className="border-line bg-surface flex min-w-0 flex-col rounded-xl border">
+      <h3 className="border-line text-ink-faint border-b px-4 py-2.5 text-[0.6875rem] font-medium tracking-wide uppercase">
+        {title}
+      </h3>
+      <div className="px-4">{children}</div>
+    </section>
+  )
+}
+
+const MAIL_JOBS = ['daily_report', 'weekly_report']
+
 function JobsBand({
   jobs,
   ordered,
@@ -254,20 +401,37 @@ function JobsBand({
   readonly ordered: JobStatus[]
   readonly controls: Record<string, React.ReactNode>
 }) {
+  const { t } = useI18n()
   if (jobs.error) return <ErrorState message={jobs.error} onRetry={jobs.reload} />
   if (!ordered.length) return <Skeleton className="h-64" />
-  // A list of hairline rows, not a grid of bordered cards: five identical
-  // rounded boxes is the "endless card grid" DESIGN.md names as an anti-pattern,
-  // and the Ledger already establishes rows as how this app shows a set of
-  // things that differ only by their values.
-  return (
+
+  const mails = ordered.filter((j) => MAIL_JOBS.includes(j.name))
+  const upkeep = ordered.filter((j) => !MAIL_JOBS.includes(j.name))
+
+  // Rows inside each panel, never a grid of bordered cards: identical rounded
+  // boxes are the "endless card grid" DESIGN.md names as an anti-pattern, and
+  // the Ledger already establishes rows as how this app shows a set of things
+  // that differ only by their values.
+  const rows = (list: JobStatus[]) => (
     <ul className="flex flex-col">
-      {ordered.map((job) => (
+      {list.map((job) => (
         <JobRow key={job.name} job={job} onRan={jobs.reload}>
           {controls[job.name]}
         </JobRow>
       ))}
     </ul>
+  )
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Panel title={t('automation.plan.title')}>
+        <div className="py-4">
+          <DayPlan jobs={ordered} />
+        </div>
+      </Panel>
+      {mails.length > 0 && <Panel title={t('automation.group.mails')}>{rows(mails)}</Panel>}
+      {upkeep.length > 0 && <Panel title={t('automation.group.upkeep')}>{rows(upkeep)}</Panel>}
+    </div>
   )
 }
 
