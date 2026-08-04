@@ -53,14 +53,14 @@ const CHANNELS = ['telegram', 'whatsapp'] as const
 const CREW_PER_ROW = 3
 
 /**
- * Chefs side by side before the band wraps.
+ * Chefs: always one row.
  *
- * Two, not three: a chef's subtree is as wide as its crew row (three 10rem
- * boxes plus gaps, ~32rem), so three chefs need ~96rem of chart against the
- * ~72rem a 1440px window actually leaves beside the nav.
+ * Wrapping them to a second line used to leave a lone chef stranded under
+ * empty space rather than under the directeur's line, which read as broken
+ * rather than as "ran out of room". The chart already scrolls horizontally
+ * (`overflow-x-auto` + `min-w-max`) for a wide crew row, so the same trade is
+ * made here: more chefs widen the chart instead of wrapping it.
  */
-const CHEFS_PER_ROW = 2
-
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = []
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
@@ -347,56 +347,51 @@ function Chart({
         )}
 
         <div className="org-crew">
-          {chunk(chefs, CHEFS_PER_ROW).map((chefRow) => (
-            <ul
-              key={chefRow.map((c) => c.id).join('-')}
-              className="org-branch flex items-start justify-center gap-6"
-            >
-              {chefRow.map((chef) => {
-                const crew = techs.filter((p) => p.manager_id === chef.id)
-                return (
-                  <li key={chef.id} className="org-node flex flex-col items-center">
-                    <div className={cn(crew.length > 0 && 'org-stem')}>
-                      <Box
-                        person={chef}
-                        selected={selected === chef.id}
-                        onSelect={onSelect}
-                        onMove={onMove}
-                        canEdit={canEdit}
-                        stat={teamOf(chef)}
-                        peak={Math.max(peak, teamOf(chef).count)}
-                        crew={crew.length}
-                        dropTarget
-                      />
-                    </div>
-                    <div className="org-crew">
-                      {chunk(crew, CREW_PER_ROW).map((row) => (
-                        <ul
-                          key={row.map((p) => p.id).join('-')}
-                          className="org-branch flex items-start justify-center gap-3"
-                        >
-                          {row.map((p) => (
-                            <li key={p.id} className="org-node">
-                              <Box
-                                person={p}
-                                selected={selected === p.id}
-                                onSelect={onSelect}
-                                onMove={onMove}
-                                canEdit={canEdit}
-                                stat={load.get(p.name.trim().toLowerCase())}
-                                peak={peak}
-                                draggable
-                              />
-                            </li>
-                          ))}
-                        </ul>
-                      ))}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          ))}
+          <ul className="org-branch flex flex-nowrap items-start justify-center gap-6">
+            {chefs.map((chef) => {
+              const crew = techs.filter((p) => p.manager_id === chef.id)
+              return (
+                <li key={chef.id} className="org-node flex flex-col items-center">
+                  <div className={cn(crew.length > 0 && 'org-stem')}>
+                    <Box
+                      person={chef}
+                      selected={selected === chef.id}
+                      onSelect={onSelect}
+                      onMove={onMove}
+                      canEdit={canEdit}
+                      stat={teamOf(chef)}
+                      peak={Math.max(peak, teamOf(chef).count)}
+                      crew={crew.length}
+                      dropTarget
+                    />
+                  </div>
+                  <div className="org-crew">
+                    {chunk(crew, CREW_PER_ROW).map((row) => (
+                      <ul
+                        key={row.map((p) => p.id).join('-')}
+                        className="org-branch flex items-start justify-center gap-3"
+                      >
+                        {row.map((p) => (
+                          <li key={p.id} className="org-node">
+                            <Box
+                              person={p}
+                              selected={selected === p.id}
+                              onSelect={onSelect}
+                              onMove={onMove}
+                              canEdit={canEdit}
+                              stat={load.get(p.name.trim().toLowerCase())}
+                              peak={peak}
+                              draggable
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ))}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         </div>
 
         {orphans.length > 0 && (
@@ -492,9 +487,6 @@ function Box({
       layout={!still}
       layoutId={still ? undefined : `org-person-${person.id}`}
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      // Lifted while dragging so the source is obviously the thing in flight,
-      // and so the browser's own drag ghost is not the only feedback.
-      animate={{ opacity: lifting ? 0.4 : 1 }}
     >
       {/* Native HTML5 drag lives on a plain child: motion owns `onDragStart`
           for its own pointer-drag gesture, and the two signatures do not
@@ -505,7 +497,13 @@ function Box({
         onDragStart={(e) => {
           e.dataTransfer.setData(DRAG_TYPE, String(person.id))
           e.dataTransfer.effectAllowed = 'move'
-          setLifting(true)
+          // Native drag freezes the source element's own repaint the instant
+          // dragstart fires — the browser has already snapshotted it for the
+          // ghost image and won't apply further style changes to the real DOM
+          // node until drop. Setting the state one tick later, after that
+          // snapshot is taken, is what makes the gap actually visible while
+          // held instead of only flashing in on release.
+          setTimeout(() => setLifting(true), 0)
         }}
         onDragEnd={() => setLifting(false)}
         onDragOver={
@@ -533,7 +531,16 @@ function Box({
         // Only the hovered target lights up — never every valid chef at once.
         // DESIGN.md's Ten Percent Rule: two accented things on screen means one
         // of them is wrong, and a whole row of accent rings finds nothing.
-        className={cn('rounded-lg border transition-colors', dropBorder(over, selected))}
+        //
+        // While this box is the one being dragged, its own spot turns into an
+        // empty dashed gap instead — a slot with nothing in it, the way the
+        // rest of the row would actually look with this person lifted out.
+        // The browser's native drag ghost is what carries the moving card;
+        // this stays put and hollow.
+        className={cn(
+          'rounded-lg border transition-colors',
+          lifting ? 'border-accent bg-accent/5 border-dashed' : dropBorder(over, selected),
+        )}
       >
         <button
           type="button"
@@ -542,6 +549,7 @@ function Box({
           className={cn(
             'bg-surface edge focus-visible:ring-accent flex w-40 cursor-pointer flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-start outline-none focus-visible:ring-2',
             canDrag && 'cursor-grab active:cursor-grabbing',
+            lifting && 'bg-transparent opacity-0',
           )}
         >
           <span className="text-ink w-full truncate text-sm font-medium">{person.name}</span>
