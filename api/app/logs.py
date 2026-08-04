@@ -613,6 +613,35 @@ def write_safe(stage: str, level: str = "info", **kwargs: Any) -> None:
         print(f"[logs] dropped {stage}/{level} event: {exc}")
 
 
+def last_job_runs() -> Dict[str, datetime]:
+    """When each scheduled job last ran, across process restarts.
+
+    `jobs._record` already writes one `job:<name>` row per run through
+    `write_safe`, so the history is durable — it simply was never read back. The
+    scheduler needs it: seeding its in-memory `last_run` from process start made
+    a morning restart cancel that day's report, and seeding from `None` made an
+    evening restart send it twice.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT stage, max(ts) AS ts
+              FROM pipeline_logs
+             WHERE stage LIKE 'job:%%'
+             GROUP BY stage
+            """
+        )
+        rows = cur.fetchall()
+    out: Dict[str, datetime] = {}
+    for row in rows:
+        item = dict(row)
+        ts = item.get("ts")
+        if isinstance(ts, datetime):
+            # Naive local time: the scheduler compares against datetime.now().
+            out[str(item["stage"])[len("job:"):]] = ts.astimezone().replace(tzinfo=None)
+    return out
+
+
 def read(
     limit: int = 200,
     level: Optional[str] = None,

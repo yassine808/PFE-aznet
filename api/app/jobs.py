@@ -450,7 +450,13 @@ def run(name: str) -> dict:
         # dies, so an overrun cannot accumulate. Its status would have arrived
         # too late to matter; the timeout record is the one the operator sees.
         return _record(name, {"ok": False, "error": f"timed out after {timeout}s"}, started)
-    return result["status"]
+    # .get, not [...]: a worker that died before writing its status would make
+    # this raise KeyError straight into _loop, and the rule this module opens
+    # with is that a job never raises into the scheduler.
+    status = result.get("status")
+    if status is None:
+        return _record(name, {"ok": False, "error": "worker produced no status"}, started)
+    return status
 
 
 def _execute(job, name: str, started: float, result: Optional[Dict[str, dict]] = None) -> dict:
@@ -557,19 +563,47 @@ def _due(now: datetime, last: Optional[datetime], name: str) -> bool:
     return last is None or last.date() < now.date()
 
 
-def _loop() -> None:
-    # Nothing has run yet in this process; a restart at 03:05 must not replay the
-    # nightly jobs, so "never run" counts as due only for the 5-minute drain.
+def _seed_last_run() -> Dict[str, Optional[datetime]]:
+    """What each job's `last_run` starts at in a fresh process.
+
+    Neither obvious answer is right on its own. Seeding `None` makes a restart
+    at 19:00 re-send the 18:30 report; seeding process start makes a restart at
+    08:00 cancel that day's report entirely, because `_due` gates the daily and
+    weekly bands on `last.date() < now.date()`. The only correct value is when
+    the job *actually* last ran, which `pipeline_logs` has been recording all
+    along (`_record` -> `logs.write_safe("job:<name>")`).
+
+    A log store outage falls back to the old process-start seed: skipping a
+    report is a better failure than mailing every manager twice.
+    """
     started = datetime.now()
-    last_run: Dict[str, Optional[datetime]] = {
-        name: (None if name == "sheet_queue" else started) for name in JOBS
+    try:
+        recorded = logs.last_job_runs()
+    except Exception as exc:  # noqa: BLE001 — the loop must start regardless
+        print(f"[jobs] could not read job history ({exc}) — seeding from process start")
+        recorded = {}
+    # The drain is the exception: it is idempotent and runs every 5 minutes, so
+    # "never run in this process" should fire it immediately.
+    return {
+        name: (None if name == "sheet_queue" else recorded.get(name, started))
+        for name in JOBS
     }
+
+
+def _loop() -> None:
+    last_run = _seed_last_run()
     while True:
         now = datetime.now()
         for name in JOBS:
             if _due(now, last_run[name], name):
                 last_run[name] = now
-                run(name)
+                try:
+                    run(name)
+                except Exception as exc:  # noqa: BLE001
+                    # `run` is meant never to raise, but if it ever does, the
+                    # scheduler thread dies and takes all six jobs with it —
+                    # silently, until someone notices the Sheet stopped filling.
+                    print(f"[jobs] {name} raised into the scheduler: {exc}")
         time.sleep(TICK_SECONDS)
 
 

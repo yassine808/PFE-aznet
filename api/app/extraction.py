@@ -146,7 +146,13 @@ def _call_groq(
             model=model,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": _INSTRUCTIONS + f"\nRéponds en JSON avec exactement ces clés: {schema_hint}"},
+                # The profile belongs here, not only in _call_gemini: groq is the
+                # *primary* text engine, so leaving it out meant the nightly
+                # profile was built, stored, read and then silently dropped on
+                # every normal request. `caption` stays out on purpose — it only
+                # arrives with an image, which this engine refused above.
+                {"role": "system", "content": _INSTRUCTIONS + _profile_block(profile)
+                 + f"\nRéponds en JSON avec exactement ces clés: {schema_hint}"},
                 {"role": "user", "content": text or ""},
             ],
         )
