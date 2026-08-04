@@ -33,6 +33,14 @@ REPORTS_TTL_SECONDS = 30.0
 _reports_cache: Optional[List[dict]] = None
 _reports_cached_at: float = 0.0
 
+# The header row, cached separately. Every write path resolves its columns by
+# name, which cost a second Google call per write — and one per parked row on
+# the retry drain. The header changes about as often as the schema does, and
+# invalidate_reports() clears it, so a column rename still lands immediately.
+HEADERS_TTL_SECONDS = 300.0
+_headers_cache: Optional[List[str]] = None
+_headers_cached_at: float = 0.0
+
 
 class SheetsError(RuntimeError):
     pass
@@ -78,7 +86,12 @@ def read_reports() -> List[dict]:
     """
     now = time.monotonic()
     if _reports_cache is not None and now - _reports_cached_at < REPORTS_TTL_SECONDS:
-        return _reports_cache
+        # A copy of the list, not the list: callers filter and sort these rows
+        # (jobs.send_daily_report, memory.collect), and one in-place reverse
+        # would corrupt what every other caller reads for the next 30 seconds.
+        # The row dicts themselves are still shared — copying a few hundred
+        # references is cheap, deep-copying every cell would not be.
+        return list(_reports_cache)
     try:
         resp = (
             _service()
@@ -112,11 +125,37 @@ def _set_reports_cache(rows: List[dict]) -> None:
 
 
 def invalidate_reports() -> None:
-    """Drop the read cache. Every write path calls this, or the dashboard
-    would keep rendering the pre-edit state until the TTL expired."""
-    global _reports_cache, _reports_cached_at
+    """Drop both caches. Every write path calls this, or the dashboard would
+    keep rendering the pre-edit state until the TTL expired."""
+    global _reports_cache, _reports_cached_at, _headers_cache, _headers_cached_at
     _reports_cache = None
     _reports_cached_at = 0.0
+    _headers_cache = None
+    _headers_cached_at = 0.0
+
+
+def _headers(svc) -> List[str]:
+    """The Rapports header row, TTL-cached.
+
+    Column names are resolved by name on every write so a reordered column
+    moves its value with it — but that meant a second Google call per write,
+    and the retry drain pays it once per parked row. The header is the one part
+    of the sheet that does not change between two requests.
+    """
+    global _headers_cache, _headers_cached_at
+    now = time.monotonic()
+    if _headers_cache is not None and now - _headers_cached_at < HEADERS_TTL_SECONDS:
+        return list(_headers_cache)
+    resp = (
+        svc.spreadsheets()
+        .values()
+        .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
+        .execute(num_retries=_RETRIES)
+    )
+    headers = resp.get("values", [[]])[0]
+    _headers_cache = headers
+    _headers_cached_at = now
+    return list(headers)
 
 
 def update_report_field(row: int, field: str, value: Optional[str]) -> None:
@@ -132,13 +171,7 @@ def update_report_fields(row: int, values: dict) -> None:
     """
     svc = _service()
     try:
-        header_resp = (
-            svc.spreadsheets()
-            .values()
-            .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
-            .execute(num_retries=_RETRIES)
-        )
-        headers = header_resp.get("values", [[]])[0]
+        headers = _headers(svc)
         data = []
         for field, value in values.items():
             if field not in headers:
@@ -173,13 +206,7 @@ def clear_row(row: int) -> None:
     """
     svc = _service()
     try:
-        header_resp = (
-            svc.spreadsheets()
-            .values()
-            .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
-            .execute(num_retries=_RETRIES)
-        )
-        ncols = max(1, len(header_resp.get("values", [[]])[0]))
+        ncols = max(1, len(_headers(svc)))
         svc.spreadsheets().values().clear(
             spreadsheetId=settings.sheet_id,
             range=f"{RAPPORTS_TAB}!A{row}:{_col_letter(ncols)}{row}",
@@ -203,13 +230,7 @@ def append_report(values: dict) -> Optional[int]:
     """
     svc = _service()
     try:
-        header_resp = (
-            svc.spreadsheets()
-            .values()
-            .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
-            .execute(num_retries=_RETRIES)
-        )
-        headers = header_resp.get("values", [[]])[0]
+        headers = _headers(svc)
         if not headers:
             raise SheetsError("Rapports tab has no header row")
         row = [_cell(values.get(h)) for h in headers]

@@ -754,11 +754,25 @@ export function useApi<T>(
     }
 
     void run(true)
-    if (pollMs) timer = window.setInterval(() => void run(false), pollMs)
+
+    // A backgrounded tab used to keep polling all night — burning API calls and
+    // Google Sheets quota for a page nobody is looking at. Skip the tick while
+    // hidden, then refresh once on the way back so the first thing the user
+    // sees is current rather than however stale the tab got.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void run(false)
+    }
+    if (pollMs) {
+      timer = window.setInterval(() => {
+        if (document.visibilityState === 'visible') void run(false)
+      }, pollMs)
+      document.addEventListener('visibilitychange', onVisible)
+    }
 
     return () => {
       controller.abort()
       if (timer) window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [key, pollMs, nonce])
 

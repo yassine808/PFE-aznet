@@ -22,6 +22,7 @@ gate -- is done properly now.
 """
 import secrets
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from fastapi import Cookie, Depends, Header, HTTPException, Response
@@ -51,6 +52,19 @@ def hash_password(raw: str) -> str:
     import bcrypt
 
     return bcrypt.hashpw(raw.encode("utf-8")[:BCRYPT_MAX_BYTES], bcrypt.gensalt()).decode()
+
+
+@lru_cache(maxsize=1)
+def _dummy_hash() -> str:
+    """A hash of nothing, to spend on logins that never had one to check.
+
+    Returning early on an unknown address costs ~2 ms; a real account costs a
+    bcrypt round, ~100 ms. That gap is a user-enumeration oracle: it tells a
+    script which addresses are accounts, which is exactly what `login`'s single
+    failure message exists to hide. Computed once, lazily, so importing this
+    module still needs no bcrypt.
+    """
+    return hash_password(secrets.token_urlsafe(16))
 
 
 def verify_password(raw: str, hashed: str) -> bool:
@@ -218,12 +232,13 @@ def login(email: str, password: str) -> Optional[Dict[str, Any]]:
     # with no credentials. verify_password would reach None.encode() and raise
     # AttributeError -- which its except clause does not catch -- turning a
     # technician's address into a 500 that says an account exists.
-    if (
-        user is None
-        or user["password_hash"] is None
-        or not user["active"]
-        or not verify_password(password, user["password_hash"])
-    ):
+    if user is None or user["password_hash"] is None or not user["active"]:
+        # Spend the same bcrypt round the happy path spends. Without it the
+        # response time itself answers "is this address an account?", which is
+        # the question the single failure message above refuses to answer.
+        verify_password(password, _dummy_hash())
+        return None
+    if not verify_password(password, user["password_hash"]):
         return None
 
     token = secrets.token_urlsafe(32)
@@ -258,7 +273,17 @@ def user_for_token(token: Optional[str]) -> Optional[dict]:
         row = logs._one(cur)
         if row is None:
             return None
-        cur.execute("UPDATE persons SET last_seen_at = now() WHERE id = %s", (dict(row)["id"],))
+        # Throttled: auth sits on the read path of every request, so an
+        # unconditional UPDATE here becomes one write per poll per open panel,
+        # forever. A minute of resolution is all "last seen" ever needed.
+        cur.execute(
+            """
+            UPDATE persons SET last_seen_at = now()
+             WHERE id = %s
+               AND (last_seen_at IS NULL OR last_seen_at < now() - interval '60 seconds')
+            """,
+            (dict(row)["id"],),
+        )
     return _public(dict(row))
 
 

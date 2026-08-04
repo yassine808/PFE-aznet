@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, model_validator
@@ -200,7 +200,13 @@ def _login_allowed(client: str) -> bool:
     """
     now = time.time()
     hits = [t for t in _login_failures.get(client, []) if now - t < LOGIN_WINDOW_SECONDS]
-    _login_failures[client] = hits
+    if hits:
+        _login_failures[client] = hits
+    else:
+        # Drop the key rather than storing []: only a *successful* login popped
+        # it before, so every address that ever mistyped a password kept a dict
+        # entry for the life of the process.
+        _login_failures.pop(client, None)
     return len(hits) < LOGIN_MAX_FAILURES
 
 
@@ -294,7 +300,9 @@ def remove_user(user_id: int, caller: dict = Depends(auth.require_director)) -> 
 
 @app.get("/history", responses={502: {"description": "Log store unreachable"}})
 def user_history(
-    user_id: Optional[int] = None, limit: int = 100, caller: dict = Depends(auth.require_human)
+    user_id: Optional[int] = None,
+    limit: int = Query(100, ge=1, le=500),
+    caller: dict = Depends(auth.require_human),
 ) -> dict:
     """A chef may only read their own history, whatever they ask for."""
     target = user_id if caller.get("role") == "directeur" else caller["id"]
@@ -583,7 +591,9 @@ async def process(
 # ── media + chat archive (TO-DO #10: download audios/images/chat to the DB) ─
 
 @app.get("/media", responses={502: {"description": "Log store unreachable"}})
-def list_media(limit: int = 50, caller: dict = Depends(auth.require_human)) -> dict:
+def list_media(
+    limit: int = Query(50, ge=1, le=500), caller: dict = Depends(auth.require_human)
+) -> dict:
     """Archive listing (metadata only, never the blobs)."""
     try:
         return {"media": logs.list_media(limit)}
@@ -609,7 +619,7 @@ def get_media_file(media_id: int, caller: dict = Depends(auth.require_human)) ->
 
 @app.get("/messages", responses={502: {"description": "Log store unreachable"}})
 def list_messages(
-    limit: int = 100, channel: Optional[str] = None, search: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500), channel: Optional[str] = None, search: Optional[str] = None,
     caller: dict = Depends(auth.require_human),
 ) -> dict:
     """Raw chat archive, newest first — the Sheet only keeps extracted reports."""
@@ -890,7 +900,7 @@ def create_log(event: LogEvent, caller: dict = Depends(auth.require_user)) -> di
 
 @app.get("/logs", responses={502: {"description": "Log store unreachable"}})
 def list_logs(
-    limit: int = 200,
+    limit: int = Query(200, ge=1, le=1000),
     level: Optional[str] = None,
     channel: Optional[str] = None,
     stage: Optional[str] = None,
@@ -971,7 +981,9 @@ def queue_write(item: FailedWrite, caller: dict = Depends(auth.require_user)) ->
 
 
 @app.get("/sheet-queue", responses={502: {"description": "Log store unreachable"}})
-def list_queue(limit: int = 20, caller: dict = Depends(auth.require_user)) -> dict:
+def list_queue(
+    limit: int = Query(20, ge=1, le=500), caller: dict = Depends(auth.require_user)
+) -> dict:
     try:
         return {"pending": logs.pending_writes(limit)}
     except logs.LogStoreError as exc:
@@ -991,7 +1003,9 @@ class NotificationReadIn(BaseModel):
 
 
 @app.get("/notifications", responses={502: {"description": "Log store unreachable"}})
-def list_notifications(limit: int = 50, caller: dict = Depends(auth.require_human)) -> dict:
+def list_notifications(
+    limit: int = Query(50, ge=1, le=500), caller: dict = Depends(auth.require_human)
+) -> dict:
     try:
         return {
             "items": logs.list_notifications(caller["id"], limit),
@@ -1220,7 +1234,9 @@ async def n8n_workflows(caller: dict = Depends(auth.require_human)) -> Any:
 
 
 @app.get("/n8n/executions", responses={502: {"description": "n8n unreachable or misconfigured"}})
-async def n8n_executions(limit: int = 20, caller: dict = Depends(auth.require_human)) -> Any:
+async def n8n_executions(
+    limit: int = Query(20, ge=1, le=250), caller: dict = Depends(auth.require_human)
+) -> Any:
     return await _n8n_get(f"executions?limit={int(limit)}")
 
 

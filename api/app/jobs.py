@@ -201,82 +201,25 @@ def _report_mail(
     }
 
 
-def send_daily_report(date: Optional[str] = None) -> dict:
-    """Today's rows → one French summary per site manager, each to their inbox.
+def _period_report(label: str, rows: List[dict], kind: str) -> dict:
+    """One company digest to the director(s) + one team digest per chef.
 
-    Reports became per-manager: the director gets the company-wide digest, and
-    every chef gets their team's. Each generated version is stored so the
-    technicians' /rapport command answers with the *same* text the mail showed.
+    The daily and weekly jobs differed only in how they picked their rows and
+    what they called the period — everything below was duplicated line for
+    line, which meant every fix had to be made twice or silently applied to
+    half the feature.
     """
-    day = date or datetime.now().strftime("%Y-%m-%d")
-    rows = [r for r in sheets.read_reports() if r.get("date") == day]
-    if not rows:
-        # Not an error: a Sunday with no reports is a normal outcome, and mailing
-        # an empty report teaches the manager to ignore the mail.
-        return {"date": day, "rows": 0, "sent_to": [], "reason": "aucun rapport pour cette date"}
     persons = logs.list_persons()
     buckets = _manager_buckets(persons, rows)
     by_id = {p["id"]: p for p in persons}
 
     # The company digest goes to the director(s); without a director row the
     # manual recipient list takes over, so an install without an org chart
-    # behaves exactly as before this split.
-    directors = [p for p in persons if p.get("role") == "directeur" and p.get("has_login") and p.get("email")]
-    director_rcpts = [p["email"] for p in directors] or _report_recipients()
-    company = _report_mail(director_rcpts, day, rows)
-
-    sent_all = set(company["sent_to"])
-    manager_reports = []
-    for manager_id, team in sorted(buckets.items()):
-        chef = by_id.get(manager_id)
-        if chef is None:
-            continue
-        rcpts = [chef["email"]] if chef.get("has_login") and chef.get("email") else []
-        result = _report_mail(rcpts, day, team)
-        if result["rows"]:
-            sent_all.update(result["sent_to"])
-            manager_reports.append(
-                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"],
-                 "mail_error": result.get("mail_error")}
-            )
-            # Stored even when the chef has no email: the /rapport command
-            # answers from here, and a report a technician can read is worth
-            # generating even if no account row is set up yet.
-            logs.save_manager_report(
-                manager_id, day, result["objet"], result["corps"], result["generated_by"], "daily"
-            )
-
-    return {
-        "date": day,
-        "rows": len(rows),
-        "sent_to": sorted(sent_all),
-        "subject": company["subject"],
-        "managers": len(manager_reports),
-        "reports": manager_reports,
-        "generated_by": "automatique",
-    }
-
-
-def send_weekly_report(end: Optional[str] = None) -> dict:
-    """Monday→today of the current week, same generator as the daily mail.
-
-    There is deliberately no weekly prompt: `/daily-report` already takes an
-    arbitrary row set and a free-text label, and the dashboard's weekly panel
-    has been calling it that way since it was built. A second prompt would be a
-    second thing to keep true when the Sheet columns change.
-    """
-    last_day = datetime.strptime(end, "%Y-%m-%d") if end else datetime.now()
-    first_day = last_day - timedelta(days=last_day.weekday())
-    span = {(first_day + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)}
-    rows = [r for r in sheets.read_reports() if r.get("date") in span]
-    label = f"{first_day.strftime('%Y-%m-%d')} → {last_day.strftime('%Y-%m-%d')}"
-    if not rows:
-        return {"period": label, "rows": 0, "sent_to": [], "reason": "aucun rapport sur la période"}
-    persons = logs.list_persons()
-    buckets = _manager_buckets(persons, rows)
-    by_id = {p["id"]: p for p in persons}
-
-    directors = [p for p in persons if p.get("role") == "directeur" and p.get("has_login") and p.get("email")]
+    # behaves exactly as before reports went per-manager.
+    directors = [
+        p for p in persons
+        if p.get("role") == "directeur" and p.get("has_login") and p.get("email")
+    ]
     director_rcpts = [p["email"] for p in directors] or _report_recipients()
     company = _report_mail(director_rcpts, label, rows)
 
@@ -294,12 +237,14 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
                 {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"],
                  "mail_error": result.get("mail_error")}
             )
+            # Stored even when the chef has no email: the /rapport command
+            # answers from here, and a report a technician can read is worth
+            # generating even if no account row is set up yet.
             logs.save_manager_report(
-                manager_id, label, result["objet"], result["corps"], result["generated_by"], "weekly"
+                manager_id, label, result["objet"], result["corps"], result["generated_by"], kind
             )
 
     return {
-        "period": label,
         "rows": len(rows),
         "sent_to": sorted(sent_all),
         "subject": company["subject"],
@@ -307,6 +252,40 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
         "reports": manager_reports,
         "generated_by": "automatique",
     }
+
+
+def send_daily_report(date: Optional[str] = None) -> dict:
+    """Today's rows → one French summary per site manager, each to their inbox.
+
+    Reports became per-manager: the director gets the company-wide digest, and
+    every chef gets their team's. Each generated version is stored so the
+    technicians' /rapport command answers with the *same* text the mail showed.
+    """
+    day = date or datetime.now().strftime("%Y-%m-%d")
+    rows = [r for r in sheets.read_reports() if r.get("date") == day]
+    if not rows:
+        # Not an error: a Sunday with no reports is a normal outcome, and mailing
+        # an empty report teaches the manager to ignore the mail.
+        return {"date": day, "rows": 0, "sent_to": [], "reason": "aucun rapport pour cette date"}
+    return {"date": day, **_period_report(day, rows, "daily")}
+
+
+def send_weekly_report(end: Optional[str] = None) -> dict:
+    """Monday→today of the current week, same generator as the daily mail.
+
+    There is deliberately no weekly prompt: `/daily-report` already takes an
+    arbitrary row set and a free-text label, and the dashboard's weekly panel
+    has been calling it that way since it was built. A second prompt would be a
+    second thing to keep true when the Sheet columns change.
+    """
+    last_day = datetime.strptime(end, "%Y-%m-%d") if end else datetime.now()
+    first_day = last_day - timedelta(days=last_day.weekday())
+    span = {(first_day + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)}
+    rows = [r for r in sheets.read_reports() if r.get("date") in span]
+    label = f"{first_day.strftime('%Y-%m-%d')} → {last_day.strftime('%Y-%m-%d')}"
+    if not rows:
+        return {"period": label, "rows": 0, "sent_to": [], "reason": "aucun rapport sur la période"}
+    return {"period": label, **_period_report(label, rows, "weekly")}
 
 
 def _next_occurrence(due: Optional[datetime], repeat: str,
