@@ -17,7 +17,7 @@ and the reader permission is granted on its own file.
 """
 import io
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Dict
 
 from app.config import settings
 
@@ -73,7 +73,10 @@ def upload_audio(filename: str, mime_type: str, data: bytes) -> str:
 
     svc = _service()
     try:
-        body = {"name": filename}
+        # Annotated because `parents` is a list beside a str value: inferred from
+        # the literal alone the dict is Dict[str, str] and the next line is a
+        # type error.
+        body: Dict[str, Any] = {"name": filename}
         folder_id = settings.google_drive_folder_id
         if folder_id:
             body["parents"] = [folder_id]

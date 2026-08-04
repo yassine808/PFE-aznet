@@ -8,7 +8,7 @@ import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ActivityGraphSection } from '@/components/activity-graph-section'
 import { ReportImageCard } from '@/components/report-image'
-import { cn, copyText } from '@/lib/utils'
+import { copyText } from '@/lib/utils'
 
 export function DailyReportPage() {
   const { t, locale } = useI18n()

@@ -160,7 +160,13 @@ jobs:
       - name: Semgrep scan
         continue-on-error: true
         run: semgrep scan --config=p/owasp-top-ten --sarif --output=semgrep.sarif
+      # Non-fatal: the scan itself already runs with continue-on-error, so a
+      # finding never gates CI -- only the upload did. Uploading needs code
+      # scanning to accept SARIF for this repo; when it does not, the whole
+      # job went red for a reason unrelated to the code under test. The scan
+      # still runs and the SARIF is still produced as an artifact.
       - uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -182,7 +188,13 @@ jobs:
           scan-ref: .
           format: sarif
           output: trivy-fs.sarif
+      # Non-fatal: the scan itself already runs with continue-on-error, so a
+      # finding never gates CI -- only the upload did. Uploading needs code
+      # scanning to accept SARIF for this repo; when it does not, the whole
+      # job went red for a reason unrelated to the code under test. The scan
+      # still runs and the SARIF is still produced as an artifact.
       - uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         if: always()
         with:
           sarif_file: trivy-fs.sarif
@@ -204,7 +216,13 @@ jobs:
           scan-ref: .
           format: sarif
           output: trivy-config.sarif
+      # Non-fatal: the scan itself already runs with continue-on-error, so a
+      # finding never gates CI -- only the upload did. Uploading needs code
+      # scanning to accept SARIF for this repo; when it does not, the whole
+      # job went red for a reason unrelated to the code under test. The scan
+      # still runs and the SARIF is still produced as an artifact.
       - uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         if: always()
         with:
           sarif_file: trivy-config.sarif
@@ -225,7 +243,13 @@ jobs:
       - name: Bandit
         continue-on-error: true
         run: bandit -r api/ scripts/ benchmark/ -f sarif -o bandit.sarif
+      # Non-fatal: the scan itself already runs with continue-on-error, so a
+      # finding never gates CI -- only the upload did. Uploading needs code
+      # scanning to accept SARIF for this repo; when it does not, the whole
+      # job went red for a reason unrelated to the code under test. The scan
+      # still runs and the SARIF is still produced as an artifact.
       - uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         if: always()
         with:
           sarif_file: bandit.sarif
