@@ -18,9 +18,12 @@ export default defineConfig(() => {
           // splits in App.tsx; docx stays in the page chunk that uses it.
           manualChunks(id) {
             if (!id.includes('node_modules')) return
-            if (id.includes('react')) return 'react'
-            if (id.includes('motion')) return 'motion'
+            // Phosphor first: its package path is `@phosphor-icons/react`, so a
+            // bare `includes('react')` swallows the whole icon set into the
+            // react chunk and the split does nothing.
             if (id.includes('@phosphor-icons')) return 'phosphor'
+            if (id.includes('motion')) return 'motion'
+            if (id.includes('react')) return 'react'
           },
         },
       },

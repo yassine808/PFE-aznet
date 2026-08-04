@@ -288,3 +288,43 @@ def test_weekly_due_only_on_the_configured_day(monkeypatch):
     assert jobs._due(friday_morning, None, "weekly_report") is False
     assert jobs._due(thursday, None, "weekly_report") is False
     assert jobs._due(friday_evening, friday_evening, "weekly_report") is False
+
+
+def test_manager_without_email_does_not_abort_the_report_job(monkeypatch):
+    """A chef with no account email must not take the whole daily job down.
+
+    `mailer.send([])` raises, and it used to propagate: the company digest went
+    out, then the first email-less chef aborted the loop — so the remaining
+    chefs lost their mail *and* their stored report, which is exactly what the
+    /rapport command answers with.
+    """
+    rows = [{"date": "2026-08-04", "technicien": "Ali", "resume": "x"}]
+    persons = [
+        {"id": 1, "name": "Dir", "role": "directeur", "has_login": True,
+         "email": "d@x.ma", "manager_id": None},
+        {"id": 2, "name": "Chef", "role": "chef", "has_login": False,
+         "email": None, "manager_id": None},
+        {"id": 3, "name": "Ali", "role": "tech", "has_login": False,
+         "email": None, "manager_id": 2},
+    ]
+    stored = []
+    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
+    monkeypatch.setattr(jobs.logs, "list_persons", lambda: persons)
+    monkeypatch.setattr(jobs.logs, "save_manager_report",
+                        lambda *a: stored.append(a))
+    monkeypatch.setattr(jobs.daily_report, "generate_daily_report",
+                        lambda period, r: jobs.daily_report.DailyReportContent(objet="o", corps="c"))
+
+    def fake_send(to, subject, body, html=False):
+        addresses = [a for a in to if a]
+        if not addresses:
+            raise jobs.mailer.MailError("aucun destinataire configuré")
+        return addresses
+
+    monkeypatch.setattr(jobs.mailer, "send", fake_send)
+
+    result = jobs.send_daily_report("2026-08-04")
+    assert result["sent_to"] == ["d@x.ma"]          # the director still got theirs
+    assert result["managers"] == 1                   # the chef's report was still built
+    assert stored and stored[0][0] == 2              # …and stored for /rapport
+    assert result["reports"][0]["mail_error"]        # the failure is visible, not swallowed

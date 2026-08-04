@@ -39,8 +39,12 @@ REMINDER_INTERVAL_SECONDS = 60  # task reminders fire within a minute of due
 # run inline (they are DB-only and fast).
 _TIMEOUT_SECONDS = {
     "sheet_queue": 120,
-    "daily_report": 180,   # Sheet read + two LLM calls + SMTP
-    "weekly_report": 180,
+    # Sheet read + SMTP + one LLM call for the company digest *and one more per
+    # site manager* (reports went per-manager on this branch): 180 s was sized
+    # for the single-digest era and would kill the job — and every chef's stored
+    # report with it — as soon as the org chart has a few chefs.
+    "daily_report": 600,
+    "weekly_report": 600,
     "profiles": 300,       # one Sheet read + one LLM call per technician
     "prune_logs": 120,
     "reminders": 60,
@@ -172,14 +176,28 @@ def _manager_buckets(persons: List[dict], rows: List[dict]) -> Dict[int, List[di
 def _report_mail(
     recipients: List[str], period: str, rows: List[dict]
 ) -> dict:
-    """Generate one digest and mail it. Returns what the jobs report back."""
+    """Generate one digest and mail it. Returns what the jobs report back.
+
+    The mail is best-effort *per report*: the reports loop below is per manager,
+    and a chef with no account email (`mailer.send([])` raises) or one bounced
+    address must not abort the whole job — the remaining chefs would lose their
+    mail and, worse, their stored report, which is what /rapport answers with.
+    The failure travels in `mail_error` so the operator still sees it in the
+    Automation panel instead of it disappearing.
+    """
     if not rows:
         return {"rows": 0, "sent_to": [], "reason": "aucun rapport"}
     content = daily_report.generate_daily_report(period, rows)
-    sent = mailer.send(recipients, content.objet, content.corps, html=True)
+    sent: List[str] = []
+    mail_error = None
+    try:
+        sent = mailer.send(recipients, content.objet, content.corps, html=True)
+    except mailer.MailError as exc:
+        mail_error = str(exc)
     return {
         "rows": len(rows), "sent_to": sent, "subject": content.objet,
         "generated_by": "automatique", "objet": content.objet, "corps": content.corps,
+        "mail_error": mail_error,
     }
 
 
@@ -218,7 +236,8 @@ def send_daily_report(date: Optional[str] = None) -> dict:
         if result["rows"]:
             sent_all.update(result["sent_to"])
             manager_reports.append(
-                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"]}
+                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"],
+                 "mail_error": result.get("mail_error")}
             )
             # Stored even when the chef has no email: the /rapport command
             # answers from here, and a report a technician can read is worth
@@ -272,7 +291,8 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
         if result["rows"]:
             sent_all.update(result["sent_to"])
             manager_reports.append(
-                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"]}
+                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"],
+                 "mail_error": result.get("mail_error")}
             )
             logs.save_manager_report(
                 manager_id, label, result["objet"], result["corps"], result["generated_by"], "weekly"
