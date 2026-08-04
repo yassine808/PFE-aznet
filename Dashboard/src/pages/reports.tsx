@@ -216,28 +216,26 @@ function GeneratedCard({
   )
 }
 
-export function ReportsPage() {
+/**
+ * The "messages" tab: search / flag / day filters over the raw Sheet rows.
+ *
+ * Lifted out of ReportsPage with its own filter state — the page was one
+ * function holding two unrelated tabs, and the filters are meaningless to the
+ * generated tab anyway.
+ */
+function MessagesTab({
+  reports,
+  pad,
+}: {
+  readonly reports: ReturnType<typeof useApi<{ reports: ReportRow[] }>>
+  readonly pad: string
+}) {
   const { t, locale } = useI18n()
   const { settings } = useSettings()
-  const reports = useApi('reports', api.reports, settings.refreshMs || undefined)
-  const generated = useApi('reports/generated', api.generatedReports, settings.refreshMs || undefined)
-
-  const [tab, setTab] = useState<'generated' | 'messages'>('generated')
   const [query, setQuery] = useState('')
   const [onlyFlagged, setOnlyFlagged] = useState(false)
   const [date, setDate] = useState('')
-
   const fmt = useMemo(() => new Intl.NumberFormat(intlLocaleOf(locale)), [locale])
-  const dt = useMemo(
-    () =>
-      new Intl.DateTimeFormat(intlLocaleOf(locale), {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    [locale],
-  )
 
   const rows = useMemo(() => {
     if (!reports.data) return []
@@ -255,6 +253,110 @@ export function ReportsPage() {
           : true,
       )
   }, [reports.data, query, onlyFlagged, date])
+
+  return (
+    <>
+      {/* Filters in one row above the table. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="border-line focus-within:border-accent flex min-w-56 flex-1 items-center gap-2 rounded-md border px-3 py-2 transition-colors">
+          <MagnifyingGlassIcon size={14} className="text-ink-faint shrink-0" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('reports.search')}
+            aria-label={t('reports.search')}
+            className="text-ink placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-sm outline-none"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOnlyFlagged((v) => !v)}
+          aria-pressed={onlyFlagged}
+          className={cn(
+            'border-line flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors active:translate-y-px',
+            onlyFlagged ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-muted hover:text-ink',
+          )}
+        >
+          <FlagIcon size={13} weight={onlyFlagged ? 'fill' : 'regular'} />
+          {t('metric.flagged')}
+        </button>
+
+        {date && (
+          <button
+            type="button"
+            onClick={() => setDate('')}
+            className="text-ink-faint hover:text-ink text-xs underline underline-offset-4"
+          >
+            {t('inbox.all')}
+          </button>
+        )}
+
+        <span className="tabular text-ink-faint text-xs">{fmt.format(rows.length)}</span>
+      </div>
+
+      <ActivityGraphSection
+        rows={reports.data?.reports ?? []}
+        date={date || todayISO()}
+        onSelectDay={(iso) => setDate(iso)}
+      />
+
+      {rows.length === 0 ? (
+        <EmptyState body={query || onlyFlagged || date ? t('reports.noMatch') : undefined} />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[46rem] border-collapse text-start">
+            <thead>
+              <tr className="border-line text-ink-faint border-b text-start text-[0.6875rem] tracking-wide uppercase">
+                <th className="py-2 pe-4 text-start font-medium">{t('col.when')}</th>
+                <th className="py-2 pe-4 text-start font-medium">{t('col.technicien')}</th>
+                <th className="py-2 pe-4 text-start font-medium">{t('col.chantier')}</th>
+                <th className="py-2 pe-4 text-end font-medium">{t('metric.goulottes')}</th>
+                <th className="py-2 pe-4 text-end font-medium">{t('metric.cables')}</th>
+                <th className="py-2 pe-4 text-start font-medium">{t('col.confidence')}</th>
+                <th className="py-2 text-start font-medium">
+                  <span className="sr-only">{t('metric.flagged')}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <LedgerRow
+                  key={r._row}
+                  r={r}
+                  fmt={fmt}
+                  threshold={settings.confidence}
+                  pad={pad}
+                  onChantierSaved={reports.reload}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )
+}
+
+export function ReportsPage() {
+  const { t, locale } = useI18n()
+  const { settings } = useSettings()
+  const reports = useApi('reports', api.reports, settings.refreshMs || undefined)
+  const generated = useApi('reports/generated', api.generatedReports, settings.refreshMs || undefined)
+
+  const [tab, setTab] = useState<'generated' | 'messages'>('generated')
+
+  const dt = useMemo(
+    () =>
+      new Intl.DateTimeFormat(intlLocaleOf(locale), {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    [locale],
+  )
 
   if (tab === 'generated' && generated.error) {
     return <ErrorState message={generated.error} onRetry={generated.reload} />
@@ -319,89 +421,7 @@ export function ReportsPage() {
           )}
         </div>
       ) : (
-        <>
-          {/* Filters in one row above the table. */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="border-line focus-within:border-accent flex min-w-56 flex-1 items-center gap-2 rounded-md border px-3 py-2 transition-colors">
-              <MagnifyingGlassIcon size={14} className="text-ink-faint shrink-0" />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('reports.search')}
-                aria-label={t('reports.search')}
-                className="text-ink placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-sm outline-none"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setOnlyFlagged((v) => !v)}
-              aria-pressed={onlyFlagged}
-              className={cn(
-                'border-line flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors active:translate-y-px',
-                onlyFlagged
-                  ? 'bg-slate-100 text-ink dark:bg-slate-850'
-                  : 'text-ink-muted hover:text-ink',
-              )}
-            >
-              <FlagIcon size={13} weight={onlyFlagged ? 'fill' : 'regular'} />
-              {t('metric.flagged')}
-            </button>
-
-            {date && (
-              <button
-                type="button"
-                onClick={() => setDate('')}
-                className="text-ink-faint hover:text-ink text-xs underline underline-offset-4"
-              >
-                {t('inbox.all')}
-              </button>
-            )}
-
-            <span className="tabular text-ink-faint text-xs">{fmt.format(rows.length)}</span>
-          </div>
-
-          <ActivityGraphSection
-            rows={reports.data?.reports ?? []}
-            date={date || todayISO()}
-            onSelectDay={(iso) => setDate(iso)}
-          />
-
-          {rows.length === 0 ? (
-            <EmptyState body={query || onlyFlagged || date ? t('reports.noMatch') : undefined} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[46rem] border-collapse text-start">
-                <thead>
-                  <tr className="border-line text-ink-faint border-b text-start text-[0.6875rem] tracking-wide uppercase">
-                    <th className="py-2 pe-4 text-start font-medium">{t('col.when')}</th>
-                    <th className="py-2 pe-4 text-start font-medium">{t('col.technicien')}</th>
-                    <th className="py-2 pe-4 text-start font-medium">{t('col.chantier')}</th>
-                    <th className="py-2 pe-4 text-end font-medium">{t('metric.goulottes')}</th>
-                    <th className="py-2 pe-4 text-end font-medium">{t('metric.cables')}</th>
-                    <th className="py-2 pe-4 text-start font-medium">{t('col.confidence')}</th>
-                    <th className="py-2 text-start font-medium">
-                      <span className="sr-only">{t('metric.flagged')}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <LedgerRow
-                      key={r._row}
-                      r={r}
-                      fmt={fmt}
-                      threshold={settings.confidence}
-                      pad={pad}
-                      onChantierSaved={reports.reload}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+        <MessagesTab reports={reports} pad={pad} />
       )}
     </motion.div>
   )

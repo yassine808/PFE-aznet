@@ -13,6 +13,14 @@ import { useSettings } from '@/lib/settings'
 import { ROUTES, type Route } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
+/** Icon + colour per notification kind. `report` is the fallback. */
+const KIND_DOT: Record<NotificationItem['kind'], { Icon: typeof BellIcon; cls: string }> = {
+  error: { Icon: WarningCircleIcon, cls: 'text-status-fail' },
+  review: { Icon: WarningIcon, cls: 'text-status-warn' },
+  reminder: { Icon: LightningIcon, cls: 'text-accent' },
+  report: { Icon: BellIcon, cls: 'text-status-ok' },
+}
+
 /**
  * The per-account bell. Rows are created by the API (own team's new reports,
  * rows flagged for review, Sheet write failures, due task reminders); only the
@@ -159,15 +167,6 @@ export function Bell({ onNavigate }: { readonly onNavigate: (r: Route) => void }
 }
 
 function KindDot({ kind }: { readonly kind: NotificationItem['kind'] }) {
-  const cls =
-    kind === 'error'
-      ? 'text-status-fail'
-      : kind === 'review'
-        ? 'text-status-warn'
-        : kind === 'reminder'
-          ? 'text-accent'
-          : 'text-status-ok'
-  const Icon =
-    kind === 'error' ? WarningCircleIcon : kind === 'review' ? WarningIcon : kind === 'reminder' ? LightningIcon : BellIcon
+  const { Icon, cls } = KIND_DOT[kind] ?? KIND_DOT.report
   return <Icon size={14} weight="fill" className={cn('mt-0.5 shrink-0', cls)} />
 }

@@ -50,7 +50,7 @@ export function TasksPage() {
     setBusy('new')
     setError(null)
     try {
-      const lead = parseInt(remindValue, 10)
+      const lead = Number.parseInt(remindValue, 10)
       await createTask({
         title: trimmed,
         notes: notes.trim() || null,
@@ -58,7 +58,7 @@ export function TasksPage() {
         repeat: repeat === 'custom' ? 'none' : repeat,
         remind_before_value: lead > 0 ? lead : null,
         remind_before_unit: lead > 0 ? remindUnit : null,
-        repeat_every: repeat === 'custom' ? Math.max(1, parseInt(repeatEvery, 10) || 1) : null,
+        repeat_every: repeat === 'custom' ? Math.max(1, Number.parseInt(repeatEvery, 10) || 1) : null,
         repeat_unit: repeat === 'custom' ? repeatUnit : null,
       })
       setTitle('')

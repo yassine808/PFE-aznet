@@ -53,10 +53,8 @@ def test_missing_hash_does_not_raise(monkeypatch):
     # AttributeError, which its `except (ValueError, TypeError)` misses. That
     # turns a wrong login into a 500 whose very existence confirms the account.
     _with_row(monkeypatch, TECH)
-    try:
-        assert auth.login("youssef@aznet.ma", "anything") is None
-    except AttributeError:  # pragma: no cover - the bug this test exists for
-        pytest.fail("login raised on a person with no password_hash")
+    # An AttributeError here is the bug: it escapes and fails this test loudly.
+    assert auth.login("youssef@aznet.ma", "anything") is None
 
 
 def test_wrong_password_still_fails_for_a_real_account(monkeypatch):

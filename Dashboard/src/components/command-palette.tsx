@@ -43,8 +43,8 @@ export function useCommandPalette(): [boolean, (open: boolean) => void] {
 function subsequenceScore(q: string, text: string): number {
   let at = 0
   let cost = 0
-  for (let i = 0; i < q.length; i++) {
-    const found = text.indexOf(q[i], at)
+  for (const ch of q) {
+    const found = text.indexOf(ch, at)
     if (found < 0) return -1
     cost += found - at
     at = found + 1

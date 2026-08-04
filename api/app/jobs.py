@@ -336,6 +336,27 @@ def _next_occurrence(due: Optional[datetime], repeat: str,
     return logs.shift_months(due, 1)
 
 
+def _reminder_body(task: dict) -> str:
+    """The French body shared by the bell row and the reminder mail.
+
+    Lifted out of `send_reminders` so the loop reads as notify → mail → stamp:
+    the pluralisation and the two optional blocks were most of its branching.
+    """
+    body = f"Tâche à faire : {task['title']}"
+    if task.get("notes"):
+        body += f"\n{task['notes']}"
+    if task.get("due_at"):
+        body += f"\nÉchéance : {task['due_at'].strftime('%d/%m/%Y %H:%M')}"
+    lead_value = task.get("remind_before_value")
+    lead_unit = task.get("remind_before_unit")
+    if lead_value and lead_unit:
+        label = {"day": "jour", "week": "semaine", "month": "mois"}.get(lead_unit, lead_unit)
+        if lead_value > 1 and lead_unit != "month":
+            label += "s"
+        body += f"\nRappel : {lead_value} {label} avant l'échéance"
+    return body
+
+
 def send_reminders() -> dict:
     """Fire every due task reminder: bell + mail, then advance the schedule.
 
@@ -353,19 +374,7 @@ def send_reminders() -> dict:
     notified, emailed, failed = [], [], []
     for task in due:
         title = task["title"]
-        body = f"Tâche à faire : {title}"
-        if task.get("notes"):
-            body += f"\n{task['notes']}"
-        if task.get("due_at"):
-            body += f"\nÉchéance : {task['due_at'].strftime('%d/%m/%Y %H:%M')}"
-        lead_value = task.get("remind_before_value")
-        lead_unit = task.get("remind_before_unit")
-        if lead_value and lead_unit:
-            labels = {"day": "jour", "week": "semaine", "month": "mois"}
-            label = labels.get(lead_unit, lead_unit)
-            if lead_value > 1 and lead_unit != "month":
-                label += "s"
-            body += f"\nRappel : {lead_value} {label} avant l'échéance"
+        body = _reminder_body(task)
         try:
             logs.notify_accounts("reminder", title, body, "#/tasks", str(task["id"]))
             notified.append(task["id"])

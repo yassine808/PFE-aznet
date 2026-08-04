@@ -110,7 +110,8 @@ def test_task_crud(monkeypatch):
     )
     r = client.post("/tasks", json={"title": "Envoyer devis", "repeat": "weekly"})
     assert r.status_code == 200
-    assert r.json()["id"] == 9 and r.json()["repeat"] == "weekly"
+    assert r.json()["id"] == 9
+    assert r.json()["repeat"] == "weekly"
 
     task = {"id": 9, "title": "Envoyer devis", "notes": None, "due_at": None,
             "repeat": "weekly", "done": False}
@@ -310,7 +311,9 @@ def test_process_report_rings_the_managers_bell(monkeypatch):
     assert r.status_code == 200
     assert calls
     technicien, kind, title = calls[0][0], calls[0][1], calls[0][2]
-    assert technicien == "Rachid" and kind == "report" and "Nouveau rapport" in title
+    assert technicien == "Rachid"
+    assert kind == "report"
+    assert "Nouveau rapport" in title
     assert calls[0][4] == "#/reports"
 
 
@@ -338,7 +341,9 @@ def test_process_short_voice_note_rings_review_bell(monkeypatch):
         files={"audio": ("note.ogg", b"fake-bytes", "audio/ogg")},
     )
     assert r.status_code == 200
-    assert calls and calls[0][1] == "review" and "à vérifier" in calls[0][2]
+    assert calls
+    assert calls[0][1] == "review"
+    assert "à vérifier" in calls[0][2]
 
 
 def test_process_greeting_does_not_ring_bell(monkeypatch):
@@ -371,7 +376,8 @@ def test_process_image_rings_review_bell(monkeypatch):
         files={"image": ("note.jpg", b"\xff\xd8fake", "image/jpeg")},
     )
     assert r.status_code == 200
-    assert calls and calls[0][1] == "review"
+    assert calls
+    assert calls[0][1] == "review"
 
 
 def test_sheet_queue_writes_and_rings_error_bell(monkeypatch):
@@ -387,7 +393,9 @@ def test_sheet_queue_writes_and_rings_error_bell(monkeypatch):
     )
     assert r.status_code == 200
     assert r.json() == {"id": 42}
-    assert calls and calls[0][0] == "error" and "Sheets" in calls[0][1]
+    assert calls
+    assert calls[0][0] == "error"
+    assert "Sheets" in calls[0][1]
 
 
 def test_sheet_queue_store_down_is_502(monkeypatch):
@@ -420,11 +428,15 @@ def test_send_reminders_fires_bell_and_mail(monkeypatch):
     )
     monkeypatch.setattr(jobs.mailer, "send", lambda to, subj, body: sent.append((to, subj)) or to)
     out = jobs.send_reminders()
-    assert out["due"] == 1 and out["notified"] == 1 and out["emailed"] == 1
-    assert notified[0][0] == "reminder" and notified[0][1] == "Devis"
+    assert out["due"] == 1
+    assert out["notified"] == 1
+    assert out["emailed"] == 1
+    assert notified[0][0] == "reminder"
+    assert notified[0][1] == "Devis"
     assert notified[0][3] == "#/tasks"
     assert stamped == [(1, None)]  # one-shot: never fires again
-    assert sent and sent[0][1] == "Rappel — Devis"
+    assert sent
+    assert sent[0][1] == "Rappel — Devis"
 
 
 def test_send_reminders_advances_recurring_task(monkeypatch):
@@ -457,8 +469,10 @@ def test_mail_failure_never_blocks_the_bell(monkeypatch):
         raise mailer.MailError("smtp down")
     monkeypatch.setattr(jobs.mailer, "send", dead_smtp)
     out = jobs.send_reminders()
-    assert out["notified"] == 1 and out["emailed"] == 0
-    assert out["failed"] and "mail" in out["failed"][0]["error"]
+    assert out["notified"] == 1
+    assert out["emailed"] == 0
+    assert out["failed"]
+    assert "mail" in out["failed"][0]["error"]
 
 
 def test_next_occurrence_rules():
@@ -509,7 +523,8 @@ def test_send_reminders_fires_early_for_lead_time(monkeypatch):
     )
     monkeypatch.setattr(jobs.logs, "stamp_task_notified", lambda *a, **k: None)
     out = jobs.send_reminders()
-    assert out["due"] == 1 and out["notified"] == 1
+    assert out["due"] == 1
+    assert out["notified"] == 1
     assert "Rappel : 3 jours avant l'échéance" in bodies[0][2]
     assert "Échéance" in bodies[0][2]
 

@@ -326,5 +326,6 @@ def test_manager_without_email_does_not_abort_the_report_job(monkeypatch):
     result = jobs.send_daily_report("2026-08-04")
     assert result["sent_to"] == ["d@x.ma"]          # the director still got theirs
     assert result["managers"] == 1                   # the chef's report was still built
-    assert stored and stored[0][0] == 2              # …and stored for /rapport
+    assert stored                                    # …and stored for /rapport
+    assert stored[0][0] == 2
     assert result["reports"][0]["mail_error"]        # the failure is visible, not swallowed

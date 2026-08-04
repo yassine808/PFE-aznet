@@ -24,8 +24,10 @@ mkdirSync(SHOTS, { recursive: true })
 function readEnv(path) {
   const out = {}
   for (const line of readFileSync(path, 'utf-8').split('\n')) {
-    const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/)
-    if (m) out[m[1]] = m[2]
+    // No trailing `\s*` before `$`: paired with `.*` it makes the match
+    // super-linear on long lines. Trim the value instead.
+    const m = line.match(/^\s*([A-Z_]+)\s*=(.*)$/)
+    if (m) out[m[1]] = m[2].trim()
   }
   return out
 }

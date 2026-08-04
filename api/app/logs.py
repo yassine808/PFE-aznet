@@ -1384,6 +1384,13 @@ def list_manager_reports() -> List[dict]:
 
 # ── In-app notifications (the dashboard bell) ───────────────────────────────
 
+# One row per (person, event). Shared by the single-person insert and the two
+# fan-out helpers, so a column change lands in one place.
+_NOTIFY_INSERT = (
+    "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
+    "VALUES (%s, %s, %s, %s, %s, %s)"
+)
+
 
 def create_notification(
     person_id: int,
@@ -1396,8 +1403,7 @@ def create_notification(
     """Append one notification for one person."""
     with _cursor() as cur:
         cur.execute(
-            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            _NOTIFY_INSERT,
             (person_id, kind, title, body, route, ref_id),
         )
 
@@ -1430,8 +1436,7 @@ def notify_accounts(
         return 0
     with _cursor() as cur:
         cur.executemany(
-            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            _NOTIFY_INSERT,
             [(p["id"], kind, title, body, route, ref_id) for p in people],
         )
     return len(people)
@@ -1498,8 +1503,7 @@ def notify_managers(
         return 0
     with _cursor() as cur:
         cur.executemany(
-            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            _NOTIFY_INSERT,
             [(p["id"], kind, title, body, route, ref_id) for p in people],
         )
     return len(people)

@@ -302,6 +302,12 @@ function Chart({
 
 const DRAG_TYPE = 'application/x-aznet-person'
 
+/** Border of a drop target: hovered wins over selected, both beat the default. */
+function dropBorder(over: boolean, selected: boolean): string {
+  if (over) return 'border-accent ring-accent ring-2'
+  return selected ? 'border-accent' : 'border-line'
+}
+
 /**
  * One box. Click selects, drag reassigns.
  *
@@ -365,7 +371,7 @@ function Box({
       // of them is wrong, and a whole row of accent rings finds nothing.
       className={cn(
         'rounded-xl border transition-colors',
-        over ? 'border-accent ring-accent ring-2' : selected ? 'border-accent' : 'border-line',
+        dropBorder(over, selected),
       )}
     >
       <button

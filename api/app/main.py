@@ -2,7 +2,7 @@
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -14,6 +14,11 @@ from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError, TranscriptionInfo
 from app.schemas import ProcessResponse
+
+# What both channels send when they do not label the voice note themselves.
+DEFAULT_AUDIO_MIME = "audio/ogg"
+# 404 body for every /tasks route — one string, so the wording cannot drift.
+TASK_NOT_FOUND = "tâche inconnue"
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -372,11 +377,11 @@ def _transcribe_engine(
     if forced:
         # Unknown forced names must fail loudly (422 upstream): the benchmark
         # needs to learn a typo, not silently fall back to another engine.
-        return get_provider(forced).transcribe(blob, mime_type or "audio/ogg")
+        return get_provider(forced).transcribe(blob, mime_type or DEFAULT_AUDIO_MIME)
     failures: List[str] = []
     for name in (part.strip() for part in settings.stt_chain.split(",") if part.strip()):
         try:
-            return get_provider(name).transcribe(blob, mime_type or "audio/ogg")
+            return get_provider(name).transcribe(blob, mime_type or DEFAULT_AUDIO_MIME)
         except (TranscriptionError, ValueError) as exc:
             # ValueError = unknown engine in the chain: a config typo must not
             # take the remaining engines down with it, just be recorded.
@@ -436,6 +441,63 @@ async def _extract_from_image(
     )
 
 
+async def _audio_input(
+    audio: UploadFile,
+    provider: Optional[str],
+    caption: Optional[str],
+    message_id: Optional[str],
+    correlation_id: Optional[str],
+    ctx: dict,
+) -> Tuple[Optional[TranscriptionInfo], str, List[str], Optional[str]]:
+    """Transcribe, archive the blob, mint the Drive link. Lifted out of
+    `/process` so the endpoint reads as three input shapes, not one long
+    branch — the archive and Drive steps are both best-effort, and their
+    try/except pairs were most of that function's complexity."""
+    transcription, rapport_complet, warnings, blob = await _transcribe_audio(audio, provider, ctx)
+    if caption:
+        rapport_complet = f"{rapport_complet}\n\n{caption}"
+    # Archive the voice note (Postgres) and mint its durable link (Drive).
+    # Both are best-effort: a log store outage or a Drive hiccup must never
+    # cost the technician their summary — the fallback is the previous
+    # behavior where n8n stored the channel's own file ticket.
+    try:
+        logs.save_media(ctx.get("channel"), None, message_id, "audio",
+                        audio.content_type, blob)
+    except logs.LogStoreError as exc:
+        await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
+    lien_audio = None
+    try:
+        if blob:
+            lien_audio = await run_in_threadpool(
+                drive.upload_audio,
+                f"audio-{message_id or correlation_id or int(time.time())}.ogg",
+                audio.content_type or DEFAULT_AUDIO_MIME, blob,
+            )
+    except drive.DriveError as exc:
+        await _log("api", "warn", message=f"drive upload failed: {exc}", **ctx)
+    return transcription, rapport_complet, warnings, lien_audio
+
+
+async def _text_input(
+    text: Optional[str], caption: Optional[str], message_id: Optional[str], ctx: dict,
+) -> str:
+    """Merge text + caption and archive the message. Empty after the merge is
+    a 422 — an empty row is worse than a rejected one."""
+    rapport_complet = (text or "").strip()
+    if caption:
+        rapport_complet = f"{rapport_complet}\n\n{caption}".strip()
+    if not rapport_complet:
+        await _log("api", "error", message="Empty text", **ctx)
+        raise HTTPException(422, "Empty text")
+    # Text messages are archived too, so the conversation is recoverable
+    # even though the Sheet only keeps extracted reports.
+    try:
+        logs.save_message(ctx.get("channel"), None, message_id, rapport_complet)
+    except logs.LogStoreError as exc:
+        await _log("api", "warn", message=f"chat archive failed: {exc}", **ctx)
+    return rapport_complet
+
+
 @app.post("/process", responses={422: {"description": "Invalid input"}, 502: {"description": "Upstream service error"}})
 async def process(
     audio: Optional[UploadFile] = File(None, description="Voice note (ogg/opus from WhatsApp)"),
@@ -474,44 +536,15 @@ async def process(
     lien_audio = None  # set only by the audio branch (Drive upload)
 
     if audio is not None:
-        transcription, rapport_complet, warnings, blob = await _transcribe_audio(audio, provider, ctx)
-        if caption:
-            rapport_complet = f"{rapport_complet}\n\n{caption}"
-        # Archive the voice note (Postgres) and mint its durable link (Drive).
-        # Both are best-effort: a log store outage or a Drive hiccup must never
-        # cost the technician their summary — the fallback is the previous
-        # behavior where n8n stored the channel's own file ticket.
-        try:
-            logs.save_media(ctx.get("channel"), None, message_id, "audio",
-                            audio.content_type, blob)
-        except logs.LogStoreError as exc:
-            await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
-        try:
-            if blob:
-                lien_audio = await run_in_threadpool(
-                    drive.upload_audio,
-                    f"audio-{message_id or correlation_id or int(time.time())}.ogg",
-                    audio.content_type or "audio/ogg", blob,
-                )
-        except drive.DriveError as exc:
-            await _log("api", "warn", message=f"drive upload failed: {exc}", **ctx)
+        transcription, rapport_complet, warnings, lien_audio = await _audio_input(
+            audio, provider, caption, message_id, correlation_id, ctx,
+        )
     elif image is not None:
         return await _extract_from_image(image, sender_profile, caption, ctx, message_id)
     else:
         transcription = None
         warnings = []
-        rapport_complet = (text or "").strip()
-        if caption:
-            rapport_complet = f"{rapport_complet}\n\n{caption}".strip()
-        if not rapport_complet:
-            await _log("api", "error", message="Empty text", **ctx)
-            raise HTTPException(422, "Empty text")
-        # Text messages are archived too, so the conversation is recoverable
-        # even though the Sheet only keeps extracted reports.
-        try:
-            logs.save_message(ctx.get("channel"), None, message_id, rapport_complet)
-        except logs.LogStoreError as exc:
-            await _log("api", "warn", message=f"chat archive failed: {exc}", **ctx)
+        rapport_complet = await _text_input(text, caption, message_id, ctx)
 
     t1 = time.time()
     try:
@@ -1075,7 +1108,9 @@ def create_task(payload: TaskIn, caller: dict = Depends(auth.require_human)) -> 
 
 
 @app.patch("/tasks/{task_id}",
-           responses={404: {"description": "Unknown task"}, 502: {"description": "Log store unreachable"}})
+           responses={404: {"description": "Unknown task"},
+                      422: {"description": "Reminder lead overlaps the repeat period"},
+                      502: {"description": "Log store unreachable"}})
 def update_task(task_id: int, payload: TaskPatchIn, caller: dict = Depends(auth.require_human)) -> dict:
     fields = payload.model_dump(exclude_unset=True)
     # When the patch changes the lead but carries no repeat, the validator
@@ -1088,7 +1123,7 @@ def update_task(task_id: int, payload: TaskPatchIn, caller: dict = Depends(auth.
         except logs.LogStoreError as exc:
             raise HTTPException(502, str(exc)) from exc
         if stored is None:
-            raise HTTPException(404, "tâche inconnue")
+            raise HTTPException(404, TASK_NOT_FOUND)
         error = _lead_period_error(
             payload.remind_before_value, payload.remind_before_unit,
             stored["repeat"], stored["repeat_every"], stored["repeat_unit"],
@@ -1100,7 +1135,7 @@ def update_task(task_id: int, payload: TaskPatchIn, caller: dict = Depends(auth.
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     if not updated:
-        raise HTTPException(404, "tâche inconnue")
+        raise HTTPException(404, TASK_NOT_FOUND)
     auth.record(caller, "task_updated", target=str(task_id), detail=fields)
     return {"ok": True, "id": task_id}
 
@@ -1113,7 +1148,7 @@ def delete_task(task_id: int, caller: dict = Depends(auth.require_human)) -> dic
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     if not deleted:
-        raise HTTPException(404, "tâche inconnue")
+        raise HTTPException(404, TASK_NOT_FOUND)
     auth.record(caller, "task_deleted", target=str(task_id))
     return {"ok": True}
 

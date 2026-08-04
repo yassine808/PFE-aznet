@@ -74,6 +74,21 @@ function Band({
 }
 
 /**
+ * The one health branch every job indicator shares: never run / last ok /
+ * last failed. Callers pass the three classes so dot, rail and icon badge stay
+ * one rule read three ways.
+ */
+function healthClass(
+  last: JobStatus['last'],
+  never: string,
+  ok: string,
+  fail: string,
+): string {
+  if (!last) return never
+  return last.ok ? ok : fail
+}
+
+/**
  * Jump nav + at-a-glance job health, sticky under the page header.
  *
  * The page used to be a scroll of three equal-weight sections with no way to
@@ -113,9 +128,11 @@ function QuickNav({ t, jobs }: { readonly t: (k: string) => string; readonly job
         <div className="ms-auto flex items-center gap-2.5">
           {jobs.map((job) => {
             const last = job.last
-            const title = last
-              ? `${t(`automation.job.${job.name}`)} — ${outcome(job) ?? ''} (${ago(last.at)})`
-              : `${t(`automation.job.${job.name}`)} — ${t('automation.job.never')}`
+            const label = t(`automation.job.${job.name}`)
+            const state = last
+              ? `${outcome(job) ?? ''} (${ago(last.at)})`
+              : t('automation.job.never')
+            const title = `${label} — ${state}`
             return (
               <span
                 key={job.name}
@@ -123,7 +140,7 @@ function QuickNav({ t, jobs }: { readonly t: (k: string) => string; readonly job
                 aria-label={title}
                 className={cn(
                   'size-2 rounded-full',
-                  !last ? 'bg-line' : last.ok ? 'bg-status-ok' : 'bg-status-fail',
+                  healthClass(last, 'bg-line', 'bg-status-ok', 'bg-status-fail'),
                 )}
               />
             )
@@ -235,7 +252,7 @@ function JobCard({
 
   // Left rail: instant scan of health across the grid without reading text —
   // grey = never run, and ok/fail mirror the dot already used in QuickNav.
-  const rail = !last ? 'bg-line' : last.ok ? 'bg-status-ok' : 'bg-status-fail'
+  const rail = healthClass(last, 'bg-line', 'bg-status-ok', 'bg-status-fail')
 
   return (
     <li className="border-line bg-canvas relative flex flex-col gap-3 overflow-hidden rounded-xl border p-4 ps-5">
@@ -244,11 +261,12 @@ function JobCard({
         <span
           className={cn(
             'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border',
-            !last
-              ? 'border-line text-ink-muted'
-              : last.ok
-                ? 'border-status-ok/30 bg-status-ok/10 text-status-ok'
-                : 'border-status-fail/30 bg-status-fail/10 text-status-fail',
+            healthClass(
+              last,
+              'border-line text-ink-muted',
+              'border-status-ok/30 bg-status-ok/10 text-status-ok',
+              'border-status-fail/30 bg-status-fail/10 text-status-fail',
+            ),
           )}
         >
           <Icon size={16} />

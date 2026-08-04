@@ -29,8 +29,9 @@ export async function copyText(text: string): Promise<void> {
   ta.focus()
   ta.select()
   try {
+    // NOSONAR — deprecated on purpose: the only copy path in a non-secure context.
     document.execCommand('copy')
   } finally {
-    document.body.removeChild(ta)
+    ta.remove()
   }
 }

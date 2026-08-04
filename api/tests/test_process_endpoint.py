@@ -268,7 +268,9 @@ def test_stt_chain_all_engines_failing_502(monkeypatch):
     r = client.post("/process", files={"audio": ("note.ogg", b"q", "audio/ogg")})
     assert r.status_code == 502
     detail = r.json()["detail"]
-    assert "groq" in detail and "gemini" in detail  # both failures named, no silent fallback
+    # both failures named, no silent fallback
+    assert "groq" in detail
+    assert "gemini" in detail
 
 
 def test_forced_provider_bypasses_the_chain(monkeypatch):
