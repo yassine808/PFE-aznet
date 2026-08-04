@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { CopyIcon, DownloadSimpleIcon, SparkleIcon } from '@phosphor-icons/react'
-import { cn } from '@/lib/utils'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
 import { exportReport, type ReportFormat } from '@/lib/report-export'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
@@ -9,6 +8,7 @@ import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ContributionGraph, isoOf as iso, weekStart } from '@/components/contribution-graph'
 import { ReportImageCard } from '@/components/report-image'
+import { cn, copyText } from '@/lib/utils'
 
 const DAY_MS = 86_400_000
 
@@ -118,7 +118,7 @@ export function WeeklyReportPage() {
       '',
       ...week.byTech.map(([name, v]) => `- ${name}: ${v.count} (${v.goulottes} m)`),
     ]
-    await navigator.clipboard.writeText(lines.join('\n'))
+    await copyText(lines.join('\n'))
     setCopied(true)
     window.setTimeout(() => setCopied(false), 2000)
   }

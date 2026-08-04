@@ -676,17 +676,44 @@ export interface Async<T> {
 }
 
 /**
- * Module-level response cache, keyed by endpoint.
+ * Module-level response cache, keyed by endpoint, with subscribers.
  *
  * Without this, navigating away from a route unmounts its hooks and coming back
  * re-runs every fetch from a blank loading state, so the app appears to forget
  * everything it just showed. With it, a remount paints cached data immediately
  * and revalidates in the background: stale-while-revalidate.
  *
- * ponytail: a plain Map, not TanStack Query. Five endpoints, one consumer app,
- * no mutations to invalidate. Reach for a real query library if that changes.
+ * The subscriber list makes the cache reactive: when any hook writes fresh data
+ * (a poll, a remount, a reload), every other hook on the same key repaints too.
+ * Without it, a page that reads a key nobody polls keeps its mount-time
+ * snapshot for the whole visit — Overview's headline numbers froze until
+ * navigation.
+ *
+ * ponytail: a Map plus a listener set, not TanStack Query. Five endpoints, one
+ * consumer app, no mutations to invalidate. Reach for a real query library if
+ * that changes.
  */
 const cache = new Map<string, unknown>()
+const listeners = new Map<string, Set<() => void>>()
+
+function setCache<T>(key: string, value: T): void {
+  cache.set(key, value)
+  const set = listeners.get(key)
+  if (set) for (const fn of set) fn()
+}
+
+function subscribe(key: string, fn: () => void): () => void {
+  let set = listeners.get(key)
+  if (!set) {
+    set = new Set()
+    listeners.set(key, set)
+  }
+  set.add(fn)
+  return () => {
+    set.delete(fn)
+    if (set.size === 0) listeners.delete(key)
+  }
+}
 
 /**
  * Fetch on mount, optionally re-fetch on an interval.
@@ -715,7 +742,7 @@ export function useApi<T>(
       if (first && cache.get(key) === undefined) setLoading(true)
       try {
         const next = await fetcherRef.current(controller.signal)
-        cache.set(key, next)
+        setCache(key, next)
         setData(next)
         setError(null)
       } catch (err) {
@@ -734,6 +761,15 @@ export function useApi<T>(
       if (timer) window.clearInterval(timer)
     }
   }, [key, pollMs, nonce])
+
+  // Repaint when another hook refreshes this key. setData with the same object
+  // reference is a no-op, so a poll writing identical data cannot loop.
+  useEffect(() => {
+    return subscribe(key, () => {
+      const fresh = cache.get(key)
+      if (fresh !== undefined) setData(fresh as T)
+    })
+  }, [key])
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
   return { data, error, loading, reload }

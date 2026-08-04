@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   CalendarBlankIcon,
@@ -33,6 +33,9 @@ function ChantierCell({ r, onSaved }: { readonly r: ReportRow; readonly onSaved:
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Enter "saves" and unmounts the input, which fires a blur save on the same
+  // frame — without a lock, one commit becomes two PATCHes.
+  const saving = useRef(false)
 
   const start = () => {
     setValue(r.chantier ?? '')
@@ -40,14 +43,18 @@ function ChantierCell({ r, onSaved }: { readonly r: ReportRow; readonly onSaved:
     setEditing(true)
   }
   const save = async () => {
+    if (saving.current) return
     const next = value.trim()
     setEditing(false)
     if (next === (r.chantier ?? '')) return
+    saving.current = true
     try {
       await patchReport(r._row, 'chantier', next)
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      saving.current = false
     }
   }
 

@@ -8,6 +8,7 @@ import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ActivityGraphSection } from '@/components/activity-graph-section'
 import { ReportImageCard } from '@/components/report-image'
+import { cn, copyText } from '@/lib/utils'
 
 export function DailyReportPage() {
   const { t, locale } = useI18n()
@@ -75,7 +76,7 @@ export function DailyReportPage() {
 
   const copy = async () => {
     if (!content) return
-    await navigator.clipboard.writeText(`${content.objet}\n\n${content.corps}`)
+    await copyText(`${content.objet}\n\n${content.corps}`)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 2000)
   }

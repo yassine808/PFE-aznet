@@ -89,6 +89,12 @@ function QuickNav({ t, jobs }: { readonly t: (k: string) => string; readonly job
     ['automation-recipients', t('automation.recipients')],
     ['automation-format', t('automation.format')],
   ]
+  // A plain `#id` link would be hijacked: the hash router maps any unknown
+  // fragment to Overview, so the whole page would unmount on click.
+  const jump = (e: { preventDefault: () => void }, id: string) => {
+    e.preventDefault()
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   return (
     <div className="bg-canvas/95 border-line sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-1 py-3 backdrop-blur">
       <nav className="flex items-center gap-1">
@@ -96,6 +102,7 @@ function QuickNav({ t, jobs }: { readonly t: (k: string) => string; readonly job
           <a
             key={id}
             href={`#${id}`}
+            onClick={(e) => jump(e, id)}
             className="text-ink-faint hover:text-ink hover:bg-line/40 rounded-md px-2 py-1 text-xs font-medium transition-colors"
           >
             {label}
