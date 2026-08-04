@@ -23,9 +23,15 @@ mkdirSync(SHOTS, { recursive: true })
 
 function readEnv(path) {
   const out = {}
-  for (const line of readFileSync(path, 'utf-8').split('\n')) {
-    // No trailing `\s*` before `$`: paired with `.*` it makes the match
-    // super-linear on long lines. Trim the value instead.
+  // Split on \r?\n, not '\n'. This file is edited on Windows, so the lines are
+  // CRLF — and in JS `.` does not match `\r` (it is a line terminator), so a
+  // trailing `\r` left on the line makes `(.*)$` fail on every line but the
+  // last. The old pattern ended `\s*$`, which absorbed the `\r` by accident;
+  // dropping that `\s*` for the super-linear-backtracking fix silently took the
+  // CRLF handling with it and this parser found 1 key out of 25.
+  for (const line of readFileSync(path, 'utf-8').split(/\r?\n/)) {
+    // Still no trailing `\s*` before `$`: paired with `.*` it backtracks
+    // super-linearly on long lines. Trim the value instead.
     const m = line.match(/^\s*([A-Z_]+)\s*=(.*)$/)
     if (m) out[m[1]] = m[2].trim()
   }

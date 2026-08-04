@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   ArrowClockwiseIcon,
+  BellRingingIcon,
   BroomIcon,
   CalendarBlankIcon,
   CheckIcon,
@@ -42,10 +43,11 @@ const JOB_ICONS: Record<string, typeof BroomIcon> = {
   profiles: UserFocusIcon,
   daily_report: EnvelopeSimpleIcon,
   weekly_report: CalendarBlankIcon,
+  reminders: BellRingingIcon,
 }
 
 // Order shown to the operator: the two mails they care about first, plumbing last.
-const JOB_ORDER = ['daily_report', 'weekly_report', 'sheet_queue', 'profiles', 'prune_logs']
+const JOB_ORDER = ['daily_report', 'weekly_report', 'reminders', 'sheet_queue', 'profiles', 'prune_logs']
 
 const FORMAT_EXT: Record<ReportFormat, string> = { txt: '.txt', markdown: '.md', docx: '.docx' }
 
@@ -120,6 +122,11 @@ function useOutcome() {
         if (!n('pending')) return t('automation.out.queueEmpty')
         return t('automation.out.queueDrained', { written: n('written'), failed })
       }
+      case 'reminders':
+        if (!n('due')) return t('automation.out.remindersNone')
+        return t('automation.out.reminders', {
+          due: n('due'), notified: n('notified'), emailed: n('emailed'),
+        })
       case 'profiles':
         return t('automation.out.profiles', { refreshed: n('refreshed'), total: n('persons') })
       case 'prune_logs':
