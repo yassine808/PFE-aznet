@@ -32,6 +32,23 @@ RETENTION_DAYS = 30
 DRAIN_INTERVAL_MINUTES = 5
 DRAIN_BATCH = 50
 NIGHTLY_HOUR = 3  # log prune + profile rebuild, while nobody is sending
+REMINDER_INTERVAL_SECONDS = 60  # task reminders fire within a minute of due
+
+# Ceiling per job, generous but bounded: a hung Google/SMTP call must cost the
+# operator a visible failed run, not a frozen scheduler. Jobs not listed here
+# run inline (they are DB-only and fast).
+_TIMEOUT_SECONDS = {
+    "sheet_queue": 120,
+    # Sheet read + SMTP + one LLM call for the company digest *and one more per
+    # site manager* (reports went per-manager on this branch): 180 s was sized
+    # for the single-digest era and would kill the job — and every chef's stored
+    # report with it — as soon as the org chart has a few chefs.
+    "daily_report": 600,
+    "weekly_report": 600,
+    "profiles": 300,       # one Sheet read + one LLM call per technician
+    "prune_logs": 120,
+    "reminders": 60,
+}
 
 # name -> last result, newest wins. Read by GET /jobs.
 _STATUS: Dict[str, dict] = {}
@@ -73,22 +90,32 @@ def drain_sheet_queue() -> dict:
             **report,
         }
         try:
-            sheets.append_report(row)
+            appended_row = sheets.append_report(row)
         except sheets.SheetsError as exc:
             # Left in the queue with the attempt counted, not dropped.
             logs.resolve_write(item["id"], False, str(exc))
             failed.append({"id": item["id"], "error": str(exc)})
             continue
         logs.resolve_write(item["id"], True)
+        # Link the parked message to the row it landed on, so a /modify reply
+        # can find it even when the happy path's append is the one that failed.
+        message_id = payload.get("message_id")
+        if message_id and appended_row:
+            try:
+                logs.link_message_row(message_id, appended_row)
+            except logs.LogStoreError:
+                pass  # best-effort like the append itself
         written += 1
     return {"pending": len(pending), "written": written, "failed": failed}
 
 
 def prune_logs() -> dict:
-    """Retention sweep on both time-series tables."""
+    """Retention sweep on the time-series tables *and* the never-pruned ones:
+    expired sessions, idempotency claims, the audit trail and page visits."""
     return {
         "logs_deleted": logs.prune(RETENTION_DAYS),
         "samples_deleted": logs.prune_samples(RETENTION_DAYS),
+        **logs.prune_meta(RETENTION_DAYS),
     }
 
 
@@ -108,18 +135,126 @@ def refresh_profiles() -> dict:
     }
 
 
+def _report_recipients() -> List[str]:
+    """Who the company report goes to: every account's email (admin + site managers).
+
+    The `emails` app setting is the manual fallback, kept for installs where no
+    account row carries an email yet — once the org chart has accounts, the list
+    derives from the database and cannot drift from who can log in.
+    """
+    recipients = logs.account_emails()
+    if not recipients:
+        recipients = logs.get_settings().get("emails") or []
+    return recipients
+
+
+def _manager_buckets(persons: List[dict], rows: List[dict]) -> Dict[int, List[dict]]:
+    """Bucket rows by the chef each sender reports to: manager person id → rows.
+
+    A row is attributed through the sender's name (the Sheet has no channel
+    ids), the same key the directory matches on. Rows whose sender resolves to
+    no person, or to a person without a chef, belong to nobody's team — they
+    only appear in the director's company-wide digest, so nothing a technician
+    actually sent can be lost because the org chart is incomplete.
+    """
+    by_name = {p["name"].strip().lower(): p for p in persons}
+    buckets: Dict[int, List[dict]] = {}
+    for row in rows:
+        person = by_name.get((row.get("technicien") or "").strip().lower())
+        manager_id = None
+        if person is not None:
+            # A chef's own rows land in their own report; a tech's rows land in
+            # their chef's. Unassigned or unknown senders stay with the director.
+            manager_id = person.get("manager_id") or (
+                person["id"] if person.get("role") == "chef" else None
+            )
+        if manager_id:
+            buckets.setdefault(manager_id, []).append(row)
+    return buckets
+
+
+def _report_mail(
+    recipients: List[str], period: str, rows: List[dict]
+) -> dict:
+    """Generate one digest and mail it. Returns what the jobs report back.
+
+    The mail is best-effort *per report*: the reports loop below is per manager,
+    and a chef with no account email (`mailer.send([])` raises) or one bounced
+    address must not abort the whole job — the remaining chefs would lose their
+    mail and, worse, their stored report, which is what /rapport answers with.
+    The failure travels in `mail_error` so the operator still sees it in the
+    Automation panel instead of it disappearing.
+    """
+    if not rows:
+        return {"rows": 0, "sent_to": [], "reason": "aucun rapport"}
+    content = daily_report.generate_daily_report(period, rows)
+    sent: List[str] = []
+    mail_error = None
+    try:
+        sent = mailer.send(recipients, content.objet, content.corps, html=True)
+    except mailer.MailError as exc:
+        mail_error = str(exc)
+    return {
+        "rows": len(rows), "sent_to": sent, "subject": content.objet,
+        "generated_by": "automatique", "objet": content.objet, "corps": content.corps,
+        "mail_error": mail_error,
+    }
+
+
 def send_daily_report(date: Optional[str] = None) -> dict:
-    """Today's rows → French summary → the configured mailboxes."""
+    """Today's rows → one French summary per site manager, each to their inbox.
+
+    Reports became per-manager: the director gets the company-wide digest, and
+    every chef gets their team's. Each generated version is stored so the
+    technicians' /rapport command answers with the *same* text the mail showed.
+    """
     day = date or datetime.now().strftime("%Y-%m-%d")
     rows = [r for r in sheets.read_reports() if r.get("date") == day]
     if not rows:
         # Not an error: a Sunday with no reports is a normal outcome, and mailing
         # an empty report teaches the manager to ignore the mail.
         return {"date": day, "rows": 0, "sent_to": [], "reason": "aucun rapport pour cette date"}
-    content = daily_report.generate_daily_report(day, rows)
-    recipients = logs.get_settings().get("emails") or []
-    sent = mailer.send(recipients, content.objet, content.corps, html=True)
-    return {"date": day, "rows": len(rows), "sent_to": sent, "subject": content.objet}
+    persons = logs.list_persons()
+    buckets = _manager_buckets(persons, rows)
+    by_id = {p["id"]: p for p in persons}
+
+    # The company digest goes to the director(s); without a director row the
+    # manual recipient list takes over, so an install without an org chart
+    # behaves exactly as before this split.
+    directors = [p for p in persons if p.get("role") == "directeur" and p.get("has_login") and p.get("email")]
+    director_rcpts = [p["email"] for p in directors] or _report_recipients()
+    company = _report_mail(director_rcpts, day, rows)
+
+    sent_all = set(company["sent_to"])
+    manager_reports = []
+    for manager_id, team in sorted(buckets.items()):
+        chef = by_id.get(manager_id)
+        if chef is None:
+            continue
+        rcpts = [chef["email"]] if chef.get("has_login") and chef.get("email") else []
+        result = _report_mail(rcpts, day, team)
+        if result["rows"]:
+            sent_all.update(result["sent_to"])
+            manager_reports.append(
+                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"],
+                 "mail_error": result.get("mail_error")}
+            )
+            # Stored even when the chef has no email: the /rapport command
+            # answers from here, and a report a technician can read is worth
+            # generating even if no account row is set up yet.
+            logs.save_manager_report(
+                manager_id, day, result["objet"], result["corps"], result["generated_by"], "daily"
+            )
+
+    return {
+        "date": day,
+        "rows": len(rows),
+        "sent_to": sorted(sent_all),
+        "subject": company["subject"],
+        "managers": len(manager_reports),
+        "reports": manager_reports,
+        "generated_by": "automatique",
+    }
 
 
 def send_weekly_report(end: Optional[str] = None) -> dict:
@@ -137,16 +272,138 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
     label = f"{first_day.strftime('%Y-%m-%d')} → {last_day.strftime('%Y-%m-%d')}"
     if not rows:
         return {"period": label, "rows": 0, "sent_to": [], "reason": "aucun rapport sur la période"}
-    content = daily_report.generate_daily_report(label, rows)
-    recipients = logs.get_settings().get("emails") or []
-    sent = mailer.send(recipients, content.objet, content.corps, html=True)
-    return {"period": label, "rows": len(rows), "sent_to": sent, "subject": content.objet}
+    persons = logs.list_persons()
+    buckets = _manager_buckets(persons, rows)
+    by_id = {p["id"]: p for p in persons}
+
+    directors = [p for p in persons if p.get("role") == "directeur" and p.get("has_login") and p.get("email")]
+    director_rcpts = [p["email"] for p in directors] or _report_recipients()
+    company = _report_mail(director_rcpts, label, rows)
+
+    sent_all = set(company["sent_to"])
+    manager_reports = []
+    for manager_id, team in sorted(buckets.items()):
+        chef = by_id.get(manager_id)
+        if chef is None:
+            continue
+        rcpts = [chef["email"]] if chef.get("has_login") and chef.get("email") else []
+        result = _report_mail(rcpts, label, team)
+        if result["rows"]:
+            sent_all.update(result["sent_to"])
+            manager_reports.append(
+                {"manager": chef["name"], "rows": result["rows"], "sent_to": result["sent_to"],
+                 "mail_error": result.get("mail_error")}
+            )
+            logs.save_manager_report(
+                manager_id, label, result["objet"], result["corps"], result["generated_by"], "weekly"
+            )
+
+    return {
+        "period": label,
+        "rows": len(rows),
+        "sent_to": sorted(sent_all),
+        "subject": company["subject"],
+        "managers": len(manager_reports),
+        "reports": manager_reports,
+        "generated_by": "automatique",
+    }
+
+
+def _next_occurrence(due: Optional[datetime], repeat: str,
+                     repeat_every: Optional[int] = None,
+                     repeat_unit: Optional[str] = None) -> Optional[datetime]:
+    """The next due_at after a reminder fires, per the repeat rule.
+
+    `repeat_unit` carries a custom interval (every N days/weeks/months) and
+    beats the presets; monthly math clamps to the month's real length (Jan 31 →
+    Feb 28), so a task scheduled for the 31st never silently skips a short
+    month. Custom + preset both land here through the same `shift_months`, so
+    the clamping can only drift in one place.
+    """
+    if due is None or (repeat == "none" and repeat_unit is None):
+        return None
+    if repeat_unit:
+        n = repeat_every or 1
+        if repeat_unit == "day":
+            return due + timedelta(days=n)
+        if repeat_unit == "week":
+            return due + timedelta(weeks=n)
+        return logs.shift_months(due, n)
+    if repeat == "daily":
+        return due + timedelta(days=1)
+    if repeat == "weekly":
+        return due + timedelta(days=7)
+    return logs.shift_months(due, 1)
+
+
+def send_reminders() -> dict:
+    """Fire every due task reminder: bell + mail, then advance the schedule.
+
+    One shot per occurrence — the `last_notified_at` guard in `logs.due_tasks`
+    makes this safe to run as often as the scheduler wakes, and a restart can
+    never re-send what already fired. The bell row goes to every account and
+    the mail to every account email, because the task list is shared.
+    """
+    now = datetime.now()
+    due = logs.due_tasks(now)
+    if not due:
+        return {"due": 0, "notified": 0, "emailed": 0, "failed": []}
+    accounts = logs.account_people()
+    emails = [p["email"] for p in accounts if p.get("email")]
+    notified, emailed, failed = [], [], []
+    for task in due:
+        title = task["title"]
+        body = f"Tâche à faire : {title}"
+        if task.get("notes"):
+            body += f"\n{task['notes']}"
+        if task.get("due_at"):
+            body += f"\nÉchéance : {task['due_at'].strftime('%d/%m/%Y %H:%M')}"
+        lead_value = task.get("remind_before_value")
+        lead_unit = task.get("remind_before_unit")
+        if lead_value and lead_unit:
+            labels = {"day": "jour", "week": "semaine", "month": "mois"}
+            label = labels.get(lead_unit, lead_unit)
+            if lead_value > 1 and lead_unit != "month":
+                label += "s"
+            body += f"\nRappel : {lead_value} {label} avant l'échéance"
+        try:
+            logs.notify_accounts("reminder", title, body, "#/tasks", str(task["id"]))
+            notified.append(task["id"])
+        except logs.LogStoreError as exc:
+            failed.append({"id": task["id"], "error": str(exc)})
+            continue
+        if emails:
+            try:
+                mailer.send(emails, f"Rappel — {title}", body)
+                emailed.append(task["id"])
+            except mailer.MailError as exc:
+                # The bell already fired; a dead SMTP must not re-fire it next tick.
+                failed.append({"id": task["id"], "error": f"mail: {exc}"})
+        try:
+            logs.stamp_task_notified(
+                task["id"],
+                _next_occurrence(
+                    task.get("due_at"),
+                    task.get("repeat") or "none",
+                    task.get("repeat_every"),
+                    task.get("repeat_unit"),
+                ),
+            )
+        except logs.LogStoreError as exc:
+            failed.append({"id": task["id"], "error": str(exc)})
+    return {
+        "due": len(due),
+        "notified": len(notified),
+        "emailed": len(emailed),
+        "failed": failed,
+    }
 
 
 JOBS: Dict[str, Callable[[], dict]] = {
     "sheet_queue": drain_sheet_queue,
     "prune_logs": prune_logs,
     "profiles": refresh_profiles,
+    "reminders": send_reminders,
     "daily_report": send_daily_report,
     "weekly_report": send_weekly_report,
 }
@@ -160,16 +417,46 @@ def run(name: str) -> dict:
 
     The same path serves the scheduler and the dashboard's "Run now" button, so
     a manual run is visible in the panel exactly like an automatic one.
+
+    Jobs with a timeout run in a daemon worker thread: the scheduler must keep
+    ticking even when one job hangs on a slow upstream (a stuck Google call
+    must not freeze the 03:00 nightly band, nor delay every drain), and the
+    overrun is recorded as a failed run the operator can see and re-trigger.
     """
     job = JOBS.get(name)
     if job is None:
         raise KeyError(name)
     started = time.time()
+    timeout = _TIMEOUT_SECONDS.get(name)
+    if timeout is None:
+        return _execute(job, name, started)
+    result: Dict[str, dict] = {}
+    worker = threading.Thread(
+        target=_execute, args=(job, name, started, result), name=f"job-{name}", daemon=True
+    )
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        # The thread is a daemon: once it finishes (or the process exits) it
+        # dies, so an overrun cannot accumulate. Its status would have arrived
+        # too late to matter; the timeout record is the one the operator sees.
+        return _record(name, {"ok": False, "error": f"timed out after {timeout}s"}, started)
+    return result["status"]
+
+
+def _execute(job, name: str, started: float, result: Optional[Dict[str, dict]] = None) -> dict:
+    """Body shared by the direct and the timed path. Never raises."""
     try:
-        result: dict = job()
-        status = {"job": name, "ok": True, "result": result}
+        payload: dict = job()
+        status = {"job": name, "ok": True, "result": payload}
     except Exception as exc:  # any failure is data, not a crash  # noqa: BLE001
         status = {"job": name, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    if result is not None:
+        result["status"] = status
+    return _record(name, status, started)
+
+
+def _record(name: str, status: dict, started: float) -> dict:
     status["at"] = datetime.now().isoformat(timespec="seconds")
     status["seconds"] = round(time.time() - started, 2)
     with _LOCK:
@@ -178,7 +465,7 @@ def run(name: str) -> dict:
         f"job:{name}",
         "info" if status["ok"] else "error",
         message=status.get("error") or "ok",
-        detail=status.get("result"),
+        payload=status.get("result"),
     )
     return status
 
@@ -199,6 +486,8 @@ DAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanch
 def _schedule_label(name: str) -> str:
     if name == "sheet_queue":
         return f"toutes les {DRAIN_INTERVAL_MINUTES} min"
+    if name == "reminders":
+        return "chaque minute"
     if name in ("prune_logs", "profiles"):
         return f"chaque nuit à {NIGHTLY_HOUR:02d}:00"
     row = _settings_safe()
@@ -237,6 +526,8 @@ def _settings_safe() -> dict:
 def _due(now: datetime, last: Optional[datetime], name: str) -> bool:
     if name == "sheet_queue":
         return last is None or now - last >= timedelta(minutes=DRAIN_INTERVAL_MINUTES)
+    if name == "reminders":
+        return last is None or now - last >= timedelta(seconds=REMINDER_INTERVAL_SECONDS)
     if name in ("prune_logs", "profiles"):
         return now.hour == NIGHTLY_HOUR and (last is None or last.date() < now.date())
 

@@ -14,7 +14,7 @@ with no database and no API keys (see CLAUDE.md).
 """
 import json
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, cast
 
 from app.config import settings
@@ -205,6 +205,149 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value      JSONB NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Per-account dashboard preferences (clock format, density, confidence
+-- threshold): one JSONB blob per person, same key/JSON rationale as
+-- app_settings. One row, whole settings object — not key/value — because only
+-- the person's own browser ever reads it; there is no query that wants one key
+-- across accounts.
+CREATE TABLE IF NOT EXISTS person_settings (
+    person_id  BIGINT PRIMARY KEY REFERENCES persons(id) ON DELETE CASCADE,
+    value      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The last generated report per site manager, one row per period. The
+-- technicians' /rapport command answers from here: the reply must be the last
+-- *generated* version, not a regeneration — the daily mail and the command
+-- must show the same text, or the manager and their team are looking at two
+-- reports that disagree about the same day. Written by the scheduler only;
+-- dashboard manual runs stay company-wide on purpose.
+CREATE TABLE IF NOT EXISTS manager_reports (
+    manager_id   BIGINT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+    period       TEXT NOT NULL,
+    period_type  TEXT NOT NULL DEFAULT 'daily',
+    objet        TEXT NOT NULL,
+    corps        TEXT NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    generated_by TEXT NOT NULL DEFAULT 'automatique',
+    PRIMARY KEY (manager_id, period)
+);
+CREATE INDEX IF NOT EXISTS manager_reports_mgr_idx ON manager_reports (manager_id, generated_at DESC);
+
+-- Media archive: every voice note / photo /document the pipeline receives,
+-- copied into Postgres while it is still downloadable. Telegram file_ids and
+-- WhatsApp media ids are tickets, not URLs — Meta's media URLs expire within
+-- minutes, so without a durable copy the only trace left of a technician's
+-- message is its transcript. Rows are small (Telegram caps voice notes at
+-- ~1.5 MB, photos at a few hundred KB), which keeps a BYTEA column honest.
+CREATE TABLE IF NOT EXISTS media_files (
+    id          BIGSERIAL PRIMARY KEY,
+    channel     TEXT,
+    external_id TEXT,
+    message_id  TEXT,
+    kind        TEXT NOT NULL,               -- 'audio' | 'image'
+    mime_type   TEXT,
+    size_bytes  INTEGER NOT NULL DEFAULT 0,
+    data        BYTEA NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS media_files_ts_idx ON media_files (created_at DESC);
+
+-- Raw chat archive: every typed message, so the conversation survives the
+-- Sheet (the Sheet only ever holds extracted reports).
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id          BIGSERIAL PRIMARY KEY,
+    channel     TEXT,
+    external_id TEXT,
+    message_id  TEXT,
+    text        TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS chat_messages_ts_idx ON chat_messages (created_at DESC);
+
+-- The /modify command: a technician replies to their own message and the row
+-- it became has to be found by the id of that message. The claim already
+-- stores `channel:msgid`; these two columns record which Sheet row it landed
+-- on, written by whoever performed the append (n8n on the happy path, the
+-- retry drain after a Sheets outage).
+ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_row BIGINT;
+ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ;
+
+-- Per-account in-app notifications (the dashboard bell). Every row is owned
+-- by exactly one person; pipeline events (a new report for the chef, a row
+-- flagged for review, a Sheets failure) land here beside task reminders, so
+-- each account sees its own history and nothing else.
+CREATE TABLE IF NOT EXISTS notifications (
+    id          BIGSERIAL PRIMARY KEY,
+    person_id   BIGINT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,          -- 'report' | 'review' | 'error' | 'reminder'
+    title       TEXT NOT NULL,
+    body        TEXT,
+    route       TEXT,                   -- dashboard hash route to jump to, e.g. '#/reports'
+    ref_id      TEXT,                   -- sheet row / correlation id for the jump target
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    read_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS notifications_person_idx
+    ON notifications (person_id, created_at DESC);
+
+-- Shared to-do list with recurring reminders. Global on purpose: the org is
+-- small enough that one list every account can edit beats five copies of it.
+-- `repeat` is how the scheduler advances due_at after firing a reminder;
+-- `remind_before_value`/`remind_before_unit` open the reminder early (X
+-- days/weeks/months before the due moment); `repeat_every`/`repeat_unit` add
+-- custom intervals (every 3 days, every 2 weeks, ...) beside the presets.
+-- `last_notified_at` records the DUE MOMENT of the last occurrence that fired,
+-- not the firing time, so the once-per-occurrence guard `last_notified_at <
+-- due_at` survives advance reminders (a fire at due-3d must not re-fire every
+-- tick just because the stamp time is before the due moment).
+CREATE TABLE IF NOT EXISTS tasks (
+    id                   BIGSERIAL PRIMARY KEY,
+    title                TEXT NOT NULL,
+    notes                TEXT,
+    due_at               TIMESTAMPTZ,
+    repeat               TEXT NOT NULL DEFAULT 'none' CHECK (repeat IN ('none','daily','weekly','monthly')),
+    remind_before_value  INT CHECK (remind_before_value IS NULL OR remind_before_value >= 0),
+    remind_before_unit   TEXT CHECK (remind_before_unit IN ('day','week','month')),
+    repeat_every         INT CHECK (repeat_every IS NULL OR repeat_every >= 1),
+    repeat_unit          TEXT CHECK (repeat_unit IN ('day','week','month')),
+    done_at              TIMESTAMPTZ,
+    last_notified_at     TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS tasks_due_idx ON tasks (due_at) WHERE done_at IS NULL;
+
+-- The live table predates these columns: CREATE TABLE IF NOT EXISTS is a no-op
+-- on it, so add the columns and their constraints explicitly. Postgres has no
+-- `ADD CONSTRAINT IF NOT EXISTS`, hence the pg_constraint lookups.
+DO $$ BEGIN
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS remind_before_value INT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS remind_before_unit TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat_every INT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat_unit TEXT;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_remind_before_value_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_remind_before_value_check
+            CHECK (remind_before_value IS NULL OR remind_before_value >= 0);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_remind_before_unit_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_remind_before_unit_check
+            CHECK (remind_before_unit IN ('day','week','month'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_repeat_every_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_repeat_every_check
+            CHECK (repeat_every IS NULL OR repeat_every >= 1);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_repeat_unit_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_repeat_unit_check
+            CHECK (repeat_unit IN ('day','week','month'));
+    END IF;
+END $$;
 """
 
 
@@ -568,6 +711,135 @@ def claim_message(message_id: str, channel: Optional[str] = None) -> bool:
         return _one(cur) is not None
 
 
+# ── media + chat archive ───────────────────────────────────────────────────
+# Every voice note, photo and typed message is copied into Postgres as it
+# arrives (see the media_files / chat_messages comments in _SCHEMA for why).
+# These functions raise LogStoreError like the rest of the module; the /process
+# handler wraps them in best-effort calls because archiving must never cost a
+# technician their reply.
+
+
+def save_media(
+    channel: Optional[str],
+    external_id: Optional[str],
+    message_id: Optional[str],
+    kind: str,
+    mime_type: Optional[str],
+    data: bytes,
+) -> int:
+    with _cursor() as cur:
+        from psycopg2 import Binary  # lazy: tests run with no DB
+
+        cur.execute(
+            """
+            INSERT INTO media_files
+                (channel, external_id, message_id, kind, mime_type, size_bytes, data)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (channel, external_id, message_id, kind, mime_type, len(data), Binary(data)),
+        )
+        return (_one(cur) or {})["id"]
+
+
+def save_message(
+    channel: Optional[str],
+    external_id: Optional[str],
+    message_id: Optional[str],
+    text: str,
+) -> int:
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO chat_messages (channel, external_id, message_id, text)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+            """,
+            (channel, external_id, message_id, text),
+        )
+        return (_one(cur) or {})["id"]
+
+
+def list_media(limit: int = 50) -> List[dict]:
+    """Archive listing — metadata only, never the blob.
+
+    A dashboard grid does not need to download every file to know they exist;
+    GET /media/{id}/file fetches one on demand.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, channel, external_id, message_id, kind, mime_type, "
+            "size_bytes, created_at FROM media_files ORDER BY created_at DESC LIMIT %s",
+            (max(1, min(limit, 200)),),
+        )
+        rows = [_iso(dict(r)) for r in cur.fetchall()]
+    return rows
+
+
+def get_media(media_id: int) -> Optional[dict]:
+    """One archived file, blob included, for GET /media/{id}/file."""
+    with _cursor() as cur:
+        cur.execute("SELECT * FROM media_files WHERE id = %s", (media_id,))
+        row = _one(cur)
+    if row is None:
+        return None
+    out = _iso(dict(row))
+    out["data"] = bytes(out["data"])
+    return out
+
+
+def list_messages(
+    limit: int = 100, channel: Optional[str] = None, search: Optional[str] = None
+) -> List[dict]:
+    with _cursor() as cur:
+        where: List[str] = []
+        args: List[Any] = []
+        if channel:
+            where.append("channel = %s")
+            args.append(channel)
+        if search:
+            where.append("text ILIKE %s")
+            args.append("%" + search + "%")
+        sql = "SELECT id, channel, external_id, message_id, text, created_at FROM chat_messages"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY created_at DESC LIMIT %s"
+        args.append(max(1, min(limit, 500)))
+        cur.execute(sql, args)
+        rows = [_iso(dict(r)) for r in cur.fetchall()]
+    return rows
+
+
+# ── message → Sheet row link (the /modify command) ─────────────────────────
+# The /modify reply has to find the row its report landed on, and the only id
+# it carries is the origin message's — the same `channel:msgid` string the
+# claim stores. The link is written by whoever performed the append.
+
+def link_message_row(message_id: str, row: Optional[int]) -> bool:
+    """Remember which Sheet row a processed message landed on; None clears it.
+
+    Upsert-free by design: the row already exists (the claim inserted it), so
+    this is an UPDATE — clearing with None is how /supprimer unlinks a row.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "UPDATE processed_messages SET sheet_row = %s, linked_at = now() "
+            "WHERE message_id = %s",
+            (row, message_id),
+        )
+        return cur.rowcount > 0
+
+
+def message_row(message_id: str) -> Optional[int]:
+    """The Sheet row a message landed on, if anyone linked it."""
+    with _cursor() as cur:
+        cur.execute("SELECT sheet_row FROM processed_messages WHERE message_id = %s", (message_id,))
+        row = _one(cur)
+    if row is None or row["sheet_row"] is None:
+        return None
+    return int(row["sheet_row"])
+
+
 # ── sheet retry queue ──────────────────────────────────────────────────────
 
 def queue_failed_write(payload: Dict[str, Any], error: str, correlation_id: Optional[str] = None) -> int:
@@ -668,6 +940,31 @@ def list_persons() -> List[dict]:
     return list(persons.values())
 
 
+def normalize_external_id(channel: str, external_id: str) -> str:
+    """Bring a channel identity to the form the rest of the pipeline expects.
+
+    WhatsApp numbers are phones, and operators type them every way imaginable
+    (`+212 6 61 23 45 67`, `0661234567`, `661234567`, `00212…`). One canonical
+    form — 12 digits starting `2126`/`2127` — makes the dedupe guard and the
+    directory lookup match regardless of how the number was keyed in. Telegram
+    chat ids are not phones and are left untouched.
+    """
+    if channel != "whatsapp":
+        return external_id.strip()
+    digits = "".join(c for c in external_id if c.isdigit())
+    if not digits:
+        return external_id.strip()
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("2120") and len(digits) == 13:
+        digits = "212" + digits[4:]
+    if digits.startswith("0"):
+        digits = "212" + digits[1:]
+    if len(digits) == 9 and digits.startswith(("6", "7")):
+        digits = "212" + digits
+    return digits
+
+
 def upsert_technician(
     channel: str, external_id: str, name: str, role: Optional[str] = None, active: bool = True
 ) -> dict:
@@ -685,7 +982,8 @@ def upsert_technician(
     """
     if channel not in CHANNELS:
         raise LogStoreError(f"unknown channel: {channel} (expected one of {', '.join(CHANNELS)})")
-    if not external_id.strip() or not name.strip():
+    external_id = normalize_external_id(channel, external_id)
+    if not external_id or not name.strip():
         raise LogStoreError("external_id and name are required")
 
     with _cursor() as cur:
@@ -779,7 +1077,12 @@ def find_technician(channel: str, external_id: str) -> Optional[dict]:
     Filters on `active`: deactivating an identity in the dashboard has to
     actually revoke access. Without this an inactive row still answers
     `found: true` and the operator's click does nothing they can observe.
+
+    The incoming id goes through the same normalization as writes, or a sender
+    whose number was keyed in differently than the directory would be denied
+    — one form, stored and looked up alike.
     """
+    external_id = normalize_external_id(channel, external_id)
     with _cursor() as cur:
         cur.execute(
             """
@@ -793,6 +1096,35 @@ def find_technician(channel: str, external_id: str) -> Optional[dict]:
         )
         row = _one(cur)
     return _iso(dict(row)) if row else None
+
+
+def person_by_name(name: str) -> Optional[dict]:
+    """The person behind a Sheet name, with their channel identities.
+
+    The inbox replies by name because that is what the Sheet rows carry — n8n
+    resolved identities to people during access control, so Telegram and
+    WhatsApp both arrive here as the same string. Columns named (the hash
+    never rides out to the browser, same rule as list_persons).
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, name, role, manager_id, email, active, last_seen_at,
+                   profile, profile_updated_at, created_at
+              FROM persons WHERE name = %s
+            """,
+            (name.strip(),),
+        )
+        person = _one(cur)
+        if person is None:
+            return None
+        person = _iso(dict(person))
+        cur.execute(
+            "SELECT id, channel, external_id, active, person_id FROM technicians WHERE person_id = %s",
+            (person["id"],),
+        )
+        person["identities"] = [_iso(dict(raw)) for raw in cur.fetchall()]
+    return person
 
 
 def profile_for(name: Optional[str]) -> Optional[str]:
@@ -863,6 +1195,42 @@ def prune_samples(days: int = RETENTION_DAYS) -> int:
         return cur.rowcount
 
 
+def prune_meta(days: int = RETENTION_DAYS) -> dict:
+    """Retention sweep for the tables that would otherwise grow forever: expired
+    sessions, idempotency claims, the audit trail and page visits.
+
+    Sessions prune on expiry (they are dead the moment `expires_at` passes)
+    rather than on age: an account that logs in every six days keeps a live
+    session past any age cutoff, and cutting it would force an early logout.
+    The others age out exactly like the pipeline logs — a 30-day audit trail is
+    the same bargain `pipeline_logs` makes.
+    """
+    with _cursor() as cur:
+        cur.execute("DELETE FROM sessions WHERE expires_at < now()")
+        sessions = cur.rowcount
+        cur.execute(
+            "DELETE FROM processed_messages WHERE processed_at < now() - (%s * interval '1 day')",
+            (days,),
+        )
+        claims = cur.rowcount
+        cur.execute(
+            "DELETE FROM user_actions WHERE created_at < now() - (%s * interval '1 day')",
+            (days,),
+        )
+        actions = cur.rowcount
+        cur.execute(
+            "DELETE FROM page_visits WHERE created_at < now() - (%s * interval '1 day')",
+            (days,),
+        )
+        visits = cur.rowcount
+    return {
+        "sessions_deleted": sessions,
+        "claims_deleted": claims,
+        "actions_deleted": actions,
+        "visits_deleted": visits,
+    }
+
+
 # ── Application settings ───────────────────────────────────────────────────
 # One row per key, JSON value. Small and generic on purpose: report schedule,
 # notification recipients and export format are operator preferences, not
@@ -889,3 +1257,466 @@ def put_settings(values: Dict[str, Any]) -> dict:
                 (key, json.dumps(value)),
             )
     return get_settings()
+
+
+# ── Per-account settings ────────────────────────────────────────────────────
+# One JSONB blob per person. The browser owns the defaults and merges what it
+# gets over them; the server just stores what each account chose.
+
+def get_person_settings(person_id: int) -> dict:
+    with _cursor() as cur:
+        cur.execute("SELECT value FROM person_settings WHERE person_id = %s", (person_id,))
+        row = _one(cur)
+    return dict(row)["value"] if row else {}
+
+
+def put_person_settings(person_id: int, values: Dict[str, Any]) -> dict:
+    """Merge every supplied key into the account's blob. Absent keys are left
+    untouched, never cleared — `||` on JSONB keeps what we already had."""
+    if not values:
+        return get_person_settings(person_id)
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO person_settings (person_id, value) VALUES (%s, %s)
+            ON CONFLICT (person_id) DO UPDATE
+                SET value = person_settings.value || EXCLUDED.value, updated_at = now()
+            """,
+            (person_id, json.dumps(values)),
+        )
+    return get_person_settings(person_id)
+
+
+def account_emails() -> List[str]:
+    """Emails of every account (admin + site managers), for the report mail.
+
+    `password_hash IS NOT NULL` is the whole of "this row is an account" since
+    the users table folded into persons; technicians never sign in and their
+    email stays NULL, so this is automatically "the people who should read the
+    end-of-day report" — no role list to keep in sync with the org chart.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT email FROM persons "
+            "WHERE email IS NOT NULL AND password_hash IS NOT NULL ORDER BY name"
+        )
+        return [dict(r)["email"] for r in cur.fetchall()]
+
+
+# ── Per-manager reports (the /rapport command) ──────────────────────────────
+
+def person_by_id(person_id: int) -> Optional[dict]:
+    """One person row, named columns — used to resolve a manager's identity."""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, name, role, manager_id, email, "
+            "(password_hash IS NOT NULL) AS has_login FROM persons WHERE id = %s",
+            (person_id,),
+        )
+        row = _one(cur)
+    return _iso(dict(row)) if row else None
+
+
+def save_manager_report(
+    manager_id: int,
+    period: str,
+    objet: str,
+    corps: str,
+    generated_by: str = "automatique",
+    period_type: str = "daily",
+) -> None:
+    """Store the last generated report for a manager, one row per period.
+
+    UPSERT rather than INSERT: when a manager's report is regenerated for the
+    same period, the newest text wins — that is what "last version" means to
+    the /rapport command. `period_type` separates daily from weekly periods
+    for the dashboard's generated-reports list.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO manager_reports (manager_id, period, period_type, objet, corps, generated_by)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (manager_id, period) DO UPDATE
+                SET period_type = EXCLUDED.period_type, objet = EXCLUDED.objet,
+                    corps = EXCLUDED.corps, generated_by = EXCLUDED.generated_by,
+                    generated_at = now()
+            """,
+            (manager_id, period, period_type, objet, corps, generated_by),
+        )
+
+
+def latest_manager_report(manager_id: int) -> Optional[dict]:
+    """The newest stored report for a manager, whichever period it covers."""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT manager_id, period, period_type, objet, corps, generated_at, generated_by "
+            "FROM manager_reports WHERE manager_id = %s "
+            "ORDER BY generated_at DESC LIMIT 1",
+            (manager_id,),
+        )
+        row = _one(cur)
+    return _iso(dict(row)) if row else None
+
+
+def list_manager_reports() -> List[dict]:
+    """Every stored report, newest first, with the manager's name attached.
+
+    The dashboard's reports page renders daily + weekly versions from here —
+    the same rows the mail and the /rapport command use, so nothing a report
+    showed was generated twice with a different text. A manager whose person
+    row vanished keeps their row, under a placeholder name.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.manager_id, m.period, m.period_type, m.objet, m.corps,
+                   m.generated_at, m.generated_by,
+                   COALESCE(p.name, '—') AS manager_name
+            FROM manager_reports m
+            LEFT JOIN persons p ON p.id = m.manager_id
+            ORDER BY m.generated_at DESC
+            """
+        )
+        rows = [_iso(dict(r)) for r in cur.fetchall()]
+    return rows
+
+
+# ── In-app notifications (the dashboard bell) ───────────────────────────────
+
+
+def create_notification(
+    person_id: int,
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    route: Optional[str] = None,
+    ref_id: Optional[str] = None,
+) -> None:
+    """Append one notification for one person."""
+    with _cursor() as cur:
+        cur.execute(
+            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (person_id, kind, title, body, route, ref_id),
+        )
+
+
+def account_people() -> List[dict]:
+    """Accounts (people who can sign in) — the audience of the bell.
+
+    Same rule as `account_emails`: `password_hash IS NOT NULL` is the whole of
+    "this row is an account". Technicians never sign in, so they neither read
+    the bell nor get reminder mail.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, name, email FROM persons "
+            "WHERE password_hash IS NOT NULL ORDER BY name"
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def notify_accounts(
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    route: Optional[str] = None,
+    ref_id: Optional[str] = None,
+) -> int:
+    """One notification for every account. Returns how many rows were written."""
+    people = account_people()
+    if not people:
+        return 0
+    with _cursor() as cur:
+        cur.executemany(
+            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            [(p["id"], kind, title, body, route, ref_id) for p in people],
+        )
+    return len(people)
+
+
+def notify_technician_manager(
+    technicien: Optional[str],
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    route: Optional[str] = None,
+    ref_id: Optional[str] = None,
+) -> Optional[int]:
+    """Bell target for a report: the sender's manager, nobody else.
+
+    Resolution key is the person's name — the same key the directory and the
+    channel tables use — and only an account manager gets the row (a manager
+    who never signs in cannot read a bell). When the sender is unknown or has
+    no manager (a directeur's own report), the notification escalates to every
+    manager account rather than dying silently. Returns the rows written, or
+    None when there is no account to notify.
+    """
+    manager_id: Optional[int] = None
+    if technicien:
+        with _cursor() as cur:
+            cur.execute(
+                "SELECT manager_id FROM persons WHERE name = %s ORDER BY id LIMIT 1",
+                (technicien,),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                manager_id = row[0]
+    if manager_id is not None:
+        with _cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM persons WHERE id = %s AND password_hash IS NOT NULL",
+                (manager_id,),
+            )
+            if cur.fetchone() is not None:
+                return create_notification(manager_id, kind, title, body, route, ref_id)
+    return notify_managers(kind, title, body, route, ref_id)
+
+
+def notify_managers(
+    kind: str,
+    title: str,
+    body: Optional[str] = None,
+    route: Optional[str] = None,
+    ref_id: Optional[str] = None,
+) -> int:
+    """Notify every chef/directeur account about their team's activity.
+
+    The kind of event that concerns management (a new report, a row flagged
+    for review) has no business in a technician's bell, and a chef without an
+    account cannot read one anyway — so only accounts get rows.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, name FROM persons "
+            "WHERE password_hash IS NOT NULL AND role IN ('chef', 'directeur')"
+        )
+        people = [dict(r) for r in cur.fetchall()]
+    if not people:
+        return 0
+    with _cursor() as cur:
+        cur.executemany(
+            "INSERT INTO notifications (person_id, kind, title, body, route, ref_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            [(p["id"], kind, title, body, route, ref_id) for p in people],
+        )
+    return len(people)
+
+
+def list_notifications(person_id: int, limit: int = 50) -> List[dict]:
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, kind, title, body, route, ref_id, created_at, read_at "
+            "FROM notifications WHERE person_id = %s "
+            "ORDER BY created_at DESC LIMIT %s",
+            (person_id, limit),
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def unread_notifications(person_id: int) -> int:
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM notifications "
+            "WHERE person_id = %s AND read_at IS NULL",
+            (person_id,),
+        )
+        row = _one(cur)
+    return int(row["n"]) if row else 0
+
+
+def mark_notifications_read(person_id: int, ids: Optional[List[int]] = None) -> int:
+    """Mark the given ids read, or everything when ids is None. Returns count."""
+    with _cursor() as cur:
+        if ids:
+            cur.execute(
+                "UPDATE notifications SET read_at = now() "
+                "WHERE person_id = %s AND id = ANY(%s) AND read_at IS NULL",
+                (person_id, list(ids)),
+            )
+        else:
+            cur.execute(
+                "UPDATE notifications SET read_at = now() "
+                "WHERE person_id = %s AND read_at IS NULL",
+                (person_id,),
+            )
+        return cur.rowcount
+
+
+# ── Shared to-do tasks ──────────────────────────────────────────────────────
+
+
+_TASK_COLUMNS = (
+    "title", "notes", "due_at", "repeat",
+    "remind_before_value", "remind_before_unit",
+    "repeat_every", "repeat_unit",
+)
+
+
+def shift_months(dt: datetime, n: int) -> datetime:
+    """Add n months (negative subtracts), clamping to the month's real length.
+
+    Jan 31 + 1 month → Feb 28, never March 3: a monthly task on the 31st must
+    not silently skip February. Shared by the repeat advance and the advance
+    reminder offset, so both sides of the calendar math cannot drift apart.
+    """
+    import calendar
+
+    month = dt.month + n
+    year = dt.year + (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    day = min(dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
+
+
+def notify_time(due_at: Optional[datetime], value: Optional[int],
+                unit: Optional[str]) -> Optional[datetime]:
+    """When this occurrence's reminder should fire: due minus the lead time.
+
+    The scheduler fires as soon as `notify_time(due_at) <= now`, which is the
+    whole of the "remind X days/weeks/months before" feature — with no lead the
+    window opens exactly at the due moment, preserving the old behaviour.
+    """
+    if due_at is None or not value or unit not in ("day", "week", "month"):
+        return due_at
+    if unit == "day":
+        return due_at - timedelta(days=value)
+    if unit == "week":
+        return due_at - timedelta(weeks=value)
+    return shift_months(due_at, -value)
+
+
+def create_task(title: str, notes: Optional[str] = None,
+                due_at: Optional[datetime] = None, repeat: str = "none",
+                remind_before_value: Optional[int] = None,
+                remind_before_unit: Optional[str] = None,
+                repeat_every: Optional[int] = None,
+                repeat_unit: Optional[str] = None) -> int:
+    with _cursor() as cur:
+        cur.execute(
+            "INSERT INTO tasks (title, notes, due_at, repeat, "
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (title, notes, due_at, repeat, remind_before_value,
+             remind_before_unit, repeat_every, repeat_unit),
+        )
+        row = _one(cur)
+    return int(row["id"])
+
+
+def update_task(task_id: int, fields: dict) -> bool:
+    """Update whitelisted columns. `done` toggles done_at; done=false reopens."""
+    allowed = {k: v for k, v in fields.items() if k in _TASK_COLUMNS or k == "done"}
+    if not allowed:
+        return False
+    sets = []
+    values = []
+    if "done" in allowed:
+        if allowed.pop("done"):
+            sets.append("done_at = now()")
+        else:
+            sets.append("done_at = NULL")
+    for col in sorted(allowed):
+        sets.append(f"{col} = %s")
+        values.append(allowed[col])
+    sets.append("updated_at = now()")
+    values.append(task_id)
+    with _cursor() as cur:
+        cur.execute(
+            f"UPDATE tasks SET {', '.join(sets)} WHERE id = %s", values
+        )
+        return cur.rowcount > 0
+
+
+def delete_task(task_id: int) -> bool:
+    with _cursor() as cur:
+        cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
+        return cur.rowcount > 0
+
+
+def get_task(task_id: int) -> Optional[dict]:
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, title, notes, due_at, repeat, "
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "done_at, last_notified_at, created_at, updated_at FROM tasks "
+            "WHERE id = %s",
+            (task_id,),
+        )
+        row = cur.fetchone()
+        return _iso(dict(row)) if row else None
+
+
+def list_tasks() -> List[dict]:
+    """Every task, open first then done, each group by due date."""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, title, notes, due_at, repeat, "
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "done_at, last_notified_at, created_at, updated_at FROM tasks "
+            "ORDER BY (done_at IS NOT NULL), COALESCE(due_at, 'infinity'::timestamptz)"
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def due_tasks(now: datetime) -> List[dict]:
+    """Tasks whose reminder window is open and not fired for this occurrence.
+
+    The window opens at `notify_time(due_at)` (due minus the lead time), so an
+    advance reminder fires before the due moment. The guard is `last_notified_at
+    < window start`: after a fire the stamp records the occurrence's DUE MOMENT,
+    which always lies after the window start, so a restart can never re-send the
+    same reminder — and the window of the next occurrence opens later still,
+    because the API refuses a lead as long as the repeat period (overlapping
+    windows would re-fire every tick).
+
+    The scheduler wakes with a naive `datetime.now()`, but TIMESTAMPTZ columns
+    come back timezone-aware — comparing them raw raises TypeError. A naive
+    `now` is treated as UTC, which reproduces the old SQL comparison exactly
+    (psycopg2 sent the naive value and Postgres cast it in the session
+    timezone, UTC on this stack): the reminder fires at the wall-clock moment
+    the user picked, never a tick early or late because of the machine offset.
+    """
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, title, notes, due_at, repeat, "
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "last_notified_at FROM tasks "
+            "WHERE due_at IS NOT NULL AND done_at IS NULL ORDER BY due_at",
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    due = []
+    for row in rows:
+        when = notify_time(row["due_at"], row["remind_before_value"],
+                           row["remind_before_unit"])
+        last = row["last_notified_at"]
+        if when <= now and (last is None or last < when):
+            due.append(row)
+    return due
+
+
+def stamp_task_notified(task_id: int, next_due: Optional[datetime]) -> None:
+    """Record that a reminder fired; `next_due` advances a recurring task.
+
+    `last_notified_at = due_at` in the UPDATE refers to the OLD due value (all
+    SET expressions see the pre-update row), so the stamp always stores the
+    occurrence's due moment — the value the once-per-occurrence guard compares
+    against — regardless of how early the reminder fired.
+    """
+    with _cursor() as cur:
+        if next_due is None:
+            cur.execute(
+                "UPDATE tasks SET last_notified_at = due_at, updated_at = now() "
+                "WHERE id = %s",
+                (task_id,),
+            )
+        else:
+            cur.execute(
+                "UPDATE tasks SET due_at = %s, last_notified_at = due_at, "
+                "updated_at = now() WHERE id = %s",
+                (next_due, task_id),
+            )

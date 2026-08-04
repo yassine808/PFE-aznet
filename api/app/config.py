@@ -19,15 +19,23 @@ class Settings(BaseSettings):
 
     # default engine until the week-1 benchmark decides (PLAN.md sprint 1)
     stt_provider: str = "groq"
+    # Ordered STT fallback chain, same spirit as the extraction chains: tried
+    # left to right, first success wins, all failing raises one combined error
+    # (main.py:_transcribe_engine). A Groq outage must fall through to Gemini's
+    # native audio instead of costing the technician their report.
+    stt_chain: str = "groq,gemini"
 
     # pipeline log store (app/logs.py). Read here rather than via os.getenv so the
     # host-run uvicorn sees .env too — Docker's env_file only populates the real
     # environment for the containerised api service.
     database_url: Optional[str] = None
 
-    # dashboard backend (Sheets read/write; no auth — runs on the admin's PC only)
+    # dashboard backend (Sheets read/write; every route is auth-gated in main.py)
     sheet_id: Optional[str] = None
     google_service_account_json: str = "./credentials/service-account.json"
+    # Optional parent folder for the durable audio archive (app/drive.py). Unset
+    # = files land in the service account's Drive root.
+    google_drive_folder_id: Optional[str] = None
     # rolling alias, lite pool — pinned "gemini-2.5-flash" got retired (404, Jul 2026)
     # and the flagship "gemini-flash-latest" pool 503s under free-tier evening load;
     # lite is verified live and plenty for structured extraction (benchmark revisits)
@@ -85,6 +93,14 @@ class Settings(BaseSettings):
     # `internal_api_key` is what n8n sends as X-API-Key. Unset means machine
     # access is DISABLED, never "everyone is a machine".
     internal_api_key: Optional[str] = None
+    # First-account seeding (auth.seed_admin). Read through Settings so the
+    # host-run `uvicorn --reload` dev flow (which loads .env via pydantic-settings)
+    # sees them too, not just the containerised env_file path — before this, an
+    # .env with ADMIN_EMAIL/ADMIN_PASSWORD only took effect inside Docker and the
+    # reload process kept seeding a throwaway "admin" account nobody asked for.
+    admin_email: Optional[str] = None
+    admin_password: Optional[str] = None
+    admin_name: str = "Directeur"
     # Off on http://localhost, which is where this runs today: a Secure cookie is
     # simply not sent over http, so leaving it on would make login silently fail.
     # Flip to true the day the dashboard is published over HTTPS.
@@ -122,6 +138,16 @@ class Settings(BaseSettings):
     # "SMTP is not configured" against a file that plainly configures it.
     smtp_password: Optional[str] = Field(None, validation_alias=AliasChoices("SMTP_PASSWORD", "SMTP_PASS"))
     smtp_from: Optional[str] = None
+
+    # Outbound technician replies (POST /reply — the inbox's composer).
+    # n8n holds the credentials for reception; the API sends replies itself so
+    # the dashboard keeps working even while n8n is down. Same values as n8n's
+    # channel credentials: the Telegram bot token, and the WhatsApp System User
+    # token + the WABA phone number id. Optional: unset makes /reply answer 501
+    # with a precise message instead of the API refusing to boot.
+    telegram_bot_token: Optional[str] = None
+    whatsapp_access_token: Optional[str] = None
+    whatsapp_phone_number_id: Optional[str] = None
 
 
 settings = Settings()

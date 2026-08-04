@@ -1,30 +1,34 @@
 # TO-DO
 
 - [ ] Finish STT benchmark → pick default provider — **blocked on the dataset**: `benchmark/dataset/audio/` is still empty, so `stt_provider=groq` is an assumption, not a measurement. Harness is ready (`benchmark/run_benchmark.py`).
-- [ ] Add email notif for the generated report
+- [x] Add email notif for the generated report — recipients derive from account emails (admin + site managers), manual list is the fallback
 - [ ] Daily stat: % spoken Darija words vs French (post-PFE, zero cahier value)
-- [ ] Generate image if needed from all the infos collected in the day
+- [x] Generate image if needed from all the infos collected in the day — "Carte illustrée" button on the Daily and Weekly pages: explicit click only, `POST /generate-image` (Gemini), the data-URI card is displayed and downloadable, never written to the Sheet
 
 ## Workflow improvements (discussed 2026-07-23, cheap → expensive)
 - [ ] Durable audio links: upload audio to Google Drive, store share link in `lien_audio` (file_id/media_id not durable; Meta media URLs expire ~5 min)
 - [ ] download audios and images and chat to the database
-- [ ] Caption support: audio sent WITH caption (mostly Telegram) → needs optional `caption` form field on `/process`, merged into text before extraction
-- [ ] sending /rapport or /report, uploads the last version of report for the day in the assistant chat
+- [x] Caption support: audio sent WITH caption (mostly Telegram) → optional `caption` form field on `/process`, merged into text before extraction — also passed to the vision model with photos; n8n audio+image nodes send it
+- [x] sending /rapport or /report, uploads the last version of report for the day in the assistant chat — reports are now per-manager: each chef's daily/weekly digest is stored in `manager_reports` at send time, and the `/rapport` command (new `Is /rapport?` branch in n8n) returns the sender's manager's last report via `GET /rapport`
 - [ ] **Message commands — edit by reply.** Technician replies to one of their own messages with `/modify {nouveau texte}`; the bot re-runs extraction on the new text and updates *that* Sheet row instead of appending a new one. Needs: (a) store the origin message id per row (`tg:chat:msgid` / `wa:wamid` — already minted for the dedupe guard, currently thrown away after the claim) plus its Sheet row number, in `processed_messages`; (b) an n8n branch that detects `reply_to_message` / `context.id` + a `/`-prefixed body before the normal audio/text fork; (c) `PATCH /reports/{row}` already exists for the write-back. Same branch is the natural home for `/supprimer` and the `/rapport` boss command below.
-- [ ] **Assistant persona from leaked-system-prompt techniques** — mine <https://github.com/yassine808/system_prompts_leaks> for prompt structure that production assistants actually use (role framing, refusal/uncertainty wording, formatting discipline, anti-hallucination phrasing) and fold the useful parts into all three prompt sites: text extraction, STT post-processing, and the audio/vision paths (`app/extraction.py` `_INSTRUCTIONS`, the image instructions in `benchmark/run_model_benchmark.py`, `app/daily_report.py`). Identity is **"l'assistant AZnet"** — never Claude, ChatGPT, Gemini or any vendor name, in any language. Keep the existing hard rule (`null` for absent fields, never invent) as the top constraint; borrowed phrasing must not dilute it. Verify with the `t04_hallucination_trap` / `t08_no_quantities_at_all` benchmark cases before and after.
+- [x] **Assistant persona from leaked-system-prompt techniques** — mine <https://github.com/yassine808/system_prompts_leaks> for prompt structure that production assistants actually use (role framing, refusal/uncertainty wording, formatting discipline, anti-hallucination phrasing) and fold the useful parts into all three prompt sites: text extraction, STT post-processing, and the audio/vision paths (`app/extraction.py` `_INSTRUCTIONS`, the image instructions in `benchmark/run_model_benchmark.py`, `app/daily_report.py`). Identity is **"l'assistant AZnet"** — never Claude, ChatGPT, Gemini or any vendor name, in any language. Keep the existing hard rule (`null` for absent fields, never invent) as the top constraint; borrowed phrasing must not dilute it. Verify with the `t04_hallucination_trap` / `t08_no_quantities_at_all` benchmark cases before and after.
 
 ## Dashboard v2 (rebuilt from scratch 2026-07-26 in `Dashboard/`)
-- [ ] Verify the dashboard visually — never done; Playwright's Chrome is not installed (`npx playwright install chrome`)
-- [ ] Inbox: give it better UI, show recent users, after i click on the user, it shows like a big window inside it in the left canals, and on the right the conversation + reply + add the modify button. make everything simple and clear.
-- [ ] on each report generated, it emails the saved emails for the login (admin + Site manager)
-- [ ] make daily reports similar to weely reports
-- [ ] reports should show daily + weekly reports, not the messages
-- [ ] for each user (admin or site manager), if he ever generated the report ( manually) then it should show in the report at the end (generated by:{name}) then it should show also next to the report panel. if it was auto generated then it should tell aswell.
-- [ ] add AM/Pm in the frontend time.
-- [ ] in access control, no matter how i write the whatsapp phone number it always takes care of format and saves it as 2126.... or 2127.... (removes the + if there's any / replaces first 0 with 212)
-- [ ] add infos about each worker : %french/arabic, how many messages sent, etc
-- [ ] in overview panel, instead of Reports today, change it to (messages today) or something similar
-- [x] in TEAM panel (accounts dashboard) show something like a flowchart with the admin on the very top, then site managers below it, then workers below it ( add a "+" to add more site manager if wanted to), then below each site manager show all the workers that belong to them with their name + phone number. merge this panel with access control.
-- [ ] Site name isn't auto-generated
-- [ ] the search (crtl+k) searches literally eveything. (even with typos etc, then show suggestion of what it can show instead)
-
+- [x] Verify the dashboard visually — never done; Playwright's Chrome is not installed (`npx playwright install chrome`) — `Dashboard/scripts/visual-check.mjs`: headless login against the compose stack, walks all 9 pages, screenshots each (full-page PNG to `%TMP%/dashboard-shots/`), fails on console errors / HTTP >= 400 / horizontal overflow / broken images / blank pages. First run: clean on every check.
+- [x] Inbox: give it better UI, show recent users, after i click on the user, it shows like a big window inside it in the left canals, and on the right the conversation + reply + add the modify button. make everything simple and clear. — left rail of recent technicians (count, channels, last date), right conversation window with per-message modify + a reply composer; replies are sent by the API on the technician's own channels via `POST /reply` (needs `TELEGRAM_BOT_TOKEN` + `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` in `.env`, same values as n8n's credentials; without them the composer answers 501 loudly)
+- [x] on each report generated, it emails the saved emails for the login (admin + Site manager) — see line 4 above
+- [x] make daily reports similar to weely reports — same stat panels (totals, production, per-tech)
+- [x] reports should show daily + weekly reports, not the messages — the Reports page now defaults to a "Rapports générés" tab (the stored per-manager daily/weekly reports from `manager_reports`); the message ledger moved to a second tab
+- [x] Site name isn't auto-generated — the chantier is inserted by admin/site manager: click the chantier cell in the Reports → Messages tab and type the name (PATCH /reports/{row} already existed; the UI was missing)
+- [x] for each user (admin or site manager), if he ever generated the report ( manually) then it should show in the report at the end (generated by:{name}) then it should show also next to the report panel. if it was auto generated then it should tell aswell. — manual runs signed by the account, scheduled mail "automatique"
+- [x] add AM/Pm in the frontend time.
+- [x] Dashboard settings saved per account in the database (clock format 24h/12h, density, confidence) — `person_settings` table + `GET/PUT /me/settings`, follow the person across browsers, confidence director-only on the API.
+- [x] in access control, no matter how i write the whatsapp phone number it always takes care of format and saves it as 2126.... or 2127.... (removes the + if there's any / replaces first 0 with 212)
+- [x] add infos about each worker : %french/arabic, how many messages sent, etc — WorkerStats in the equipe detail panel (messages, % darija vs french, flagged count, last activity)
+- [x] in overview panel, instead of Reports today, change it to (messages today) or something similar
+- [x] in TEAM panel (accounts dashboard) show something like a flowchart with the admin on the very top, then site managers below it, then workers below it ( add a "+" to add more site manager if wanted to), then below each site manager show all the workers that belong to them with their name + phone number. merge this panel with access control. — the equipe page: three role bands, + buttons, drag-drop reassignment, channels + access merged
+- [x] Site name isn't auto-generated — duplicate of line 22: the chantier is inserted by admin/site manager, never invented by the model
+- [x] the search (crtl+k) searches literally eveything. (even with typos etc, then show suggestion of what it can show instead) — fuzzy subsequence matching, technicians indexed, "did you mean" fallback
+- [x] add notification that's unique for the users of the dashboard — the bell: per-account rows (own team's new reports, rows flagged for review, Sheet write failures, task reminders), unread badge, mark-all-read; only the signed-in person sees their own
+- [x] add panel for "to do" tasks which can be added with the reminder repitition — the shared to-do page: title/notes/échéance/répétition (une fois, jour, semaine, mois); the scheduler rings every bell at échéance and emails the accounts, then advances the recurrence
+- [x] in the to-do panel, remind in X days/weeks/months BEFORE the due date, and repeat on custom intervals (every 3 days, every 2 weeks, ...) — `remind_before_value/unit` open the reminder window early (calendar-aware months), `repeat_every/unit` add custom cadences beside the presets; the API rejects a lead as long as the repeat period (overlapping windows would re-ring every tick); bell + email say "Rappel : N jours avant l'échéance"

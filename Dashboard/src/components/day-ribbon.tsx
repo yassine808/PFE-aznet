@@ -1,6 +1,8 @@
 import { memo, useState } from 'react'
 import { motion } from 'motion/react'
+import { clock } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
+import { useSettings } from '@/lib/settings'
 
 export interface Tick {
   /** Minutes since midnight. */
@@ -29,6 +31,7 @@ export const DayRibbon = memo(function DayRibbon({
   dir: 'ltr' | 'rtl'
 }) {
   const { t } = useI18n()
+  const { settings } = useSettings()
   const [hover, setHover] = useState<number | null>(null)
 
   const pct = (minutes: number) => {
@@ -67,7 +70,7 @@ export const DayRibbon = memo(function DayRibbon({
                 onMouseLeave={() => setHover(null)}
                 onFocus={() => setHover(i)}
                 onBlur={() => setHover(null)}
-                aria-label={`${tick.time} ${tick.technicien}`}
+                aria-label={`${clock(tick.time, settings.timeFormat, t('time.am'), t('time.pm'))} ${tick.technicien}`}
               />
               <motion.span
                 className={`absolute bottom-0 w-[3px] rounded-full ${tick.flagged ? 'bg-status-warn' : 'bg-accent'}`}
@@ -93,7 +96,9 @@ export const DayRibbon = memo(function DayRibbon({
               {active && (
                 <div className="pointer-events-none absolute bottom-[72%] left-1/2 z-20 w-max -translate-x-1/2">
                   <div className="border-line bg-surface-raised edge rounded-lg border px-3 py-2 shadow-[0_12px_28px_-16px_oklch(0.146_0.008_245/0.5)]">
-                    <p className="tabular text-ink text-xs font-medium">{tick.time}</p>
+                    <p className="tabular text-ink text-xs font-medium">
+                      {clock(tick.time, settings.timeFormat, t('time.am'), t('time.pm'))}
+                    </p>
                     <p className="text-ink-muted mt-0.5 text-xs">{tick.technicien || '—'}</p>
                     {tick.chantier && <p className="text-ink-faint text-xs">{tick.chantier}</p>}
                   </div>

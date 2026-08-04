@@ -57,6 +57,25 @@ export function minutesOf(heure?: string): number | null {
   return h * 60 + min
 }
 
+/** Renders a Sheet "HH:MM" cell in the chosen clock. 24h keeps a zero-padded
+ *  "HH:MM"; 12h adds an explicit marker whatever the locale's default is.
+ *  Returns the raw string untouched when the cell is unusable. */
+export function clock(
+  v: string | undefined,
+  format: '24h' | '12h',
+  am: string,
+  pm: string,
+): string {
+  const at = minutesOf(v)
+  if (at === null) return v ?? ''
+  const h = Math.floor(at / 60)
+  const m = at % 60
+  const mm = String(m).padStart(2, '0')
+  if (format === '24h') return `${String(h).padStart(2, '0')}:${mm}`
+  const h12 = h % 12 || 12
+  return `${h12}:${mm} ${h < 12 ? am : pm}`
+}
+
 export interface Metrics {
   today: number
   week: number

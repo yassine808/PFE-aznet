@@ -1,4 +1,5 @@
 import time
+from functools import lru_cache
 
 from app.config import settings
 from app.schemas import TranscriptionInfo
@@ -6,12 +7,25 @@ from app.schemas import TranscriptionInfo
 from . import register
 from .base import TranscriptionError, TranscriptionProvider
 
+
+@lru_cache(maxsize=1)
+def _client():
+    """One SDK client per process (keep-alive pool; see groq_whisper._client).
+    Lazy import keeps unit tests dependency-free; the API-key check stays
+    per-call in transcribe()."""
+    from google import genai  # lazy: keeps unit tests dependency-free
+
+    return genai.Client(api_key=settings.gemini_api_key)
+
 _PROMPT = (
     "Transcris fidèlement ce message vocal d'un technicien de câblage marocain. "
     "Le locuteur parle en darija (arabe marocain) mélangée de français technique "
     "(goulotte, câble, panneau de brassage, bureau, étage, mètres). "
     "Rends le texte exactement comme prononcé, en graphie arabe pour la darija "
-    "et en latin pour les mots français. Ne traduis pas, ne résume pas."
+    "et en latin pour les mots français. Ne traduis pas, ne résume pas. "
+    "Si un passage est inaudible, transcris ce que tu entends et laisse la lacune : "
+    "n'invente JAMAIS un mot pour compléter. Ne corrige pas la grammaire du locuteur "
+    "et ne commente pas l'audio : uniquement le texte prononcé."
 )
 
 
@@ -24,10 +38,9 @@ class GeminiAudioProvider(TranscriptionProvider):
     def transcribe(self, audio: bytes, mime_type: str) -> TranscriptionInfo:
         if not settings.gemini_api_key:
             raise TranscriptionError("GEMINI_API_KEY not configured")
-        from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=settings.gemini_api_key)
+        client = _client()
         start = time.perf_counter()
         try:
             resp = client.models.generate_content(

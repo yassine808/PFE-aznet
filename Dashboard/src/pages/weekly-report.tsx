@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { CopyIcon, DownloadSimpleIcon, SparkleIcon } from '@phosphor-icons/react'
-import { cn } from '@/lib/utils'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
 import { exportReport, type ReportFormat } from '@/lib/report-export'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ContributionGraph, isoOf as iso, weekStart } from '@/components/contribution-graph'
+import { ReportImageCard } from '@/components/report-image'
+import { cn, copyText } from '@/lib/utils'
 
 const DAY_MS = 86_400_000
 
@@ -117,7 +118,7 @@ export function WeeklyReportPage() {
       '',
       ...week.byTech.map(([name, v]) => `- ${name}: ${v.count} (${v.goulottes} m)`),
     ]
-    await navigator.clipboard.writeText(lines.join('\n'))
+    await copyText(lines.join('\n'))
     setCopied(true)
     window.setTimeout(() => setCopied(false), 2000)
   }
@@ -186,6 +187,11 @@ export function WeeklyReportPage() {
           <h2 className="text-ink mt-1 text-lg font-medium tracking-tight">{content.objet}</h2>
           <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">
             {content.corps}
+          </p>
+          <p className="text-ink-faint mt-3 text-xs">
+            {content.generated_by && content.generated_by !== 'automatique'
+              ? t('daily.generatedBy', { name: content.generated_by })
+              : t('daily.generatedAuto')}
           </p>
         </section>
       )}
@@ -315,6 +321,12 @@ export function WeeklyReportPage() {
               ))}
             </ul>
           </section>
+
+          <ReportImageCard
+            rows={week.rows}
+            title={t('image.weekTitle', { start: iso(days[0]), end: iso(days[6]) })}
+            disabled={week.rows.length === 0}
+          />
         </>
       )}
     </motion.div>

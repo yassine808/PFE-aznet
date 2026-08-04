@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { MagnifyingGlassIcon } from '@phosphor-icons/react'
+import { ChartBarIcon, MagnifyingGlassIcon, UserIcon } from '@phosphor-icons/react'
 import { useI18n } from '@/lib/i18n'
-import { NAV, fold, type NavItem } from '@/lib/nav'
+import { NAV, fold } from '@/lib/nav'
+import { api, useApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { Route } from '@/lib/router'
 
@@ -34,8 +35,52 @@ export function useCommandPalette(): [boolean, (open: boolean) => void] {
   return [open, setOpen]
 }
 
-interface Hit extends NavItem {
+/**
+ * Ordered-subsequence score: how tightly `q`'s letters sit inside `text`, in
+ * order. 0 = contiguous, positive = gaps (missing or inserted letters), -1 =
+ * a letter is absent. This is what tolerates "rappot" for "Rapports".
+ */
+function subsequenceScore(q: string, text: string): number {
+  let at = 0
+  let cost = 0
+  for (let i = 0; i < q.length; i++) {
+    const found = text.indexOf(q[i], at)
+    if (found < 0) return -1
+    cost += found - at
+    at = found + 1
+  }
+  return cost
+}
+
+/** Classic Levenshtein, two rows of memory — small strings, called only as a fallback. */
+function editDistance(a: string, b: string): number {
+  const m = a.length
+  const n = b.length
+  if (!m) return n
+  if (!n) return m
+  let prev = Array.from({ length: n + 1 }, (_, j) => j)
+  for (let i = 1; i <= m; i++) {
+    const cur = [i] as number[]
+    for (let j = 1; j <= n; j++) {
+      const sub = prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, sub)
+    }
+    prev = cur
+  }
+  return prev[n]
+}
+
+interface Hit {
+  route: Route
+  /** Pages translate their label; people carry a raw name. */
+  labelKey?: string
+  label?: string
+  /** Extra words the palette matches on, so "email" finds the daily report. */
+  keywordsKey?: string
   section: string
+  Icon: typeof ChartBarIcon
+  /** Present on people hits, which all route to the same page. */
+  personId?: number
 }
 
 export function CommandPalette({
@@ -63,13 +108,53 @@ export function CommandPalette({
     [],
   )
 
-  const hits = useMemo(() => {
+  // Colleagues join the index: the palette searches people as well as pages.
+  const techs = useApi('technicians', api.technicians)
+
+  const people: Hit[] = useMemo(
+    () =>
+      (techs.data?.technicians ?? []).map((p) => ({
+        route: 'equipe' as const,
+        label: p.name,
+        section: p.role ? `equipe.role.${p.role}` : 'nav.equipe',
+        Icon: UserIcon,
+        personId: p.id,
+      })),
+    [techs.data],
+  )
+
+  const pool = useMemo(() => [...all, ...people], [all, people])
+
+  const { hits, fellBack } = useMemo(() => {
     const q = fold(query.trim())
-    if (!q) return all
-    return all.filter((i) =>
-      fold(`${t(i.labelKey)} ${t(i.keywordsKey)} ${t(i.section)} ${i.route}`).includes(q),
-    )
-  }, [all, query, t])
+    if (!q) return { hits: all, fellBack: false }
+    const haystack = (h: Hit) =>
+      fold(
+        `${h.label ?? t(h.labelKey ?? '')} ${h.keywordsKey ? t(h.keywordsKey) : ''} ${t(
+          h.section,
+        )} ${h.route}`.trim(),
+      )
+    const scored = pool
+      .map((h) => {
+        const hay = haystack(h)
+        if (hay.includes(q)) return { h, s: 0 }
+        // One letter is not enough signal for fuzzy matching — substring only.
+        if (q.length === 1) return { h, s: -1 }
+        return { h, s: subsequenceScore(q, hay) }
+      })
+      .filter((x): x is { h: Hit; s: number } => x.s >= 0)
+      .sort((a, b) => a.s - b.s)
+    if (scored.length > 0) return { hits: scored.map((x) => x.h), fellBack: false }
+    // Nothing fuzzy matched: offer the closest strings as suggestions.
+    const near = pool
+      .map((h) => {
+        const hay = fold(`${h.label ?? t(h.labelKey ?? '')} ${h.keywordsKey ? t(h.keywordsKey) : ''}`)
+        return { h, d: editDistance(q, hay) }
+      })
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 2)
+    return { hits: near.map((x) => x.h), fellBack: true }
+  }, [all, pool, query, t])
 
   useEffect(() => {
     if (open) {
@@ -157,7 +242,9 @@ export function CommandPalette({
                 role="combobox"
                 aria-expanded="true"
                 aria-controls="cmd-list"
-                aria-activedescendant={hits[cursor] ? `cmd-opt-${hits[cursor].route}` : undefined}
+                aria-activedescendant={
+                  hits[cursor] ? `cmd-opt-${hits[cursor].personId ?? hits[cursor].route}` : undefined
+                }
                 className="text-ink placeholder:text-ink-faint h-14 min-w-0 flex-1 bg-transparent text-sm outline-none"
               />
               <kbd className="border-line text-ink-faint hidden rounded border px-1.5 py-0.5 text-[0.6875rem] sm:block">
@@ -175,36 +262,42 @@ export function CommandPalette({
               {hits.length === 0 ? (
                 <p className="text-ink-faint px-3 py-6 text-center text-sm">{t('cmd.noResults')}</p>
               ) : (
-                hits.map((hit, i) => {
-                  const active = i === cursor
-                  return (
-                    <button
-                      key={hit.route}
-                      id={`cmd-opt-${hit.route}`}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      data-active={active}
-                      onMouseMove={() => setCursor(i)}
-                      onClick={() => go(hit.route)}
-                      className={cn(
-                        'flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-start text-sm transition-colors',
-                        active ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-muted',
-                      )}
-                    >
-                      <hit.Icon
-                        size={17}
-                        weight={active ? 'fill' : 'regular'}
-                        className={active ? 'text-accent shrink-0' : 'shrink-0'}
-                      />
-                      <span className="min-w-0 flex-1 truncate">{t(hit.labelKey)}</span>
-                      <span className="text-ink-faint truncate text-xs">{t(hit.section)}</span>
-                      {hit.route === route && (
-                        <span className="text-ink-faint text-[0.6875rem]">{t('cmd.current')}</span>
-                      )}
-                    </button>
-                  )
-                })
+                <>
+                  {fellBack && (
+                    <p className="text-ink-faint px-3 pb-1 pt-2 text-xs">{t('cmd.didYouMean')}</p>
+                  )}
+                  {hits.map((hit, i) => {
+                    const active = i === cursor
+                    const id = `cmd-opt-${hit.personId ?? hit.route}`
+                    return (
+                      <button
+                        key={hit.personId ?? hit.route}
+                        id={id}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        data-active={active}
+                        onMouseMove={() => setCursor(i)}
+                        onClick={() => go(hit.route)}
+                        className={cn(
+                          'flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-start text-sm transition-colors',
+                          active ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-muted',
+                        )}
+                      >
+                        <hit.Icon
+                          size={17}
+                          weight={active ? 'fill' : 'regular'}
+                          className={active ? 'text-accent shrink-0' : 'shrink-0'}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{hit.label ?? t(hit.labelKey ?? '')}</span>
+                        <span className="text-ink-faint truncate text-xs">{t(hit.section)}</span>
+                        {hit.route === route && (
+                          <span className="text-ink-faint text-[0.6875rem]">{t('cmd.current')}</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </>
               )}
             </div>
           </motion.div>

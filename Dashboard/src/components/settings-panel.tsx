@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { GearSixIcon, XIcon } from '@phosphor-icons/react'
-import { REFRESH_CHOICES, useSettings, type Density } from '@/lib/settings'
+import { REFRESH_CHOICES, useSettings, type Density, type TimeFormat } from '@/lib/settings'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
@@ -124,6 +124,16 @@ export function SettingsPanel() {
                 options={[
                   { v: 'comfortable', label: t('settings.comfortable') },
                   { v: 'compact', label: t('settings.compact') },
+                ]}
+              />
+
+              <Segmented<TimeFormat>
+                label={t('settings.timeFormat')}
+                value={settings.timeFormat}
+                onChange={(v) => update({ timeFormat: v })}
+                options={[
+                  { v: '24h', label: t('settings.h24') },
+                  { v: '12h', label: t('settings.h12') },
                 ]}
               />
 

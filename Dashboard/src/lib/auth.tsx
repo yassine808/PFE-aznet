@@ -42,6 +42,16 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     return () => ac.abort()
   }, [])
 
+  // A 401 on *any* API call means the session is gone for good — the server
+  // rejected it, so retrying cannot help. The event is dispatched by api.ts's
+  // fail() (every authenticated request funnels through it); clearing the user
+  // flips the Gate to the login screen and unmounts the polling panels.
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null)
+    window.addEventListener('aznet:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('aznet:unauthorized', onUnauthorized)
+  }, [])
+
   const signIn = useCallback(async (email: string, password: string) => {
     const r = await apiLogin(email, password)
     setUser(r.user)

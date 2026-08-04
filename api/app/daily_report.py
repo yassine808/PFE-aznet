@@ -39,6 +39,9 @@ de câblage réseau au Maroc, à partir des rapports individuels des techniciens
 - Ensuite un court paragraphe ou point par chantier/technicien.
 - Termine par les problèmes et besoins matériels signalés ("observations"), s'il y en a.
 - N'invente JAMAIS de chiffre ni d'information absente des rapports.
+- Pas de formule de politesse d'ouverture ni de clôture, pas de mots de remplissage
+  (« veuillez », « n'hésitez pas », « bien sûr ») : le directeur lit ce rapport
+  d'affilée avec d'autres.
 - "objet" : une ligne du type "Rapport journalier — <date> — <n> intervention(s)".
 
 Date du jour : {date}

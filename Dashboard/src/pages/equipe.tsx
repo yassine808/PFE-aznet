@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   ArrowsClockwiseIcon,
@@ -21,6 +21,7 @@ import {
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
+import { isFlagged } from '@/lib/metrics'
 import { ChannelIcon } from '@/components/channel-icon'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { GrantAccessForm, HistBlock } from '@/components/team-activity'
@@ -557,6 +558,8 @@ function Detail({
 
       <Identities person={person} canEdit={canEdit} onReload={onReload} onError={onError} />
 
+      {!isAccount && <WorkerStats name={person.name} />}
+
       <div className="flex flex-col gap-2">
         <h3 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
           {t('equipe.profile')}
@@ -722,6 +725,72 @@ function Identities({
             {t('access.add')}
           </button>
         </form>
+      )}
+    </div>
+  )
+}
+
+/**
+ * What the worker actually did, from their own rows in the Sheet.
+ *
+ * The language split reads the raw transcript (`rapport_complet`), not the
+ * French `resume` — the point is "how do they dictate", and that is only in
+ * the original. Script-based detection: Arabic letters count as darija, Latin
+ * as French. Darija written in latin letters (arabizi) reads as French here;
+ * that is a real limit, and the label admits it.
+ */
+function WorkerStats({ name }: { readonly name: string }) {
+  const { t } = useI18n()
+  const reports = useApi('reports', api.reports)
+
+  const stats = useMemo(() => {
+    const rows = (reports.data?.reports ?? []).filter(
+      (r) => (r.technicien ?? '').trim() === name.trim(),
+    )
+    let arabic = 0
+    let latin = 0
+    for (const r of rows) {
+      const text = (r.rapport_complet ?? '').replace(/\s+/g, '')
+      for (const ch of text) {
+        const code = ch.codePointAt(0) ?? 0
+        if (code >= 0x0600 && code <= 0x06ff) arabic += 1
+        else if (/[a-zA-ZàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]/.test(ch)) latin += 1
+      }
+    }
+    const total = arabic + latin
+    return {
+      count: rows.length,
+      flagged: rows.filter((r) => isFlagged(r.flag_review)).length,
+      pctArabic: total === 0 ? null : Math.round((arabic / total) * 100),
+    }
+  }, [reports.data, name])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <h3 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+        {t('equipe.stats')}
+      </h3>
+      {stats.count === 0 ? (
+        <p className="text-ink-faint text-xs italic">{t('equipe.noActivity')}</p>
+      ) : (
+        <ul className="divide-line flex flex-col divide-y">
+          <li className="flex items-baseline justify-between gap-4 py-1.5">
+            <span className="text-ink-muted text-xs">{t('equipe.messages')}</span>
+            <span className="tabular text-ink text-sm">{stats.count}</span>
+          </li>
+          <li className="flex items-baseline justify-between gap-4 py-1.5">
+            <span className="text-ink-muted text-xs">{t('equipe.lang')}</span>
+            <span className="tabular text-ink text-sm">
+              {stats.pctArabic === null
+                ? t('equipe.langUnknown')
+                : `${stats.pctArabic}% ${t('equipe.langAr')} / ${100 - stats.pctArabic}% ${t('equipe.langFr')}`}
+            </span>
+          </li>
+          <li className="flex items-baseline justify-between gap-4 py-1.5">
+            <span className="text-ink-muted text-xs">{t('equipe.flagged')}</span>
+            <span className="tabular text-status-warn text-sm">{stats.flagged}</span>
+          </li>
+        </ul>
       )}
     </div>
   )

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { createUser, type Async, type History } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
+import { useSettings } from '@/lib/settings'
 import { daysAgoISO } from '@/lib/metrics'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
@@ -34,6 +35,7 @@ export function HistBlock({ hist }: { readonly hist: Async<History> }) {
 
 export function Activity({ data }: { readonly data: History }) {
   const { t, locale } = useI18n()
+  const { settings } = useSettings()
 
   // 14 days, zero-filled here rather than in SQL: a day with no activity has to
   // show as a gap in the bars, not vanish and make the fortnight look shorter.
@@ -137,6 +139,7 @@ export function Activity({ data }: { readonly data: History }) {
                     month: '2-digit',
                     hour: '2-digit',
                     minute: '2-digit',
+                    hour12: settings.timeFormat === '12h',
                   })}
                 </span>
                 <span className="text-ink">{t(`team.action.${a.action}`)}</span>

@@ -11,9 +11,14 @@ services:
     # over the compose network as `postgres:5432`. Publishing it put a database
     # on the machine's public interface -- harmless on a laptop, an open door on
     # a server reachable from the internet.
+    # Credentials: the password has deliberately NO `:-fallback` default — a
+    # clone without .env must fail loudly at start, not quietly run Postgres
+    # with password "pfe" (the pre-2026-08-03 default) on a machine that may
+    # face the web. User and database name are not secrets and keep their
+    # defaults, since the pg_data volume was created with them.
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-pfe}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-pfe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB:-pfe_logs}
       - TZ=Africa/Casablanca
     healthcheck:
@@ -80,7 +85,7 @@ services:
       # .env holds localhost:5432 for a host-run uvicorn; inside this network the
       # host is the compose service name. `environment` wins over `env_file`, so
       # both run modes work without editing .env.
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-pfe}:${POSTGRES_PASSWORD:-pfe}@postgres:5432/${POSTGRES_DB:-pfe_logs}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-pfe}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pfe_logs}
       # Absolute on purpose: sheets.py anchors a *relative* key path to
       # Path(__file__).parents[2], which is the repo root on the host but "/" in
       # this image (api/app → /app/app). Absolute skips that resolution.

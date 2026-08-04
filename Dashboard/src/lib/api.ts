@@ -70,12 +70,7 @@ export interface PendingWrite {
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { signal })
-  if (!res.ok) {
-    // Surface the API's own message: "sheets read failed: ..." is far more
-    // actionable to the operator than a bare 502.
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<T>
 }
 
@@ -194,15 +189,65 @@ export async function patchReport(row: number, field: string, value: string): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ field, value }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
+}
+
+/** Outbound manager reply, sent by the API on the technician's own channels. */
+export interface ReplyResult {
+  delivered: { channel: string }[]
+}
+
+export async function sendReply(name: string, text: string): Promise<ReplyResult> {
+  const res = await fetch(`${BASE}/reply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, text }),
+  })
+  if (!res.ok) await fail(res)
+  return (await res.json()) as ReplyResult
+}
+
+/**
+ * One stored generated report: the same text the scheduler mailed and the
+ * /rapport command answers with — per site manager, per period.
+ */
+export interface GeneratedReport {
+  manager_id: number
+  manager_name: string
+  period: string
+  period_type: 'daily' | 'weekly'
+  objet: string
+  corps: string
+  generated_at: string
+  generated_by: string
+}
+
+/** An illustrated summary card, returned as a data URI — never written to the Sheet. */
+export interface GeneratedImage {
+  model: string
+  mime_type: string
+  data_uri: string
+}
+
+/**
+ * Renders the summary card for a period. A real image-model call against a
+ * metered free tier: only ever fired by an explicit click, never by a poll.
+ */
+export async function generateImage(rows: ReportRow[], title: string): Promise<GeneratedImage> {
+  const res = await fetch(`${BASE}/generate-image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows, title }),
+  })
+  if (!res.ok) await fail(res)
+  return res.json() as Promise<GeneratedImage>
 }
 
 export interface DailyReportContent {
   objet: string
   corps: string
+  /** Who asked for the report — an account name, or "automatique" for the scheduled mail. */
+  generated_by?: string
 }
 
 /**
@@ -219,10 +264,7 @@ export async function generateDailyReport(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date, rows }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 300) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<DailyReportContent>
 }
 
@@ -270,10 +312,7 @@ export async function setManager(id: number, managerId: number | null): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ manager_id: managerId }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
 }
 
 export async function addTechnician(input: {
@@ -287,23 +326,20 @@ export async function addTechnician(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<Technician>
 }
 
 /** Remove one channel handle. The person and their profile survive. */
 export async function deleteTechnician(id: number): Promise<void> {
   const res = await fetch(`${BASE}/technicians/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) await fail(res)
 }
 
 /** Remove the person and every handle they own. */
 export async function deletePerson(id: number): Promise<void> {
   const res = await fetch(`${BASE}/persons/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) await fail(res)
 }
 
 /**
@@ -312,10 +348,7 @@ export async function deletePerson(id: number): Promise<void> {
  */
 export async function refreshProfile(id: number): Promise<{ updated: boolean; reason?: string }> {
   const res = await fetch(`${BASE}/persons/${id}/profile`, { method: 'POST' })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<{ updated: boolean; reason?: string }>
 }
 
@@ -346,10 +379,7 @@ export interface JobStatus {
  */
 export async function runJob(name: string): Promise<JobStatus['last']> {
   const res = await fetch(`${BASE}/jobs/${name}/run`, { method: 'POST' })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<JobStatus['last']>
 }
 
@@ -360,10 +390,7 @@ export async function dismissQueueItem(id: number): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ok: true }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
 }
 
 /** Operator preferences, stored server-side so any scheduler reads the same values. */
@@ -375,16 +402,36 @@ export interface AppSettings {
   report_format?: string
 }
 
+/** This account's dashboard preferences, stored per person in the database.
+ *  Loose on purpose: the browser owns the shape and merges this over its own
+ *  defaults, so the API never needs to know about a new preference. */
+export interface MeSettings {
+  refreshMs?: number
+  confidence?: number
+  density?: string
+  timeFormat?: string
+}
+
+export const meSettings = (s?: AbortSignal) =>
+  get<{ settings: Partial<MeSettings> }>('/me/settings', s)
+
+export async function putMeSettings(values: Partial<MeSettings>): Promise<Partial<MeSettings>> {
+  const res = await fetch(`${BASE}/me/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  })
+  if (!res.ok) await fail(res)
+  return ((await res.json()) as { settings: Partial<MeSettings> }).settings
+}
+
 export async function putSettings(values: Partial<AppSettings>): Promise<AppSettings> {
   const res = await fetch(`${BASE}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${body.slice(0, 200) || res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return ((await res.json()) as { settings: AppSettings }).settings
 }
 
@@ -394,11 +441,7 @@ export async function sendTestMail(to: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ to }),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    // The API names the missing env vars on a 422; surface that verbatim.
-    throw new Error(body.slice(0, 300) || `${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) await fail(res)  // the API names the missing env vars on a 422
 }
 
 // ── Accounts, sessions and history ────────────────────────────────────────
@@ -436,22 +479,37 @@ export interface History {
   total_seconds: number
 }
 
+/** Turn a non-OK response into a readable Error: our HTTPExceptions carry a
+ * string detail, pydantic validation errors an array of { msg } — both must
+ * end up as plain text, never "[object Object]". */
+async function fail(res: Response): Promise<never> {
+  const text = await res.text().catch(() => '')
+  let detail = text
+  try {
+    const parsed = JSON.parse(text) as { detail?: string | Array<{ msg?: string }> }
+    if (typeof parsed.detail === 'string') detail = parsed.detail
+    else if (Array.isArray(parsed.detail)) {
+      detail = parsed.detail.map((d) => d.msg).filter(Boolean).join(' ; ')
+    }
+  } catch {
+    /* not JSON — use the raw body */
+  }
+  if (res.status === 401) {
+    // The session died mid-use: expired, or its row was deleted (revoked). No
+    // single panel can fix that — every poll would keep failing with the same
+    // 401 — so tell the app to drop the user back on the login screen.
+    window.dispatchEvent(new Event('aznet:unauthorized'))
+  }
+  throw new Error(detail.slice(0, 300) || `${res.status} ${res.statusText}`)
+}
+
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    let detail = text
-    try {
-      detail = (JSON.parse(text) as { detail?: string }).detail ?? text
-    } catch {
-      /* not JSON — use the raw body */
-    }
-    throw new Error(detail.slice(0, 300) || `${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) await fail(res)
   return res.json() as Promise<T>
 }
 
@@ -470,7 +528,7 @@ export const createUser = (input: { email: string; name: string; password: strin
 
 export async function deleteUser(id: number): Promise<void> {
   const res = await fetch(`${BASE}/users/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) await fail(res)
 }
 
 export const history = (userId?: number, s?: AbortSignal) =>
@@ -519,6 +577,79 @@ export async function postSamples(samples: { service: string; state: string }[])
   }
 }
 
+export interface NotificationItem {
+  id: number
+  kind: 'report' | 'review' | 'error' | 'reminder'
+  title: string
+  body?: string | null
+  /** Dashboard hash route the bell links to, e.g. '#/reports'. */
+  route?: string | null
+  ref_id?: string | null
+  created_at: string
+  read_at?: string | null
+}
+
+export type TaskRepeat = 'none' | 'daily' | 'weekly' | 'monthly'
+export type TaskUnit = 'day' | 'week' | 'month'
+
+export interface TaskItem {
+  id: number
+  title: string
+  notes?: string | null
+  due_at?: string | null
+  repeat: TaskRepeat
+  remind_before_value?: number | null
+  remind_before_unit?: TaskUnit | null
+  repeat_every?: number | null
+  repeat_unit?: TaskUnit | null
+  done_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const notifications = (s?: AbortSignal) =>
+  get<{ items: NotificationItem[]; unread: number }>('/notifications', s)
+
+/** Marks the given notifications read, or all of them when `ids` is omitted. */
+export const markNotificationsRead = (ids?: number[]) =>
+  post<{ marked: number }>('/notifications/read', { ids: ids ?? null })
+
+export const tasks = (s?: AbortSignal) => get<{ tasks: TaskItem[] }>('/tasks', s)
+
+export type TaskInput = {
+  title: string
+  notes?: string | null
+  due_at?: string | null
+  repeat?: TaskRepeat
+  remind_before_value?: number | null
+  remind_before_unit?: TaskUnit | null
+  repeat_every?: number | null
+  repeat_unit?: TaskUnit | null
+}
+
+export const createTask = (input: TaskInput) =>
+  post<{ id: number; title: string; notes?: string | null; due_at?: string | null; repeat: string; done: boolean }>(
+    '/tasks',
+    input,
+  )
+
+export async function updateTask(
+  id: number,
+  fields: Partial<TaskInput> & { done?: boolean },
+): Promise<void> {
+  const res = await fetch(`${BASE}/tasks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) await fail(res)
+}
+
+export async function deleteTask(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/tasks/${id}`, { method: 'DELETE' })
+  if (!res.ok) await fail(res)
+}
+
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
@@ -529,9 +660,12 @@ export const api = {
   n8n: n8nStatus,
   n8nExecutions,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
+  generatedReports: (s?: AbortSignal) => get<{ reports: GeneratedReport[] }>('/reports/generated', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),
   queue: (s?: AbortSignal) => get<{ pending: PendingWrite[] }>('/sheet-queue', s),
   jobs: (s?: AbortSignal) => get<{ jobs: JobStatus[] }>('/jobs', s),
+  notifications,
+  tasks,
 }
 
 export interface Async<T> {
@@ -542,17 +676,44 @@ export interface Async<T> {
 }
 
 /**
- * Module-level response cache, keyed by endpoint.
+ * Module-level response cache, keyed by endpoint, with subscribers.
  *
  * Without this, navigating away from a route unmounts its hooks and coming back
  * re-runs every fetch from a blank loading state, so the app appears to forget
  * everything it just showed. With it, a remount paints cached data immediately
  * and revalidates in the background: stale-while-revalidate.
  *
- * ponytail: a plain Map, not TanStack Query. Five endpoints, one consumer app,
- * no mutations to invalidate. Reach for a real query library if that changes.
+ * The subscriber list makes the cache reactive: when any hook writes fresh data
+ * (a poll, a remount, a reload), every other hook on the same key repaints too.
+ * Without it, a page that reads a key nobody polls keeps its mount-time
+ * snapshot for the whole visit — Overview's headline numbers froze until
+ * navigation.
+ *
+ * ponytail: a Map plus a listener set, not TanStack Query. Five endpoints, one
+ * consumer app, no mutations to invalidate. Reach for a real query library if
+ * that changes.
  */
 const cache = new Map<string, unknown>()
+const listeners = new Map<string, Set<() => void>>()
+
+function setCache<T>(key: string, value: T): void {
+  cache.set(key, value)
+  const set = listeners.get(key)
+  if (set) for (const fn of set) fn()
+}
+
+function subscribe(key: string, fn: () => void): () => void {
+  let set = listeners.get(key)
+  if (!set) {
+    set = new Set()
+    listeners.set(key, set)
+  }
+  set.add(fn)
+  return () => {
+    set.delete(fn)
+    if (set.size === 0) listeners.delete(key)
+  }
+}
 
 /**
  * Fetch on mount, optionally re-fetch on an interval.
@@ -581,7 +742,7 @@ export function useApi<T>(
       if (first && cache.get(key) === undefined) setLoading(true)
       try {
         const next = await fetcherRef.current(controller.signal)
-        cache.set(key, next)
+        setCache(key, next)
         setData(next)
         setError(null)
       } catch (err) {
@@ -600,6 +761,15 @@ export function useApi<T>(
       if (timer) window.clearInterval(timer)
     }
   }, [key, pollMs, nonce])
+
+  // Repaint when another hook refreshes this key. setData with the same object
+  // reference is a no-op, so a poll writing identical data cannot loop.
+  useEffect(() => {
+    return subscribe(key, () => {
+      const fresh = cache.get(key)
+      if (fresh !== undefined) setData(fresh as T)
+    })
+  }, [key])
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
   return { data, error, loading, reload }

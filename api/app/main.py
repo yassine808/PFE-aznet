@@ -1,17 +1,18 @@
 """FastAPI entrypoint — the single endpoint n8n and the web form call."""
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from app import auth, daily_report, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, sheets
+from app import auth, daily_report, drive, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
-from app.providers.base import TranscriptionError
+from app.providers.base import TranscriptionError, TranscriptionInfo
 from app.schemas import ProcessResponse
 
 @asynccontextmanager
@@ -61,6 +62,12 @@ app.add_middleware(
 MIN_USABLE_CHARS = 10
 LOW_CONFIDENCE_THRESHOLD = 0.5  # below this, flag for manual review in the dashboard
 
+# Upload caps enforced *before* anything leaves this process: a 100 MB Telegram
+# dump or a 30 MB "photo" must cost us nothing (no Sheet write, no quota burn),
+# and a request that big is certainly a misdirected file, not a voice note.
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+MAX_IMAGE_BYTES = 15 * 1024 * 1024
+
 # Wall-clock start of this process — the dashboard reads uptime from /health to
 # show an "API online / uptime" status tile (ops visibility on the admin PC).
 _STARTED_AT = time.time()
@@ -74,6 +81,33 @@ async def _log(stage: str, level: str = "info", **kwargs) -> None:
     concurrent request. run_in_threadpool keeps the loop free.
     """
     await run_in_threadpool(logs.write_safe, stage, level, **kwargs)
+
+
+def _notify_report_event(
+    technicien: Optional[str], rapport_complet: str, warnings: List[str], ctx: dict
+) -> None:
+    """The bell: a chef learns about their team's report, and about the flagged
+    rows that need a human eye. Best-effort like every observability write — a
+    log store outage must not cost the technician their summary.
+    """
+    try:
+        if not warnings or not ({"low_confidence_transcription", "short_transcription",
+                                 "image_input"} & set(warnings)):
+            logs.notify_technician_manager(
+                technicien, "report",
+                f"Nouveau rapport — {technicien or 'inconnu'}",
+                (rapport_complet or "")[:300] or None, "#/reports",
+            )
+        else:
+            logs.notify_technician_manager(
+                technicien, "review",
+                f"Rapport à vérifier — {technicien or 'inconnu'}",
+                "Confiance faible ou entrée photo : à relire avant clôture.", "#/reports",
+            )
+    except logs.LogStoreError as exc:
+        # Notifications cannot be awaited here (sync helper) — write_safe via
+        # the regular log path, which is itself best-effort.
+        logs.write_safe("api", "warn", message=f"notification failed: {exc}", **ctx)
 
 
 @app.get("/health")
@@ -282,18 +316,21 @@ def track_visit(payload: VisitIn, caller: dict = Depends(auth.require_human)) ->
 async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dict):
     """Audio branch of /process: STT then a couple of quality warnings.
 
-    Returns (transcription, rapport_complet, warnings). Raises HTTPException on
-    empty input, an unknown provider name, or a transcription failure.
+    Returns (transcription, rapport_complet, warnings, blob). Raises HTTPException
+    on empty/oversized input, an unknown provider name, or a transcription failure.
     """
-    blob = await audio.read()
+    blob = await audio.read(MAX_AUDIO_BYTES + 1)
     if not blob:
         raise HTTPException(422, "Empty audio file")
-    engine = provider or settings.stt_provider
+    if len(blob) > MAX_AUDIO_BYTES:
+        raise HTTPException(422, f"Audio too large (max {MAX_AUDIO_BYTES // (1024 * 1024)} MB)")
     t0 = time.time()
     try:
-        transcription = get_provider(engine).transcribe(
-            blob, audio.content_type or "audio/ogg"
-        )
+        # STT is pure synchronous I/O (requests/genai/groq/httpx) — run it off the
+        # loop or one slow engine stalls every other concurrent request. The chain
+        # lives in _transcribe_engine, which does the ordered fallback so a dead
+        # engine never costs the technician their report.
+        transcription = await run_in_threadpool(_transcribe_engine, blob, audio.content_type, provider)
     except ValueError as exc:  # unknown provider name
         await _log("api", "error", message=f"unknown provider: {exc}", **ctx)
         raise HTTPException(422, str(exc)) from exc
@@ -301,10 +338,11 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
         await _log(
             "transcribed", "error", message=f"transcription failed: {exc}",
             duration_ms=int((time.time() - t0) * 1000),
-            payload={"engine": engine}, **ctx,
+            payload={"engine": provider or settings.stt_chain}, **ctx,
         )
         raise HTTPException(502, f"transcription failed: {exc}") from exc
 
+    engine = transcription.provider
     rapport_complet = transcription.text
     warnings: List[str] = []
     if len(rapport_complet) < MIN_USABLE_CHARS:
@@ -317,22 +355,53 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
         duration_ms=int((time.time() - t0) * 1000),
         payload={"engine": engine, "chars": len(rapport_complet)}, **ctx,
     )
-    return transcription, rapport_complet, warnings
+    return transcription, rapport_complet, warnings, blob
 
 
-async def _extract_from_image(image: UploadFile, sender_profile: Optional[str], ctx: dict) -> ProcessResponse:
+def _transcribe_engine(
+    blob: bytes, mime_type: Optional[str], forced: Optional[str]
+) -> TranscriptionInfo:
+    """Run the STT chain — synchronous, so callers wrap it in run_in_threadpool.
+
+    `forced` is the benchmark override (`provider=` form field) and bypasses the
+    chain exactly like the old single-engine path. The chain mirrors the
+    extraction design in app/extraction.py: ordered engines, first success wins,
+    every failure recorded, all of them failing raises one combined
+    TranscriptionError — never a silent fallback to "no report".
+    """
+    if forced:
+        # Unknown forced names must fail loudly (422 upstream): the benchmark
+        # needs to learn a typo, not silently fall back to another engine.
+        return get_provider(forced).transcribe(blob, mime_type or "audio/ogg")
+    failures: List[str] = []
+    for name in (part.strip() for part in settings.stt_chain.split(",") if part.strip()):
+        try:
+            return get_provider(name).transcribe(blob, mime_type or "audio/ogg")
+        except (TranscriptionError, ValueError) as exc:
+            # ValueError = unknown engine in the chain: a config typo must not
+            # take the remaining engines down with it, just be recorded.
+            failures.append(f"{name}: {exc}")
+    raise TranscriptionError("no STT engine succeeded — " + " | ".join(failures))
+
+
+async def _extract_from_image(
+    image: UploadFile, sender_profile: Optional[str], caption: Optional[str],
+    ctx: dict, message_id: Optional[str] = None,
+) -> ProcessResponse:
     """Image branch of /process. The vision model reads the photo and fills the
     schema in one call, so there is no intermediate transcription to store or
     to get wrong twice — this returns the full ProcessResponse directly.
     """
-    blob = await image.read()
+    blob = await image.read(MAX_IMAGE_BYTES + 1)
     if not blob:
         raise HTTPException(422, "Empty image file")
+    if len(blob) > MAX_IMAGE_BYTES:
+        raise HTTPException(422, f"Image too large (max {MAX_IMAGE_BYTES // (1024 * 1024)} MB)")
     t1 = time.time()
     try:
         report, model_used = await run_in_threadpool(
             extraction.extract_report_from_image, blob,
-            image.content_type or "image/jpeg", sender_profile,
+            image.content_type or "image/jpeg", sender_profile, caption,
         )
     except extraction.ExtractionError as exc:
         await _log(
@@ -353,6 +422,15 @@ async def _extract_from_image(image: UploadFile, sender_profile: Optional[str], 
         duration_ms=int((time.time() - t1) * 1000),
         payload={"model": model_used, "chantier": report.chantier, "bytes": len(blob)}, **ctx,
     )
+    # Archive the photo in Postgres while the channel's ticket is still live —
+    # a webhook media URL dies within minutes, the DB copy does not.
+    try:
+        logs.save_media(ctx.get("channel"), None, message_id, "image",
+                        image.content_type, blob)
+    except logs.LogStoreError as exc:
+        await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
+    if report.has_data():
+        _notify_report_event(ctx.get("technicien"), rapport_complet, warnings, ctx)
     return ProcessResponse(
         rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
     )
@@ -363,10 +441,13 @@ async def process(
     audio: Optional[UploadFile] = File(None, description="Voice note (ogg/opus from WhatsApp)"),
     image: Optional[UploadFile] = File(None, description="Photo: notebook page, whiteboard, delivery note, or the work itself"),
     text: Optional[str] = Form(None, description="Raw report text (web form mode)"),
+    caption: Optional[str] = Form(None, description="Text that came with the audio/image (Telegram captions) — merged into the input before extraction"),
     provider: Optional[str] = Form(None, description="STT engine override (benchmark use)"),
     correlation_id: Optional[str] = Form(None, description="Trace id minted by n8n at reception"),
     channel: Optional[str] = Form(None, description="telegram | whatsapp | form"),
     technicien: Optional[str] = Form(None, description="Sender name, for log filtering"),
+    message_id: Optional[str] = Form(None, description="Channel message id (dedupe key, e.g. 'tg:123:456') — links the report to its origin message for /modify"),
+    caller: dict = Depends(auth.require_user),
 ) -> ProcessResponse:
     # Same trace id n8n threads through every stage, so the API's own errors
     # line up with the workflow's rows in the dashboard timeline.
@@ -385,17 +466,52 @@ async def process(
         await _log("api", "error", message=detail, **ctx)
         raise HTTPException(422, detail)
 
+    # A caption is auxiliary: it never satisfies the "exactly one input" rule,
+    # but once an input exists it rides along as part of the message. Telegram
+    # sends it when a technician records a voice note with a text caption.
+    caption = (caption or "").strip() or None
+
+    lien_audio = None  # set only by the audio branch (Drive upload)
+
     if audio is not None:
-        transcription, rapport_complet, warnings = await _transcribe_audio(audio, provider, ctx)
+        transcription, rapport_complet, warnings, blob = await _transcribe_audio(audio, provider, ctx)
+        if caption:
+            rapport_complet = f"{rapport_complet}\n\n{caption}"
+        # Archive the voice note (Postgres) and mint its durable link (Drive).
+        # Both are best-effort: a log store outage or a Drive hiccup must never
+        # cost the technician their summary — the fallback is the previous
+        # behavior where n8n stored the channel's own file ticket.
+        try:
+            logs.save_media(ctx.get("channel"), None, message_id, "audio",
+                            audio.content_type, blob)
+        except logs.LogStoreError as exc:
+            await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
+        try:
+            if blob:
+                lien_audio = await run_in_threadpool(
+                    drive.upload_audio,
+                    f"audio-{message_id or correlation_id or int(time.time())}.ogg",
+                    audio.content_type or "audio/ogg", blob,
+                )
+        except drive.DriveError as exc:
+            await _log("api", "warn", message=f"drive upload failed: {exc}", **ctx)
     elif image is not None:
-        return await _extract_from_image(image, sender_profile, ctx)
+        return await _extract_from_image(image, sender_profile, caption, ctx, message_id)
     else:
         transcription = None
         warnings = []
         rapport_complet = (text or "").strip()
+        if caption:
+            rapport_complet = f"{rapport_complet}\n\n{caption}".strip()
         if not rapport_complet:
             await _log("api", "error", message="Empty text", **ctx)
             raise HTTPException(422, "Empty text")
+        # Text messages are archived too, so the conversation is recoverable
+        # even though the Sheet only keeps extracted reports.
+        try:
+            logs.save_message(ctx.get("channel"), None, message_id, rapport_complet)
+        except logs.LogStoreError as exc:
+            await _log("api", "warn", message=f"chat archive failed: {exc}", **ctx)
 
     t1 = time.time()
     try:
@@ -413,6 +529,8 @@ async def process(
     # an empty Sheet row and answers "✅ Rapport enregistré" for a greeting.
     if not report.has_data():
         warnings.append("no_report_content")
+    else:
+        _notify_report_event(technicien, rapport_complet, warnings, ctx)
 
     await _log(
         "extracted", "info", message="ok",
@@ -425,7 +543,108 @@ async def process(
         report=report,
         transcription=transcription,
         warnings=warnings,
+        lien_audio=lien_audio,
     )
+
+
+# ── media + chat archive (TO-DO #10: download audios/images/chat to the DB) ─
+
+@app.get("/media", responses={502: {"description": "Log store unreachable"}})
+def list_media(limit: int = 50, caller: dict = Depends(auth.require_human)) -> dict:
+    """Archive listing (metadata only, never the blobs)."""
+    try:
+        return {"media": logs.list_media(limit)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/media/{media_id}/file", responses={404: {"description": "Not found"}, 502: {"description": "Log store unreachable"}})
+def get_media_file(media_id: int, caller: dict = Depends(auth.require_human)) -> Response:
+    """One archived voice note / photo, for the dashboard's <audio>/<img> tags."""
+    try:
+        row = logs.get_media(media_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if row is None:
+        raise HTTPException(404, "media not found")
+    return Response(
+        content=row["data"],
+        media_type=row["mime_type"] or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="media-{row["id"]}"'},
+    )
+
+
+@app.get("/messages", responses={502: {"description": "Log store unreachable"}})
+def list_messages(
+    limit: int = 100, channel: Optional[str] = None, search: Optional[str] = None,
+    caller: dict = Depends(auth.require_human),
+) -> dict:
+    """Raw chat archive, newest first — the Sheet only keeps extracted reports."""
+    try:
+        return {"messages": logs.list_messages(limit, channel, search)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+class LinkIn(BaseModel):
+    message_id: str
+    row: Optional[int] = Field(None, description="1-based Sheet row; None clears the link")
+
+
+@app.post("/messages/link", responses={404: {"description": "Unknown message"}, 502: {"description": "Log store unreachable"}})
+def link_message(payload: LinkIn, caller: dict = Depends(auth.require_user)) -> dict:
+    """Record which Sheet row a message became (called by n8n after the append)."""
+    try:
+        linked = logs.link_message_row(payload.message_id, payload.row)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if not linked:
+        raise HTTPException(404, "message inconnu (pas encore traité)")
+    return {"linked": True, "message_id": payload.message_id, "row": payload.row}
+
+
+class ModifyIn(BaseModel):
+    message_id: str
+    action: Literal["modify", "supprimer"]
+    fields: Optional[Dict[str, Optional[str]]] = Field(
+        None, description="Column → value map; required for modify, ignored for supprimer"
+    )
+
+
+@app.post("/modify-command", responses={404: {"description": "Unknown message"}, 422: {"description": "Missing fields"}, 502: {"description": "Sheets or log store failure"}})
+def modify_command(payload: ModifyIn, caller: dict = Depends(auth.require_user)) -> dict:
+    """Backend of the /modify and /supprimer reply commands.
+
+    The technician replies to their own report message; n8n resolves the reply
+    to its origin message_id and calls here. The row number comes from the link
+    the append wrote (processed_messages.sheet_row), never from anything the
+    technician typed — same reason /rapport never parses the text.
+    """
+    try:
+        row = logs.message_row(payload.message_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if row is None:
+        raise HTTPException(404, "aucun rapport lié à ce message")
+
+    if payload.action == "supprimer":
+        try:
+            sheets.clear_row(row)
+        except sheets.SheetsError as exc:
+            raise HTTPException(502, f"sheets clear failed: {exc}") from exc
+        try:
+            logs.link_message_row(payload.message_id, None)  # unlink: nothing left to edit
+        except logs.LogStoreError:
+            pass  # the Sheet is the source of truth; the link is best-effort
+        return {"action": "supprimer", "row": row}
+
+    if not payload.fields:
+        raise HTTPException(422, "des champs sont requis pour /modify")
+    try:
+        sheets.update_report_fields(row, payload.fields)
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, f"sheets write failed: {exc}") from exc
+    return {"action": "modify", "row": row, "fields": sorted(payload.fields)}
 
 
 # No auth: dashboard + API run only on the admin's machine (localhost), decided 2026-07-23.
@@ -435,6 +654,20 @@ def list_reports(caller: dict = Depends(auth.require_human)) -> dict:
         return {"reports": sheets.read_reports()}
     except sheets.SheetsError as exc:
         raise HTTPException(502, f"sheets read failed: {exc}") from exc
+
+
+@app.get("/reports/generated", responses={502: {"description": "Log store unreachable"}})
+def list_generated_reports(caller: dict = Depends(auth.require_human)) -> dict:
+    """The daily + weekly reports the scheduler stored, newest first.
+
+    These are the exact texts that were mailed and that /rapport answers
+    with — the dashboard shows them so an operator sees the reports without
+    digging in an inbox.
+    """
+    try:
+        return {"reports": logs.list_manager_reports()}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, f"log store read failed: {exc}") from exc
 
 
 class ReportPatch(BaseModel):
@@ -485,15 +718,77 @@ class DailyReportRequest(BaseModel):
     rows: List[dict] = Field(..., description="Lignes du Sheet pour la date donnée")
 
 
+class DailyReportResponse(BaseModel):
+    """The generated report plus who asked for it — provenance rides alongside."""
+
+    objet: str
+    corps: str
+    generated_by: str
+
+
 @app.post("/daily-report", responses={422: {"description": "No rows for the given date"}, 502: {"description": "Daily report generation failed"}})
-def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(auth.require_user)) -> daily_report.DailyReportContent:
+def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(auth.require_user)) -> DailyReportResponse:
     auth.record(caller, "report_generated", target=payload.date)
     if not payload.rows:
         raise HTTPException(422, "No rows for the given date")
     try:
-        return daily_report.generate_daily_report(payload.date, payload.rows)
+        content = daily_report.generate_daily_report(payload.date, payload.rows)
     except daily_report.DailyReportError as exc:
         raise HTTPException(502, f"daily report failed: {exc}") from exc
+    # The scheduled mail is signed "automatique"; a manual run is signed by the
+    # account that asked — the dashboard shows it next to the panel.
+    return DailyReportResponse(
+        objet=content.objet, corps=content.corps, generated_by=caller["name"]
+    )
+
+
+class RapportResponse(BaseModel):
+    """Answer to the technicians' /rapport command: the last generated report
+    of their site manager. `found: false` carries a short reason so n8n can
+    reply politely instead of parsing an error."""
+
+    found: bool
+    detail: Optional[str] = None
+    period: Optional[str] = None
+    objet: Optional[str] = None
+    corps: Optional[str] = None
+    generated_at: Optional[str] = None
+    generated_by: Optional[str] = None
+    manager_name: Optional[str] = None
+
+
+@app.get("/rapport", responses={500: {"description": "Log store failure"}})
+def latest_rapport(
+    channel: str,
+    external_id: str,
+    caller: dict = Depends(auth.require_user),
+) -> RapportResponse:
+    """A technician asks /rapport → the last generated report of their chef.
+
+    The sender resolves to a person, the person to their manager; the answer
+    comes from `manager_reports`, which the scheduler fills at the same moment
+    it mails — so the chat reply and the inbox show the same text. Machine
+    access (X-API-Key) is deliberate: n8n answers the command on the spot.
+    """
+    person = logs.find_technician(channel, external_id)
+    if person is None:
+        return RapportResponse(found=False, detail="inconnu")
+    manager_id = person.get("manager_id")
+    if not manager_id:
+        return RapportResponse(found=False, detail="pas de responsable")
+    manager = logs.person_by_id(manager_id)
+    report = logs.latest_manager_report(manager_id)
+    if report is None:
+        return RapportResponse(found=False, detail="aucun rapport")
+    return RapportResponse(
+        found=True,
+        period=report.get("period"),
+        objet=report.get("objet"),
+        corps=report.get("corps"),
+        generated_at=report.get("generated_at"),
+        generated_by=report.get("generated_by"),
+        manager_name=manager["name"] if manager else None,
+    )
 
 
 class ImageCardRequest(BaseModel):
@@ -568,6 +863,7 @@ def list_logs(
     stage: Optional[str] = None,
     correlation_id: Optional[str] = None,
     search: Optional[str] = None,
+    caller: dict = Depends(auth.require_user),
 ) -> dict:
     try:
         return {
@@ -624,7 +920,19 @@ class FailedWrite(BaseModel):
 @app.post("/sheet-queue", responses={502: {"description": "Log store unreachable"}})
 def queue_write(item: FailedWrite, caller: dict = Depends(auth.require_user)) -> dict:
     try:
-        return {"id": logs.queue_failed_write(item.payload, item.error, item.correlation_id)}
+        queued_id = logs.queue_failed_write(item.payload, item.error, item.correlation_id)
+        # The bell: a write parked in the retry queue means the Sheet is (or
+        # was) behind — the directeur learns now, not at the daily digest.
+        try:
+            logs.notify_managers(
+                "error",
+                "Échec d'écriture Google Sheets",
+                f"Un rapport n'a pas pu être écrit (file d'attente {queued_id}).",
+                "#/logs", item.correlation_id,
+            )
+        except logs.LogStoreError as exc:
+            logs.write_safe("api", "warn", message=f"notification failed: {exc}")
+        return {"id": queued_id}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
 
@@ -635,6 +943,179 @@ def list_queue(limit: int = 20, caller: dict = Depends(auth.require_user)) -> di
         return {"pending": logs.pending_writes(limit)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+# ── Notifications + tasks (the bell and the to-do panel) ───────────────────
+# Notifications are strictly per-account rows; the API never broadcasts to
+# everybody at once. The task list is the opposite: one shared list, every
+# account can edit it, and the scheduler's reminders job rings every bell.
+
+
+class NotificationReadIn(BaseModel):
+    ids: Optional[List[int]] = Field(
+        None, description="Which notifications to mark read; omit for all"
+    )
+
+
+@app.get("/notifications", responses={502: {"description": "Log store unreachable"}})
+def list_notifications(limit: int = 50, caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        return {
+            "items": logs.list_notifications(caller["id"], limit),
+            "unread": logs.unread_notifications(caller["id"]),
+        }
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/notifications/read", responses={502: {"description": "Log store unreachable"}})
+def read_notifications(payload: NotificationReadIn, caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        return {"marked": logs.mark_notifications_read(caller["id"], payload.ids)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+_UNIT_DAYS = {"day": 1, "week": 7, "month": 30}
+_REPEAT_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
+
+
+def _lead_period_error(remind_value, remind_unit, repeat, repeat_every, repeat_unit):
+    """A lead as long as the repeat period makes consecutive windows overlap
+    (the next reminder would be due the moment the previous one fired), which
+    the once-per-occurrence guard then re-fires every tick. The period is the
+    custom interval when one is set, else the preset; a one-shot task accepts
+    any lead. Returns the rejection message or None."""
+    recurring = (repeat not in (None, "none")) or repeat_unit is not None
+    if not remind_value or not recurring:
+        return None
+    if repeat_unit:
+        period_days = repeat_every * _UNIT_DAYS[repeat_unit]
+    else:
+        period_days = _REPEAT_DAYS[repeat]
+    if _UNIT_DAYS[remind_unit] * remind_value >= period_days:
+        return "le rappel avant doit être plus court que la période de répétition"
+    return None
+
+
+class TaskIn(BaseModel):
+    title: str
+    notes: Optional[str] = None
+    due_at: Optional[datetime] = None
+    repeat: Literal["none", "daily", "weekly", "monthly"] = "none"
+    remind_before_value: Optional[int] = Field(None, ge=0)
+    remind_before_unit: Optional[Literal["day", "week", "month"]] = None
+    repeat_every: Optional[int] = Field(None, ge=1)
+    repeat_unit: Optional[Literal["day", "week", "month"]] = None
+
+    @model_validator(mode="after")
+    def _task_pairs(self):
+        if (self.remind_before_value is None) != (self.remind_before_unit is None):
+            raise ValueError("remind_before_value et remind_before_unit vont ensemble")
+        if (self.repeat_every is None) != (self.repeat_unit is None):
+            raise ValueError("repeat_every et repeat_unit vont ensemble")
+        error = _lead_period_error(self.remind_before_value, self.remind_before_unit,
+                                   self.repeat, self.repeat_every, self.repeat_unit)
+        if error:
+            raise ValueError(error)
+        return self
+
+
+class TaskPatchIn(BaseModel):
+    title: Optional[str] = None
+    notes: Optional[str] = None
+    due_at: Optional[datetime] = None
+    repeat: Optional[Literal["none", "daily", "weekly", "monthly"]] = None
+    remind_before_value: Optional[int] = Field(None, ge=0)
+    remind_before_unit: Optional[Literal["day", "week", "month"]] = None
+    repeat_every: Optional[int] = Field(None, ge=1)
+    repeat_unit: Optional[Literal["day", "week", "month"]] = None
+    done: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _task_pairs(self):
+        if (self.remind_before_value is None) != (self.remind_before_unit is None):
+            raise ValueError("remind_before_value et remind_before_unit vont ensemble")
+        if (self.repeat_every is None) != (self.repeat_unit is None):
+            raise ValueError("repeat_every et repeat_unit vont ensemble")
+        # Same overlap guard, but only when the patch itself carries the
+        # repeat: otherwise the stored cadence is invisible at validation time.
+        error = _lead_period_error(self.remind_before_value, self.remind_before_unit,
+                                   self.repeat, self.repeat_every, self.repeat_unit)
+        if error:
+            raise ValueError(error)
+        return self
+
+
+@app.get("/tasks", responses={502: {"description": "Log store unreachable"}})
+def list_tasks(caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        return {"tasks": logs.list_tasks()}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/tasks", responses={502: {"description": "Log store unreachable"}})
+def create_task(payload: TaskIn, caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        task_id = logs.create_task(
+            payload.title, payload.notes, payload.due_at, payload.repeat,
+            payload.remind_before_value, payload.remind_before_unit,
+            payload.repeat_every, payload.repeat_unit,
+        )
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    auth.record(caller, "task_created", target=str(task_id), detail={"title": payload.title})
+    return {"id": task_id, "title": payload.title, "notes": payload.notes,
+            "due_at": payload.due_at, "repeat": payload.repeat,
+            "remind_before_value": payload.remind_before_value,
+            "remind_before_unit": payload.remind_before_unit,
+            "repeat_every": payload.repeat_every, "repeat_unit": payload.repeat_unit,
+            "done": False}
+
+
+@app.patch("/tasks/{task_id}",
+           responses={404: {"description": "Unknown task"}, 502: {"description": "Log store unreachable"}})
+def update_task(task_id: int, payload: TaskPatchIn, caller: dict = Depends(auth.require_human)) -> dict:
+    fields = payload.model_dump(exclude_unset=True)
+    # When the patch changes the lead but carries no repeat, the validator
+    # could not see the stored cadence — and a lead as long as the stored
+    # period would overlap windows and silently kill every future reminder.
+    # Check the resulting state against the stored task before writing.
+    if "remind_before_value" in fields and "repeat" not in fields:
+        try:
+            stored = logs.get_task(task_id)
+        except logs.LogStoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        if stored is None:
+            raise HTTPException(404, "tâche inconnue")
+        error = _lead_period_error(
+            payload.remind_before_value, payload.remind_before_unit,
+            stored["repeat"], stored["repeat_every"], stored["repeat_unit"],
+        )
+        if error:
+            raise HTTPException(422, error)
+    try:
+        updated = logs.update_task(task_id, fields)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if not updated:
+        raise HTTPException(404, "tâche inconnue")
+    auth.record(caller, "task_updated", target=str(task_id), detail=fields)
+    return {"ok": True, "id": task_id}
+
+
+@app.delete("/tasks/{task_id}",
+            responses={404: {"description": "Unknown task"}, 502: {"description": "Log store unreachable"}})
+def delete_task(task_id: int, caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        deleted = logs.delete_task(task_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if not deleted:
+        raise HTTPException(404, "tâche inconnue")
+    auth.record(caller, "task_deleted", target=str(task_id))
+    return {"ok": True}
 
 
 # ── Scheduled jobs ─────────────────────────────────────────────────────────
@@ -819,7 +1300,14 @@ def refresh_one_profile(person_id: int, caller: dict = Depends(auth.require_huma
     if person is None:
         raise HTTPException(404, f"person {person_id} not found")
     auth.record(caller, "profile_refreshed", target=person["name"])
-    return memory.refresh_person(person, sheets.read_reports())
+    # The profile is built from the person's own past reports, which live in the
+    # Sheet: a Google outage must surface as a 502 ("try the button again"),
+    # never as a 500 that looks like our bug.
+    try:
+        rows = sheets.read_reports()
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, f"sheet unreachable: {exc}") from exc
+    return memory.refresh_person(person, rows)
 
 
 @app.post("/profiles/refresh", responses={502: {"description": "Log store unreachable"}})
@@ -833,7 +1321,12 @@ def refresh_all_profiles(caller: dict = Depends(auth.require_user)) -> dict:
         persons = logs.list_persons()
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
-    rows = sheets.read_reports()
+    # Same reasoning as refresh_one_profile: the Sheet is the input, and when it
+    # is down the job must say so instead of 500ing.
+    try:
+        rows = sheets.read_reports()
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, f"sheet unreachable: {exc}") from exc
     results = [memory.refresh_person(p, rows) for p in persons]
     return {"refreshed": sum(1 for r in results if r["updated"]), "results": results}
 
@@ -846,6 +1339,40 @@ def lookup_technician(channel: str, external_id: str, caller: dict = Depends(aut
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     return {"found": found is not None, "technician": found}
+
+
+# ── Technician replies ─────────────────────────────────────────────────────
+# The inbox composer. The API sends on the technician's own channels (Telegram
+# Bot API / WhatsApp Cloud API) so a manager's answer works without n8n. The
+# channel tokens are optional; when unset the endpoint answers 501 loudly.
+
+
+class ReplyIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200, description="Technician name as written in the Sheet")
+    text: str = Field(..., min_length=1, max_length=4000, description="Reply text")
+
+
+@app.post("/reply", responses={404: {"description": "No person with that name or no active channel"}, 422: {"description": "Invalid input"}, 501: {"description": "Channel tokens not configured"}, 502: {"description": "Channel refused the message"}})
+def send_reply(payload: ReplyIn, caller: dict = Depends(auth.require_human)) -> dict:
+    """Send a manager's reply to a technician, on every active channel of theirs."""
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(422, "text is required")
+    try:
+        person = logs.person_by_name(payload.name)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if person is None:
+        raise HTTPException(404, f"no technician named {payload.name!r}")
+    identities = [t for t in person.get("identities", []) if t.get("active")]
+    if not identities:
+        raise HTTPException(404, f"{payload.name} has no active channel")
+    try:
+        result = reply.reply_to_identities(identities, payload.text)
+    except reply.ReplyError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    auth.record(caller, "reply_sent", target=payload.name, detail=result)
+    return result
 
 
 # ── Operator settings ──────────────────────────────────────────────────────
@@ -870,6 +1397,38 @@ def write_settings(payload: SettingsIn, caller: dict = Depends(auth.require_huma
     auth.record(caller, "settings_saved", detail=payload.values)
     try:
         return {"settings": logs.put_settings(payload.values)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+# ── Per-account settings ────────────────────────────────────────────────────
+# What this browser prefers: clock format, density, confidence threshold. The
+# browser keeps the defaults; the database keeps what each account chose, so
+# the preferences follow the person across browsers and machines instead of
+# being tied to one browser's localStorage.
+
+class MeSettingsIn(BaseModel):
+    values: Dict[str, Any]
+
+
+@app.get("/me/settings", responses={502: {"description": "Log store unreachable"}})
+def read_me_settings(caller: dict = Depends(auth.require_human)) -> dict:
+    try:
+        return {"settings": logs.get_person_settings(caller["id"])}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.put("/me/settings", responses={403: {"description": "Confidence is director-only"}, 502: {"description": "Log store unreachable"}})
+def write_me_settings(payload: MeSettingsIn, caller: dict = Depends(auth.require_human)) -> dict:
+    # The confidence threshold left the browser the day these settings became
+    # server-side, so it needs a real gate now: the dashboard hides the slider
+    # from non-directors, but the API must refuse the value too.
+    if "confidence" in payload.values and caller.get("role") != "directeur":
+        raise HTTPException(403, "le seuil de confiance est réservé au directeur")
+    auth.record(caller, "settings_saved", detail=payload.values)
+    try:
+        return {"settings": logs.put_person_settings(caller["id"], payload.values)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
 
@@ -919,7 +1478,7 @@ class SamplesIn(BaseModel):
 
 
 @app.post("/service-samples", responses={502: {"description": "Log store unreachable"}})
-def post_samples(payload: SamplesIn) -> dict:
+def post_samples(payload: SamplesIn, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         return {"written": logs.record_samples([s.model_dump() for s in payload.samples])}
     except logs.LogStoreError as exc:
@@ -927,7 +1486,7 @@ def post_samples(payload: SamplesIn) -> dict:
 
 
 @app.get("/service-samples", responses={502: {"description": "Log store unreachable"}})
-def get_samples(hours: int = 1) -> dict:
+def get_samples(hours: int = 1, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         return {"samples": logs.read_samples(hours)}
     except logs.LogStoreError as exc:
@@ -940,7 +1499,7 @@ class ResolveRequest(BaseModel):
 
 
 @app.patch("/sheet-queue/{write_id}", responses={502: {"description": "Log store unreachable"}})
-def resolve_queue_item(write_id: int, payload: ResolveRequest) -> dict:
+def resolve_queue_item(write_id: int, payload: ResolveRequest, caller: dict = Depends(auth.require_user)) -> dict:
     try:
         logs.resolve_write(write_id, payload.ok, payload.error)
     except logs.LogStoreError as exc:

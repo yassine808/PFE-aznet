@@ -3,7 +3,21 @@
 Sheets stays the single source of truth (PLAN.md assumption 3): the dashboard
 reads rows through here and manual corrections write back to the same cells.
 Google client is lazy-imported so tests run without credentials.
+
+Two caches live here, both with the same rule: only successful results are
+cached, and every write path invalidates the read cache, so a correction is
+visible to the next poll instead of 30 seconds later.
+
+- `_service`: the googleapiclient service is expensive to build (credentials
+  + discovery document, downloaded on every call when cache_discovery=False,
+  which is the default here). One per process, like the prompt loader.
+- `read_reports`: the dashboard polls /reports on an interval and n8n reads
+  it on every message; a 30 s TTL turns ~1 s Google round trips into
+  in-memory reads without ever serving stale edits.
 """
+import re
+import time
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
 
@@ -11,12 +25,20 @@ from app.config import settings
 
 RAPPORTS_TAB = "Rapports"
 
+# Google's free tier throttles transiently; the client's own exponential
+# backoff (num_retries) absorbs that without a row lost to a 429.
+_RETRIES = 3
+
+REPORTS_TTL_SECONDS = 30.0
+_reports_cache: Optional[List[dict]] = None
+_reports_cached_at: float = 0.0
+
 
 class SheetsError(RuntimeError):
     pass
 
 
-def _service():
+def _build_service():
     if not settings.sheet_id:
         raise SheetsError("SHEET_ID not configured")
     key_path = Path(settings.google_service_account_json)
@@ -34,15 +56,36 @@ def _service():
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
 
+@lru_cache(maxsize=1)
+def _cached_service():
+    """One service per process: building it re-downloads the discovery
+    document, which costs ~hundreds of ms on every call otherwise. Exceptions
+    are never cached, so a transient Google failure retries on the next call."""
+    return _build_service()
+
+
+def _service():
+    return _cached_service()
+
+
 def read_reports() -> List[dict]:
-    """All rows of the Rapports tab as dicts, plus their 1-based sheet row number."""
+    """All rows of the Rapports tab as dicts, plus their 1-based sheet row number.
+
+    TTL-cached: this is the dashboard's poll endpoint and n8n's per-message
+    /rapport, so the same ~1 s Google call must not be repeated on every poll.
+    Write paths call invalidate_reports(), so the cache can never outlive an
+    edit.
+    """
+    now = time.monotonic()
+    if _reports_cache is not None and now - _reports_cached_at < REPORTS_TTL_SECONDS:
+        return _reports_cache
     try:
         resp = (
             _service()
             .spreadsheets()
             .values()
             .get(spreadsheetId=settings.sheet_id, range=RAPPORTS_TAB)
-            .execute()
+            .execute(num_retries=_RETRIES)
         )
     except SheetsError:
         raise
@@ -50,48 +93,42 @@ def read_reports() -> List[dict]:
         raise SheetsError(f"sheets read failed: {exc}") from exc
     values = resp.get("values", [])
     if not values:
-        return []
-    headers = values[0]
-    rows = []
-    for i, raw in enumerate(values[1:], start=2):  # row 1 = headers
-        row = {h: (raw[j] if j < len(raw) else "") for j, h in enumerate(headers)}
-        row["_row"] = i
-        rows.append(row)
+        rows: List[dict] = []
+    else:
+        headers = values[0]
+        rows = []
+        for i, raw in enumerate(values[1:], start=2):  # row 1 = headers
+            row = {h: (raw[j] if j < len(raw) else "") for j, h in enumerate(headers)}
+            row["_row"] = i
+            rows.append(row)
+    _set_reports_cache(rows)
     return rows
+
+
+def _set_reports_cache(rows: List[dict]) -> None:
+    global _reports_cache, _reports_cached_at
+    _reports_cache = rows
+    _reports_cached_at = time.monotonic()
+
+
+def invalidate_reports() -> None:
+    """Drop the read cache. Every write path calls this, or the dashboard
+    would keep rendering the pre-edit state until the TTL expired."""
+    global _reports_cache, _reports_cached_at
+    _reports_cache = None
+    _reports_cached_at = 0.0
 
 
 def update_report_field(row: int, field: str, value: Optional[str]) -> None:
     """Write one cell back (manual correction). Column resolved from the header row."""
-    svc = _service()
-    try:
-        header_resp = (
-            svc.spreadsheets()
-            .values()
-            .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
-            .execute()
-        )
-        headers = header_resp.get("values", [[]])[0]
-        if field not in headers:
-            raise SheetsError(f"unknown column: {field}")
-        col = _col_letter(headers.index(field) + 1)
-        svc.spreadsheets().values().update(
-            spreadsheetId=settings.sheet_id,
-            range=f"{RAPPORTS_TAB}!{col}{row}",
-            valueInputOption="USER_ENTERED",
-            body={"values": [[value if value is not None else ""]]},
-        ).execute()
-    except SheetsError:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise SheetsError(f"sheets write failed: {exc}") from exc
+    update_report_fields(row, {field: value})
 
 
-def append_report(values: dict) -> None:
-    """Append one report row to the Rapports tab.
+def update_report_fields(row: int, values: dict) -> None:
+    """Write several cells of one row in one batch call (the /modify write-back).
 
-    Used only by the retry drain: the happy path still appends from n8n. Cells
-    are placed by header name, so a column reordered in the Sheet moves the value
-    with it instead of silently writing `chantier` into `client`.
+    Column resolved from the header row like the single-cell variant, so a
+    column reordered in the Sheet moves the value with it.
     """
     svc = _service()
     try:
@@ -99,23 +136,111 @@ def append_report(values: dict) -> None:
             svc.spreadsheets()
             .values()
             .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
-            .execute()
+            .execute(num_retries=_RETRIES)
+        )
+        headers = header_resp.get("values", [[]])[0]
+        data = []
+        for field, value in values.items():
+            if field not in headers:
+                raise SheetsError(f"unknown column: {field}")
+            col = _col_letter(headers.index(field) + 1)
+            data.append(
+                {
+                    "range": f"{RAPPORTS_TAB}!{col}{row}",
+                    "values": [[value if value is not None else ""]],
+                }
+            )
+        if not data:
+            return
+        svc.spreadsheets().values().batchUpdate(
+            spreadsheetId=settings.sheet_id,
+            body={"valueInputOption": "USER_ENTERED", "data": data},
+        ).execute(num_retries=_RETRIES)
+        invalidate_reports()
+    except SheetsError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SheetsError(f"sheets write failed: {exc}") from exc
+
+
+def clear_row(row: int) -> None:
+    """Empty every cell of a row (the /supprimer command).
+
+    The row stays in place on purpose: Google has no cheap positional delete
+    that would not shift every row number below it, which would invalidate
+    every stored message→row link at once. An emptied row keeps its place and
+    its row number; the reports the dashboard renders simply stop matching it.
+    """
+    svc = _service()
+    try:
+        header_resp = (
+            svc.spreadsheets()
+            .values()
+            .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
+            .execute(num_retries=_RETRIES)
+        )
+        ncols = max(1, len(header_resp.get("values", [[]])[0]))
+        svc.spreadsheets().values().clear(
+            spreadsheetId=settings.sheet_id,
+            range=f"{RAPPORTS_TAB}!A{row}:{_col_letter(ncols)}{row}",
+            body={},
+        ).execute(num_retries=_RETRIES)
+        invalidate_reports()
+    except SheetsError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SheetsError(f"sheets clear failed: {exc}") from exc
+
+
+def append_report(values: dict) -> Optional[int]:
+    """Append one report row to the Rapports tab, returning its row number.
+
+    Used by the retry drain: the happy path still appends from n8n. Cells are
+    placed by header name, so a column reordered in the Sheet moves the value
+    with it instead of silently writing `chantier` into `client`. The returned
+    row number is the same positional numbering read_reports uses, which is
+    what lets the drain link the message to the row for /modify.
+    """
+    svc = _service()
+    try:
+        header_resp = (
+            svc.spreadsheets()
+            .values()
+            .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
+            .execute(num_retries=_RETRIES)
         )
         headers = header_resp.get("values", [[]])[0]
         if not headers:
             raise SheetsError("Rapports tab has no header row")
         row = [_cell(values.get(h)) for h in headers]
-        svc.spreadsheets().values().append(
-            spreadsheetId=settings.sheet_id,
-            range=RAPPORTS_TAB,
-            valueInputOption="USER_ENTERED",
-            insertDataOption="INSERT_ROWS",
-            body={"values": [row]},
-        ).execute()
+        resp = (
+            svc.spreadsheets()
+            .values()
+            .append(
+                spreadsheetId=settings.sheet_id,
+                range=RAPPORTS_TAB,
+                valueInputOption="USER_ENTERED",
+                insertDataOption="INSERT_ROWS",
+                body={"values": [row]},
+            )
+            .execute(num_retries=_RETRIES)
+        )
+        # The appended row changes what the dashboard renders, so the read
+        # cache dies here. The drain itself re-reads through the TTL window —
+        # which is fine, because this very row is what it just wrote.
+        invalidate_reports()
+        return _row_from_range(resp.get("updates", {}).get("updatedRange"))
     except SheetsError:
         raise
     except Exception as exc:  # noqa: BLE001
         raise SheetsError(f"sheets append failed: {exc}") from exc
+
+def _row_from_range(updated_range: Optional[str]) -> Optional[int]:
+    """'Rapports!A15:H15' → 15. Same positional numbering as read_reports."""
+    if not updated_range:
+        return None
+    m = re.search(r"!([A-Z]+)(\d+)", updated_range)
+    return int(m.group(2)) if m else None
 
 
 def _cell(value) -> str:

@@ -3,12 +3,13 @@ import { motion } from 'motion/react'
 import {
   CheckIcon,
   FlagIcon,
+  PaperPlaneRightIcon,
   PencilSimpleIcon,
   SpeakerHighIcon,
   TextAlignLeftIcon,
 } from '@phosphor-icons/react'
-import { api, patchReport, useApi, type ReportRow } from '@/lib/api'
-import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
+import { api, patchReport, sendReply, useApi, type ReportRow } from '@/lib/api'
+import { isFlagged, num, toISODate, todayISO, clock } from '@/lib/metrics'
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -27,6 +28,7 @@ const EDITABLE: { field: keyof ReportRow; labelKey: string; long?: boolean }[] =
 
 function MessageCard({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: () => void }) {
   const { t } = useI18n()
+  const { settings } = useSettings()
   // Cards read as messages by default; editing is opt-in per message.
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Record<string, string>>({})
@@ -72,7 +74,7 @@ function MessageCard({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: 
         </span>
         <span className="text-ink text-sm font-medium">{r.technicien || '—'}</span>
         <span className="tabular text-ink-faint text-xs">
-          {r.date} {r.heure}
+          {r.date} {clock(r.heure, settings.timeFormat, t('time.am'), t('time.pm'))}
         </span>
         {flagged && (
           <span className="text-status-warn ms-auto flex items-center gap-1 text-xs">
@@ -220,12 +222,85 @@ function MessageCard({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: 
   )
 }
 
+/** The manager's answer, sent by the API on the technician's own channels. */
+function ReplyComposer({ name }: { readonly name: string }) {
+  const { t } = useI18n()
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+
+  const send = async () => {
+    const trimmed = text.trim()
+    if (!trimmed || busy) return
+    setBusy(true)
+    setError(null)
+    setSent(false)
+    try {
+      await sendReply(name, trimmed)
+      setText('')
+      setSent(true)
+      window.setTimeout(() => setSent(false), 2500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="border-line border-t p-4">
+      <div className="flex items-end gap-3">
+        <textarea
+          rows={2}
+          value={text}
+          placeholder={t('inbox.replyPlaceholder', { name })}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void send()
+            }
+          }}
+          className="border-line focus:border-accent text-ink bg-canvas min-h-0 flex-1 resize-none rounded-md border px-3 py-2 text-sm outline-none transition-colors"
+        />
+        <button
+          type="button"
+          onClick={send}
+          disabled={busy || !text.trim()}
+          className={cn(
+            'flex shrink-0 items-center gap-2 rounded-md px-4 py-2 text-sm transition-all active:translate-y-px',
+            busy || !text.trim()
+              ? 'border-line text-ink-faint cursor-not-allowed border'
+              : 'bg-accent text-white hover:opacity-90',
+          )}
+        >
+          <PaperPlaneRightIcon size={14} weight="fill" />
+          {busy ? t('inbox.sending') : t('inbox.send')}
+        </button>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <p className="text-ink-faint text-[0.6875rem]">{t('inbox.replyHint')}</p>
+        {sent && (
+          <span className="text-status-ok flex items-center gap-1 text-xs">
+            <CheckIcon size={13} weight="bold" />
+            {t('inbox.replySent')}
+          </span>
+        )}
+      </div>
+      {error && <p className="text-status-fail mt-2 text-xs break-all">{error}</p>}
+    </div>
+  )
+}
+
 export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
   const { t } = useI18n()
   const { settings } = useSettings()
   const reports = useApi('reports', api.reports, settings.refreshMs || undefined)
 
   const [channel, setChannel] = useState<string>('')
+  // The selected person; the rail below is the picker.
   const [who, setWho] = useState<string>('')
   // Seeded from the deep link out of Overview's year graph (#/inbox?date=…).
   const [date, setDate] = useState<string>(initialDate ?? '')
@@ -236,18 +311,43 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
     () => [...new Set(all.map((r) => (r.canal ?? '').trim()).filter(Boolean))],
     [all],
   )
-  const people = useMemo(
-    () => [...new Set(all.map((r) => (r.technicien ?? '').trim()).filter(Boolean))],
-    [all],
-  )
 
-  const rows = useMemo(
+  // Recent users, newest message first. The rail is the conversation list; the
+  // channel/date filters narrow it like any list filter.
+  const people = useMemo(() => {
+    const byName = new Map<string, { name: string; count: number; last: string; channels: Set<string> }>()
+    for (const r of all) {
+      const name = (r.technicien ?? '').trim()
+      if (!name) continue
+      if (channel && (r.canal ?? '').trim() !== channel) continue
+      if (date && toISODate(r.date) !== date) continue
+      let p = byName.get(name)
+      if (!p) {
+        // `all` runs newest-first, so the first occurrence is the last message.
+        p = { name, count: 0, last: `${r.date} ${r.heure ?? ''}`.trim(), channels: new Set() }
+        byName.set(name, p)
+      }
+      p.count += 1
+      p.channels.add((r.canal ?? '').trim().toLowerCase())
+    }
+    return [...byName.values()]
+  }, [all, channel, date])
+
+  // Falls back to the most recent person when the picker points at someone the
+  // current filters removed, so the window never goes stale mid-filter.
+  const active = who && people.some((p) => p.name === who) ? who : (people[0]?.name ?? '')
+
+  // The same filter set the rail was counted with, so the badge and the
+  // thread always agree.
+  const windowRows = useMemo(
     () =>
-      all
-        .filter((r) => (channel ? (r.canal ?? '').trim() === channel : true))
-        .filter((r) => (who ? (r.technicien ?? '').trim() === who : true))
-        .filter((r) => (date ? toISODate(r.date) === date : true)),
-    [all, channel, who, date],
+      all.filter(
+        (r) =>
+          (r.technicien ?? '').trim() === active &&
+          (channel ? (r.canal ?? '').trim() === channel : true) &&
+          (date ? toISODate(r.date) === date : true),
+      ),
+    [all, active, channel, date],
   )
 
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
@@ -278,13 +378,6 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
           options={channels}
           allLabel={t('inbox.all')}
         />
-        <Filter
-          label={t('col.technicien')}
-          value={who}
-          onChange={setWho}
-          options={people}
-          allLabel={t('inbox.all')}
-        />
 
         <div className="flex items-center gap-2">
           <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
@@ -307,7 +400,7 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
           )}
         </div>
 
-        <span className="tabular text-ink-faint text-xs">{rows.length}</span>
+        <span className="tabular text-ink-faint text-xs">{people.length}</span>
       </div>
 
       <ActivityGraphSection
@@ -316,13 +409,81 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
         onSelectDay={(iso) => setDate(iso)}
       />
 
-      {rows.length === 0 ? (
+      {people.length === 0 ? (
         <EmptyState body={t('reports.noMatch')} />
       ) : (
-        <div className="flex flex-col gap-4">
-          {rows.map((r) => (
-            <MessageCard key={r._row} r={r} onSaved={reports.reload} />
-          ))}
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+          {/* The conversation list: who wrote, how much, and when they last did. */}
+          <aside className="border-line bg-surface edge rounded-xl border lg:sticky lg:top-6">
+            <h2 className="text-ink-faint border-line border-b px-4 py-3 text-[0.6875rem] font-medium tracking-wide uppercase">
+              {t('inbox.people')}
+            </h2>
+            <ul className="flex max-h-[60vh] flex-col overflow-y-auto">
+              {people.map((p) => (
+                <li key={p.name}>
+                  <button
+                    type="button"
+                    onClick={() => setWho(p.name)}
+                    aria-pressed={active === p.name}
+                    className={cn(
+                      'flex w-full items-center gap-3 border-s-2 px-4 py-3 text-start transition-colors',
+                      active === p.name
+                        ? 'border-s-accent bg-accent/5'
+                        : 'border-s-transparent hover:bg-slate-100 dark:hover:bg-slate-850',
+                    )}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="text-ink block truncate text-sm font-medium">{p.name}</span>
+                      <span className="text-ink-faint mt-0.5 flex items-center gap-1.5 text-[0.6875rem]">
+                        {[...p.channels].map((c) => (
+                          <ChannelIcon key={c} channel={c} size={11} />
+                        ))}
+                        {p.count} {t('inbox.messages')}
+                      </span>
+                    </span>
+                    <span className="tabular text-ink-faint shrink-0 text-[0.6875rem]">
+                      {p.last.split(' ')[0]}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </aside>
+
+          {/* The conversation itself: thread + modify per message, reply at the
+              bottom — the reply leaves on the technician's own channels. */}
+          <section className="border-line bg-surface edge flex max-h-[72vh] min-h-[24rem] flex-col rounded-xl border">
+            <header className="border-line flex items-center gap-3 border-b px-5 py-4">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-ink truncate text-base font-medium">{active}</h2>
+                <p className="text-ink-faint mt-0.5 text-xs">
+                  {t('inbox.replyTo', { name: active })}
+                </p>
+              </div>
+              {(() => {
+                const p = people.find((x) => x.name === active)
+                return p ? (
+                  <span className="text-ink-faint flex items-center gap-1.5 text-xs">
+                    {[...p.channels].map((c) => (
+                      <ChannelIcon key={c} channel={c} size={14} />
+                    ))}
+                  </span>
+                ) : null
+              })()}
+            </header>
+
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+              {windowRows.length === 0 ? (
+                <EmptyState body={t('reports.noMatch')} />
+              ) : (
+                windowRows.map((r) => (
+                  <MessageCard key={r._row} r={r} onSaved={reports.reload} />
+                ))
+              )}
+            </div>
+
+            <ReplyComposer name={active} />
+          </section>
         </div>
       )}
     </motion.div>

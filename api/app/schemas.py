@@ -99,3 +99,10 @@ class ProcessResponse(BaseModel):
         default_factory=list,
         description="Signaux qualité (ex: transcription douteuse) pour le flagging n8n",
     )
+    lien_audio: Optional[str] = Field(
+        None,
+        description=(
+            "Lien durable (Google Drive) vers l'audio, quand l'upload a réussi. "
+            "n8n le préfère au file_id de la chaîne, qui expire."
+        ),
+    )

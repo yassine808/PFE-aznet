@@ -44,6 +44,7 @@ function LogsList({
   readonly locale: string
   readonly emptyBody: string
 }) {
+  const { settings } = useSettings()
   if (logs.error) return <ErrorState message={logs.error} onRetry={logs.reload} />
   if (logs.loading && entries.length === 0) return <Skeleton className="h-64" />
   if (shown.length === 0) return <EmptyState body={emptyBody} />
@@ -63,6 +64,7 @@ function LogsList({
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
+                hour12: settings.timeFormat === '12h',
               })}
             </span>
 
