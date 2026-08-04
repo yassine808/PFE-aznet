@@ -35,7 +35,7 @@ const DEFAULTS: Required<AppSettings> = {
   report_format: 'markdown',
 }
 
-// Icon per job, so the four cards are told apart at a glance rather than read.
+// Icon per job, so the rows are told apart at a glance rather than read.
 const JOB_ICONS: Record<string, typeof BroomIcon> = {
   sheet_queue: ArrowClockwiseIcon,
   prune_logs: BroomIcon,
@@ -50,18 +50,16 @@ const JOB_ORDER = ['daily_report', 'weekly_report', 'sheet_queue', 'profiles', '
 const FORMAT_EXT: Record<ReportFormat, string> = { txt: '.txt', markdown: '.md', docx: '.docx' }
 
 function Band({
-  id,
   title,
   hint,
   children,
 }: {
-  readonly id?: string
   readonly title: string
   readonly hint?: string
   readonly children: React.ReactNode
 }) {
   return (
-    <section id={id} className="flex min-w-0 scroll-mt-16 flex-col gap-4">
+    <section className="flex min-w-0 flex-col gap-4">
       <div className="border-line flex flex-col gap-1 border-b pb-2">
         <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
           {title}
@@ -70,84 +68,6 @@ function Band({
       </div>
       {children}
     </section>
-  )
-}
-
-/**
- * The one health branch every job indicator shares: never run / last ok /
- * last failed. Callers pass the three classes so dot, rail and icon badge stay
- * one rule read three ways.
- */
-function healthClass(
-  last: JobStatus['last'],
-  never: string,
-  ok: string,
-  fail: string,
-): string {
-  if (!last) return never
-  return last.ok ? ok : fail
-}
-
-/**
- * Jump nav + at-a-glance job health, sticky under the page header.
- *
- * The page used to be a scroll of three equal-weight sections with no way to
- * tell "is anything broken" without reading every card. This answers that in
- * one glance (colored dots, tooltip = job name) and gives a one-click way to
- * reach Recipients/Format without scrolling past the job grid.
- */
-function QuickNav({ t, jobs }: { readonly t: (k: string) => string; readonly jobs: JobStatus[] }) {
-  const ago = useAgo()
-  const outcome = useOutcome()
-  const sections: Array<[string, string]> = [
-    ['automation-jobs', t('automation.jobs')],
-    ['automation-recipients', t('automation.recipients')],
-    ['automation-format', t('automation.format')],
-  ]
-  // A plain `#id` link would be hijacked: the hash router maps any unknown
-  // fragment to Overview, so the whole page would unmount on click.
-  const jump = (e: { preventDefault: () => void }, id: string) => {
-    e.preventDefault()
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-  return (
-    <div className="bg-canvas/95 border-line sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-1 py-3 backdrop-blur">
-      <nav className="flex items-center gap-1">
-        {sections.map(([id, label]) => (
-          <a
-            key={id}
-            href={`#${id}`}
-            onClick={(e) => jump(e, id)}
-            className="text-ink-faint hover:text-ink hover:bg-line/40 rounded-md px-2 py-1 text-xs font-medium transition-colors"
-          >
-            {label}
-          </a>
-        ))}
-      </nav>
-      {jobs.length > 0 && (
-        <div className="ms-auto flex items-center gap-2.5">
-          {jobs.map((job) => {
-            const last = job.last
-            const label = t(`automation.job.${job.name}`)
-            const state = last
-              ? `${outcome(job) ?? ''} (${ago(last.at)})`
-              : t('automation.job.never')
-            const title = `${label} — ${state}`
-            return (
-              <span
-                key={job.name}
-                title={title}
-                aria-label={title}
-                className={cn(
-                  'size-2 rounded-full',
-                  healthClass(last, 'bg-line', 'bg-status-ok', 'bg-status-fail'),
-                )}
-              />
-            )
-          })}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -216,7 +136,7 @@ function useOutcome() {
  * on the thing it changes instead of in a separate panel the operator has to
  * mentally connect back to it.
  */
-function JobCard({
+function JobRow({
   job,
   onRan,
   children,
@@ -250,27 +170,10 @@ function JobCard({
   const last = job.last
   const text = outcome(job)
 
-  // Left rail: instant scan of health across the grid without reading text —
-  // grey = never run, and ok/fail mirror the dot already used in QuickNav.
-  const rail = healthClass(last, 'bg-line', 'bg-status-ok', 'bg-status-fail')
-
   return (
-    <li className="border-line bg-canvas relative flex flex-col gap-3 overflow-hidden rounded-xl border p-4 ps-5">
-      <span aria-hidden className={cn('absolute inset-y-0 start-0 w-1', rail)} />
-      <div className="flex items-start gap-3">
-        <span
-          className={cn(
-            'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border',
-            healthClass(
-              last,
-              'border-line text-ink-muted',
-              'border-status-ok/30 bg-status-ok/10 text-status-ok',
-              'border-status-fail/30 bg-status-fail/10 text-status-fail',
-            ),
-          )}
-        >
-          <Icon size={16} />
-        </span>
+    <li className="border-line flex flex-col gap-2 border-b py-4 last:border-b-0">
+      <div className="flex items-baseline gap-3">
+        <Icon size={15} className="text-ink-faint shrink-0 translate-y-0.5" />
 
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="text-ink text-sm font-medium">{t(`automation.job.${job.name}`)}</span>
@@ -281,18 +184,23 @@ function JobCard({
           type="button"
           onClick={trigger}
           disabled={busy}
-          className="border-line text-ink-muted hover:text-ink hover:border-ink-faint flex shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px disabled:opacity-50"
+          aria-busy={busy}
+          className="border-line text-ink-muted hover:text-ink hover:border-ink-faint focus-visible:ring-accent flex shrink-0 cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowClockwiseIcon size={13} className={busy ? 'animate-spin' : undefined} />
           {busy ? t('automation.job.running') : t('automation.job.run')}
         </button>
       </div>
 
-      {children && <div className="ps-11">{children}</div>}
-
-      <div className="border-line flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3 ps-11 text-xs">
+      {/* One status line, indented under the name. It used to be three separate
+          health signals per card — a 4px coloured rail, a tinted icon badge and
+          this dot — which is two more than the reading needs, and the rail broke
+          DESIGN.md's Hairline Rule outright. */}
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 ps-6 text-xs">
         <span className="text-ink-faint">{job.schedule}</span>
-        <span className="text-ink-faint">·</span>
+        <span aria-hidden className="text-ink-faint">
+          ·
+        </span>
         {last ? (
           <>
             <span
@@ -316,10 +224,12 @@ function JobCard({
         ) : (
           <span className="text-ink-faint">{t('automation.job.never')}</span>
         )}
-      </div>
+      </p>
+
+      {children && <div className="ps-6 pt-1">{children}</div>}
 
       {failure && (
-        <p className="text-status-fail flex items-start gap-1.5 ps-11 text-xs break-all">
+        <p role="alert" className="text-status-fail flex items-start gap-1.5 ps-6 text-xs break-all">
           <WarningCircleIcon size={14} className="mt-px shrink-0" />
           {failure}
         </p>
@@ -338,13 +248,17 @@ function JobsBand({
   readonly controls: Record<string, React.ReactNode>
 }) {
   if (jobs.error) return <ErrorState message={jobs.error} onRetry={jobs.reload} />
-  if (!ordered.length) return <Skeleton className="h-64 rounded-xl" />
+  if (!ordered.length) return <Skeleton className="h-64" />
+  // A list of hairline rows, not a grid of bordered cards: five identical
+  // rounded boxes is the "endless card grid" DESIGN.md names as an anti-pattern,
+  // and the Ledger already establishes rows as how this app shows a set of
+  // things that differ only by their values.
   return (
-    <ul className="grid gap-3 lg:grid-cols-2">
+    <ul className="flex flex-col">
       {ordered.map((job) => (
-        <JobCard key={job.name} job={job} onRan={jobs.reload}>
+        <JobRow key={job.name} job={job} onRan={jobs.reload}>
           {controls[job.name]}
-        </JobCard>
+        </JobRow>
       ))}
     </ul>
   )
@@ -510,14 +424,11 @@ export function AutomationPage() {
     >
       <p className="text-ink-faint max-w-[70ch] text-sm">{t('automation.intro')}</p>
 
-      <QuickNav t={t} jobs={ordered} />
-
-      <Band id="automation-jobs" title={t('automation.jobs')} hint={t('automation.jobsHint')}>
+      <Band title={t('automation.jobs')} hint={t('automation.jobsHint')}>
         <JobsBand jobs={jobs} ordered={ordered} controls={CONTROLS} />
       </Band>
 
       <Band
-        id="automation-recipients"
         title={t('automation.recipients')}
         hint={t('automation.recipientsHint')}
       >

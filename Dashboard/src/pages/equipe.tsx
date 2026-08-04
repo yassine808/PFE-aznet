@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   ArrowsClockwiseIcon,
+  KeyIcon,
   PlusIcon,
   TrashIcon,
   UserMinusIcon,
@@ -369,46 +370,42 @@ function Box({
       // Only the hovered target lights up — never every valid chef at once.
       // DESIGN.md's Ten Percent Rule: two accented things on screen means one
       // of them is wrong, and a whole row of accent rings finds nothing.
-      className={cn(
-        'rounded-xl border transition-colors',
-        dropBorder(over, selected),
-      )}
+      className={cn('rounded-lg border transition-colors', dropBorder(over, selected))}
     >
       <button
         type="button"
         onClick={() => onSelect(person.id)}
         aria-pressed={selected}
         className={cn(
-          'bg-surface edge focus-visible:ring-accent flex w-44 cursor-pointer flex-col items-start gap-1 rounded-xl px-3.5 py-3 text-start outline-none focus-visible:ring-2',
+          'bg-surface edge focus-visible:ring-accent flex w-40 cursor-pointer flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-start outline-none focus-visible:ring-2',
           canDrag && 'cursor-grab active:cursor-grabbing',
         )}
       >
         <span className="text-ink w-full truncate text-sm font-medium">{person.name}</span>
-        <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
-          {t(`equipe.role.${person.role ?? 'tech'}`)}
-        </span>
-        {/* Every identity present, channel-labelled. WhatsApp's external_id is a
-            phone number; Telegram's is a chat id, which is why the badge always
-            carries its icon rather than being presented as "the phone". */}
-        {person.identities.length > 0 && (
-          <span className="flex flex-wrap items-center gap-1">
-            {person.identities.map((id) => (
-              <span
-                key={id.id}
-                className={cn(
-                  'border-line text-ink-muted flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[0.625rem]',
-                  !id.active && 'opacity-50',
-                )}
-              >
-                <ChannelIcon channel={id.channel} size={10} />
-                <span className="tabular">{id.external_id}</span>
-              </span>
-            ))}
+        <span className="flex w-full items-center gap-1.5">
+          <span className="text-ink-faint flex-1 truncate text-[0.6875rem] tracking-wide uppercase">
+            {t(`equipe.role.${person.role ?? 'tech'}`)}
           </span>
-        )}
-        {person.has_login && (
-          <span className="text-ink-faint text-[0.625rem]">{t('equipe.hasLogin')}</span>
-        )}
+          {/* Which channels reach them, not what their addresses are. The raw
+              external_id — a phone number or a Telegram chat id — used to sit on
+              every box, which made the chart a wall of digits and pushed the one
+              thing a chart is for (who reports to whom) into third place. The
+              full identities are one click away in the detail panel. */}
+          {person.identities.map((id) => (
+            <ChannelIcon
+              key={id.id}
+              channel={id.channel}
+              size={12}
+              className={cn('text-ink-faint shrink-0', !id.active && 'opacity-40')}
+            />
+          ))}
+          {person.has_login && (
+            <span className="text-ink-faint shrink-0" title={t('equipe.hasLogin')}>
+              <KeyIcon size={12} />
+              <span className="sr-only">{t('equipe.hasLogin')}</span>
+            </span>
+          )}
+        </span>
       </button>
     </div>
   )
