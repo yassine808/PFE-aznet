@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   ArrowsClockwiseIcon,
   KeyIcon,
@@ -43,6 +43,30 @@ import { cn } from '@/lib/utils'
 
 const CHANNELS = ['telegram', 'whatsapp'] as const
 
+/**
+ * Technicians shown side by side before a crew wraps to the next row.
+ *
+ * Three, because four 10rem boxes plus their gaps already push a chart with two
+ * chefs past a 1440px viewport — and the page body scrolling sideways is the
+ * thing DESIGN.md rules out.
+ */
+const CREW_PER_ROW = 3
+
+/**
+ * Chefs side by side before the band wraps.
+ *
+ * Two, not three: a chef's subtree is as wide as its crew row (three 10rem
+ * boxes plus gaps, ~32rem), so three chefs need ~96rem of chart against the
+ * ~72rem a 1440px window actually leaves beside the nav.
+ */
+const CHEFS_PER_ROW = 2
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
 /** Reports per person, keyed by lower-cased name (the Sheet's own join key). */
 type Load = Map<string, { count: number; flagged: number }>
 
@@ -57,9 +81,29 @@ export function EquipePage() {
   const [selected, setSelected] = useState<number | null>(null)
   const [adding, setAdding] = useState<'chef' | 'tech' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // personId -> the manager we have asked for but not yet seen confirmed.
+  const [pending, setPending] = useState<Map<number, number | null>>(new Map())
 
   const isDirector = user?.role === 'directeur'
-  const people = list.data?.technicians ?? []
+  const people = useMemo(() => {
+    const rows = list.data?.technicians ?? []
+    if (pending.size === 0) return rows
+    return rows.map((p) => (pending.has(p.id) ? { ...p, manager_id: pending.get(p.id)! } : p))
+  }, [list.data, pending])
+
+  // Clear overrides the server has caught up with, so a stale entry cannot pin
+  // someone in place after a later move.
+  useEffect(() => {
+    if (pending.size === 0) return
+    const rows = list.data?.technicians ?? []
+    const settled = rows.filter((p) => pending.has(p.id) && p.manager_id === pending.get(p.id))
+    if (settled.length === 0) return
+    setPending((m) => {
+      const next = new Map(m)
+      for (const p of settled) next.delete(p.id)
+      return next
+    })
+  }, [list.data, pending])
 
   const directeur = people.find((p) => p.role === 'directeur')
   const chefs = people.filter((p) => p.role === 'chef')
@@ -104,18 +148,31 @@ export function EquipePage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [focus])
 
-  const guard = (fn: () => Promise<unknown>) => async () => {
+  /**
+   * Reassign, showing the move immediately.
+   *
+   * The box has to travel the moment it is dropped: waiting for the PATCH and
+   * the reload means the chart sits still for a beat and then the person is
+   * simply somewhere else, which reads as a glitch rather than as a move. The
+   * override is dropped once the server's own list arrives, and on failure the
+   * box springs back to where it was — which is the honest thing for the UI to
+   * do when the write did not land.
+   */
+  const move = async (personId: number, managerId: number | null) => {
     setError(null)
+    setPending((m) => new Map(m).set(personId, managerId))
     try {
-      await fn()
+      await setManager(personId, managerId)
       list.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      setPending((m) => {
+        const next = new Map(m)
+        next.delete(personId)
+        return next
+      })
     }
   }
-
-  const move = (personId: number, managerId: number | null) =>
-    guard(() => setManager(personId, managerId))()
 
   return (
     <motion.div
@@ -289,44 +346,58 @@ function Chart({
           </div>
         )}
 
-        <ul className="org-branch flex items-start justify-center gap-6">
-          {chefs.map((chef) => {
-            const crew = techs.filter((p) => p.manager_id === chef.id)
-            return (
-              <li key={chef.id} className="org-node flex flex-col items-center">
-                <div className={cn(crew.length > 0 && 'org-stem')}>
-                  <Box
-                    person={chef}
-                    selected={selected === chef.id}
-                    onSelect={onSelect}
-                    onMove={onMove}
-                    canEdit={canEdit}
-                    stat={teamOf(chef)}
-                    peak={Math.max(peak, teamOf(chef).count)}
-                    crew={crew.length}
-                    dropTarget
-                  />
-                </div>
-                <ul className="org-branch flex items-start justify-center gap-3">
-                  {crew.map((p) => (
-                    <li key={p.id} className="org-node">
+        <div className="org-crew">
+          {chunk(chefs, CHEFS_PER_ROW).map((chefRow) => (
+            <ul
+              key={chefRow.map((c) => c.id).join('-')}
+              className="org-branch flex items-start justify-center gap-6"
+            >
+              {chefRow.map((chef) => {
+                const crew = techs.filter((p) => p.manager_id === chef.id)
+                return (
+                  <li key={chef.id} className="org-node flex flex-col items-center">
+                    <div className={cn(crew.length > 0 && 'org-stem')}>
                       <Box
-                        person={p}
-                        selected={selected === p.id}
+                        person={chef}
+                        selected={selected === chef.id}
                         onSelect={onSelect}
                         onMove={onMove}
                         canEdit={canEdit}
-                        stat={load.get(p.name.trim().toLowerCase())}
-                        peak={peak}
-                        draggable
+                        stat={teamOf(chef)}
+                        peak={Math.max(peak, teamOf(chef).count)}
+                        crew={crew.length}
+                        dropTarget
                       />
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            )
-          })}
-        </ul>
+                    </div>
+                    <div className="org-crew">
+                      {chunk(crew, CREW_PER_ROW).map((row) => (
+                        <ul
+                          key={row.map((p) => p.id).join('-')}
+                          className="org-branch flex items-start justify-center gap-3"
+                        >
+                          {row.map((p) => (
+                            <li key={p.id} className="org-node">
+                              <Box
+                                person={p}
+                                selected={selected === p.id}
+                                onSelect={onSelect}
+                                onMove={onMove}
+                                canEdit={canEdit}
+                                stat={load.get(p.name.trim().toLowerCase())}
+                                peak={peak}
+                                draggable
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      ))}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ))}
+        </div>
 
         {orphans.length > 0 && (
           <section className="mt-10 flex w-full flex-col items-center gap-3">
@@ -401,78 +472,105 @@ function Box({
 }) {
   const { t } = useI18n()
   const [over, setOver] = useState(false)
+  const [lifting, setLifting] = useState(false)
   const canDrag = canEdit && draggable
+  const still = useReducedMotion()
 
   return (
-    <div
-      draggable={canDrag}
-      onDragStart={(e) => {
-        e.dataTransfer.setData(DRAG_TYPE, String(person.id))
-        e.dataTransfer.effectAllowed = 'move'
-      }}
-      onDragOver={
-        canEdit && dropTarget
-          ? (e) => {
-              // preventDefault is what marks this a valid drop target; without
-              // it the browser refuses the drop and nothing happens.
-              e.preventDefault()
-              e.dataTransfer.dropEffect = 'move'
-              setOver(true)
-            }
-          : undefined
-      }
-      onDragLeave={() => setOver(false)}
-      onDrop={
-        canEdit && dropTarget
-          ? (e) => {
-              e.preventDefault()
-              setOver(false)
-              const dragged = Number(e.dataTransfer.getData(DRAG_TYPE))
-              if (dragged && dragged !== person.id) onMove(dragged, person.id)
-            }
-          : undefined
-      }
-      // Only the hovered target lights up — never every valid chef at once.
-      // DESIGN.md's Ten Percent Rule: two accented things on screen means one
-      // of them is wrong, and a whole row of accent rings finds nothing.
-      className={cn('rounded-lg border transition-colors', dropBorder(over, selected))}
+    /*
+      `layoutId` is what makes a reassignment visible.
+      
+      The box is torn out of one chef's crew and re-mounted under another, which
+      React renders as an instant jump — the person is simply somewhere else and
+      the eye has nothing to follow. With a stable layoutId motion measures the
+      old and new rectangles and springs the same element between them, so the
+      move is watched rather than inferred. It reads as a move precisely because
+      it is animated with the page's own spring (DESIGN.md: stiffness 100,
+      damping 20) and only touches transform.
+    */
+    <motion.div
+      layout={!still}
+      layoutId={still ? undefined : `org-person-${person.id}`}
+      transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+      // Lifted while dragging so the source is obviously the thing in flight,
+      // and so the browser's own drag ghost is not the only feedback.
+      animate={{ opacity: lifting ? 0.4 : 1 }}
     >
-      <button
-        type="button"
-        onClick={() => onSelect(person.id)}
-        aria-pressed={selected}
-        className={cn(
-          'bg-surface edge focus-visible:ring-accent flex w-40 cursor-pointer flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-start outline-none focus-visible:ring-2',
-          canDrag && 'cursor-grab active:cursor-grabbing',
-        )}
+      {/* Native HTML5 drag lives on a plain child: motion owns `onDragStart`
+          for its own pointer-drag gesture, and the two signatures do not
+          agree. Keeping them on separate elements is cheaper than casting
+          around a real type conflict. */}
+      <div
+        draggable={canDrag}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(DRAG_TYPE, String(person.id))
+          e.dataTransfer.effectAllowed = 'move'
+          setLifting(true)
+        }}
+        onDragEnd={() => setLifting(false)}
+        onDragOver={
+          canEdit && dropTarget
+            ? (e) => {
+                // preventDefault is what marks this a valid drop target; without
+                // it the browser refuses the drop and nothing happens.
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setOver(true)
+              }
+            : undefined
+        }
+        onDragLeave={() => setOver(false)}
+        onDrop={
+          canEdit && dropTarget
+            ? (e) => {
+                e.preventDefault()
+                setOver(false)
+                const dragged = Number(e.dataTransfer.getData(DRAG_TYPE))
+                if (dragged && dragged !== person.id) onMove(dragged, person.id)
+              }
+            : undefined
+        }
+        // Only the hovered target lights up — never every valid chef at once.
+        // DESIGN.md's Ten Percent Rule: two accented things on screen means one
+        // of them is wrong, and a whole row of accent rings finds nothing.
+        className={cn('rounded-lg border transition-colors', dropBorder(over, selected))}
       >
-        <span className="text-ink w-full truncate text-sm font-medium">{person.name}</span>
-        <span className="flex w-full items-center gap-1.5">
-          <span className="text-ink-faint flex-1 truncate text-[0.6875rem] tracking-wide uppercase">
-            {t(`equipe.role.${person.role ?? 'tech'}`)}
-          </span>
-          {/* Which channels reach them, not what their addresses are. The raw
+        <button
+          type="button"
+          onClick={() => onSelect(person.id)}
+          aria-pressed={selected}
+          className={cn(
+            'bg-surface edge focus-visible:ring-accent flex w-40 cursor-pointer flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-start outline-none focus-visible:ring-2',
+            canDrag && 'cursor-grab active:cursor-grabbing',
+          )}
+        >
+          <span className="text-ink w-full truncate text-sm font-medium">{person.name}</span>
+          <span className="flex w-full items-center gap-1.5">
+            <span className="text-ink-faint flex-1 truncate text-[0.6875rem] tracking-wide uppercase">
+              {t(`equipe.role.${person.role ?? 'tech'}`)}
+            </span>
+            {/* Which channels reach them, not what their addresses are. The raw
               external_id — a phone number or a Telegram chat id — used to sit on
               every box, which made the chart a wall of digits and pushed the one
               thing a chart is for (who reports to whom) into third place. The
               full identities are one click away in the detail panel. */}
-          {person.identities.map((id) => (
-            <ChannelIcon
-              key={id.id}
-              channel={id.channel}
-              size={12}
-              className={cn('text-ink-faint shrink-0', !id.active && 'opacity-40')}
-            />
-          ))}
-          {person.has_login && (
-            <span className="text-ink-faint shrink-0" title={t('equipe.hasLogin')}>
-              <KeyIcon size={12} />
-              <span className="sr-only">{t('equipe.hasLogin')}</span>
-            </span>
-          )}
-        </span>
+            {person.identities.map((id) => (
+              <ChannelIcon
+                key={id.id}
+                channel={id.channel}
+                size={12}
+                className={cn('text-ink-faint shrink-0', !id.active && 'opacity-40')}
+              />
+            ))}
+            {person.has_login && (
+              <span className="text-ink-faint shrink-0" title={t('equipe.hasLogin')}>
+                <KeyIcon size={12} />
+                <span className="sr-only">{t('equipe.hasLogin')}</span>
+              </span>
+            )}
+          </span>
 
-        {/*
+          {/*
           Load. A bar plus its own number, never the bar alone: the chart is
           read at a glance for shape and then squinted at for the actual figure,
           and a bar with no value is a shape you cannot act on.
@@ -481,35 +579,36 @@ function Box({
           the Reserved Band Rule's exact sanctioned meaning — and the count is
           in the title text too, so the split never rests on hue.
         */}
-        {stat && stat.count > 0 && (
-          <span
-            className="mt-0.5 flex w-full items-center gap-2"
-            title={loadLabel(t, person.name, stat, crew)}
-          >
-            <span className="bg-line relative h-1 flex-1 overflow-hidden rounded-full">
-              <span
-                className="bg-accent absolute inset-y-0 start-0 rounded-full"
-                style={{ inlineSize: `${Math.max(4, (stat.count / peak) * 100)}%` }}
-              />
-              {stat.flagged > 0 && (
+          {stat && stat.count > 0 && (
+            <span
+              className="mt-0.5 flex w-full items-center gap-2"
+              title={loadLabel(t, person.name, stat, crew)}
+            >
+              <span className="bg-line relative h-1 flex-1 overflow-hidden rounded-full">
                 <span
-                  className="bg-status-warn absolute inset-y-0 start-0 rounded-full"
-                  style={{ inlineSize: `${Math.max(2, (stat.flagged / peak) * 100)}%` }}
+                  className="bg-accent absolute inset-y-0 start-0 rounded-full"
+                  style={{ inlineSize: `${Math.max(4, (stat.count / peak) * 100)}%` }}
                 />
-              )}
+                {stat.flagged > 0 && (
+                  <span
+                    className="bg-status-warn absolute inset-y-0 start-0 rounded-full"
+                    style={{ inlineSize: `${Math.max(2, (stat.flagged / peak) * 100)}%` }}
+                  />
+                )}
+              </span>
+              <span className="tabular text-ink-muted text-[0.625rem]">{stat.count}</span>
+              <span className="sr-only">{loadLabel(t, person.name, stat, crew)}</span>
             </span>
-            <span className="tabular text-ink-muted text-[0.625rem]">{stat.count}</span>
-            <span className="sr-only">{loadLabel(t, person.name, stat, crew)}</span>
-          </span>
-        )}
+          )}
 
-        {crew !== undefined && crew > 0 && (
-          <span className="text-ink-faint text-[0.625rem]">
-            {t('equipe.crewCount', { count: crew })}
-          </span>
-        )}
-      </button>
-    </div>
+          {crew !== undefined && crew > 0 && (
+            <span className="text-ink-faint text-[0.625rem]">
+              {t('equipe.crewCount', { count: crew })}
+            </span>
+          )}
+        </button>
+      </div>
+    </motion.div>
   )
 }
 

@@ -243,7 +243,10 @@
     inset-block-start: 0;
     inline-size: 50%;
     block-size: 1.5rem;
-    border-block-start: 1px solid var(--line);
+    /* line-strong, not line: at 1px on a tinted canvas the connectors read as
+       a rendering artefact rather than as structure. Still one pixel — the
+       Hairline Rule is about weight, and this is a contrast fix. */
+    border-block-start: 1px solid var(--line-strong);
   }
 
   .org-branch > .org-node::before {
@@ -252,7 +255,7 @@
 
   .org-branch > .org-node::after {
     inset-inline-start: 50%;
-    border-inline-start: 1px solid var(--line);
+    border-inline-start: 1px solid var(--line-strong);
   }
 
   /* The overhang trim. `:only-child` keeps a lone child's vertical stub while
@@ -280,7 +283,40 @@
     inset-block-end: 0;
     inset-inline-start: 50%;
     block-size: 1.5rem;
-    border-inline-start: 1px solid var(--line);
+    border-inline-start: 1px solid var(--line-strong);
+  }
+
+  /*
+    A crew wider than three wraps instead of scrolling.
+
+    The page used to put a whole crew on one row, so six technicians pushed the
+    chart past the viewport and the org could only be read by scrolling
+    sideways — the one thing DESIGN.md says the page body must never do.
+    Rows are chunked in the component; this connects them.
+
+    Each row already draws its own centre-to-centre rule (.org-node above). A
+    row that follows another gets one short vertical link up through the gap,
+    so the crew reads as one continuous branch rather than as separate teams.
+    The gap is a fixed row-gap, which is the only reason this height is
+    knowable in CSS at all.
+  */
+  .org-crew {
+    display: flex;
+    flex-direction: column;
+    row-gap: 1.5rem;
+  }
+
+  .org-crew > .org-branch + .org-branch {
+    position: relative;
+  }
+
+  .org-crew > .org-branch + .org-branch::before {
+    content: '';
+    position: absolute;
+    inset-block-start: -1.5rem;
+    inset-inline-start: 50%;
+    block-size: 1.5rem;
+    border-inline-start: 1px solid var(--line-strong);
   }
 
   /*
