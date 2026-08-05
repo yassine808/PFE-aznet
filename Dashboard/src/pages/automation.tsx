@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'motion/react'
+import { motion, useReducedMotion } from 'motion/react'
 import {
   ArrowClockwiseIcon,
   BellRingingIcon,
@@ -23,7 +23,6 @@ import {
   type AppSettings,
   type JobStatus,
 } from '@/lib/api'
-import { FORMATS, type ReportFormat } from '@/lib/report-export'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
@@ -33,7 +32,6 @@ const DEFAULTS: Required<AppSettings> = {
   weekly_day: 4,
   weekly_time: '17:00',
   emails: [],
-  report_format: 'markdown',
 }
 
 // Icon per job, so the rows are told apart at a glance rather than read.
@@ -49,7 +47,6 @@ const JOB_ICONS: Record<string, typeof BroomIcon> = {
 // Order shown to the operator: the two mails they care about first, plumbing last.
 const JOB_ORDER = ['daily_report', 'weekly_report', 'reminders', 'sheet_queue', 'profiles', 'prune_logs']
 
-const FORMAT_EXT: Record<ReportFormat, string> = { txt: '.txt', markdown: '.md', docx: '.docx' }
 
 function Band({
   title,
@@ -102,6 +99,28 @@ function scheduledAt(job: JobStatus): number | null {
  */
 function DayPlan({ jobs }: { readonly jobs: JobStatus[] }) {
   const { t, dir } = useI18n()
+
+  /**
+   * Where "now" sits on the axis, repainted once a minute.
+   *
+   * Without it the axis showed a day in the abstract and the operator still had
+   * to find themselves on it before it meant anything. A needle turns the same
+   * drawing into "the report goes out in two hours". A minute is the finest
+   * step the axis can actually resolve — a second-by-second timer would repaint
+   * sixty times for one pixel.
+   */
+  const [nowMinutes, setNowMinutes] = useState(() => {
+    const d = new Date()
+    return d.getHours() * 60 + d.getMinutes()
+  })
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const d = new Date()
+      setNowMinutes(d.getHours() * 60 + d.getMinutes())
+    }, 60_000)
+    return () => window.clearInterval(id)
+  }, [])
+
   const pct = (minutes: number) => {
     const p = (Math.min(Math.max(minutes, 0), 1440) / 1440) * 100
     return dir === 'rtl' ? 100 - p : p
@@ -117,10 +136,27 @@ function DayPlan({ jobs }: { readonly jobs: JobStatus[] }) {
   }
   const timed = [...clusters.entries()].sort((a, b) => a[0] - b[0])
   const continuous = jobs.filter((job) => scheduledAt(job) === null)
+  // The next cluster to fire, wrapping past midnight — the one thing on this
+  // axis worth emphasising, and the answer to "what happens next?".
+  const next = timed.find(([at]) => at >= nowMinutes)?.[0] ?? timed[0]?.[0] ?? null
 
   return (
     <div className="flex flex-col gap-3">
       <div className="relative h-14">
+        {/* Night, as a tonal wash rather than a labelled region: the three
+            nightly jobs cluster at 03:00 and it should be obvious at a glance
+            that they run while nobody is on site. */}
+        <span
+          aria-hidden
+          className="bg-ink/[0.03] dark:bg-ink/[0.06] absolute inset-y-0 rounded-sm"
+          style={{ insetInlineStart: `${pct(0)}%`, inlineSize: `${(6 / 24) * 100}%` }}
+        />
+        <span
+          aria-hidden
+          className="bg-ink/[0.03] dark:bg-ink/[0.06] absolute inset-y-0 rounded-sm"
+          style={{ insetInlineStart: `${pct(20 * 60)}%`, inlineSize: `${(4 / 24) * 100}%` }}
+        />
+
         {/* Recessive gridlines, same hairline language as the Day Ribbon. */}
         {PLAN_HOURS.map((h) => (
           <span
@@ -130,10 +166,31 @@ function DayPlan({ jobs }: { readonly jobs: JobStatus[] }) {
             style={{ insetInlineStart: `${pct(h * 60)}%` }}
           />
         ))}
+
+        {/* Now. The one accented thing on the axis — DESIGN.md's Ten Percent
+            Rule means the marks cannot all shout, and this is the mark that
+            makes every other one legible. */}
+        <span
+          aria-hidden
+          className="bg-accent absolute inset-y-0 w-px"
+          style={{ insetInlineStart: `${pct(nowMinutes)}%` }}
+        />
+        <span
+          className="bg-accent absolute top-0 size-1.5 -translate-x-1/2 rounded-full rtl:translate-x-1/2"
+          style={{ insetInlineStart: `${pct(nowMinutes)}%` }}
+        >
+          <span className="sr-only">
+            {t('automation.plan.now', {
+              time: `${String(Math.floor(nowMinutes / 60)).padStart(2, '0')}:${String(nowMinutes % 60).padStart(2, '0')}`,
+            })}
+          </span>
+        </span>
+
         {timed.map(([at, group]) => {
           const label = group
             .map((job) => `${t(`automation.job.${job.name}`)} — ${job.schedule}`)
             .join(' · ')
+          const isNext = at === next
           return (
             <span
               key={at}
@@ -147,14 +204,26 @@ function DayPlan({ jobs }: { readonly jobs: JobStatus[] }) {
                   return (
                     <span
                       key={job.name}
-                      className="border-line bg-surface text-ink-muted flex size-7 items-center justify-center rounded-full border"
+                      className={cn(
+                        'flex size-7 items-center justify-center rounded-full border transition-colors',
+                        // Next up reads through weight, not through a second
+                        // accent: the needle already owns the accent here.
+                        isNext
+                          ? 'border-ink-faint bg-surface text-ink'
+                          : 'border-line bg-surface text-ink-faint',
+                      )}
                     >
-                      <Icon size={13} />
+                      <Icon size={13} weight={isNext ? 'bold' : 'regular'} />
                     </span>
                   )
                 })}
               </span>
-              <span className="tabular text-ink-faint text-[0.625rem]">
+              <span
+                className={cn(
+                  'tabular text-[0.625rem]',
+                  isNext ? 'text-ink-muted' : 'text-ink-faint',
+                )}
+              >
                 {String(Math.floor(at / 60)).padStart(2, '0')}:
                 {String(at % 60).padStart(2, '0')}
               </span>
@@ -296,21 +365,30 @@ function JobRow({
   const text = outcome(job)
 
   return (
-    <li className="border-line flex flex-col gap-2 border-b py-4 last:border-b-0">
+    <li className="border-line hover:bg-canvas/60 -mx-4 flex flex-col gap-2 border-b px-4 py-4 transition-colors last:border-b-0">
       <div className="flex items-baseline gap-3">
         <Icon size={15} className="text-ink-faint shrink-0 translate-y-0.5" />
 
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-ink text-sm font-medium">{t(`automation.job.${job.name}`)}</span>
-          <span className="text-ink-faint text-xs">{t(`automation.job.${job.name}.what`)}</span>
+          <span className="text-ink text-sm font-medium text-balance">
+            {t(`automation.job.${job.name}`)}
+          </span>
+          {/* `pretty` rather than `balance`: these are one-line explanations, and
+              the thing worth avoiding is a single orphaned word on line two. */}
+          <span className="text-ink-faint text-xs text-pretty">
+            {t(`automation.job.${job.name}.what`)}
+          </span>
         </div>
 
+        {/* 36px tall and 40px of touch target with the inline padding — the
+            row's only control should not need aiming at. `transition-colors`
+            plus a transform on press, never `transition: all`. */}
         <button
           type="button"
           onClick={trigger}
           disabled={busy}
           aria-busy={busy}
-          className="border-line text-ink-muted hover:text-ink hover:border-ink-faint focus-visible:ring-accent flex shrink-0 cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+          className="border-line text-ink-muted hover:text-ink hover:border-ink-faint focus-visible:ring-accent flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border px-3.5 text-xs transition-[color,border-color,transform] duration-150 outline-none focus-visible:ring-2 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowClockwiseIcon size={13} className={busy ? 'animate-spin' : undefined} />
           {busy ? t('automation.job.running') : t('automation.job.run')}
@@ -328,10 +406,16 @@ function JobRow({
         </span>
         {last ? (
           <>
+            {/* The outcome as a pill rather than loose coloured text: it is the
+                one thing on the row that is scanned down a column, and a shape
+                is findable at a glance in a way a tinted sentence is not. The
+                dot stays, so the state never rests on hue alone. */}
             <span
               className={cn(
-                'inline-flex items-center gap-1.5',
-                last.ok ? 'text-status-ok' : 'text-status-fail',
+                'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5',
+                last.ok
+                  ? 'text-status-ok bg-status-ok/10'
+                  : 'text-status-fail bg-status-fail/10',
               )}
             >
               <span
@@ -375,18 +459,35 @@ function JobRow({
  */
 function Panel({
   title,
+  aside,
+  index = 0,
   children,
 }: {
   readonly title: string
+  /** Small right-aligned figure in the header — a count, a state. */
+  readonly aside?: React.ReactNode
+  readonly index?: number
   readonly children: React.ReactNode
 }) {
+  const still = useReducedMotion()
   return (
-    <section className="border-line bg-surface flex min-w-0 flex-col rounded-xl border">
-      <h3 className="border-line text-ink-faint border-b px-4 py-2.5 text-[0.6875rem] font-medium tracking-wide uppercase">
-        {title}
-      </h3>
+    <motion.section
+      // Staggered by position, so the three panels arrive as a sequence rather
+      // than as one flash. 60ms is enough to read as order and short enough
+      // that nobody waits for the page.
+      initial={still ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 100, damping: 20, delay: index * 0.06 }}
+      className="border-line bg-surface flex min-w-0 flex-col rounded-xl border"
+    >
+      <div className="border-line flex items-center gap-3 border-b px-4 py-2.5">
+        <h3 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
+          {title}
+        </h3>
+        {aside && <span className="text-ink-faint tabular ms-auto text-[0.6875rem]">{aside}</span>}
+      </div>
       <div className="px-4">{children}</div>
-    </section>
+    </motion.section>
   )
 }
 
@@ -422,15 +523,31 @@ function JobsBand({
     </ul>
   )
 
+  // How many of these ran and came back clean — the header figure that saves
+  // reading every row to answer "is the machine healthy?".
+  const health = (list: JobStatus[]) => {
+    const ran = list.filter((j) => j.last)
+    const ok = ran.filter((j) => j.last?.ok).length
+    return ran.length === 0 ? t('automation.job.never') : `${ok}/${ran.length}`
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <Panel title={t('automation.plan.title')}>
+      <Panel title={t('automation.plan.title')} index={0}>
         <div className="py-4">
           <DayPlan jobs={ordered} />
         </div>
       </Panel>
-      {mails.length > 0 && <Panel title={t('automation.group.mails')}>{rows(mails)}</Panel>}
-      {upkeep.length > 0 && <Panel title={t('automation.group.upkeep')}>{rows(upkeep)}</Panel>}
+      {mails.length > 0 && (
+        <Panel title={t('automation.group.mails')} aside={health(mails)} index={1}>
+          {rows(mails)}
+        </Panel>
+      )}
+      {upkeep.length > 0 && (
+        <Panel title={t('automation.group.upkeep')} aside={health(upkeep)} index={2}>
+          {rows(upkeep)}
+        </Panel>
+      )}
     </div>
   )
 }
@@ -695,28 +812,6 @@ export function AutomationPage() {
             <p className="text-status-fail max-w-[70ch] text-xs break-all">{testResult.message}</p>
           )}
         </div>
-      </Band>
-
-      <Band title={t('automation.format')} hint={t('automation.formatHint')}>
-        <fieldset className="border-line m-0 flex w-fit rounded-md border p-0.5">
-          <legend className="sr-only">{t('automation.format')}</legend>
-          {FORMATS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => set('report_format', f)}
-              aria-pressed={values.report_format === f}
-              className={cn(
-                'rounded px-3 py-1.5 text-xs transition-colors active:translate-y-px',
-                values.report_format === (f as ReportFormat)
-                  ? 'bg-slate-100 text-ink dark:bg-slate-850'
-                  : 'text-ink-faint hover:text-ink',
-              )}
-            >
-              {FORMAT_EXT[f]}
-            </button>
-          ))}
-        </fieldset>
       </Band>
 
       {error && <ErrorState message={error} onRetry={save} />}

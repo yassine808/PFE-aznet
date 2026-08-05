@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   ArrowsClockwiseIcon,
@@ -18,11 +18,12 @@ import {
   refreshProfile,
   setManager,
   useApi,
+  type ReportRow,
   type Technician,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
-import { isFlagged } from '@/lib/metrics'
+import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { ChannelIcon } from '@/components/channel-icon'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { GrantAccessForm, HistBlock } from '@/components/team-activity'
@@ -67,8 +68,69 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out
 }
 
+/**
+ * Everything one person's rows say about them.
+ *
+ * Computed once, in one place, because the chart card and the detail panel were
+ * otherwise going to answer the same question with two different arithmetics —
+ * and the first time the two disagreed, both would be suspect.
+ */
+export interface PersonStats {
+  count: number
+  flagged: number
+  /** Most recent report, ISO — null when the Sheet carries no parsable date. */
+  last: string | null
+  /** Distinct chantiers touched. */
+  sites: number
+  goulottes: number
+  cables: number
+  bureaux: number
+  panneaux: number
+  /**
+   * Share of the raw transcript written in Arabic script, or null when nothing
+   * was transcribed. Script-based: arabizi (darija in latin letters) reads as
+   * French here, which the label admits.
+   */
+  pctArabic: number | null
+}
+
+function statsOf(rows: ReportRow[]): PersonStats {
+  let arabic = 0
+  let latin = 0
+  let last: string | null = null
+  const sites = new Set<string>()
+  const totals = { goulottes: 0, cables: 0, bureaux: 0, panneaux: 0 }
+
+  for (const r of rows) {
+    const iso = toISODate(r.date)
+    if (iso && (last === null || iso > last)) last = iso
+    const site = (r.chantier ?? '').trim()
+    if (site) sites.add(site.toLowerCase())
+    totals.goulottes += num(r.goulottes_m)
+    totals.cables += num(r.cables_m)
+    totals.bureaux += num(r.bureaux_termines)
+    totals.panneaux += num(r.panneaux_raccordes)
+
+    for (const ch of (r.rapport_complet ?? '').replace(/\s+/g, '')) {
+      const code = ch.codePointAt(0) ?? 0
+      if (code >= 0x0600 && code <= 0x06ff) arabic += 1
+      else if (/[a-zA-ZàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]/.test(ch)) latin += 1
+    }
+  }
+
+  const script = arabic + latin
+  return {
+    count: rows.length,
+    flagged: rows.filter((r) => isFlagged(r.flag_review)).length,
+    last,
+    sites: sites.size,
+    ...totals,
+    pctArabic: script === 0 ? null : Math.round((arabic / script) * 100),
+  }
+}
+
 /** Reports per person, keyed by lower-cased name (the Sheet's own join key). */
-type Load = Map<string, { count: number; flagged: number }>
+type Load = Map<string, PersonStats>
 
 export function EquipePage() {
   const { t } = useI18n()
@@ -124,15 +186,16 @@ export function EquipePage() {
    * when they open it: who is carrying the week, and who has gone quiet.
    */
   const load = useMemo(() => {
-    const m = new Map<string, { count: number; flagged: number }>()
+    const byName = new Map<string, ReportRow[]>()
     for (const r of reports.data?.reports ?? []) {
       const key = (r.technicien ?? '').trim().toLowerCase()
       if (!key) continue
-      const cur = m.get(key) ?? { count: 0, flagged: 0 }
-      cur.count += 1
-      if (isFlagged(r.flag_review)) cur.flagged += 1
-      m.set(key, cur)
+      const bucket = byName.get(key)
+      if (bucket) bucket.push(r)
+      else byName.set(key, [r])
     }
+    const m: Load = new Map()
+    for (const [key, rows] of byName) m.set(key, statsOf(rows))
     return m
   }, [reports.data])
 
@@ -207,15 +270,27 @@ export function EquipePage() {
         )}
       </div>
 
-      {adding && isDirector && (
-        <AddPersonForm
-          role={adding}
-          onDone={() => {
-            setAdding(null)
-            list.reload()
-          }}
-        />
-      )}
+      {/* The add form is a drawer, not a centred window: it opens from the same
+          edge and with the same spring as the detail panel, so "look at one
+          person" and "add a person" are one gesture in two directions rather
+          than two unrelated surfaces — and neither one covers the chart. */}
+      <AnimatePresence>
+        {adding && isDirector && (
+          <Drawer
+            label={t(adding === 'chef' ? 'equipe.addChef' : 'equipe.addTech')}
+            onClose={() => setAdding(null)}
+          >
+            <AddPersonForm
+              role={adding}
+              onCancel={() => setAdding(null)}
+              onDone={() => {
+                setAdding(null)
+                list.reload()
+              }}
+            />
+          </Drawer>
+        )}
+      </AnimatePresence>
 
       {error && <p className="text-status-fail text-xs break-all">{error}</p>}
 
@@ -241,38 +316,7 @@ export function EquipePage() {
 
       <AnimatePresence>
         {focus && (
-          <motion.div
-            className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            onClick={() => setSelected(null)}
-            aria-hidden="true"
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {focus && (
-          <motion.div
-            role="dialog"
-            aria-label={focus.name}
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', stiffness: 220, damping: 28 }}
-            className="border-line bg-surface edge fixed top-0 bottom-0 end-0 z-50 flex w-full max-w-md flex-col gap-6 overflow-y-auto border-s p-5 shadow-[0_16px_40px_-20px_oklch(0.146_0.008_245/0.45)]"
-          >
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              aria-label={t('nav.close')}
-              className="text-ink-faint hover:text-ink focus-visible:ring-accent absolute end-4 top-4 cursor-pointer rounded p-1 transition-colors outline-none focus-visible:ring-2"
-            >
-              <XIcon size={16} />
-            </button>
-
+          <Drawer label={focus.name} onClose={() => setSelected(null)}>
             <Detail
               person={focus}
               chefs={chefs}
@@ -282,7 +326,7 @@ export function EquipePage() {
               onMove={move}
               onError={setError}
             />
-          </motion.div>
+          </Drawer>
         )}
       </AnimatePresence>
 
@@ -331,6 +375,26 @@ function Chart({
       )
   return (
     <div className="overflow-x-auto pb-2">
+      {/*
+        A key for the one encoded thing on the chart.
+
+        The bar under each name carries two quantities and nothing on the page
+        said so — an operator either guessed or ignored it, and an ignored
+        encoding is wasted ink. Stated once, quietly, above the chart rather
+        than repeated in six tooltips.
+      */}
+      <div className="text-ink-faint mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem]">
+        <span className="flex items-center gap-1.5">
+          <span className="bg-accent h-1 w-6 rounded-full" />
+          {t('equipe.legendReports')}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="bg-status-warn h-1 w-3 rounded-full" />
+          {t('equipe.legendFlagged')}
+        </span>
+        {canEdit && <span className="ms-auto">{t('equipe.legendDrag')}</span>}
+      </div>
+
       <div className="flex min-w-max flex-col items-center gap-0">
         {directeur && (
           <div className={cn(chefs.length > 0 && 'org-stem')}>
@@ -459,7 +523,18 @@ function Box({
   readonly canEdit: boolean
   readonly draggable?: boolean
   readonly dropTarget?: boolean
-  readonly stat?: { count: number; flagged: number }
+  /**
+   * A chef's card shows their crew's summed output, which has no single date or
+   * language behind it — hence the optional half. Structurally, a whole
+   * `PersonStats` satisfies this, so a technician's card passes one straight in.
+   */
+  readonly stat?: {
+    count: number
+    flagged: number
+    last?: string | null
+    sites?: number
+    pctArabic?: number | null
+  }
   readonly peak: number
   readonly crew?: number
   readonly onSelect: (id: number) => void
@@ -470,6 +545,8 @@ function Box({
   const [lifting, setLifting] = useState(false)
   const canDrag = canEdit && draggable
   const still = useReducedMotion()
+  // A technician's card, i.e. the one whose figures are about one person.
+  const isCrewCard = person.role !== 'directeur' && person.role !== 'chef'
 
   return (
     /*
@@ -546,13 +623,31 @@ function Box({
           type="button"
           onClick={() => onSelect(person.id)}
           aria-pressed={selected}
+          /*
+            Every card in a band is the same rectangle, whatever its occupant
+            has or has not sent. Sizing to content made the chart ragged and,
+            worse, made an empty week look like a smaller job: a box's height
+            was reading as a second, accidental measure of the person in it.
+            Technicians get the taller card because theirs is the one carrying
+            per-person figures; a chef's carries a crew total.
+          */
           className={cn(
-            'bg-surface edge focus-visible:ring-accent flex w-40 cursor-pointer flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-start outline-none focus-visible:ring-2',
+            'bg-surface edge focus-visible:ring-accent flex cursor-pointer flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-start outline-none focus-visible:ring-2',
+            isCrewCard ? 'h-32 w-44' : 'h-24 w-44',
+            // Depth on hover, not colour: the card is already bordered, and a
+            // tint here would compete with the drop-target ring that has to
+            // stay the loudest thing on the chart while dragging. Explicit
+            // properties — never `transition: all` on a card that also moves
+            // under motion's layout animation.
+            'shadow-[0_1px_2px_-1px_oklch(0.146_0.008_245/0.08)] transition-[box-shadow,border-color] duration-150',
+            'hover:shadow-[0_6px_16px_-8px_oklch(0.146_0.008_245/0.28)]',
             canDrag && 'cursor-grab active:cursor-grabbing',
-            lifting && 'bg-transparent opacity-0',
+            lifting && 'bg-transparent opacity-0 shadow-none',
           )}
         >
-          <span className="text-ink w-full truncate text-sm font-medium">{person.name}</span>
+          <span className="text-ink w-full truncate text-sm font-medium text-balance">
+            {person.name}
+          </span>
           <span className="flex w-full items-center gap-1.5">
             <span className="text-ink-faint flex-1 truncate text-[0.6875rem] tracking-wide uppercase">
               {t(`equipe.role.${person.role ?? 'tech'}`)}
@@ -614,6 +709,30 @@ function Box({
               {t('equipe.crewCount', { count: crew })}
             </span>
           )}
+
+          {/*
+            The three questions a manager opens this chart with, under the bar:
+            when did I last hear from them, how much of it needs checking, and
+            which language do they dictate in. `mt-auto` pins the row to the
+            bottom of the fixed-height card, so the line is in the same place on
+            every technician — a row that floated with content length would be
+            read as a fourth, meaningless variable.
+          */}
+          {isCrewCard && (
+            <span className="text-ink-faint mt-auto flex w-full items-center gap-2 text-[0.625rem]">
+              <span className="truncate">
+                {stat?.last ? t('equipe.lastOn', { date: stat.last }) : t('equipe.neverSent')}
+              </span>
+              {stat && stat.flagged > 0 && (
+                <span className="text-status-warn tabular ms-auto shrink-0">⚑ {stat.flagged}</span>
+              )}
+              {stat?.pctArabic !== null && stat?.pctArabic !== undefined && (
+                <span className={cn('tabular shrink-0', !stat.flagged && 'ms-auto')}>
+                  {stat.pctArabic}% {t('equipe.langAr')}
+                </span>
+              )}
+            </span>
+          )}
         </button>
       </div>
     </motion.div>
@@ -669,6 +788,144 @@ function DropZone({
   )
 }
 
+/**
+ * A modal window.
+ *
+ * A native `<dialog>` opened with `showModal()`, not a div: the platform already
+ * gives the focus trap, the Esc key, the inert background and the top-layer
+ * stacking that a hand-rolled modal has to re-implement and usually gets wrong
+ * for keyboard users. Only the skin is ours.
+ *
+ * It is also why the "add" forms live here rather than in the page flow — a
+ * panel that opens between the intro and the chart pushes the whole org chart
+ * down the screen, so pressing "+" appears to move everyone.
+ */
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  readonly title: string
+  readonly onClose: () => void
+  readonly children: React.ReactNode
+}) {
+  const ref = useRef<HTMLDialogElement>(null)
+
+  // showModal() is imperative — there is no `open modally` attribute, and the
+  // `open` attribute alone renders a non-modal dialog with no focus trap.
+  useEffect(() => ref.current?.showModal(), [])
+
+  return (
+    <dialog
+      ref={ref}
+      onCancel={onClose}
+      onClose={onClose}
+      aria-label={title}
+      className="bg-panel border-line text-ink m-auto rounded-xl border p-5 shadow-lg backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
+    >
+      <h2 className="text-ink text-sm font-medium">{title}</h2>
+      {children}
+    </dialog>
+  )
+}
+
+/**
+ * A panel that slides in from the inline end, over a dimmed page.
+ *
+ * One component for both "who is this person" and "add a person": they are the
+ * same kind of side task, and giving them the same surface means the operator
+ * learns one dismissal gesture (backdrop, Esc, or the ✕) instead of two. `end`
+ * rather than `right`, so Arabic gets a left-hand drawer for free.
+ */
+function Drawer({
+  label,
+  onClose,
+  children,
+}: {
+  readonly label: string
+  readonly onClose: () => void
+  readonly children: React.ReactNode
+}) {
+  const { t } = useI18n()
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <>
+      <motion.div
+        className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <motion.div
+        role="dialog"
+        aria-label={label}
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', stiffness: 220, damping: 28 }}
+        className="border-line bg-surface edge fixed top-0 bottom-0 end-0 z-50 flex w-full max-w-md flex-col gap-6 overflow-y-auto border-s p-5 shadow-[0_16px_40px_-20px_oklch(0.146_0.008_245/0.45)]"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('nav.close')}
+          className="text-ink-faint hover:text-ink focus-visible:ring-accent absolute end-4 top-4 cursor-pointer rounded p-1 transition-colors outline-none focus-visible:ring-2"
+        >
+          <XIcon size={16} />
+        </button>
+        {children}
+      </motion.div>
+    </>
+  )
+}
+
+/** Ask before an irreversible delete. */
+function Confirm({
+  title,
+  body,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: {
+  readonly title: string
+  readonly body: string
+  readonly confirmLabel: string
+  readonly onConfirm: () => void
+  readonly onCancel: () => void
+}) {
+  const { t } = useI18n()
+  return (
+    <Modal title={title} onClose={onCancel}>
+      <p className="text-ink-muted mt-2 max-w-[42ch] text-xs leading-relaxed">{body}</p>
+      <div className="mt-5 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent cursor-pointer rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
+        >
+          {t('inbox.cancel')}
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="bg-status-fail focus-visible:ring-accent cursor-pointer rounded-md px-3 py-1.5 text-xs text-white transition-opacity outline-none hover:opacity-90 focus-visible:ring-2"
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ── the detail panel ───────────────────────────────────────────────────────
 
 /**
@@ -698,6 +955,7 @@ function Detail({
 }) {
   const { t } = useI18n()
   const [granting, setGranting] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const isAccount = person.role === 'directeur' || person.role === 'chef'
   // Keyed by id so switching person refetches instead of showing the previous
   // one's history under the new name.
@@ -748,7 +1006,7 @@ function Detail({
             {!isSelf && (
               <button
                 type="button"
-                onClick={run(() => deletePerson(person.id))}
+                onClick={() => setConfirming(true)}
                 aria-label={`${t('access.removePerson')} ${person.name}`}
                 className="text-ink-faint hover:text-status-fail focus-visible:ring-accent cursor-pointer rounded p-1 transition-colors outline-none focus-visible:ring-2"
               >
@@ -821,6 +1079,19 @@ function Detail({
       )}
 
       {isAccount && person.has_login && <HistBlock hist={hist} />}
+
+      {confirming && (
+        <Confirm
+          title={t('equipe.confirmDelete')}
+          body={t('equipe.confirmDeleteBody', { name: person.name })}
+          confirmLabel={t('access.removePerson')}
+          onCancel={() => setConfirming(false)}
+          onConfirm={() => {
+            setConfirming(false)
+            void run(() => deletePerson(person.id))()
+          }}
+        />
+      )}
     </motion.section>
   )
 }
@@ -969,27 +1240,15 @@ function WorkerStats({ name }: { readonly name: string }) {
   const { t } = useI18n()
   const reports = useApi('reports', api.reports)
 
-  const stats = useMemo(() => {
-    const rows = (reports.data?.reports ?? []).filter(
-      (r) => (r.technicien ?? '').trim() === name.trim(),
-    )
-    let arabic = 0
-    let latin = 0
-    for (const r of rows) {
-      const text = (r.rapport_complet ?? '').replace(/\s+/g, '')
-      for (const ch of text) {
-        const code = ch.codePointAt(0) ?? 0
-        if (code >= 0x0600 && code <= 0x06ff) arabic += 1
-        else if (/[a-zA-ZàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]/.test(ch)) latin += 1
-      }
-    }
-    const total = arabic + latin
-    return {
-      count: rows.length,
-      flagged: rows.filter((r) => isFlagged(r.flag_review)).length,
-      pctArabic: total === 0 ? null : Math.round((arabic / total) * 100),
-    }
-  }, [reports.data, name])
+  const stats = useMemo(
+    () =>
+      statsOf(
+        (reports.data?.reports ?? []).filter(
+          (r) => (r.technicien ?? '').trim().toLowerCase() === name.trim().toLowerCase(),
+        ),
+      ),
+    [reports.data, name],
+  )
 
   return (
     <div className="flex flex-col gap-3">
@@ -999,50 +1258,165 @@ function WorkerStats({ name }: { readonly name: string }) {
       {stats.count === 0 ? (
         <p className="text-ink-faint text-xs italic">{t('equipe.noActivity')}</p>
       ) : (
-        <ul className="divide-line flex flex-col divide-y">
-          <li className="flex items-baseline justify-between gap-4 py-1.5">
-            <span className="text-ink-muted text-xs">{t('equipe.messages')}</span>
-            <span className="tabular text-ink text-sm">{stats.count}</span>
-          </li>
-          <li className="flex items-baseline justify-between gap-4 py-1.5">
-            <span className="text-ink-muted text-xs">{t('equipe.lang')}</span>
-            <span className="tabular text-ink text-sm">
-              {stats.pctArabic === null
-                ? t('equipe.langUnknown')
-                : `${stats.pctArabic}% ${t('equipe.langAr')} / ${100 - stats.pctArabic}% ${t('equipe.langFr')}`}
-            </span>
-          </li>
-          <li className="flex items-baseline justify-between gap-4 py-1.5">
-            <span className="text-ink-muted text-xs">{t('equipe.flagged')}</span>
-            <span className="tabular text-status-warn text-sm">{stats.flagged}</span>
-          </li>
-        </ul>
+        <>
+          <ul className="divide-line flex flex-col divide-y">
+            <Row label={t('equipe.messages')} value={stats.count} />
+            <Row label={t('equipe.lastReport')} value={stats.last ?? t('equipe.neverSent')} />
+            <Row label={t('equipe.sites')} value={stats.sites} />
+            <Row label={t('equipe.flagged')} value={stats.flagged} tone="warn" />
+            <Row label={t('metric.goulottes')} value={`${stats.goulottes} m`} />
+            <Row label={t('metric.cables')} value={`${stats.cables} m`} />
+            <Row label={t('metric.bureaux')} value={stats.bureaux} />
+            <Row label={t('metric.panneaux')} value={stats.panneaux} />
+          </ul>
+
+          <div className="flex flex-col gap-2 pt-2">
+            <h3 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+              {t('equipe.lang')}
+            </h3>
+            <LangDonut pct={stats.pctArabic} />
+          </div>
+        </>
       )}
     </div>
   )
 }
 
-/** The "+": a name, nothing else. Credentials are a separate, later step. */
+function Row({
+  label,
+  value,
+  tone,
+}: {
+  readonly label: string
+  readonly value: string | number
+  readonly tone?: 'warn'
+}) {
+  return (
+    <li className="flex items-baseline justify-between gap-4 py-1.5">
+      <span className="text-ink-muted text-xs">{label}</span>
+      <span className={cn('tabular text-sm', tone === 'warn' ? 'text-status-warn' : 'text-ink')}>
+        {value}
+      </span>
+    </li>
+  )
+}
+
+/**
+ * The darija/French split as one ring.
+ *
+ * A percentage pair is two numbers the reader has to hold and compare; a ring
+ * is the comparison itself. Hand-built SVG, per the no-Recharts rule — a single
+ * `stroke-dasharray` on a circle is the whole chart, and the numbers stay in the
+ * middle and in the legend so nothing here rests on colour alone.
+ */
+function LangDonut({ pct }: { readonly pct: number | null }) {
+  const { t } = useI18n()
+  const still = useReducedMotion()
+  if (pct === null) return <p className="text-ink-faint text-xs italic">{t('equipe.langUnknown')}</p>
+
+  // `pathLength={100}` re-scales the dash units, so the dasharray reads literally
+  // as "percent, rest" whatever the geometry is. The radius therefore only has
+  // to make the ring fit: half the box, less half a stroke on each side, or the
+  // circle is drawn outside the viewBox and clipped into arcs.
+  const SIZE = 84
+  const STROKE = 9
+  const C = SIZE / 2
+  const R = (SIZE - STROKE) / 2
+
+  return (
+    <div className="flex items-center gap-4">
+      {/* -90deg so the arc starts at twelve o'clock rather than at three. */}
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} role="presentation">
+        <g transform={`rotate(-90 ${C} ${C})`} fill="none" strokeWidth={STROKE}>
+          {/* French is the full ring under the darija arc — a second tint of the
+              accent rather than a second hue, because the status band is
+              reserved for pipeline state and a language is not one. */}
+          <circle cx={C} cy={C} r={R} className="stroke-accent-400/45" />
+          <motion.circle
+            cx={C}
+            cy={C}
+            r={R}
+            pathLength={100}
+            strokeLinecap="round"
+            className="stroke-accent"
+            initial={still ? false : { strokeDasharray: `0 100` }}
+            animate={{ strokeDasharray: `${pct} ${100 - pct}` }}
+            transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+          />
+        </g>
+        <text
+          x={C}
+          y={C}
+          textAnchor="middle"
+          dominantBaseline="central"
+          className="fill-ink tabular text-[0.8125rem]"
+        >
+          {pct}%
+        </text>
+      </svg>
+
+      <ul className="flex flex-col gap-1.5 text-xs">
+        <li className="flex items-center gap-2">
+          <span className="bg-accent size-2 shrink-0 rounded-full" />
+          <span className="text-ink-muted">
+            <span className="tabular text-ink">{pct}%</span> {t('equipe.langAr')}
+          </span>
+        </li>
+        <li className="flex items-center gap-2">
+          <span className="bg-accent-400/45 size-2 shrink-0 rounded-full" />
+          <span className="text-ink-muted">
+            <span className="tabular text-ink">{100 - pct}%</span> {t('equipe.langFr')}
+          </span>
+        </li>
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * The "+": a name, and the channels that reach them.
+ *
+ * The channels are optional but they are here, not one click later in the
+ * detail panel: a technician with no channel cannot send anything, so creating
+ * one and then having to remember a second step produced people who existed on
+ * the chart and nowhere in the pipeline. Credentials stay a separate step —
+ * those are for chefs who sign in, which is a different decision.
+ */
 function AddPersonForm({
   role,
   onDone,
+  onCancel,
 }: {
   readonly role: 'chef' | 'tech'
   readonly onDone: () => void
+  readonly onCancel: () => void
 }) {
   const { t } = useI18n()
   const [name, setName] = useState('')
+  const [ids, setIds] = useState<Record<(typeof CHANNELS)[number], string>>({
+    telegram: '',
+    whatsapp: '',
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
+    const clean = name.trim()
+    if (!clean) return
     setBusy(true)
     setError(null)
     try {
-      await addPerson({ name: name.trim(), role })
+      await addPerson({ name: clean, role })
+      // Sequential, and after the person exists: `upsert_technician` matches on
+      // name, so a channel written before the person would create a second row
+      // for the same human — the exact split the accounts fold was undoing.
+      for (const channel of CHANNELS) {
+        const external = ids[channel].trim()
+        if (external) await addTechnician({ channel, external_id: external, name: clean })
+      }
       setName('')
+      setIds({ telegram: '', whatsapp: '' })
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -1052,11 +1426,15 @@ function AddPersonForm({
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="border-line bg-surface edge flex flex-wrap items-end gap-4 rounded-xl border p-5"
-    >
-      <label className="flex min-w-48 flex-col gap-1.5">
+    <form onSubmit={submit} className="flex flex-col gap-4 pt-2">
+      <h2 className="text-ink text-sm font-medium">
+        {t(role === 'chef' ? 'equipe.addChef' : 'equipe.addTech')}
+      </h2>
+      <p className="text-ink-faint text-xs leading-relaxed">
+        {t(role === 'chef' ? 'equipe.addChefNote' : 'equipe.addTechNote')}
+      </p>
+
+      <label className="flex flex-col gap-1.5">
         <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
           {t('team.name')}
         </span>
@@ -1068,16 +1446,39 @@ function AddPersonForm({
           className="border-line focus:border-accent focus-visible:ring-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors focus-visible:ring-2"
         />
       </label>
-      <button
-        type="submit"
-        disabled={busy || !name.trim()}
-        className="bg-accent focus-visible:ring-accent cursor-pointer rounded-md px-3.5 py-2 text-sm text-white transition-transform outline-none active:translate-y-px focus-visible:ring-2 disabled:opacity-50"
-      >
-        {t('equipe.create')}
-      </button>
-      <p className="text-ink-faint w-full text-xs">
-        {t(role === 'chef' ? 'equipe.addChefNote' : 'equipe.addTechNote')}
-      </p>
+      {CHANNELS.map((channel) => (
+        <label key={channel} className="flex flex-col gap-1.5">
+          <span className="text-ink-faint flex items-center gap-1.5 text-[0.6875rem] tracking-wide uppercase">
+            <ChannelIcon channel={channel} size={12} />
+            {channel} · {t(channel === 'telegram' ? 'access.chatId' : 'access.phone')}
+            <span className="text-ink-faint normal-case">({t('equipe.optional')})</span>
+          </span>
+          <input
+            value={ids[channel]}
+            onChange={(e) => setIds((v) => ({ ...v, [channel]: e.target.value }))}
+            placeholder={channel === 'telegram' ? '123456789' : '2126…'}
+            inputMode="numeric"
+            className="border-line focus:border-accent focus-visible:ring-accent text-ink bg-canvas placeholder:text-ink-faint rounded-md border px-3 py-2 text-sm outline-none transition-colors focus-visible:ring-2"
+          />
+        </label>
+      ))}
+
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent cursor-pointer rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
+        >
+          {t('inbox.cancel')}
+        </button>
+        <button
+          type="submit"
+          disabled={busy || !name.trim()}
+          className="bg-accent focus-visible:ring-accent cursor-pointer rounded-md px-3.5 py-1.5 text-xs text-white transition-transform outline-none active:translate-y-px focus-visible:ring-2 disabled:opacity-50"
+        >
+          {t('equipe.create')}
+        </button>
+      </div>
       {error && <p className="text-status-fail w-full text-xs break-all">{error}</p>}
     </form>
   )
