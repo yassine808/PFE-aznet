@@ -65,7 +65,12 @@ export function AppShell({
 
       {/* Mobile bar. Under md the rail is a drawer, so the page starts at the content
           instead of ten links the reader has to scroll past every single time. */}
-      <div className="border-line bg-surface/85 edge sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-3 backdrop-blur-xl md:hidden">
+      {/* The blur lives on a `::before` layer, not on the bar itself. `backdrop-filter`
+          turns its element into a backdrop root, and a popover that overflows that
+          root — the bell panel hanging below this bar — gets composited against the
+          blurred backdrop instead of over it, so an opaque panel renders see-through.
+          Same reason the desktop rail below has no blur at all. */}
+      <div className="border-line edge relative sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-3 before:absolute before:inset-0 before:-z-10 before:bg-surface/85 before:backdrop-blur-xl before:content-[''] md:hidden">
         <button
           type="button"
           onClick={() => setDrawer(true)}
@@ -120,7 +125,11 @@ export function AppShell({
           // `md:` override on specificity — which is what hid the rail everywhere.
           'fixed top-0 bottom-0 start-0',
           drawer ? 'flex' : 'hidden',
-          'md:bg-surface/75 md:sticky md:top-0 md:flex md:h-[100dvh] md:w-auto md:border-e md:backdrop-blur-xl',
+          // No translucency and no blur here: on md+ the rail is a grid column, so
+          // nothing ever scrolls under it and there is no backdrop worth blurring —
+          // while `backdrop-filter` made the rail a backdrop root and rendered the
+          // bell and settings popovers (which overflow it) see-through in both themes.
+          'md:sticky md:top-0 md:flex md:h-[100dvh] md:w-auto md:border-e',
         )}
       >
         <div className="flex items-center gap-3">

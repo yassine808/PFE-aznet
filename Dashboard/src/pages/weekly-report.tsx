@@ -129,70 +129,65 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
       className="flex flex-col gap-8 pt-8"
     >
-      {/* Same shape as the Daily panel: the period on the left, everything that
-          acts on the right — generate, then the year to pick a week from. The
-          week picker used to sit at the very bottom, which meant changing week
-          was a scroll to the end of the page and back. */}
-      <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
-        <span className="tabular text-ink pt-1 text-sm">{label}</span>
+      {/* Same shape as the Daily panel: the period and the one action share a
+          row, then the week picker takes the full width — it is how a week is
+          chosen, so it gets the room rather than a right-hand column. */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <span className="tabular text-ink text-sm">{label}</span>
 
-        <div className="flex min-w-0 flex-col gap-5">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={generate}
-              disabled={busy || week.rows.length === 0}
-              className={cn(
-                'flex items-center gap-2 text-xs transition-transform',
-                busy || week.rows.length === 0
-                  ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-3 py-1.5'
-                  : 'bg-accent breathe-glow rounded-md px-3.5 py-2 text-white active:translate-y-px',
-              )}
-            >
-              <SparkleIcon size={13} weight="fill" />
-              {busy ? t('daily.generating') : t('daily.generate')}
-            </button>
+        <button
+          type="button"
+          onClick={generate}
+          disabled={busy || week.rows.length === 0}
+          className={cn(
+            'flex items-center gap-2 text-xs transition-transform',
+            busy || week.rows.length === 0
+              ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-3 py-1.5'
+              : 'bg-accent breathe-glow rounded-md px-3.5 py-2 text-white active:translate-y-px',
+          )}
+        >
+          <SparkleIcon size={13} weight="fill" />
+          {busy ? t('daily.generating') : t('daily.generate')}
+        </button>
+      </div>
+
+      {/* Pick a week by clicking its column; the rail switches years. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
+          {t('weekly.pickWeek')}
+        </h2>
+
+        <div className="flex items-start gap-5">
+          <div className="min-w-0 flex-1">
+            <ContributionGraph
+              rows={reports.data?.reports ?? []}
+              year={year}
+              onSelectWeek={setSelected}
+              selectedWeek={selected}
+            />
           </div>
 
-          {/* Pick a week by clicking its column; the rail switches years. */}
-          <section className="flex flex-col gap-3">
-            <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
-              {t('weekly.pickWeek')}
-            </h2>
-
-            <div className="flex items-start gap-5">
-              <div className="min-w-0 flex-1">
-                <ContributionGraph
-                  rows={reports.data?.reports ?? []}
-                  year={year}
-                  onSelectWeek={setSelected}
-                  selectedWeek={selected}
-                />
-              </div>
-
-              <fieldset className="m-0 flex shrink-0 flex-col gap-1 border-0 p-0">
-                <legend className="sr-only">{t('weekly.year')}</legend>
-                {years.map((y) => (
-                  <button
-                    key={y}
-                    type="button"
-                    onClick={() => setYear(y)}
-                    aria-pressed={y === year}
-                    className={cn(
-                      'tabular rounded-md px-3 py-1 text-start text-xs transition-colors active:translate-y-px',
-                      y === year
-                        ? 'bg-accent font-medium text-white'
-                        : 'text-ink-muted hover:bg-surface hover:text-ink',
-                    )}
-                  >
-                    {y}
-                  </button>
-                ))}
-              </fieldset>
-            </div>
-          </section>
+          <fieldset className="m-0 flex shrink-0 flex-col gap-1 border-0 p-0">
+            <legend className="sr-only">{t('weekly.year')}</legend>
+            {years.map((y) => (
+              <button
+                key={y}
+                type="button"
+                onClick={() => setYear(y)}
+                aria-pressed={y === year}
+                className={cn(
+                  'tabular rounded-md px-3 py-1 text-start text-xs transition-colors active:translate-y-px',
+                  y === year
+                    ? 'bg-accent font-medium text-white'
+                    : 'text-ink-muted hover:bg-surface hover:text-ink',
+                )}
+              >
+                {y}
+              </button>
+            ))}
+          </fieldset>
         </div>
-      </div>
+      </section>
 
       {genError && <ErrorState message={genError} onRetry={generate} />}
 

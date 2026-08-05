@@ -24,7 +24,7 @@
 2. Methodology: **Scrum-light** — 3 sprints × 2 weeks, backlog on GitHub Projects, sprint demo to director each cycle. Gives the report a methodology chapter.
 3. **Google Sheets = single source of truth** (per cahier). Dashboard reads Sheets API. PostgreSQL/Supabase documented as evolution path, not built.
 4. Notifications: **email (Gmail SMTP)** primary + **Telegram** confirmation reply to the technician (no session-window limit, unlike WhatsApp's 24h rule). Teams webhook documented as config option.
-5. Dashboard: **authenticated since 2026-07-29** — reversed the 2026-07-23 "no auth, admin PC only" assumption because the director and the chefs de chantier now use it and the history has to say who did what. Accounts (`users`), bcrypt, opaque session tokens in Postgres behind an httpOnly cookie, roles `directeur` / `chef`, and every endpoint gated on the API rather than on the login form. n8n gets in with `X-API-Key`. Still on one PC; publishing needs CORS narrowed and a login rate limit first. Rebuilt 2026-07-26 in `Dashboard/` (light/dark + FR/EN/AR RTL i18n from `Dashboard/src/locales/`).
+5. Dashboard: **authenticated since 2026-07-29** — reversed the 2026-07-23 "no auth, admin PC only" assumption because the director and the chefs de chantier now use it and the history has to say who did what. Accounts live in `persons` (the `users` table was folded in on 2026-08-01 — an account is a person with a `password_hash`), bcrypt, opaque session tokens in Postgres behind an httpOnly cookie, roles `directeur` / `chef`, and every endpoint gated on the API rather than on the login form. n8n gets in with `X-API-Key`. Still on one PC; publishing needs CORS narrowed and a login rate limit first. Rebuilt 2026-07-26 in `Dashboard/` (light/dark + FR/EN/AR RTL i18n from `Dashboard/src/locales/`).
 6. Git repo (this one), conventional commits, README per module.
 
 ## 3. Architecture
@@ -70,8 +70,18 @@ Telegram (polling)  +  WhatsApp Cloud API (webhook via Tailscale Funnel)
    ├─ GET /jobs · POST /jobs/{name}/run        → run + re-run scheduler jobs
    ├─ POST /generate-image                     → illustrated summary card (click only)
    ├─ GET/PUT /settings · POST /notify/test    → automation + SMTP proof
+   ├─ GET/PUT /me/settings                     → per-account UI prefs (clock, density, seuil)
+   ├─ GET /messages · GET /media/{id}/file     → archived chat + audio/photo blobs
+   ├─ POST /reply                              → answer a technician on their own channel
+   ├─ GET /notifications · POST /notifications/read → the per-account bell
+   ├─ GET/POST/PATCH/DELETE /tasks             → shared to-do + reminders
    ├─ POST|GET /logs · GET /n8n/*              → live pipeline + n8n tails
    └─ GET/POST/DELETE /technicians …           → access control
+
+ Technician-side commands (n8n branch → API):
+   ├─ /rapport      → GET /rapport          (their manager's last digest)
+   ├─ /modify …     → POST /modify-command  (re-extract, rewrite that Sheet row)
+   └─ /supprimer    → POST /modify-command  (empty the row in place, never delete)
 ```
 
 JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'activité, goulottes_m, cables_m, bureaux_termines, panneaux_raccordes, autres_travaux, observations, rapport_complet, lien_audio (+ `canal`, `confidence`, `flag_review` added in Sprint 2).
@@ -107,6 +117,12 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - [x] **Five models, not one** (2026-07-27/29): STT, text extraction, vision extraction, image-card generation (`POST /generate-image`), and a nightly technician-profile model (`app/memory.py`). Prompts moved out of Python into versioned Markdown under `api/app/prompts/` with a shared `00-soul.md` identity.
 - [x] **One person across channels** (2026-07-29): `persons` / `technicians` split so a colleague's profile follows them rather than their phone number; the n8n allowlist now reads the table instead of a hardcoded JS literal.
 - [x] **Dashboard accounts + audit trail** (2026-07-29): login, bcrypt, revocable sessions, roles, `user_actions` (with before → after on report edits) and `page_visits`, surfaced in the new **Équipe** panel. New **Journaux** panel renders the live pipeline log.
+- [x] **One person, one row** (2026-08-01): the `users` table folded into `persons`; `password_hash IS NOT NULL` is now the whole of "this row is an account", so a chef who also sends voice notes is one box on the org chart instead of two unrelated rows.
+- [x] **Archive + conversation** (2026-08-04): audio pushed to Drive for a durable `lien_audio`, raw media and chat archived in Postgres (`media_files`, `chat_messages`), and the Inbox rebuilt as a real conversation view with a reply composer (`POST /reply`, the API answers on the technician's own channel).
+- [x] **Technician-side commands** (2026-08-04): `/rapport` returns their manager's last digest, `/modify` re-extracts and rewrites *that* Sheet row via `processed_messages.sheet_row`, `/supprimer` empties the row in place — a positional delete would shift every row number below it and break every stored message→row link.
+- [x] **Report editing + versions** (2026-08-04): daily and weekly reports are editable in the dashboard with a line diff and an append-only history (`report_versions`); export is `.docx` only, because it is the one format that can carry the generated card.
+- [x] **Bell, tasks and per-account settings** (2026-08-04): per-account notifications, a shared to-do page with lead times and custom cadences (both rung by `jobs.py`), and UI preferences stored server-side in `person_settings` so they follow the person, not the browser.
+- [x] Visual verification of the dashboard — `Dashboard/scripts/visual-check.mjs` logs in headless, walks all 9 pages and fails on console errors, HTTP ≥ 400, horizontal overflow, broken images or a blank page.
 - [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director — SMTP is wired (`POST /notify/test`, recipients in the Automation panel) but `SMTP_USER`/`SMTP_PASS` are still unset in `.env`, so nothing can actually send yet
 - Report in parallel: conception (UML: use cases, séquence, classes, déploiement)
 

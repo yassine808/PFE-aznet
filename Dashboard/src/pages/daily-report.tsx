@@ -86,54 +86,30 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
       className="flex flex-col gap-6 pt-8"
     >
-      {/* What the page is for is answered by its own title and by the shape of
-          the controls; the paragraph that used to sit here repeated both. The
-          picker is the one thing on the left, and everything that acts —
-          generate, then the year to pick a day from — is on the right. */}
-      <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="report-date"
-            className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
-          >
-            {t('daily.date')}
-          </label>
-          {/* Native date input: a picker library would be a dependency for zero gain. */}
-          <input
-            id="report-date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="border-line focus:border-accent text-ink bg-canvas tabular rounded-md border px-3 py-2 text-sm outline-none transition-colors"
-          />
-        </div>
+      {/* The date input is gone: the year graph below is the picker, and it
+          reads the whole width. What is left up here is the day it chose and
+          the one action the page performs. */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <span className="tabular text-ink text-sm">{date}</span>
 
-        <div className="flex min-w-0 flex-col gap-5">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={generate}
-              disabled={busy || rows.length === 0}
-              className={
-                busy || rows.length === 0
-                  ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-4 py-2 text-sm'
-                  : 'bg-accent breathe-glow rounded-md px-4 py-2 text-sm text-white transition-transform active:translate-y-px'
-              }
-            >
-              <span className="flex items-center gap-2">
-                <SparkleIcon size={14} weight="fill" />
-                {busy ? t('daily.generating') : t('daily.generate')}
-              </span>
-            </button>
-          </div>
-
-          <ActivityGraphSection
-            rows={reports.data?.reports ?? []}
-            date={date}
-            onSelectDay={setDate}
-          />
-        </div>
+        <button
+          type="button"
+          onClick={generate}
+          disabled={busy || rows.length === 0}
+          className={
+            busy || rows.length === 0
+              ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-4 py-2 text-sm'
+              : 'bg-accent breathe-glow rounded-md px-4 py-2 text-sm text-white transition-transform active:translate-y-px'
+          }
+        >
+          <span className="flex items-center gap-2">
+            <SparkleIcon size={14} weight="fill" />
+            {busy ? t('daily.generating') : t('daily.generate')}
+          </span>
+        </button>
       </div>
+
+      <ActivityGraphSection rows={reports.data?.reports ?? []} date={date} onSelectDay={setDate} />
 
       {error && <ErrorState message={error} onRetry={generate} />}
 

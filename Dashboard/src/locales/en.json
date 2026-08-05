@@ -135,6 +135,7 @@
   "inbox.audio": "Voice note",
   "inbox.channel": "Channel",
   "inbox.all": "All",
+  "inbox.allDays": "All days",
   "inbox.field.resume": "Generated summary",
   "inbox.field.observations": "Observations",
   "inbox.save": "Save",
