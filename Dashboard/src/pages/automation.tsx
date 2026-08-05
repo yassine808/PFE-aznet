@@ -761,49 +761,73 @@ export function AutomationPage() {
           </div>
 
           {values.emails.length === 0 ? (
-            <p className="text-status-fail text-sm">{t('automation.noEmails')}</p>
+            /* A red sentence, not the neutral empty state: an automation with
+               no recipients runs every night and reaches nobody, which is a
+               fault the page has to look like it is reporting. */
+            <p className="text-status-fail flex items-start gap-2 text-sm">
+              <WarningCircleIcon size={16} weight="fill" className="mt-px shrink-0" />
+              {t('automation.noEmails')}
+            </p>
           ) : (
-            <ul className="divide-line flex flex-col divide-y">
-              {values.emails.map((address) => (
-                <li key={address} className="flex flex-wrap items-center gap-3 py-2.5">
-                  <span className="text-ink min-w-0 flex-1 truncate text-sm">{address}</span>
-
-                  {testResult?.to === address && (
-                    <span
-                      className={cn(
-                        'text-xs',
-                        testResult.ok ? 'text-status-ok' : 'text-status-fail',
-                      )}
-                    >
-                      {testResult.ok ? t('automation.testSent') : t('automation.testFailed')}
+            <ul className="flex flex-col gap-2">
+              {values.emails.map((address) => {
+                const result = testResult?.to === address ? testResult : null
+                return (
+                  <li
+                    key={address}
+                    className="border-line bg-surface flex flex-wrap items-center gap-3 rounded-md border px-3 py-2.5"
+                  >
+                    {/* The initial stands in for an avatar the app does not have
+                        and should not invent — it makes a list of addresses
+                        scannable by shape instead of by reading each one. */}
+                    <span className="border-line text-ink-muted flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium uppercase">
+                      {address.trim().charAt(0) || '@'}
                     </span>
-                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => test(address)}
-                    disabled={testing === address}
-                    className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px disabled:opacity-50"
-                  >
-                    <PaperPlaneTiltIcon size={13} />
-                    {testing === address ? t('automation.testing') : t('automation.test')}
-                  </button>
+                    <span className="text-ink min-w-0 flex-1 truncate text-sm">{address}</span>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      set(
-                        'emails',
-                        values.emails.filter((e) => e !== address),
-                      )
-                    }
-                    aria-label={`${t('access.remove')} ${address}`}
-                    className="text-ink-faint hover:text-status-fail transition-colors"
-                  >
-                    <TrashIcon size={15} />
-                  </button>
-                </li>
-              ))}
+                    {result && (
+                      <span
+                        className={cn(
+                          'flex items-center gap-1.5 text-xs',
+                          result.ok ? 'text-status-ok' : 'text-status-fail',
+                        )}
+                      >
+                        {result.ok ? (
+                          <CheckIcon size={13} weight="bold" />
+                        ) : (
+                          <WarningCircleIcon size={13} weight="fill" />
+                        )}
+                        {result.ok ? t('automation.testSent') : t('automation.testFailed')}
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => test(address)}
+                      disabled={testing === address}
+                      className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px disabled:opacity-50"
+                    >
+                      <PaperPlaneTiltIcon size={13} />
+                      {testing === address ? t('automation.testing') : t('automation.test')}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        set(
+                          'emails',
+                          values.emails.filter((e) => e !== address),
+                        )
+                      }
+                      aria-label={`${t('access.remove')} ${address}`}
+                      className="text-ink-faint hover:text-status-fail transition-colors"
+                    >
+                      <TrashIcon size={15} />
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
 

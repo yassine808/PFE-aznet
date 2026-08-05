@@ -80,6 +80,11 @@ jobs:
       # Warnings do not fail the build; errors do. The current tree is warning-only.
       - name: Oxlint
         run: npm exec --ignore-scripts -- oxlint
+      # The one piece of dashboard logic that can be wrong without looking
+      # wrong: a next-run line is plausible whatever date it prints. Node
+      # strips the types itself, so this needs no test framework.
+      - name: Schedule self-check
+        run: node scripts/check-schedule.mjs
       # The build is the real gate: tsc does not catch a broken import path,
       # a missing asset or a Tailwind v4 token that does not resolve.
       - name: Build

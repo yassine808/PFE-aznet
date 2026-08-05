@@ -33,3 +33,6 @@ benchmark/results/
 Thumbs.db
 .vscode/
 .obsidian/
+
+# Local mail design preview (scripts/preview_mail.py)
+api/preview-mail.html

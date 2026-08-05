@@ -225,15 +225,23 @@ def _report_link(period: str) -> str:
 
 def _report_html(period: str, content, rows: int) -> str:
     """The report mail: banner, the model's own text, and a way back in."""
+    weekly = "→" in period
     return mailer.render_document(
         title=content.objet,
         lead=content.corps,
         rows=[
-            ("Période", period),
             ("Rapports", str(rows)),
+            ("Période", period),
         ],
         cta=("Ouvrir le rapport", _report_link(period)),
         footer="Envoi automatique du tableau de bord aznet.",
+        # The header picture says which report this is, so the message is
+        # identifiable before a single line of it is read — which matters most
+        # in the one place it is read, a list of unopened mail.
+        caption="Rapport hebdomadaire" if weekly else "Rapport du jour",
+        # The model writes headings and bullets; render them as headings and
+        # bullets rather than shipping the reader the raw `##`.
+        rich=True,
     )
 
 

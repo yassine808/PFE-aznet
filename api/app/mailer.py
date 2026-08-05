@@ -7,6 +7,7 @@ checked at call time so an unconfigured install starts fine and fails loudly
 only when someone actually tries to send.
 """
 import io
+import re
 from functools import lru_cache
 from typing import List, Optional, Sequence, Tuple
 
@@ -24,11 +25,43 @@ def _escape(text: str) -> str:
 
 
 BANNER_CID = "aznet-banner"
-_BANNER_SIZE = (1120, 280)
+_BANNER_SIZE = (1120, 300)
 
 
-@lru_cache(maxsize=1)
-def banner_png() -> bytes:
+def _banner_cid(caption: str = "") -> str:
+    """Content-ID for a banner, carrying its own caption.
+
+    The header picture is per-message now — it prints the period the report
+    covers — but `send()` only ever sees the finished HTML, so it has to be
+    able to work out *which* banner to attach from the reference alone. Hex
+    keeps the id to the characters a Content-ID may legally contain, and an
+    empty caption keeps the plain id, so nothing that never sets one changes.
+    """
+    return f"{BANNER_CID}.{caption.encode('utf-8').hex()}" if caption else BANNER_CID
+
+
+def _caption_of(cid: str) -> str:
+    """Inverse of `_banner_cid`, used by `send()` when attaching the image."""
+    _, _, token = cid.partition(".")
+    try:
+        return bytes.fromhex(token).decode("utf-8") if token else ""
+    except ValueError:
+        return ""
+
+# The dashboard's own tokens, resolved to sRGB once (`Dashboard/src/index.css`:
+# slate-950 / slate-900 / slate-400 / slate-50 and accent-500). Mail cannot read
+# OKLCH, and it cannot read a CSS variable either — so the palette crosses over
+# as numbers, in one place, rather than as magic triples scattered through the
+# drawing code.
+INK = (18, 24, 33)
+INK_DEEP = (12, 16, 23)
+ACCENT = (45, 128, 224)
+PAPER = (248, 250, 252)
+MUTED = (148, 163, 184)
+
+
+@lru_cache(maxsize=8)
+def banner_png(caption: str = "") -> bytes:
     """The header picture, drawn rather than shipped.
 
     A remote `<img src="https://…">` is blocked by default in Gmail, Outlook
@@ -49,19 +82,21 @@ def banner_png() -> bytes:
     from app.imagegen import _font  # same fallback chain: slim image, no system fonts
 
     w, h = _BANNER_SIZE
-    canvas = Image.new("RGB", (w, h), (15, 23, 42))
+    canvas = Image.new("RGB", (w, h), INK)
     draw = ImageDraw.Draw(canvas)
 
-    # A diagonal wash from slate to the accent blue, one column at a time.
-    # Cheap enough at 1120px, and it saves pulling in numpy for a gradient.
-    for x in range(w):
-        t = x / w
+    # A vertical settle from slate to a deeper slate — the tonal step DESIGN.md
+    # asks for, not the violet-to-blue wash it names as the generic-SaaS tell.
+    # The accent stays out of the background entirely so it can mean one thing
+    # in the foreground.
+    for y in range(h):
+        t = y / h
         draw.line(
-            [(x, 0), (x, h)],
+            [(0, y), (w, y)],
             fill=(
-                int(15 + t * 22),
-                int(23 + t * 60),
-                int(42 + t * 110),
+                int(INK[0] + (INK_DEEP[0] - INK[0]) * t),
+                int(INK[1] + (INK_DEEP[1] - INK[1]) * t),
+                int(INK[2] + (INK_DEEP[2] - INK[2]) * t),
             ),
         )
 
@@ -75,19 +110,81 @@ def banner_png() -> bytes:
         gdraw.line([(gx, 0), (gx, h)], fill=(255, 255, 255), width=1)
     for gy in range(0, h, 56):
         gdraw.line([(0, gy), (w, gy)], fill=(255, 255, 255), width=1)
-    canvas = Image.blend(canvas, Image.blend(canvas, grid, 0.35), 0.30)
+    canvas = Image.blend(canvas, Image.blend(canvas, grid, 0.30), 0.22)
     draw = ImageDraw.Draw(canvas)
+
+    # One accent mark, and it is structural: a rule down the inline-start edge
+    # that the wordmark hangs off, so the whole header is read as one block
+    # rather than as text floating on a texture.
+    draw.rectangle([(0, 0), (6, h)], fill=ACCENT)
 
     # The rule sits *below* the wordmark, not through it: at 72px the glyphs
     # run to about y+92, so anything drawn at the old y=156 crossed the
     # baseline and read as a strikethrough.
-    draw.text((64, 78), "aznet", font=_font(72, bold=True), fill=(248, 250, 252))
-    draw.line([(64, 190), (188, 190)], fill=(59, 130, 246), width=5)
-    draw.text((64, 212), "RAPPORTS DE CHANTIER", font=_font(24), fill=(148, 163, 184))
+    draw.text((64, 72), "aznet", font=_font(72, bold=True), fill=PAPER)
+    draw.line([(64, 184), (188, 184)], fill=ACCENT, width=5)
+    draw.text((64, 206), "RAPPORTS DE CHANTIER", font=_font(24), fill=MUTED)
+
+    # What this particular message is about, set against the inline-end edge —
+    # the header stops being a logo plate and starts carrying information the
+    # reader needs before they have scrolled at all.
+    if caption:
+        text = caption.upper()
+        font = _font(26)
+        try:
+            width = int(draw.textlength(text, font=font))
+        except AttributeError:  # very old Pillow
+            width = len(text) * 13
+        x = max(64, w - 64 - width)
+        draw.text((x, 206), text, font=font, fill=PAPER)
+        draw.line([(x, 184), (x + width, 184)], fill=(70, 84, 104), width=2)
 
     buf = io.BytesIO()
     canvas.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
+
+
+def render_rich_text(text: str) -> str:
+    """The report's own structure, as inline-styled HTML.
+
+    `daily_report` writes `## Synthèse` headings and `- ` bullets, and the mail
+    used to drop that whole string into a single `<p>`: the hashes and dashes
+    arrived literally and every paragraph break collapsed, so the one part of
+    the message the reader actually came for was the least readable thing in
+    it. The three shapes recognised here are exactly the three the dashboard's
+    reading pane draws, so the same report looks like the same report in both
+    places.
+
+    Not a Markdown parser, and it must not grow into one — anything it does not
+    recognise falls through as a paragraph, which is what the old code did to
+    every line.
+    """
+    out: List[str] = []
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            label = line.lstrip("#").strip()
+            out.append(
+                '<p style="margin:22px 0 8px;color:#64748b;font-size:11px;'
+                'font-weight:600;letter-spacing:0.8px;text-transform:uppercase">'
+                f"{_escape(label)}</p>"
+            )
+        elif line[:1] in {"-", "*", "•"}:
+            out.append(
+                '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+                '<tr><td width="14" style="padding:3px 0 3px 0;color:#94a3b8;'
+                'font-size:14px;vertical-align:top">&bull;</td>'
+                '<td style="padding:3px 0;color:#0f172a;font-size:14px;line-height:1.6">'
+                f"{_escape(line[1:].strip())}</td></tr></table>"
+            )
+        else:
+            out.append(
+                '<p style="margin:0 0 10px;color:#334155;font-size:14px;line-height:1.65">'
+                f"{_escape(line)}</p>"
+            )
+    return "".join(out)
 
 
 def render_document(
@@ -97,6 +194,8 @@ def render_document(
     footer: str = "",
     cta: Optional[Tuple[str, str]] = None,
     banner: bool = True,
+    caption: str = "",
+    rich: bool = False,
 ) -> str:
     """One branded HTML message: header, lead sentence, label/value rows, footer.
 
@@ -110,14 +209,38 @@ def render_document(
 
     Callers pass plain text; escaping happens here so no call site can forget.
     """
-    body_rows = "".join(
-        f'<tr>'
-        f'<td style="padding:6px 16px 6px 0;color:#64748b;font-size:13px;'
-        f'white-space:nowrap;vertical-align:top">{_escape(str(label))}</td>'
-        f'<td style="padding:6px 0;color:#0f172a;font-size:14px">{_escape(str(value))}</td>'
-        f'</tr>'
-        for label, value in rows
-        if value
+    # Figures as a strip of tiles rather than a label/value table: the two or
+    # three numbers a report carries are what the reader scans first, and a
+    # table row put them at the same weight as their own labels. Tiles inside
+    # one bordered box, not a grid of bordered cards — the box is the group.
+    cells = [(str(label), str(value)) for label, value in rows if value]
+    def _tile(index: int, label: str, value: str) -> str:
+        # The separator is a border on every tile but the first, so the strip
+        # reads as one object with divisions rather than as three boxes.
+        rule = ";border-left:1px solid #e2e8f0" if index else ""
+        return (
+            f'<td style="padding:12px 16px;vertical-align:top{rule}">'
+            f'<div style="color:#0f172a;font-size:17px;font-weight:600;line-height:1.2">'
+            f"{_escape(value)}</div>"
+            f'<div style="margin-top:4px;color:#94a3b8;font-size:11px;letter-spacing:0.6px;'
+            f'text-transform:uppercase">{_escape(label)}</div></td>'
+        )
+
+    tiles = "".join(_tile(i, label, value) for i, (label, value) in enumerate(cells))
+    figures = (
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"'
+        ' style="margin:18px 0 4px;border:1px solid #e2e8f0;border-radius:10px;'
+        f'background:#f8fafc"><tr>{tiles}</tr></table>'
+        if tiles
+        else ""
+    )
+    # `rich` is opt-in: a reminder's lead is one sentence and would gain
+    # nothing, while a report's is a structured document that the single-<p>
+    # treatment flattened into a wall with visible `##` in it.
+    body = (
+        render_rich_text(lead)
+        if rich
+        else f'<p style="margin:0;color:#475569;font-size:14px;line-height:1.6">{_escape(lead)}</p>'
     )
     foot = (
         f'<p style="margin:24px 0 0;color:#94a3b8;font-size:12px;line-height:1.6">'
@@ -139,7 +262,7 @@ def render_document(
     )
     head = (
         f'<tr><td style="padding:0;line-height:0">'
-        f'<img src="cid:{BANNER_CID}" width="560" alt="aznet"'
+        f'<img src="cid:{_banner_cid(caption)}" width="560" alt="aznet"'
         f' style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:12px 12px 0 0"></td></tr>'
         if banner
         else (
@@ -152,10 +275,9 @@ def render_document(
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;margin:0 auto">
     {head}
     <tr><td style="background:#ffffff;border-radius:0 0 12px 12px;padding:24px">
-      <h1 style="margin:0 0 8px;color:#0f172a;font-size:19px;font-weight:600;letter-spacing:-0.3px">{_escape(title)}</h1>
-      <p style="margin:0 0 18px;color:#475569;font-size:14px;line-height:1.6">{_escape(lead)}</p>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-             style="border-top:1px solid #e2e8f0;padding-top:12px">{body_rows}</table>
+      <h1 style="margin:0 0 14px;color:#0f172a;font-size:19px;font-weight:600;letter-spacing:-0.3px">{_escape(title)}</h1>
+      {figures}
+      <div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:14px">{body}</div>
       {button}
       {foot}
     </td></tr>
@@ -200,10 +322,15 @@ def send(
         # when the HTML actually references it, so a message built with
         # `banner=False` does not carry a picture nobody sees — which some
         # clients would still show as a paperclip.
-        if f"cid:{BANNER_CID}" in html_body:
+        found = re.search(rf"cid:({re.escape(BANNER_CID)}[.\w]*)", html_body)
+        if found:
+            cid = found.group(1)
             try:
                 msg.get_payload()[-1].add_related(
-                    banner_png(), maintype="image", subtype="png", cid=f"<{BANNER_CID}>"
+                    banner_png(_caption_of(cid)),
+                    maintype="image",
+                    subtype="png",
+                    cid=f"<{cid}>",
                 )
             except Exception as exc:  # noqa: BLE001 — Pillow missing, font gone, anything
                 # A message with a broken header image is still the report; one

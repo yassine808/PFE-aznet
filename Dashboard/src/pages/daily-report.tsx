@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { SparkleIcon } from '@phosphor-icons/react'
+import { ArrowUUpLeftIcon, FileTextIcon } from '@phosphor-icons/react'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
 import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
+import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ActivityGraphSection } from '@/components/activity-graph-section'
+import { GenerateButton } from '@/components/generate-button'
+import { NextRun } from '@/components/next-run'
+import { PeriodPicker } from '@/components/period-picker'
 import { ReportEditor } from '@/components/report-editor'
 import { ReportImageCard } from '@/components/report-image'
 
@@ -26,6 +30,37 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
   const [error, setError] = useState<string | null>(null)
 
   const fmt = useMemo(() => new Intl.NumberFormat(intlLocaleOf(locale)), [locale])
+
+  // The chosen day as the reader's locale writes it — used by the empty state,
+  // which has to name the day it is empty *for* to be worth more than "rien".
+  const dayLabel = useMemo(() => {
+    const [y, m, d] = date.split('-').map(Number)
+    return new Intl.DateTimeFormat(intlLocaleOf(locale), {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(y, (m || 1) - 1, d || 1))
+  }, [date, locale])
+
+  // The most recent day that actually has rows — the empty state's way out.
+  // Carries its own formatted label: an ISO string in a button is a machine
+  // talking, and the sentence right above it already says "5 août 2026".
+  const lastDayWithData = useMemo(() => {
+    let best: string | null = null
+    for (const r of reports.data?.reports ?? []) {
+      const d = toISODate(r.date)
+      if (d && (best === null || d > best)) best = d
+    }
+    if (!best || best === date) return null
+    const [y, m, d] = best.split('-').map(Number)
+    return {
+      iso: best,
+      label: new Intl.DateTimeFormat(intlLocaleOf(locale), {
+        day: 'numeric',
+        month: 'long',
+      }).format(new Date(y, m - 1, d)),
+    }
+  }, [reports.data, date, locale])
 
   const rows = useMemo(
     () => (reports.data?.reports ?? []).filter((r) => toISODate(r.date) === date),
@@ -76,6 +111,14 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
     }
   }
 
+  // Generate sits beside the page title in the shared header, not on a second
+  // line of its own — the title is already the widest thing on the page and the
+  // one action belongs on it.
+  useHeaderAction(
+    <GenerateButton busy={busy} disabled={rows.length === 0} onClick={generate} />,
+    [busy, rows.length, date, locale],
+  )
+
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
   if (reports.loading) return <Skeleton className="mt-8 h-64 rounded-xl" />
 
@@ -86,34 +129,40 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
       className="flex flex-col gap-6 pt-8"
     >
-      {/* The date input is gone: the year graph below is the picker, and it
-          reads the whole width. What is left up here is the day it chose and
-          the one action the page performs. */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <span className="tabular text-ink text-sm">{date}</span>
-
-        <button
-          type="button"
-          onClick={generate}
-          disabled={busy || rows.length === 0}
-          className={
-            busy || rows.length === 0
-              ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-4 py-2 text-sm'
-              : 'bg-accent breathe-glow rounded-md px-4 py-2 text-sm text-white transition-transform active:translate-y-px'
-          }
-        >
-          <span className="flex items-center gap-2">
-            <SparkleIcon size={14} weight="fill" />
-            {busy ? t('daily.generating') : t('daily.generate')}
-          </span>
-        </button>
-      </div>
-
       <ActivityGraphSection rows={reports.data?.reports ?? []} date={date} onSelectDay={setDate} />
+
+      {/* Which day, and when the machine sends this on its own — the two things
+          the graph above cannot say for itself. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <PeriodPicker mode="day" value={date} onChange={setDate} />
+        <NextRun kind="daily" />
+      </div>
 
       {error && <ErrorState message={error} onRetry={generate} />}
 
-      {rows.length === 0 && !error && <EmptyState body={t('daily.noRows')} />}
+      {rows.length === 0 && !error && (
+        <EmptyState
+          icon={FileTextIcon}
+          title={t('daily.emptyTitle', { date: dayLabel })}
+          body={t('daily.emptyBody')}
+          // Not a disabled "Générer" button: with no rows there is nothing to
+          // generate *from*, and a greyed primary action in the middle of an
+          // empty page is a dead end dressed up as a way out. The real way out
+          // is the last day that has data, which the heatmap already knows.
+          action={
+            lastDayWithData && (
+              <button
+                type="button"
+                onClick={() => setDate(lastDayWithData.iso)}
+                className="border-line text-ink hover:bg-surface inline-flex items-center gap-2 rounded-md border px-3.5 py-2 text-sm transition-colors active:translate-y-px"
+              >
+                <ArrowUUpLeftIcon size={14} />
+                {t('daily.goLastDay', { date: lastDayWithData.label })}
+              </button>
+            )
+          }
+        />
+      )}
 
       {rows.length > 0 && (
         <>

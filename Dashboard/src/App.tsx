@@ -8,6 +8,12 @@ import { OpsProvider } from '@/lib/ops-context'
 import { ToastProvider } from '@/lib/toast'
 import { useI18n } from '@/lib/i18n'
 import { useRoute, type Route } from '@/lib/router'
+import { PageHeaderProvider, usePageAction } from '@/lib/page-header'
+
+/** The current page's primary action, rendered beside the page title. */
+function PageAction() {
+  return <>{usePageAction()}</>
+}
 
 // Pages arrive as separate chunks, fetched on first visit: the initial bundle
 // stays small (Overview — the default route — is the only eager one) and the
@@ -138,6 +144,7 @@ function Dashboard() {
     // Above the router: the uptime sampler must keep writing regardless of
     // which panel is open.
     <OpsProvider>
+     <PageHeaderProvider>
       <AppShell route={route} onNavigate={navigate}>
         {/* Keyed on route so each navigation replays the entrance. */}
         <motion.div
@@ -148,10 +155,13 @@ function Dashboard() {
         >
           {/* Overview has no h1: the masthead is the page header, and two would compete. */}
           {route !== 'overview' && (
-            <header className="border-line border-b pb-6">
+            <header className="border-line flex flex-wrap items-center justify-between gap-4 border-b pb-6">
               <h1 className="text-ink text-3xl font-semibold tracking-tighter">
                 {t(TITLE_KEY[route])}
               </h1>
+              {/* Whatever the current page published — the Generate button on
+                  Daily and Weekly. Empty on every other route. */}
+              <PageAction />
             </header>
           )}
 
@@ -163,6 +173,7 @@ function Dashboard() {
           </Suspense>
         </motion.div>
       </AppShell>
+     </PageHeaderProvider>
     </OpsProvider>
   )
 }

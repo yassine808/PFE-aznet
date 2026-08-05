@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { SparkleIcon } from '@phosphor-icons/react'
+import { ArrowUUpLeftIcon, CalendarBlankIcon } from '@phosphor-icons/react'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
+import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ContributionGraph, isoOf as iso, weekStart } from '@/components/contribution-graph'
+import { GenerateButton } from '@/components/generate-button'
+import { NextRun } from '@/components/next-run'
+import { PeriodPicker } from '@/components/period-picker'
 import { ReportEditor } from '@/components/report-editor'
 import { ReportImageCard } from '@/components/report-image'
 import { cn } from '@/lib/utils'
@@ -54,6 +58,29 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
    * daily report with the week's text.
    */
   const label = useMemo(() => `${iso(days[0])} → ${iso(days[6])}`, [days])
+
+  // The same week the picker shows, written the way the reader's locale writes
+  // it. `label` stays ISO because it is the report's stored key, not prose.
+  const rangeLabel = useMemo(() => {
+    const short = new Intl.DateTimeFormat(intlLocaleOf(locale), {
+      day: 'numeric',
+      month: 'long',
+    })
+    return `${short.format(days[0])} – ${short.format(days[6])}`
+  }, [days, locale])
+
+  // The most recent week that has rows, as its Monday — the empty state's way out.
+  const lastWeekWithData = useMemo(() => {
+    let best: string | null = null
+    for (const r of reports.data?.reports ?? []) {
+      const d = toISODate(r.date)
+      if (d && (best === null || d > best)) best = d
+    }
+    if (!best) return null
+    const [y, m, day] = best.split('-').map(Number)
+    const mondayOf = iso(weekStart(new Date(y, m - 1, day)))
+    return mondayOf === selected ? null : mondayOf
+  }, [reports.data, selected])
 
   // Current year plus the two before it, newest first.
   const years = useMemo(() => {
@@ -117,6 +144,12 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
     }
   }
 
+  // Beside the page title, same as the Daily page.
+  useHeaderAction(
+    <GenerateButton busy={busy} disabled={week.rows.length === 0} onClick={generate} />,
+    [busy, week.rows.length, label, locale],
+  )
+
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
   if (reports.loading) return <Skeleton className="mt-8 h-64 rounded-xl" />
 
@@ -129,29 +162,8 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
       className="flex flex-col gap-8 pt-8"
     >
-      {/* Same shape as the Daily panel: the period and the one action share a
-          row, then the week picker takes the full width — it is how a week is
-          chosen, so it gets the room rather than a right-hand column. */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <span className="tabular text-ink text-sm">{label}</span>
-
-        <button
-          type="button"
-          onClick={generate}
-          disabled={busy || week.rows.length === 0}
-          className={cn(
-            'flex items-center gap-2 text-xs transition-transform',
-            busy || week.rows.length === 0
-              ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-3 py-1.5'
-              : 'bg-accent breathe-glow rounded-md px-3.5 py-2 text-white active:translate-y-px',
-          )}
-        >
-          <SparkleIcon size={13} weight="fill" />
-          {busy ? t('daily.generating') : t('daily.generate')}
-        </button>
-      </div>
-
-      {/* Pick a week by clicking its column; the rail switches years. */}
+      {/* The year graph takes the full width — it is how a week is chosen, so
+          it gets the room rather than a right-hand column. */}
       <section className="flex flex-col gap-3">
         <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
           {t('weekly.pickWeek')}
@@ -189,6 +201,12 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
         </div>
       </section>
 
+      {/* Which week, and when the machine mails this one on its own. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <PeriodPicker mode="week" value={selected} onChange={setSelected} />
+        <NextRun kind="weekly" />
+      </div>
+
       {genError && <ErrorState message={genError} onRetry={generate} />}
 
       {content && (
@@ -214,7 +232,26 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
       )}
 
       {week.rows.length === 0 ? (
-        <EmptyState body={t('weekly.noRows')} />
+        <EmptyState
+          icon={CalendarBlankIcon}
+          title={t('weekly.emptyTitle', { range: rangeLabel })}
+          body={t('weekly.emptyBody')}
+          // Same reasoning as the Daily page: no rows means nothing to generate
+          // from, so the way out is the last week that has data, not a greyed
+          // primary button.
+          action={
+            lastWeekWithData && (
+              <button
+                type="button"
+                onClick={() => setSelected(lastWeekWithData)}
+                className="border-line text-ink hover:bg-surface inline-flex items-center gap-2 rounded-md border px-3.5 py-2 text-sm transition-colors active:translate-y-px"
+              >
+                <ArrowUUpLeftIcon size={14} />
+                {t('weekly.goLastWeek')}
+              </button>
+            )
+          }
+        />
       ) : (
         <>
           <div className="flex flex-wrap gap-x-12 gap-y-6">
