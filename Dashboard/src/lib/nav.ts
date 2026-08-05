@@ -23,10 +23,23 @@ export interface NavItem {
 /**
  * The single nav registry. The rail and the command palette both read it, so a
  * new page cannot appear in one and be missing from the other.
+ *
+ * Grouped by **whose data a page shows**, not by what it is made of:
+ *
+ * - *Aperçu* — the one page that answers "what is happening", for everyone.
+ * - *Mon périmètre* — pages whose content changes with who is signed in. A chef
+ *   opening Réception sees their own crew's messages and their own team's
+ *   digest; the director sees the company. Same route, different reading.
+ * - *Commun* — the org chart, the scheduler and the shared to-do list are the
+ *   same for every account, which is exactly why they belong apart from the
+ *   ones above.
+ *
+ * The grouping labels the scope; it does not gate it. Every account still
+ * reaches every page, and the API is where access is actually decided —
+ * hiding a button has never stopped anyone who can type a URL.
  */
 export const NAV: { section: string; items: NavItem[] }[] = [
   {
-    // The day-to-day working view: what came in, one message at a time.
     section: 'nav.section.overview',
     items: [
       {
@@ -35,15 +48,12 @@ export const NAV: { section: string; items: NavItem[] }[] = [
         keywordsKey: 'nav.kw.overview',
         Icon: ChartBarIcon,
       },
-      { route: 'inbox', labelKey: 'nav.inbox', keywordsKey: 'nav.kw.inbox', Icon: TrayIcon },
     ],
   },
   {
-    // Everything that reads as "a report": the raw table and the two generated
-    // digests. Grouped together so "Reports" names one thing, not two — it used
-    // to also be the name of the section one level up from the Reports page.
-    section: 'nav.section.reports',
+    section: 'nav.section.scope',
     items: [
+      { route: 'inbox', labelKey: 'nav.inbox', keywordsKey: 'nav.kw.inbox', Icon: TrayIcon },
       { route: 'reports', labelKey: 'nav.reports', keywordsKey: 'nav.kw.reports', Icon: RowsIcon },
       { route: 'daily', labelKey: 'nav.daily', keywordsKey: 'nav.kw.daily', Icon: SunHorizonIcon },
       {
@@ -55,8 +65,16 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     ],
   },
   {
-    section: 'nav.section.admin',
+    section: 'nav.section.shared',
     items: [
+      // One entry where there were two: accounts and bot authorisation are the
+      // same people since `users` folded into `persons`.
+      {
+        route: 'equipe',
+        labelKey: 'nav.equipe',
+        keywordsKey: 'nav.kw.equipe',
+        Icon: UsersThreeIcon,
+      },
       {
         route: 'automation',
         labelKey: 'nav.automation',
@@ -69,21 +87,22 @@ export const NAV: { section: string; items: NavItem[] }[] = [
         keywordsKey: 'nav.kw.tasks',
         Icon: CheckSquareIcon,
       },
-      // One entry where there were two: accounts and bot authorisation are the
-      // same people since `users` folded into `persons`.
-      {
-        route: 'equipe',
-        labelKey: 'nav.equipe',
-        keywordsKey: 'nav.kw.equipe',
-        Icon: UsersThreeIcon,
-      },
-      { route: 'logs', labelKey: 'nav.logs', keywordsKey: 'nav.kw.logs', Icon: PulseIcon },
-      { route: 'queue', labelKey: 'nav.queue', keywordsKey: 'nav.kw.queue', Icon: StackIcon },
     ],
   },
 ]
 
-export const NAV_ITEMS: NavItem[] = NAV.flatMap((s) => s.items)
+/**
+ * The machine's own two pages. Out of the rail's list and into a strip beside
+ * the server status, because that is what they are: instrumentation, checked
+ * when something looks wrong, not places anyone works. They keep their entries
+ * in `NAV_ITEMS` so the command palette still finds them by name.
+ */
+export const SYSTEM_NAV: NavItem[] = [
+  { route: 'logs', labelKey: 'nav.logs', keywordsKey: 'nav.kw.logs', Icon: PulseIcon },
+  { route: 'queue', labelKey: 'nav.queue', keywordsKey: 'nav.kw.queue', Icon: StackIcon },
+]
+
+export const NAV_ITEMS: NavItem[] = [...NAV.flatMap((s) => s.items), ...SYSTEM_NAV]
 
 export function navItem(route: Route): NavItem | undefined {
   return NAV_ITEMS.find((i) => i.route === route)

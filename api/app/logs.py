@@ -298,9 +298,10 @@ CREATE INDEX IF NOT EXISTS chat_messages_ts_idx ON chat_messages (created_at DES
 
 -- The /modify command: a technician replies to their own message and the row
 -- it became has to be found by the id of that message. The claim already
--- stores `channel:msgid`; these two columns record which Sheet row it landed
--- on, written by whoever performed the append (n8n on the happy path, the
--- retry drain after a Sheets outage).
+-- stores the canonical message key (`tg:123:456` / `wa:<id>`, the workflow's
+-- msg_key); these two columns record which Sheet row it landed on, written by
+-- whoever performed the append (n8n on the happy path, the retry drain after
+-- a Sheets outage).
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_row BIGINT;
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ;
 
@@ -871,8 +872,9 @@ def list_messages(
 
 # ── message → Sheet row link (the /modify command) ─────────────────────────
 # The /modify reply has to find the row its report landed on, and the only id
-# it carries is the origin message's — the same `channel:msgid` string the
-# claim stores. The link is written by whoever performed the append.
+# it carries is the origin message's — the same canonical message key the
+# claim stores (`tg:123:456` / `wa:<id>`). The link is written by whoever
+# performed the append.
 
 def link_message_row(message_id: str, row: Optional[int]) -> bool:
     """Remember which Sheet row a processed message landed on; None clears it.
@@ -1541,6 +1543,26 @@ def account_people() -> List[dict]:
             "WHERE password_hash IS NOT NULL ORDER BY name"
         )
         return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def manager_emails() -> List[str]:
+    """Where a task reminder goes: every chef and every directeur with an email.
+
+    Deliberately wider than `account_emails`, which requires a login. A chef who
+    has been added to the org chart with an address but has never signed in is
+    still someone the shared to-do list is asking to do something — mail is the
+    one channel that reaches them, and silently skipping them turned "remind the
+    managers" into "remind whoever happens to have a password".
+
+    The bell keeps the narrower rule, because reading a bell needs an account.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT email FROM persons "
+            "WHERE email IS NOT NULL AND email <> '' "
+            "AND role IN ('chef', 'directeur') ORDER BY name"
+        )
+        return [dict(r)["email"] for r in cur.fetchall()]
 
 
 def notify_accounts(

@@ -15,7 +15,8 @@ import { ServerStatus } from '@/components/server-status'
 import { SettingsPanel } from '@/components/settings-panel'
 import { Bell } from '@/components/bell'
 import { CommandPalette, useCommandPalette } from '@/components/command-palette'
-import { NAV, navItem } from '@/lib/nav'
+import { NAV, SYSTEM_NAV, navItem } from '@/lib/nav'
+import { useOps } from '@/lib/ops-context'
 import { cn } from '@/lib/utils'
 import type { Route } from '@/lib/router'
 
@@ -201,6 +202,7 @@ export function AppShell({
         </div>
 
         <div className="flex flex-col gap-3">
+          <SystemStrip route={route} onNavigate={go} />
           <ServerStatus />
 
           <div className="flex items-center justify-between gap-2">
@@ -225,7 +227,8 @@ export function AppShell({
             </fieldset>
 
             <div className="flex items-center gap-2">
-              <Bell onNavigate={onNavigate} />
+              {/* Opens upward: this bell sits at the bottom of a full-height rail. */}
+              <Bell onNavigate={onNavigate} placement="up" />
               <SettingsPanel />
               <button
                 type="button"
@@ -253,6 +256,77 @@ export function AppShell({
         onNavigate={onNavigate}
         route={route}
       />
+    </div>
+  )
+}
+
+/**
+ * Logs and the retry queue, as two instrument pills above the server status.
+ *
+ * They were the last two rows of an "Administration" list, which put "read the
+ * pipeline's stack traces" at the same weight as "write today's report". Here
+ * they read as what they are — a gauge each, with the number that decides
+ * whether they are worth opening: errors in the last 24 h, and writes Google
+ * has not accepted yet. A zero stays quiet; anything else colours itself.
+ *
+ * Both counts come from the `logs` key `OpsProvider` already polls, so the
+ * strip costs no extra request.
+ */
+function SystemStrip({
+  route,
+  onNavigate,
+}: {
+  readonly route: Route
+  readonly onNavigate: (r: Route) => void
+}) {
+  const { t } = useI18n()
+  const { stats } = useOps()
+
+  const gauges = [
+    {
+      item: SYSTEM_NAV[0],
+      count: stats?.last_24h.error ?? 0,
+      tone: 'text-status-fail',
+    },
+    {
+      item: SYSTEM_NAV[1],
+      count: stats?.pending_sheet_writes ?? 0,
+      tone: 'text-status-warn',
+    },
+  ]
+
+  return (
+    // Stacked, not side by side: two pills sharing a 240px rail left ~45px for
+    // the label, so both read "Journ…" and "File d'att…" — a gauge nobody can
+    // name is not a gauge. Full width costs one more row and keeps the words.
+    <div className="flex flex-col gap-1.5">
+      {gauges.map(({ item, count, tone }) => {
+        const active = item.route === route
+        const { Icon } = item
+        return (
+          <button
+            key={item.route}
+            type="button"
+            onClick={() => onNavigate(item.route)}
+            aria-current={active ? 'page' : undefined}
+            title={t(item.labelKey)}
+            className={cn(
+              'border-line focus-visible:ring-accent flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors outline-none active:translate-y-px focus-visible:ring-2',
+              active
+                ? 'bg-slate-100 text-ink dark:bg-slate-850'
+                : 'text-ink-faint hover:text-ink',
+            )}
+          >
+            <Icon size={14} weight={active ? 'fill' : 'regular'} className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-start">{t(item.labelKey)}</span>
+            {count > 0 && (
+              <span className={cn('tabular shrink-0 font-semibold', tone)}>
+                {count > 99 ? '99+' : count}
+              </span>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }

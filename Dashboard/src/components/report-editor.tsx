@@ -12,6 +12,7 @@ import { reportVersions, saveReportVersion, useApi, type ReportVersion } from '@
 import { diffCounts, diffLines } from '@/lib/diff'
 import { useI18n } from '@/lib/i18n'
 import { exportReport, type ReportFigures } from '@/lib/report-export'
+import { useToast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
 /**
@@ -55,6 +56,7 @@ export function ReportEditor({
   readonly byTech?: { name: string; count: number; goulottes: number; flagged: number }[]
 }) {
   const { t } = useI18n()
+  const toast = useToast()
   const history = useApi(`report-versions:${kind}:${period}`, (s) => reportVersions(kind, period, true, s))
 
   const [draft, setDraft] = useState(corps)
@@ -93,8 +95,14 @@ export function ReportEditor({
       history.reload()
       setSaved(true)
       setEditing(false)
+      toast({ tone: 'success', title: t('editor.saved'), body: `${kind} · ${period}` })
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
+      // Both, on purpose: the inline error is the record of what went wrong and
+      // stays until it is fixed; the toast is what makes it noticed when the
+      // save button is off-screen at the bottom of a long report.
+      toast({ tone: 'error', title: t('editor.saveFailed'), body: message })
     } finally {
       setBusy(false)
     }
@@ -444,7 +452,7 @@ function VersionModal({
       onCancel={onClose}
       onClose={onClose}
       aria-label={`v${version.version} — ${version.objet}`}
-      className="bg-panel border-line text-ink m-auto max-h-[80vh] w-[min(46rem,90vw)] overflow-y-auto rounded-xl border p-6 shadow-lg backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
+      className="bg-surface border-line text-ink m-auto max-h-[80vh] w-[min(46rem,90vw)] overflow-y-auto rounded-xl border p-6 shadow-lg backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
     >
       <div className="border-line flex items-start justify-between gap-4 border-b pb-3">
         <div>

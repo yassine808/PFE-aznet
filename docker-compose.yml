@@ -7,10 +7,12 @@ services:
     image: postgres:16-alpine
     container_name: pfe-postgres
     restart: unless-stopped
-    # No published port. Only the api service needs to reach it, and it does so
-    # over the compose network as `postgres:5432`. Publishing it put a database
-    # on the machine's public interface -- harmless on a laptop, an open door on
-    # a server reachable from the internet.
+    # Published on the loopback address only: the compose comment above says the
+    # api reaches it over the network as `postgres:5432`, and .env holds
+    # localhost:5432 for the host-run uvicorn / pytest dev flow. Binding to
+    # 127.0.0.1 (not 0.0.0.0) keeps it off the machine's public interface — a
+    # loopback socket is unreachable from the internet, so the "open door on a
+    # server" concern that motivated no-publish still holds.
     # Credentials: the password has deliberately NO `:-fallback` default — a
     # clone without .env must fail loudly at start, not quietly run Postgres
     # with password "pfe" (the pre-2026-08-03 default) on a machine that may
@@ -28,6 +30,8 @@ services:
       retries: 5
     volumes:
       - pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
 
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest

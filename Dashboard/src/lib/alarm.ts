@@ -41,6 +41,67 @@ function beep(ctxRef: { current: AudioContext | null }) {
   }
 }
 
+/**
+ * One-shot chime for a newly arrived notification.
+ *
+ * Shares this file with the alarm because they are the same problem — WebAudio
+ * refuses to make a sound before the first user gesture — and deliberately not
+ * the same sound: the alarm is two flat bursts at one pitch (something is
+ * wrong), the chime is a rising third (something arrived). A reader must be
+ * able to tell them apart without looking at the screen.
+ *
+ * ponytail: a module-level context, not a hook — the caller is an effect that
+ * fires on a poll, and there is only ever one browser tab's worth of audio.
+ */
+const chimeCtx: { current: AudioContext | null } = { current: null }
+let gestured = false
+
+if (typeof window !== 'undefined') {
+  const arm = () => {
+    gestured = true
+  }
+  window.addEventListener('pointerdown', arm, { once: true })
+  window.addEventListener('keydown', arm, { once: true })
+}
+
+export function chime() {
+  // Before the first click the browser blocks audio anyway; returning early
+  // keeps a permanently-suspended context from being created and cached.
+  if (!gestured) return
+  try {
+    if (!chimeCtx.current) {
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!Ctor) return
+      chimeCtx.current = new Ctor()
+    }
+    const ctx = chimeCtx.current
+    void ctx.resume().catch(() => {})
+
+    // E5 then G#5 — a rising major third, quiet and short.
+    for (const [offset, freq] of [
+      [0, 659.25],
+      [0.11, 830.61],
+    ] as const) {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      const t = ctx.currentTime + offset
+      gain.gain.setValueAtTime(0.0001, t)
+      gain.gain.exponentialRampToValueAtTime(0.09, t + 0.015)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.32)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(t)
+      osc.stop(t + 0.34)
+    }
+  } catch {
+    // A blocked or unsupported audio stack must never break the notification
+    // itself — the toast is the message, the sound is only the doorbell.
+  }
+}
+
 export function useAlarm(active: boolean, muted: boolean) {
   const ctxRef = useRef<AudioContext | null>(null)
   const [armed, setArmed] = useState(false)

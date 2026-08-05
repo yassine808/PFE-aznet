@@ -171,7 +171,7 @@ def test_weekly_report_covers_the_whole_week(monkeypatch):
         lambda label, r: seen.update(label=label, n=len(r))
         or jobs.daily_report.DailyReportContent(objet="Hebdo", corps="…"),
     )
-    monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, html=False: list(to))
+    monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, **k: list(to))
 
     out = jobs.send_weekly_report("2026-07-31")  # a Friday
 
@@ -206,7 +206,7 @@ def test_daily_report_is_per_manager(monkeypatch):
     monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
     monkeypatch.setattr(jobs.daily_report, "generate_daily_report", fake_gen)
-    monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, html=False: sent.append(to) or to)
+    monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, **k: sent.append(to) or to)
     monkeypatch.setattr(
         jobs.logs, "save_manager_report",
         lambda mid, period, o, c, g="automatique", pt="daily": stored.append((mid, period, pt)),
@@ -245,7 +245,7 @@ def test_weekly_report_stores_period_type(monkeypatch):
     monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
     monkeypatch.setattr(jobs.daily_report, "generate_daily_report", fake_gen)
-    monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, html=False: to)
+    monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, **k: to)
     monkeypatch.setattr(
         jobs.logs, "save_manager_report",
         lambda mid, period, o, c, g="automatique", pt="daily": stored.append((mid, pt)),
@@ -315,7 +315,7 @@ def test_manager_without_email_does_not_abort_the_report_job(monkeypatch):
     monkeypatch.setattr(jobs.daily_report, "generate_daily_report",
                         lambda period, r: jobs.daily_report.DailyReportContent(objet="o", corps="c"))
 
-    def fake_send(to, subject, body, html=False):
+    def fake_send(to, subject, body, **kwargs):
         addresses = [a for a in to if a]
         if not addresses:
             raise jobs.mailer.MailError("aucun destinataire configuré")
@@ -329,3 +329,40 @@ def test_manager_without_email_does_not_abort_the_report_job(monkeypatch):
     assert stored                                    # …and stored for /rapport
     assert stored[0][0] == 2
     assert result["reports"][0]["mail_error"]        # the failure is visible, not swallowed
+
+
+def test_report_link_targets_the_period_it_covers(monkeypatch):
+    """The mail's button opens *that* report, not a list to search.
+
+    A weekly period is a range label; the weekly panel selects a week by its
+    Monday, so the link has to carry the left half of the range. Getting this
+    wrong is invisible in a test that only checks the URL is non-empty — it
+    lands the reader on the current week instead of the one they were mailed.
+
+    `monkeypatch.setattr` rather than a plain assignment: `settings` is a
+    process-wide singleton, and a test that leaves a fake hostname on it hands
+    every later test in the session a URL nobody set.
+    """
+    monkeypatch.setattr(jobs.settings, "dashboard_url", "https://aznet.example/")
+    assert (
+        jobs._report_link("2026-08-05")
+        == "https://aznet.example/#/daily?date=2026-08-05"
+    )
+    assert (
+        jobs._report_link("2026-08-03 → 2026-08-09")
+        == "https://aznet.example/#/weekly?week=2026-08-03"
+    )
+
+
+def test_report_mail_carries_banner_and_button():
+    """Rendered document, not the plain body with <br> between the lines."""
+    from app.daily_report import DailyReportContent
+
+    html = jobs._report_html(
+        "2026-08-05",
+        DailyReportContent(objet="Rapport du 5", corps="Trois interventions."),
+        3,
+    )
+    assert "cid:aznet-banner" in html   # the picture travels with the message
+    assert "Ouvrir le rapport" in html
+    assert "<table" in html

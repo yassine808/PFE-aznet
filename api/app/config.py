@@ -121,6 +121,14 @@ class Settings(BaseSettings):
     n8n_url: str = "http://n8n:5678"  # NOSONAR — internal docker-compose service name, not internet-reachable
     n8n_api_key: Optional[str] = None
 
+    # Where the dashboard answers, used to build the "open the report" link in
+    # outgoing mail. It has to be an address the *recipient's* browser can
+    # reach, which is why it is not derived from the request: the scheduler
+    # sends these from a background thread with no request to derive from, and
+    # a link to `http://api:8000` would work only inside the compose network.
+    # Set it to the Tailscale Funnel hostname once the dashboard is published.
+    dashboard_url: str = "http://localhost:8080"
+
     # How many trusted proxies sit in front of this API, used to pick the real
     # client address out of X-Forwarded-For when throttling logins (main.py).
     # 1 = nginx alone; 2 = Tailscale Funnel in front of nginx; 0 = no proxy,

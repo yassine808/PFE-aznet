@@ -821,7 +821,7 @@ function Modal({
       onCancel={onClose}
       onClose={onClose}
       aria-label={title}
-      className="bg-panel border-line text-ink m-auto rounded-xl border p-5 shadow-lg backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
+      className="bg-surface border-line text-ink m-auto rounded-xl border p-5 shadow-lg backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
     >
       <h2 className="text-ink text-sm font-medium">{title}</h2>
       {children}

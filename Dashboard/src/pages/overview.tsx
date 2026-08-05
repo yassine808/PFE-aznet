@@ -178,10 +178,34 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
           <ServicesPanel rows={services} />
         </Band>
 
-        <Band title={t('graph.year')} aside={fmt.format(m.total)}>
-          {/* Clicking a day deep-links into the Inbox filtered to that date. */}
-          <ContributionGraph rows={reports.data?.reports ?? []} onSelectDay={onOpenDay} />
-        </Band>
+        {/* The year graph answers "when", the figures under it answer "how
+            much" — same column because they are read together, and a reader
+            who has just spotted a busy week wants the totals without moving
+            their eye back across the page. */}
+        <div className="flex min-w-0 flex-col gap-5">
+          <Band title={t('graph.year')} aside={fmt.format(m.total)}>
+            {/* Clicking a day deep-links into the Inbox filtered to that date. */}
+            <ContributionGraph rows={reports.data?.reports ?? []} onSelectDay={onOpenDay} />
+          </Band>
+
+          <Band title={t('panel.keyFigures')}>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+              <Quantity value={fmt.format(m.week)} label={t('metric.week')} />
+              <Quantity value={fmt.format(m.techniciens)} label={t('metric.techniciens')} />
+              <Quantity value={fmt.format(m.flagged)} label={t('metric.flagged')} />
+              <Quantity
+                value={m.voiceShare === null ? '—' : `${m.voiceShare}`}
+                unit={m.voiceShare === null ? undefined : '%'}
+                label={t('metric.voiceShare')}
+              />
+              <Quantity value={fmt.format(m.undated)} label={t('metric.undatedShort')} />
+              <Quantity
+                value={fmt.format(m.byChantier.length)}
+                label={t('weekly.chantiers')}
+              />
+            </div>
+          </Band>
+        </div>
       </motion.div>
     </motion.div>
   )

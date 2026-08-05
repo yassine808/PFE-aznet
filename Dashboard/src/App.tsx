@@ -5,6 +5,7 @@ import { OverviewPage } from '@/pages/overview'
 import { AuthProvider, useAuth, usePageTimer } from '@/lib/auth'
 import { SettingsProvider } from '@/lib/settings'
 import { OpsProvider } from '@/lib/ops-context'
+import { ToastProvider } from '@/lib/toast'
 import { useI18n } from '@/lib/i18n'
 import { useRoute, type Route } from '@/lib/router'
 
@@ -42,7 +43,10 @@ export default function App() {
       {/* Inside AuthProvider on purpose: the settings live in the database now,
           so the provider needs to know whose preferences to load. */}
       <SettingsProvider>
-        <Gate />
+        {/* Above the gate so the login screen can toast its own failures. */}
+        <ToastProvider>
+          <Gate />
+        </ToastProvider>
       </SettingsProvider>
     </AuthProvider>
   )
@@ -91,10 +95,12 @@ function RouteView({
       return <InboxPage initialDate={params.date} />
     case 'reports':
       return <ReportsPage />
+    // Both take their period from the URL so the "Ouvrir le rapport" button in
+    // the report mail lands on that exact day or week, not on today's.
     case 'daily':
-      return <DailyReportPage />
+      return <DailyReportPage initialDate={params.date} />
     case 'weekly':
-      return <WeeklyReportPage />
+      return <WeeklyReportPage initialWeek={params.week} />
     case 'automation':
       return <AutomationPage />
     case 'tasks':

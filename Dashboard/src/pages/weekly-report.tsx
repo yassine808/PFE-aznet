@@ -12,12 +12,15 @@ import { cn } from '@/lib/utils'
 
 const DAY_MS = 86_400_000
 
-export function WeeklyReportPage() {
+export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: string }) {
   const { t, locale } = useI18n()
   const reports = useApi('reports', api.reports)
-  // Selected week as its Monday. Picked from the year graph below.
-  const [selected, setSelected] = useState(() => iso(weekStart(new Date())))
-  const [year, setYear] = useState(() => new Date().getFullYear())
+  // Selected week as its Monday — `#/weekly?week=2026-08-03` from the report
+  // mail, otherwise the current week. Initial value only, as on the Daily page.
+  const [selected, setSelected] = useState(() => initialWeek || iso(weekStart(new Date())))
+  const [year, setYear] = useState(() =>
+    Number(initialWeek?.slice(0, 4)) || new Date().getFullYear(),
+  )
   const [content, setContent] = useState<DailyReportContent | null>(null)
   const [busy, setBusy] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
@@ -38,6 +41,19 @@ export function WeeklyReportPage() {
     () => Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * DAY_MS)),
     [start],
   )
+  /*
+   * The week's one name — `2026-08-03 → 2026-08-09`, the same shape the
+   * scheduler writes (`jobs.send_weekly_report`).
+   *
+   * It has to be a single variable because two calls on this page name the same
+   * report: the generator stores it under this label in `manager_reports`, and
+   * the editor stores its versions and its mirror under whatever `period` it is
+   * handed. When those were two expressions they disagreed — the editor passed
+   * the Monday alone, so saving an edit wrote a *second* row and, since that
+   * table is keyed `(manager_id, period)`, silently overwrote that Monday's
+   * daily report with the week's text.
+   */
+  const label = useMemo(() => `${iso(days[0])} → ${iso(days[6])}`, [days])
 
   // Current year plus the two before it, newest first.
   const years = useMemo(() => {
@@ -93,7 +109,7 @@ export function WeeklyReportPage() {
     setBusy(true)
     setGenError(null)
     try {
-      setContent(await generateDailyReport(`${iso(days[0])} → ${iso(days[6])}`, week.rows))
+      setContent(await generateDailyReport(label, week.rows))
     } catch (err) {
       setGenError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -113,26 +129,68 @@ export function WeeklyReportPage() {
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
       className="flex flex-col gap-8 pt-8"
     >
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="tabular text-ink text-sm">
-          {iso(days[0])} → {iso(days[6])}
-        </span>
-        <div className="ms-auto flex items-center gap-3">
-          <button
-            type="button"
-            onClick={generate}
-            disabled={busy || week.rows.length === 0}
-            className={cn(
-              'flex items-center gap-2 text-xs transition-transform',
-              busy || week.rows.length === 0
-                ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-3 py-1.5'
-                : 'bg-accent breathe-glow rounded-md px-3.5 py-2 text-white active:translate-y-px',
-            )}
-          >
-            <SparkleIcon size={13} weight="fill" />
-            {busy ? t('daily.generating') : t('daily.generate')}
-          </button>
+      {/* Same shape as the Daily panel: the period on the left, everything that
+          acts on the right — generate, then the year to pick a week from. The
+          week picker used to sit at the very bottom, which meant changing week
+          was a scroll to the end of the page and back. */}
+      <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
+        <span className="tabular text-ink pt-1 text-sm">{label}</span>
 
+        <div className="flex min-w-0 flex-col gap-5">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={generate}
+              disabled={busy || week.rows.length === 0}
+              className={cn(
+                'flex items-center gap-2 text-xs transition-transform',
+                busy || week.rows.length === 0
+                  ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-3 py-1.5'
+                  : 'bg-accent breathe-glow rounded-md px-3.5 py-2 text-white active:translate-y-px',
+              )}
+            >
+              <SparkleIcon size={13} weight="fill" />
+              {busy ? t('daily.generating') : t('daily.generate')}
+            </button>
+          </div>
+
+          {/* Pick a week by clicking its column; the rail switches years. */}
+          <section className="flex flex-col gap-3">
+            <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
+              {t('weekly.pickWeek')}
+            </h2>
+
+            <div className="flex items-start gap-5">
+              <div className="min-w-0 flex-1">
+                <ContributionGraph
+                  rows={reports.data?.reports ?? []}
+                  year={year}
+                  onSelectWeek={setSelected}
+                  selectedWeek={selected}
+                />
+              </div>
+
+              <fieldset className="m-0 flex shrink-0 flex-col gap-1 border-0 p-0">
+                <legend className="sr-only">{t('weekly.year')}</legend>
+                {years.map((y) => (
+                  <button
+                    key={y}
+                    type="button"
+                    onClick={() => setYear(y)}
+                    aria-pressed={y === year}
+                    className={cn(
+                      'tabular rounded-md px-3 py-1 text-start text-xs transition-colors active:translate-y-px',
+                      y === year
+                        ? 'bg-accent font-medium text-white'
+                        : 'text-ink-muted hover:bg-surface hover:text-ink',
+                    )}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </fieldset>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -141,7 +199,7 @@ export function WeeklyReportPage() {
       {content && (
         <ReportEditor
           kind="weekly"
-          period={selected}
+          period={label}
           objet={content.objet}
           corps={content.corps}
           image={image}
@@ -159,48 +217,6 @@ export function WeeklyReportPage() {
           byTech={week.byTech.map(([name, v]) => ({ name, ...v }))}
         />
       )}
-
-      {/* Pick a week by clicking its column. One year at a time; the rail on the
-          right switches years, the way GitHub's contribution calendar does. */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
-          {t('weekly.pickWeek')}
-        </h2>
-
-        <div className="flex items-start gap-5">
-          <div className="min-w-0 flex-1">
-            <ContributionGraph
-              rows={reports.data?.reports ?? []}
-              year={year}
-              onSelectWeek={setSelected}
-              selectedWeek={selected}
-            />
-          </div>
-
-          <fieldset className="m-0 flex shrink-0 flex-col gap-1 border-0 p-0">
-            <legend className="sr-only">{t('weekly.year')}</legend>
-            {years.map((y) => (
-              <button
-                key={y}
-                type="button"
-                onClick={() => setYear(y)}
-                aria-pressed={y === year}
-                className={cn(
-                  'tabular rounded-md px-4 py-1.5 text-start text-sm transition-colors active:translate-y-px',
-                  y === year
-                    ? 'bg-accent font-medium text-white'
-                    : 'text-ink-muted hover:bg-surface hover:text-ink',
-                )}
-              >
-                {y}
-              </button>
-            ))}
-          </fieldset>
-        </div>
-      </section>
-
-      {/* Computed locally from the Sheet: no model call, so the numbers are arithmetic, not prose. */}
-      <p className="text-ink-faint max-w-[65ch] text-sm">{t('weekly.intro')}</p>
 
       {week.rows.length === 0 ? (
         <EmptyState body={t('weekly.noRows')} />

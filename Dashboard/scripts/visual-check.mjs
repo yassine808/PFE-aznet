@@ -94,9 +94,27 @@ for (const route of ROUTES) {
       if (!img.complete || img.naturalWidth === 0) out.push(`broken image: ${img.src.slice(0, 120)}`)
     }
     if (document.body.innerText.trim().length < 20) out.push('page appears blank')
+    // Content wider than the viewport is only a bug when the *page* has to
+    // scroll for it. A table, an org chart or a code block inside its own
+    // `overflow-x: auto` box is the house rule, not a violation — and reporting
+    // those made the equipe org chart emit six warnings a run until nobody read
+    // the output any more.
+    const scrolls = (el) => {
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        const ox = getComputedStyle(p).overflowX
+        if (ox === 'auto' || ox === 'scroll') return true
+      }
+      return false
+    }
     for (const el of document.querySelectorAll('body *')) {
       const r = el.getBoundingClientRect()
-      if (r.width > 0 && r.right > vw + 4 && el.children.length === 0 && !el.closest('dialog, [role="dialog"]')) {
+      if (
+        r.width > 0 &&
+        r.right > vw + 4 &&
+        el.children.length === 0 &&
+        !el.closest('dialog, [role="dialog"]') &&
+        !scrolls(el)
+      ) {
         const cls = String(el.className).slice(0, 60)
         out.push(`element past right edge: <${el.tagName.toLowerCase()}> ${cls} right=${Math.round(r.right)}`)
       }
@@ -126,24 +144,56 @@ for (const route of ROUTES) {
     }
   }
 
+  // The Reports page lost its second tab when the message ledger moved out, so
+  // there is no tab bar left to switch. What has to hold now is that the page
+  // resolves to one of its two real states — a list of stored reports, or the
+  // empty state — rather than to nothing at all, which is what an unstored
+  // report looked like from here.
   if (route === 'reports') {
-    const tabs = page.locator('main fieldset:has(legend) button[aria-pressed]')
-    if ((await tabs.count()) === 2) {
-      await tabs.nth(1).click()
-      await page.waitForTimeout(1200)
-      const second = await tabs.nth(1).getAttribute('aria-pressed')
-      const first = await tabs.nth(0).getAttribute('aria-pressed')
-      if (second !== 'true' || first !== 'false') {
-        PROBLEMS.push(`reports: tab switch broken (generated=${first}, messages=${second})`)
-      }
-    } else {
-      console.log(`  [reports] unexpected tab bar: ${await tabs.count()} buttons`)
-    }
+    const rendered = await page.locator('main button[aria-expanded], main p').count()
+    if (rendered === 0) PROBLEMS.push('reports: neither generated rows nor an empty state rendered')
   }
 
   const blocked = PROBLEMS.length
   await page.waitForTimeout(1500)
   if (PROBLEMS.length > blocked) failed++
+}
+
+/*
+ * The rail's bell sits near the bottom of a full-height sticky column, so a
+ * panel anchored to `top-full` opened *below the fold*: present in the DOM,
+ * correct in every other way, and impossible to read. Nothing above catches
+ * that — the page does not overflow, no request fails, no element crosses the
+ * right edge — so it is checked on its own terms: open it, and require the
+ * panel to be inside the viewport it was drawn in.
+ */
+{
+  const bell = page.locator('nav button[aria-controls="bell-panel"]').last()
+  await bell.click()
+  const panel = page.locator('#bell-panel')
+  await panel.waitFor({ state: 'visible', timeout: 5000 })
+  // Playwright calls an element visible the moment it has a box, which for a
+  // fading popover is somewhere around opacity 0.3 — the screenshot then shows
+  // the rail straight through the panel and reads as a rendering bug that is
+  // really a capture bug. Let the 120ms entrance finish first.
+  await page.waitForTimeout(400)
+  const box = await panel.boundingBox()
+  const { width: vw, height: vh } = page.viewportSize()
+  // Both axes. Checking only the vertical one is how a panel that had stopped
+  // falling off the bottom went on hanging 80px off the left edge, with the
+  // check reporting clean: the rail's bell is cornered on two sides, so a
+  // half-check passes a half-fix.
+  if (!box) {
+    PROBLEMS.push('bell: panel has no box after opening')
+  } else if (box.y < -2 || box.y + box.height > vh + 2 || box.x < -2 || box.x + box.width > vw + 2) {
+    PROBLEMS.push(
+      `bell: panel outside the viewport (x ${Math.round(box.x)}→${Math.round(box.x + box.width)} of ${vw}, ` +
+        `y ${Math.round(box.y)}→${Math.round(box.y + box.height)} of ${vh})`,
+    )
+  }
+  await page.screenshot({ path: join(SHOTS, `${LOCALE}-bell.png`) })
+  console.log(`bell -> ${join(SHOTS, `${LOCALE}-bell.png`)}`)
+  await page.keyboard.press('Escape')
 }
 
 await browser.close()

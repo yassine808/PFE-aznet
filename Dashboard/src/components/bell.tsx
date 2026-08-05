@@ -11,6 +11,9 @@ import { api, markNotificationsRead, useApi, type NotificationItem } from '@/lib
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { ROUTES, type Route } from '@/lib/router'
+import { useAuth } from '@/lib/auth'
+import { chime } from '@/lib/alarm'
+import { useToast, type ToastTone } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
 /** Icon + colour per notification kind. `report` is the fallback. */
@@ -21,14 +24,50 @@ const KIND_DOT: Record<NotificationItem['kind'], { Icon: typeof BellIcon; cls: s
   report: { Icon: BellIcon, cls: 'text-status-ok' },
 }
 
+/** The bell's own vocabulary, mapped onto the toast's four tones. */
+const KIND_TONE: Record<NotificationItem['kind'], ToastTone> = {
+  error: 'error',
+  review: 'warn',
+  reminder: 'info',
+  report: 'success',
+}
+
+/**
+ * Highest notification id already announced, shared by every Bell on the page.
+ *
+ * The shell mounts two — one in the mobile bar, one in the rail — and CSS
+ * hides the wrong one rather than unmounting it, so both run this effect on
+ * the same polled data. A per-component ref would ring twice; module state
+ * means whichever renders first claims the row and the other sees nothing new.
+ *
+ * `null` until the first response: on a fresh page load every existing row is
+ * "new", and announcing a week of history as it arrives is how a notification
+ * system teaches people to ignore it.
+ */
+let announced: number | null = null
+
 /**
  * The per-account bell. Rows are created by the API (own team's new reports,
  * rows flagged for review, Sheet write failures, due task reminders); only the
  * signed-in person's own rows are ever shown here.
  */
-export function Bell({ onNavigate }: { readonly onNavigate: (r: Route) => void }) {
+export function Bell({
+  onNavigate,
+  placement = 'down',
+}: {
+  readonly onNavigate: (r: Route) => void
+  /**
+   * Which way the panel opens. The rail's bell sits a few centimetres above the
+   * bottom of a full-height sticky column, so a panel dropping from `top-full`
+   * rendered below the fold — open, correct, and entirely off-screen. `up` is
+   * not a preference there, it is the only direction with room.
+   */
+  readonly placement?: 'down' | 'up'
+}) {
   const { t, locale } = useI18n()
   const { settings } = useSettings()
+  const { user } = useAuth()
+  const toast = useToast()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
@@ -38,6 +77,42 @@ export function Bell({ onNavigate }: { readonly onNavigate: (r: Route) => void }
 
   const items = list.data?.items ?? []
   const unread = list.data?.unread ?? 0
+  const up = placement === 'up'
+
+  // `announced` outlives a sign-out, and notification ids are one global
+  // sequence — so the next account to use this browser would start behind a
+  // stranger's high-water mark and hear nothing until it caught up.
+  useEffect(() => {
+    announced = null
+  }, [user?.id])
+
+  // Anything that arrived since the last poll gets a chime and a toast, oldest
+  // first so the stack reads top-down in the order things happened.
+  useEffect(() => {
+    if (!list.data) return
+    const newest = items.reduce((max, n) => Math.max(max, n.id), 0)
+    if (announced === null) {
+      announced = newest // first load: catch up silently
+      return
+    }
+    if (newest <= announced) return
+    const fresh = items.filter((n) => n.id > (announced ?? 0)).sort((a, b) => a.id - b.id)
+    announced = newest
+    if (fresh.length === 0) return
+    chime()
+    for (const n of fresh) {
+      const route = n.route?.replace(/^#\//, '')
+      toast({
+        tone: KIND_TONE[n.kind] ?? 'info',
+        title: n.title,
+        body: n.body ?? undefined,
+        onOpen:
+          route && (ROUTES as readonly string[]).includes(route)
+            ? () => onNavigate(route as Route)
+            : undefined,
+      })
+    }
+  }, [list.data, items, toast, onNavigate])
 
   // Click outside and Escape both close the panel, so one gesture or one key
   // backs out — same contract as the mobile drawer.
@@ -101,11 +176,21 @@ export function Bell({ onNavigate }: { readonly onNavigate: (r: Route) => void }
         {open && (
           <motion.div
             id="bell-panel"
-            initial={{ opacity: 0, y: 6 }}
+            initial={{ opacity: 0, y: up ? -6 : 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
+            exit={{ opacity: 0, y: up ? -6 : 6 }}
             transition={{ duration: 0.12 }}
-            className="border-line bg-surface edge absolute end-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border shadow-xl shadow-black/5"
+            className={cn(
+              'border-line bg-surface edge absolute z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border shadow-xl shadow-black/5',
+              // Both axes hang off `placement`, because the rail's bell is
+              // cornered on both. Upward is the only direction with vertical
+              // room; `start-0` is the only direction with horizontal room —
+              // the panel is 320px wide inside a 240px rail, so anchoring its
+              // *end* to the button pushed 80px of it off the screen edge.
+              // Logical, not `left`: in Arabic the rail is on the other side
+              // and the overflow has to go the other way with it.
+              up ? 'bottom-full mb-2 start-0' : 'top-full mt-2 end-0',
+            )}
           >
             <div className="border-line flex items-center justify-between gap-2 border-b px-3 py-2">
               <p className="text-ink text-sm font-medium">{t('bell.title')}</p>

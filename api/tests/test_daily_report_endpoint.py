@@ -46,6 +46,49 @@ def test_daily_report_missing_date_rejected():
     assert r.status_code == 422
 
 
+def _capture_store(monkeypatch):
+    """Record what the endpoint files in `manager_reports`, without a database.
+
+    The override above is set at import time on a *shared* `main.app`, and five
+    test modules do the same with four different identities — whichever imports
+    last wins for the whole session. These two tests assert on the caller, so
+    they pin their own and let monkeypatch put the previous one back.
+    """
+    monkeypatch.setitem(
+        main.app.dependency_overrides,
+        main.auth.require_user,
+        lambda: {"id": 1, "name": "Test", "role": "directeur"},
+    )
+    calls = []
+    monkeypatch.setattr(main.daily_report, "generate_daily_report", lambda d, r: CONTENT)
+    monkeypatch.setattr(main.logs, "save_manager_report", lambda *a: calls.append(a))
+    return calls
+
+
+def test_daily_report_is_stored_for_the_caller(monkeypatch):
+    """A dashboard run has to be written down, not just returned.
+
+    The Reports page reads `manager_reports`; when this store is missing the
+    report exists only in the tab that asked for it and the page stays empty
+    with nothing to explain why.
+    """
+    calls = _capture_store(monkeypatch)
+    r = client.post("/daily-report", json={"date": "2026-07-23", "rows": ROWS})
+    assert r.status_code == 200
+    assert calls == [(1, "2026-07-23", CONTENT.objet, CONTENT.corps, "Test", "daily")]
+
+
+def test_weekly_label_is_stored_as_weekly(monkeypatch):
+    """The range label is what separates a week from a day — same endpoint."""
+    calls = _capture_store(monkeypatch)
+    r = client.post(
+        "/daily-report", json={"date": "2026-08-03 → 2026-08-09", "rows": ROWS}
+    )
+    assert r.status_code == 200
+    assert calls[0][1] == "2026-08-03 → 2026-08-09"
+    assert calls[0][5] == "weekly"
+
+
 def test_daily_report_engine_failure_is_502(monkeypatch):
     def boom(d, r):
         raise DailyReportError("both engines down")

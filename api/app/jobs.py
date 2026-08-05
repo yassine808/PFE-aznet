@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional
 
 from app import daily_report, logs, mailer, memory, sheets
+from app.config import settings
 
 # How often the loop wakes to look for due work. Well under the tightest
 # interval (5 min) so the drain never drifts by a meaningful amount.
@@ -191,7 +192,12 @@ def _report_mail(
     sent: List[str] = []
     mail_error = None
     try:
-        sent = mailer.send(recipients, content.objet, content.corps, html=True)
+        sent = mailer.send(
+            recipients,
+            content.objet,
+            content.corps,
+            html_body=_report_html(period, content, len(rows)),
+        )
     except mailer.MailError as exc:
         mail_error = str(exc)
     return {
@@ -199,6 +205,36 @@ def _report_mail(
         "generated_by": "automatique", "objet": content.objet, "corps": content.corps,
         "mail_error": mail_error,
     }
+
+
+def _report_link(period: str) -> str:
+    """Deep link that opens this exact report in the dashboard.
+
+    A weekly period is a range label (`2026-08-03 → 2026-08-09`); the weekly
+    panel selects a week by its Monday, so the link carries that. A daily
+    period is already the day. Both land on the panel with the period selected
+    rather than on a list the reader then has to search — the mail says "voici
+    le rapport", so the button has to open *that* one.
+    """
+    base = settings.dashboard_url.rstrip("/")
+    if "→" in period:
+        monday = period.split("→")[0].strip()
+        return f"{base}/#/weekly?week={monday}"
+    return f"{base}/#/daily?date={period}"
+
+
+def _report_html(period: str, content, rows: int) -> str:
+    """The report mail: banner, the model's own text, and a way back in."""
+    return mailer.render_document(
+        title=content.objet,
+        lead=content.corps,
+        rows=[
+            ("Période", period),
+            ("Rapports", str(rows)),
+        ],
+        cta=("Ouvrir le rapport", _report_link(period)),
+        footer="Envoi automatique du tableau de bord aznet.",
+    )
 
 
 def _period_report(label: str, rows: List[dict], kind: str) -> dict:
@@ -326,14 +362,45 @@ def _reminder_body(task: dict) -> str:
         body += f"\n{task['notes']}"
     if task.get("due_at"):
         body += f"\nÉchéance : {task['due_at'].strftime('%d/%m/%Y %H:%M')}"
-    lead_value = task.get("remind_before_value")
-    lead_unit = task.get("remind_before_unit")
-    if lead_value and lead_unit:
-        label = {"day": "jour", "week": "semaine", "month": "mois"}.get(lead_unit, lead_unit)
-        if lead_value > 1 and lead_unit != "month":
-            label += "s"
-        body += f"\nRappel : {lead_value} {label} avant l'échéance"
+    lead = _lead_label(task)
+    if lead:
+        body += f"\nRappel : {lead}"
     return body
+
+
+def _lead_label(task: dict) -> str:
+    """"3 jours avant l'échéance", or "" when the task has no lead time."""
+    value = task.get("remind_before_value")
+    unit = task.get("remind_before_unit")
+    if not value or not unit:
+        return ""
+    label = {"day": "jour", "week": "semaine", "month": "mois"}.get(unit) or str(unit)
+    if value > 1 and unit != "month":
+        label += "s"
+    return f"{value} {label} avant l'échéance"
+
+
+def _reminder_html(task: dict) -> str:
+    """The same reminder as `_reminder_body`, laid out for an inbox.
+
+    Kept beside the plain-text version rather than derived from it: the two say
+    the same thing but are not the same artefact — one is a fallback that must
+    stay readable as raw text, the other is a table. Deriving the second from
+    the first is what produces mail that looks like a log file with `<br>`
+    between the lines, which is exactly what this replaced.
+    """
+    due = task.get("due_at")
+    return mailer.render_document(
+        title=task["title"],
+        lead="Une tâche de l'équipe arrive à échéance.",
+        rows=[
+            ("Échéance", due.strftime("%d/%m/%Y à %H:%M") if due else ""),
+            ("Rappel", _lead_label(task)),
+            ("Notes", task.get("notes") or ""),
+        ],
+        cta=("Ouvrir la tâche", f"{settings.dashboard_url.rstrip('/')}/#/tasks"),
+        footer="Rappel automatique du tableau de bord aznet.",
+    )
 
 
 def send_reminders() -> dict:
@@ -348,21 +415,28 @@ def send_reminders() -> dict:
     due = logs.due_tasks(now)
     if not due:
         return {"due": 0, "notified": 0, "emailed": 0, "failed": []}
-    accounts = logs.account_people()
-    emails = [p["email"] for p in accounts if p.get("email")]
+    # Two audiences for one reminder, because they are reached differently: the
+    # bell needs an account to read it, mail only needs an address. A chef in
+    # the org chart with an email and no password still gets told.
+    emails = logs.manager_emails()
     notified, emailed, failed = [], [], []
     for task in due:
         title = task["title"]
         body = _reminder_body(task)
         try:
-            logs.notify_accounts("reminder", title, body, "#/tasks", str(task["id"]))
+            logs.notify_managers("reminder", title, body, "#/tasks", str(task["id"]))
             notified.append(task["id"])
         except logs.LogStoreError as exc:
             failed.append({"id": task["id"], "error": str(exc)})
             continue
         if emails:
             try:
-                mailer.send(emails, f"Rappel — {title}", body)
+                mailer.send(
+                    emails,
+                    f"Rappel — {title}",
+                    body,
+                    html_body=_reminder_html(task),
+                )
                 emailed.append(task["id"])
             except mailer.MailError as exc:
                 # The bell already fired; a dead SMTP must not re-fire it next tick.

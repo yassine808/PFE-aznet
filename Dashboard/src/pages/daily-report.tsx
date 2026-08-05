@@ -9,11 +9,14 @@ import { ActivityGraphSection } from '@/components/activity-graph-section'
 import { ReportEditor } from '@/components/report-editor'
 import { ReportImageCard } from '@/components/report-image'
 
-export function DailyReportPage() {
+export function DailyReportPage({ initialDate }: { readonly initialDate?: string }) {
   const { t, locale } = useI18n()
   const reports = useApi('reports', api.reports)
 
-  const [date, setDate] = useState(todayISO())
+  // `#/daily?date=2026-08-05` — the target of the report mail's button. Only
+  // the initial value: once the page is open the picker owns the date, so a
+  // stale link cannot fight the operator for control of it.
+  const [date, setDate] = useState(initialDate || todayISO())
   const [content, setContent] = useState<DailyReportContent | null>(null)
   // The illustrated card, once generated below. Held here rather than inside
   // the card component because the editor embeds it in the exported .docx and
@@ -83,9 +86,11 @@ export function DailyReportPage() {
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
       className="flex flex-col gap-6 pt-8"
     >
-      <p className="text-ink-faint max-w-[65ch] text-sm">{t('daily.intro')}</p>
-
-      <div className="flex flex-wrap items-end gap-4">
+      {/* What the page is for is answered by its own title and by the shape of
+          the controls; the paragraph that used to sit here repeated both. The
+          picker is the one thing on the left, and everything that acts —
+          generate, then the year to pick a day from — is on the right. */}
+      <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
         <div className="flex flex-col gap-1.5">
           <label
             htmlFor="report-date"
@@ -103,28 +108,32 @@ export function DailyReportPage() {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={generate}
-          disabled={busy || rows.length === 0}
-          className={
-            busy || rows.length === 0
-              ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-4 py-2 text-sm'
-              : 'bg-accent breathe-glow rounded-md px-4 py-2 text-sm text-white transition-transform active:translate-y-px'
-          }
-        >
-          <span className="flex items-center gap-2">
-            <SparkleIcon size={14} weight="fill" />
-            {busy ? t('daily.generating') : t('daily.generate')}
-          </span>
-        </button>
+        <div className="flex min-w-0 flex-col gap-5">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={generate}
+              disabled={busy || rows.length === 0}
+              className={
+                busy || rows.length === 0
+                  ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-4 py-2 text-sm'
+                  : 'bg-accent breathe-glow rounded-md px-4 py-2 text-sm text-white transition-transform active:translate-y-px'
+              }
+            >
+              <span className="flex items-center gap-2">
+                <SparkleIcon size={14} weight="fill" />
+                {busy ? t('daily.generating') : t('daily.generate')}
+              </span>
+            </button>
+          </div>
 
-        <span className="tabular text-ink-faint pb-2 text-xs">
-          {rows.length} {t('daily.rowsForDate')}
-        </span>
+          <ActivityGraphSection
+            rows={reports.data?.reports ?? []}
+            date={date}
+            onSelectDay={setDate}
+          />
+        </div>
       </div>
-
-      <ActivityGraphSection rows={reports.data?.reports ?? []} date={date} onSelectDay={setDate} />
 
       {error && <ErrorState message={error} onRetry={generate} />}
 

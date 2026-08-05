@@ -114,39 +114,47 @@ def _call_gemini(model: str, prompt: str) -> Tuple[bytes, str]:
 _CARD_SIZE = (1200, 675)  # 16:9, the ratio the .docx export lays out for
 
 
+def _font(size: int, bold: bool = False):
+    """A scalable font, wherever this happens to be running.
+
+    The API runs in a slim image with no system fonts and on a Windows host
+    with a different set again, so each candidate is tried in turn. The last
+    resort is `load_default(size)` — Pillow ≥ 10.1 bundles a scalable font
+    for it. `load_default()` *without* a size is the trap: it returns a
+    fixed bitmap face that silently ignores `size` and cannot draw `é`, so
+    the card comes out in tiny mojibake instead of failing.
+
+    Module level rather than nested in `_draw_card`, because the mail banner
+    (`app.mailer.banner_png`) needs exactly this fallback chain and a second
+    copy of it would drift the first time one of them gains a candidate.
+    """
+    from PIL import ImageFont
+
+    candidates = (
+        ("DejaVuSans-Bold.ttf", "DejaVuSans.ttf"),
+        ("arialbd.ttf", "arial.ttf"),
+        ("LiberationSans-Bold.ttf", "LiberationSans-Regular.ttf"),
+    )
+    for bold_name, regular_name in candidates:
+        try:
+            return ImageFont.truetype(bold_name if bold else regular_name, size)
+        except OSError:
+            continue
+    return ImageFont.load_default(size)
+
+
 def _draw_card(title: str, rows: List[Dict[str, Any]]) -> Tuple[bytes, str]:
     """A flat, typographic summary card. Pillow only, no network."""
     import io
 
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
 
     ink = (15, 23, 42)
     muted = (100, 116, 139)
     accent = (37, 99, 235)
     canvas = Image.new("RGB", _CARD_SIZE, (248, 250, 252))
     draw = ImageDraw.Draw(canvas)
-
-    def font(size: int, bold: bool = False):
-        """A scalable font, wherever this happens to be running.
-
-        The API runs in a slim image with no system fonts and on a Windows host
-        with a different set again, so each candidate is tried in turn. The last
-        resort is `load_default(size)` — Pillow ≥ 10.1 bundles a scalable font
-        for it. `load_default()` *without* a size is the trap: it returns a
-        fixed bitmap face that silently ignores `size` and cannot draw `é`, so
-        the card comes out in tiny mojibake instead of failing.
-        """
-        candidates = (
-            ("DejaVuSans-Bold.ttf", "DejaVuSans.ttf"),
-            ("arialbd.ttf", "arial.ttf"),
-            ("LiberationSans-Bold.ttf", "LiberationSans-Regular.ttf"),
-        )
-        for bold_name, regular_name in candidates:
-            try:
-                return ImageFont.truetype(bold_name if bold else regular_name, size)
-            except OSError:
-                continue
-        return ImageFont.load_default(size)
+    font = _font
 
     totals = _accumulate_totals(rows)
     chantiers = _unique_names(rows, "chantier")

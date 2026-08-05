@@ -1181,7 +1181,7 @@
     "url": "={{ $env.API_BASE_URL }}/logs/claim",
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "={{ JSON.stringify({message_id: $json.channel + ':' + ($json.message_id ?? ''), channel: $json.channel}) }}",
+    "jsonBody": "={{ JSON.stringify({message_id: $('Filtrer accès').item.json.msg_key, channel: $json.channel}) }}",
     "options": {
      "timeout": 5000
     },
@@ -1990,7 +1990,7 @@
     },
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "={{ JSON.stringify({ message_id: $('Filtrer accès').item.json.message_id, row: $json.rowNumber }) }}",
+    "jsonBody": "={{ JSON.stringify({ message_id: $('Filtrer accès').item.json.msg_key, row: $json.rowNumber }) }}",
     "options": {
      "timeout": 5000
     }

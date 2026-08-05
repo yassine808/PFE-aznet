@@ -2,6 +2,7 @@ import io
 import math
 import time
 from functools import lru_cache
+from typing import Optional
 
 from app import prompt_loader
 from app.config import settings
@@ -22,7 +23,7 @@ def _client():
     return Groq(api_key=settings.groq_api_key)
 
 
-def _confidence_from_segments(segments) -> "float | None":
+def _confidence_from_segments(segments) -> Optional[float]:
     """Whisper doesn't expose a direct confidence score; avg_logprob per
     segment is the closest proxy (log-probability the model assigned its
     own output). exp(avg_logprob) rescales it into a rough 0-1 confidence.

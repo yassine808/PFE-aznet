@@ -415,18 +415,18 @@ def test_send_reminders_fires_bell_and_mail(monkeypatch):
     notified, stamped, sent = [], [], []
     monkeypatch.setattr(jobs.logs, "due_tasks", lambda now: due)
     monkeypatch.setattr(
-        jobs.logs, "account_people",
-        lambda: [{"id": 7, "name": "Y", "email": "y@aznet.ma"}],
+        jobs.logs, "manager_emails",
+        lambda: ["y@aznet.ma"],
     )
     monkeypatch.setattr(
-        jobs.logs, "notify_accounts",
+        jobs.logs, "notify_managers",
         lambda *a, **k: notified.append(a) or 1,
     )
     monkeypatch.setattr(
         jobs.logs, "stamp_task_notified",
         lambda tid, nxt: stamped.append((tid, nxt)),
     )
-    monkeypatch.setattr(jobs.mailer, "send", lambda to, subj, body: sent.append((to, subj)) or to)
+    monkeypatch.setattr(jobs.mailer, "send", lambda to, subj, body, **k: sent.append((to, subj, k)) or to)
     out = jobs.send_reminders()
     assert out["due"] == 1
     assert out["notified"] == 1
@@ -437,6 +437,10 @@ def test_send_reminders_fires_bell_and_mail(monkeypatch):
     assert stamped == [(1, None)]  # one-shot: never fires again
     assert sent
     assert sent[0][1] == "Rappel — Devis"
+    # The mail carries a rendered alternative, not the plain body with <br> in
+    # it: the plain text stays the fallback, and the inbox gets the document.
+    html = sent[0][2].get("html_body") or ""
+    assert "<table" in html and "Devis" in html and "client Atlas" in html
 
 
 def test_send_reminders_advances_recurring_task(monkeypatch):
@@ -444,8 +448,8 @@ def test_send_reminders_advances_recurring_task(monkeypatch):
             "due_at": datetime(2026, 8, 2, 9, 0), "repeat": "weekly"}]
     stamped = []
     monkeypatch.setattr(jobs.logs, "due_tasks", lambda now: due)
-    monkeypatch.setattr(jobs.logs, "account_people", lambda: [])
-    monkeypatch.setattr(jobs.logs, "notify_accounts", lambda *a, **k: 0)
+    monkeypatch.setattr(jobs.logs, "manager_emails", lambda: [])
+    monkeypatch.setattr(jobs.logs, "notify_managers", lambda *a, **k: 0)
     monkeypatch.setattr(
         jobs.logs, "stamp_task_notified",
         lambda tid, nxt: stamped.append((tid, nxt)),
@@ -460,10 +464,10 @@ def test_mail_failure_never_blocks_the_bell(monkeypatch):
             "due_at": datetime.now(), "repeat": "none"}]
     monkeypatch.setattr(jobs.logs, "due_tasks", lambda now: due)
     monkeypatch.setattr(
-        jobs.logs, "account_people",
-        lambda: [{"id": 7, "name": "Y", "email": "y@aznet.ma"}],
+        jobs.logs, "manager_emails",
+        lambda: ["y@aznet.ma"],
     )
-    monkeypatch.setattr(jobs.logs, "notify_accounts", lambda *a, **k: 1)
+    monkeypatch.setattr(jobs.logs, "notify_managers", lambda *a, **k: 1)
     monkeypatch.setattr(jobs.logs, "stamp_task_notified", lambda *a, **k: None)
     def dead_smtp(*a, **k):
         raise mailer.MailError("smtp down")
@@ -516,9 +520,9 @@ def test_send_reminders_fires_early_for_lead_time(monkeypatch):
             "repeat_every": None, "repeat_unit": None}]
     bodies = []
     monkeypatch.setattr(jobs.logs, "due_tasks", lambda now: due)
-    monkeypatch.setattr(jobs.logs, "account_people", lambda: [])
+    monkeypatch.setattr(jobs.logs, "manager_emails", lambda: [])
     monkeypatch.setattr(
-        jobs.logs, "notify_accounts",
+        jobs.logs, "notify_managers",
         lambda *a, **k: bodies.append(a) or 1,
     )
     monkeypatch.setattr(jobs.logs, "stamp_task_notified", lambda *a, **k: None)
@@ -536,8 +540,8 @@ def test_send_reminders_advances_custom_interval(monkeypatch):
             "repeat_every": 3, "repeat_unit": "day"}]
     stamped = []
     monkeypatch.setattr(jobs.logs, "due_tasks", lambda now: due)
-    monkeypatch.setattr(jobs.logs, "account_people", lambda: [])
-    monkeypatch.setattr(jobs.logs, "notify_accounts", lambda *a, **k: 0)
+    monkeypatch.setattr(jobs.logs, "manager_emails", lambda: [])
+    monkeypatch.setattr(jobs.logs, "notify_managers", lambda *a, **k: 0)
     monkeypatch.setattr(
         jobs.logs, "stamp_task_notified",
         lambda tid, nxt: stamped.append((tid, nxt)),

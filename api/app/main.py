@@ -750,6 +750,8 @@ def save_report_version(payload: ReportVersionIn, caller: dict = Depends(auth.re
     """Append one saved version. Never overwrites: history is the feature."""
     if payload.kind not in KINDS:
         raise HTTPException(422, f"kind must be one of {KINDS}")
+    if not payload.objet.strip():
+        raise HTTPException(422, "objet must not be empty")
     if not payload.corps.strip():
         raise HTTPException(422, "corps must not be empty")
     try:
@@ -780,8 +782,12 @@ def save_report_version(payload: ReportVersionIn, caller: dict = Depends(auth.re
                 caller.get("name") or "inconnu",
                 payload.kind,
             )
-        except logs.LogStoreError:
-            pass  # the version itself is already stored; this is the mirror
+        except logs.LogStoreError as exc:
+            # Swallowed on purpose — the version itself is already stored and an
+            # unreachable log store must not cost the operator their edit. Said
+            # out loud, though: a bare `pass` here is exactly how the Reports
+            # page stayed empty for a whole session with nothing to read.
+            print(f"[reports] mirror to manager_reports failed: {exc}")
 
     auth.record(caller, "report_version_saved", target=f"{payload.kind} {payload.period}")
     return version
@@ -870,8 +876,10 @@ def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(au
             logs.save_manager_report(
                 caller["id"], payload.date, content.objet, content.corps, caller["name"], period_type
             )
-        except logs.LogStoreError:
-            pass  # an unreachable log store must not cost the operator their report
+        except logs.LogStoreError as exc:
+            # An unreachable log store must not cost the operator their report,
+            # but it does cost the Reports page this row — so it is printed.
+            print(f"[reports] storing the generated report failed: {exc}")
 
     # The scheduled mail is signed "automatique"; a manual run is signed by the
     # account that asked — the dashboard shows it next to the panel.

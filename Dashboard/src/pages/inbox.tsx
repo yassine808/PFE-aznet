@@ -368,46 +368,49 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
       className="flex flex-col gap-6 pt-8"
     >
-      <p className="text-ink-faint max-w-[65ch] text-sm">{t('inbox.intro')}</p>
-
-      <div className="flex flex-wrap items-center gap-4">
-        <Filter
-          label={t('inbox.channel')}
-          value={channel}
-          onChange={setChannel}
-          options={channels}
-          allLabel={t('inbox.all')}
-        />
-
-        <div className="flex items-center gap-2">
-          <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
-            {t('daily.date')}
-          </span>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="border-line focus:border-accent text-ink bg-canvas tabular rounded-md border px-2 py-1 text-xs outline-none transition-colors"
+      {/* Filters left, the year on the right — the same top-right slot the
+          Daily and Weekly panels give it, so moving between the three does not
+          move the graph. */}
+      <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
+        <div className="flex flex-wrap items-center gap-4">
+          <Filter
+            label={t('inbox.channel')}
+            value={channel}
+            onChange={setChannel}
+            options={channels}
+            allLabel={t('inbox.all')}
           />
-          {date && (
-            <button
-              type="button"
-              onClick={() => setDate('')}
-              className="text-ink-faint hover:text-ink text-xs underline underline-offset-4"
-            >
-              {t('inbox.all')}
-            </button>
-          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
+              {t('daily.date')}
+            </span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="border-line focus:border-accent text-ink bg-canvas tabular rounded-md border px-2 py-1 text-xs outline-none transition-colors"
+            />
+            {date && (
+              <button
+                type="button"
+                onClick={() => setDate('')}
+                className="text-ink-faint hover:text-ink text-xs underline underline-offset-4"
+              >
+                {t('inbox.all')}
+              </button>
+            )}
+          </div>
+
+          <span className="tabular text-ink-faint text-xs">{people.length}</span>
         </div>
 
-        <span className="tabular text-ink-faint text-xs">{people.length}</span>
+        <ActivityGraphSection
+          rows={all}
+          date={date || todayISO()}
+          onSelectDay={(iso) => setDate(iso)}
+        />
       </div>
-
-      <ActivityGraphSection
-        rows={all}
-        date={date || todayISO()}
-        onSelectDay={(iso) => setDate(iso)}
-      />
 
       {people.length === 0 ? (
         <EmptyState body={t('reports.noMatch')} />
