@@ -1,21 +1,60 @@
 """Pydantic schemas — the data contract between the AI service and n8n.
 
-Field set mirrors cahier des charges §3/§6. Metadata fields (date, heure,
-technicien, lien_audio) are added by n8n from the WhatsApp message context;
-this service only returns what it can derive from the audio/text itself.
+The field set mirrors the director's own tracking file (`Tableau de Suivi
+projet`), whose journal tab is the record this pipeline feeds: one row per
+(date, technicien), typed quantity columns, a location block, a stock block
+and a free remarks column.
+
+Two things deliberately absent from `ExtractedReport`:
+
+- **chantier** — routing comes from the org chart (a chef carries the site,
+  their technicians inherit it), not from what the model thinks it heard. It
+  is stamped onto the row by the pipeline and snapshotted there forever.
+- **équipe, heures, JH, ordre du jour, taux de réalisation** — planned before
+  the day or judged after it. A technician does not dictate them; the chef
+  fills them in the dashboard.
 """
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 
+ETAGES = ("RDC", "E1", "E2", "E3", "E4")
+AILES = ("Droite", "Gauche")
+LOCAUX_TECHNIQUES = ("RG",) + tuple("SR%d" % i for i in range(1, 11))
+
 # `resume` is deliberately excluded: the model always writes one, even for
 # "salut". It is the only field that cannot distinguish a report from a
 # greeting, which is exactly the distinction `has_data` answers.
+#
+# The location, stock and remarks fields ARE in here. A day where the crew was
+# stopped for 1h30 or found every office locked produces no quantity at all,
+# and it is the report the director most needs to read.
 DATA_FIELDS = (
-    "chantier", "client", "type_activite", "goulottes_m", "cables_m",
-    "bureaux_termines", "panneaux_raccordes", "autres_travaux", "observations",
+    "cables_prepares_m", "cables_installes_m", "goulotte_m",
+    "prises_connectees", "panneaux_prises_brassees", "prises_testees",
+    "fibre_m", "interconnexions", "connexions_optiques_brins",
+    "etages", "ailes", "locaux_techniques",
+    "stock_cable_m", "stock_goulotte_m", "stock_fibre_m",
+    "remarques",
 )
+
+# Formatting the model gets wrong without being wrong about the facts:
+# "rdc", "1er étage", "SR 4". Normalizing these is not a fallback — an
+# unrecognized value still raises, so an invented floor fails loudly.
+_ETAGE_ALIASES = {
+    "rdc": "RDC", "rez de chaussee": "RDC", "rez-de-chaussee": "RDC",
+    "0": "RDC", "r.d.c": "RDC", "rez de chaussée": "RDC",
+}
+for _i in range(1, 5):
+    for _form in ("e%d", "%d", "%der etage", "%deme etage", "etage %d",
+                  "%dere etage", "%d er etage", "%d eme etage"):
+        _ETAGE_ALIASES[(_form % _i)] = "E%d" % _i
+
+
+def _squash(value: str) -> str:
+    return " ".join(str(value).strip().lower().replace("è", "e")
+                    .replace("é", "e").replace("ê", "e").split())
 
 
 class ExtractedReport(BaseModel):
@@ -30,32 +69,119 @@ class ExtractedReport(BaseModel):
             return None
         return v
 
-    chantier: Optional[str] = Field(None, description="Nom du chantier mentionné")
-    client: Optional[str] = Field(None, description="Nom du client mentionné")
-    type_activite: Optional[str] = Field(
-        None, description="Type d'activité principal (ex: câblage, finition)"
+    # --- travaux cuivre ------------------------------------------------
+    cables_prepares_m: Optional[float] = Field(
+        None, ge=0, description="Mètres de câble cuivre préparés (tirés et mesurés)"
     )
-    goulottes_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de goulotte installés"
+    cables_installes_m: Optional[float] = Field(
+        None, ge=0, description="Mètres de câble cuivre installés et raccordés"
     )
-    cables_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de câble réseau posés"
+    goulotte_m: Optional[float] = Field(
+        None, ge=0, description="Mètres de goulotte posés"
     )
-    bureaux_termines: Optional[int] = Field(
-        None, ge=0, description="Nombre de bureaux terminés"
+    # The same physical port is counted three times in the director's file,
+    # at three different stages, and a single day can report three different
+    # numbers ("14 prises côté bureaux / 17 côté panneau / 15 testées").
+    prises_connectees: Optional[int] = Field(
+        None, ge=0, description="Prises RJ45 raccordées côté bureau"
     )
-    panneaux_raccordes: Optional[int] = Field(
-        None, ge=0, description="Nombre de panneaux de brassage raccordés"
+    panneaux_prises_brassees: Optional[int] = Field(
+        None, ge=0, description="Prises raccordées côté panneau de brassage"
     )
-    autres_travaux: Optional[str] = Field(
-        None, description="Travaux ne rentrant dans aucune quantité standard"
+    prises_testees: Optional[int] = Field(
+        None, ge=0, description="Prises testées et étiquetées"
     )
-    observations: Optional[str] = Field(
-        None, description="Problèmes, remarques, besoins matériels signalés"
+
+    # --- travaux fibre -------------------------------------------------
+    fibre_m: Optional[float] = Field(
+        None, ge=0, description="Mètres de câble fibre optique posés"
+    )
+    interconnexions: Optional[int] = Field(
+        None, ge=0, description="Nombre d'interconnexions installées entre locaux"
+    )
+    connexions_optiques_brins: Optional[int] = Field(
+        None, ge=0, description="Brins de fibre optique fusionnés/connectés"
+    )
+
+    # --- localisation --------------------------------------------------
+    etages: Optional[List[str]] = Field(
+        None, description="Étages travaillés (RDC, E1..E4)"
+    )
+    ailes: Optional[List[str]] = Field(None, description="Ailes (Droite, Gauche)")
+    locaux_techniques: Optional[List[str]] = Field(
+        None, description="Locaux techniques (RG, SR1..SR10)"
+    )
+
+    # --- stock restant sur site ----------------------------------------
+    stock_cable_m: Optional[float] = Field(
+        None, ge=0, description="Mètres de câble restants en stock sur site"
+    )
+    stock_goulotte_m: Optional[float] = Field(
+        None, ge=0, description="Mètres de goulotte restants en stock"
+    )
+    stock_fibre_m: Optional[float] = Field(
+        None, ge=0, description="Mètres de fibre optique restants en stock"
+    )
+
+    remarques: Optional[str] = Field(
+        None, description="Problèmes, blocages, matériel manquant, remarques"
     )
     resume: str = Field(
         ..., description="Résumé professionnel en français (2-4 phrases)"
     )
+
+    @field_validator("etages", "ailes", "locaux_techniques", mode="before")
+    @classmethod
+    def _wrap_single(cls, v):
+        # "RDC, E1, E2" and "RDC" are both things the model emits for a field
+        # the file itself writes as a comma-joined string.
+        if isinstance(v, str):
+            return [part for part in (p.strip() for p in v.split(",")) if part]
+        return v
+
+    @field_validator("etages")
+    @classmethod
+    def _valid_etages(cls, v):
+        return cls._canon(v, _ETAGE_ALIASES, ETAGES, "étage")
+
+    @field_validator("ailes")
+    @classmethod
+    def _valid_ailes(cls, v):
+        return cls._canon(v, {"droit": "Droite", "gauch": "Gauche"}, AILES, "aile")
+
+    @field_validator("locaux_techniques")
+    @classmethod
+    def _valid_locaux(cls, v):
+        return cls._canon(v, {}, LOCAUX_TECHNIQUES, "local technique")
+
+    @classmethod
+    def _canon(cls, values, aliases, allowed, label):
+        if values is None:
+            return None
+        out = []
+        for raw in values:
+            key = _squash(raw)
+            hit = aliases.get(key)
+            if hit is None:
+                squashed = key.replace(" ", "")
+                for candidate in allowed:
+                    if _squash(candidate).replace(" ", "") == squashed:
+                        hit = candidate
+                        break
+            if hit is None:
+                for prefix, mapped in aliases.items():
+                    if key.startswith(prefix):
+                        hit = mapped
+                        break
+            if hit is None:
+                # Loud, not dropped: an invented location is a wrong row, and
+                # the extraction chain treats it as a model failure and retries.
+                raise ValueError(
+                    "%s inconnu: %r (attendu: %s)" % (label, raw, ", ".join(allowed))
+                )
+            if hit not in out:
+                out.append(hit)
+        return out or None
 
     def has_data(self) -> bool:
         """True when the message carried at least one extractable fact.

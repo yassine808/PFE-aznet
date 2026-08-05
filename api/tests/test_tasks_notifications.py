@@ -52,8 +52,8 @@ def _no_db(monkeypatch):
 
 
 REPORT = ExtractedReport(
-    chantier="Tour Atlas",
-    goulottes_m=150,
+    etages=["E2"],
+    goulotte_m=150,
     resume="Installation de 150 m de goulotte.",
 )
 

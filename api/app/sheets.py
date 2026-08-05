@@ -256,6 +256,136 @@ def append_report(values: dict) -> Optional[int]:
     except Exception as exc:  # noqa: BLE001
         raise SheetsError(f"sheets append failed: {exc}") from exc
 
+# --- journal tabs, one per chantier --------------------------------------
+#
+# The director keeps one tab per site and reads them side by side, so the
+# pipeline writes into that shape rather than a flat table with a filter
+# column. Tabs are created on demand: adding a chantier in the dashboard must
+# not require anyone to open Google Sheets first.
+
+
+def read_tab(tab: str) -> List[dict]:
+    """Rows of an arbitrary tab as dicts, with their 1-based row number.
+
+    Uncached, unlike read_reports: journal reads happen once per incoming
+    message (to find the row to merge into), not on a dashboard poll, and a
+    stale hit here would merge into the wrong row.
+    """
+    try:
+        resp = (
+            _service()
+            .spreadsheets()
+            .values()
+            .get(spreadsheetId=settings.sheet_id, range=tab)
+            .execute(num_retries=_RETRIES)
+        )
+    except SheetsError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SheetsError(f"sheets read failed ({tab}): {exc}") from exc
+    values = resp.get("values", [])
+    if not values:
+        return []
+    headers = values[0]
+    rows = []
+    for i, raw in enumerate(values[1:], start=2):
+        row = {h: (raw[j] if j < len(raw) else "") for j, h in enumerate(headers)}
+        row["_row"] = i
+        rows.append(row)
+    return rows
+
+
+def ensure_tab(tab: str, headers: List[str]) -> None:
+    """Create the tab with its header row if it is not there yet.
+
+    Idempotent, and it does not touch an existing header row: the director
+    renaming a column of his own is a decision, not a drift to correct.
+    """
+    svc = _service()
+    try:
+        meta = svc.spreadsheets().get(spreadsheetId=settings.sheet_id).execute(
+            num_retries=_RETRIES
+        )
+        titles = {s["properties"]["title"] for s in meta.get("sheets", [])}
+        if tab not in titles:
+            svc.spreadsheets().batchUpdate(
+                spreadsheetId=settings.sheet_id,
+                body={"requests": [{"addSheet": {"properties": {"title": tab}}}]},
+            ).execute(num_retries=_RETRIES)
+        existing = (
+            svc.spreadsheets()
+            .values()
+            .get(spreadsheetId=settings.sheet_id, range=f"{tab}!1:1")
+            .execute(num_retries=_RETRIES)
+            .get("values", [[]])
+        )
+        if not existing or not existing[0]:
+            svc.spreadsheets().values().update(
+                spreadsheetId=settings.sheet_id,
+                range=f"{tab}!A1",
+                valueInputOption="RAW",
+                body={"values": [list(headers)]},
+            ).execute(num_retries=_RETRIES)
+    except SheetsError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SheetsError(f"sheets tab setup failed ({tab}): {exc}") from exc
+
+
+def write_row(tab: str, row: int, values: dict) -> None:
+    """Overwrite named cells of an existing row. Columns resolved by name, so a
+    reordered sheet moves the value with its header instead of shifting it."""
+    svc = _service()
+    try:
+        headers = (
+            svc.spreadsheets()
+            .values()
+            .get(spreadsheetId=settings.sheet_id, range=f"{tab}!1:1")
+            .execute(num_retries=_RETRIES)
+            .get("values", [[]])
+        )[0]
+        data = []
+        for field, value in values.items():
+            if field not in headers:
+                continue
+            col = _col_letter(headers.index(field) + 1)
+            data.append({"range": f"{tab}!{col}{row}", "values": [[_cell(value)]]})
+        if not data:
+            return
+        svc.spreadsheets().values().batchUpdate(
+            spreadsheetId=settings.sheet_id,
+            body={"valueInputOption": "USER_ENTERED", "data": data},
+        ).execute(num_retries=_RETRIES)
+    except SheetsError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SheetsError(f"sheets row write failed ({tab}!{row}): {exc}") from exc
+
+
+def append_row(tab: str, values: dict, headers: List[str]) -> Optional[int]:
+    """Append a row to any tab, placing cells by header name."""
+    svc = _service()
+    try:
+        row = [_cell(values.get(h)) for h in headers]
+        resp = (
+            svc.spreadsheets()
+            .values()
+            .append(
+                spreadsheetId=settings.sheet_id,
+                range=tab,
+                valueInputOption="USER_ENTERED",
+                insertDataOption="INSERT_ROWS",
+                body={"values": [row]},
+            )
+            .execute(num_retries=_RETRIES)
+        )
+        return _row_from_range(resp.get("updates", {}).get("updatedRange"))
+    except SheetsError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise SheetsError(f"sheets append failed ({tab}): {exc}") from exc
+
+
 def _row_from_range(updated_range: Optional[str]) -> Optional[int]:
     """'Rapports!A15:H15' → 15. Same positional numbering as read_reports."""
     if not updated_range:

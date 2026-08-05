@@ -27,10 +27,10 @@ _PROMPT = prompt_loader.load(prompt_loader.IMAGE_GENERATION)
 # text are excluded on purpose: rendering prose into an image makes it
 # unsearchable and uneditable, and it is already in the report.
 _TOTALS = (
-    ("goulottes_m", "Goulottes (m)"),
-    ("cables_m", "Câbles (m)"),
-    ("bureaux_termines", "Bureaux terminés"),
-    ("panneaux_raccordes", "Panneaux raccordés"),
+    ("cables_installes_m", "Câbles (m)"),
+    ("goulotte_m", "Goulottes (m)"),
+    ("prises_connectees", "Prises"),
+    ("fibre_m", "Fibre (m)"),
 )
 
 

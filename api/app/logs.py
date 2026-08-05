@@ -587,12 +587,106 @@ END $$;
 """
 
 
+# One company runs several sites at once, and the director tracks each in its
+# own tab. A chantier is therefore a real entity, not a string typed into a
+# report: the tab a row lands in has to be decided before the row is written.
+#
+# `persons.chantier_id` is set on the *chef*; their technicians inherit it via
+# manager_id. That is one edit to move a crew, and it reuses the org chart
+# rather than adding a second place to forget to update. The chantier is then
+# snapshotted onto the row, so reassigning a chef never rewrites history.
+_MIGRATE_CHANTIERS = """
+CREATE TABLE IF NOT EXISTS chantiers (
+    id          BIGSERIAL PRIMARY KEY,
+    nom         TEXT NOT NULL UNIQUE,
+    client      TEXT,
+    sheet_tab   TEXT NOT NULL,
+    active      BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE persons ADD COLUMN IF NOT EXISTS chantier_id BIGINT
+    REFERENCES chantiers(id) ON DELETE SET NULL;
+
+-- The bordereau (marché) per chantier. `qte_marche` is the contract quantity,
+-- entered once by the director. Installed quantity is never stored here: it is
+-- summed from the journal, so the two can never disagree. `champ` names the
+-- journal field an article accumulates from; NULL means the article has no
+-- daily counterpart (a switch, an onduleur) and is followed by hand.
+CREATE TABLE IF NOT EXISTS articles (
+    id           BIGSERIAL PRIMARY KEY,
+    chantier_id  BIGINT NOT NULL REFERENCES chantiers(id) ON DELETE CASCADE,
+    numero       INT,
+    designation  TEXT NOT NULL,
+    unite        TEXT NOT NULL DEFAULT 'U',
+    qte_marche   NUMERIC,
+    champ        TEXT,
+    UNIQUE (chantier_id, designation)
+);
+CREATE INDEX IF NOT EXISTS articles_chantier_idx ON articles(chantier_id);
+"""
+
+# Seeded from the director's own file so the first boot mirrors what he tracks
+# today. Guarded on emptiness: this is a starting point, not a fixture that
+# fights an operator who renames or removes a site.
+_SEED_CHANTIERS = (
+    ("DGH", None, "DGH"),
+    ("Extralait", None, "Extralait"),
+    ("ACAPS", None, "ACAPS"),
+)
+
+# DGH's bordereau, transcribed from the director's file. `champ` links an
+# article to the journal field that accumulates it; the ones left None (a
+# switch, an onduleur) have no daily counterpart and stay hand-followed —
+# `qte_installee: null` there means "not tracked here", never "none installed".
+_SEED_ARTICLES_DGH = (
+    (1, "Switch fédérateur", "U", 2, None),
+    (2, "Switch d'accès", "U", 11, None),
+    (3, "Modules optiques SFP+", "U", 50, None),
+    (4, "Modules optiques SFP", "U", 10, None),
+    (5, "Câble DAC SFP56 to SFP56", "U", 2, None),
+    (6, "Modules optiques SFP-RJ45", "U", 10, None),
+    (7, "Câble DAC SFP to SFP", "U", 11, None),
+    (8, "Point d'accès AP Aruba IAP 515", "U", 6, None),
+    (9, "Tiroir optique 24", "U", 2, None),
+    (10, "Tiroir optique 12", "U", 11, None),
+    (11, "Câble fibre optique", "ML", 2500, "fibre_m"),
+    (12, "Jarretière F.O", "U", 70, None),
+    (13, "Goulotte", "ML", 800, "goulotte_m"),
+    (14, "Prises RJ45 CAT.6A complète", "U", 150, "prises_connectees"),
+    (15, "Câble CAT.6A", "ML", 5000, "cables_installes_m"),
+    (16, "Cordons de brassage Cat6A", "U", 150, None),
+    (17, "Panneau de brassage Cat6A", "U", 10, "panneaux_prises_brassees"),
+    (18, "Guide de câble à balais 19''", "U", 10, None),
+    (19, "Onduleur 40kva", "U", 1, None),
+)
+
+
 def init_schema() -> None:
     """Create tables/indexes if absent, then migrate. Called once at API startup."""
     with _cursor() as cur:
         cur.execute(_SCHEMA)
         cur.execute(_MIGRATE_PERSONS)
         cur.execute(_MIGRATE_ACCOUNTS)
+        cur.execute(_MIGRATE_CHANTIERS)
+        cur.execute("SELECT COUNT(*) AS n FROM chantiers")
+        existing = _one(cur) or {"n": 0}
+        if existing["n"] == 0:
+            cur.executemany(
+                "INSERT INTO chantiers (nom, client, sheet_tab) VALUES (%s, %s, %s)",
+                _SEED_CHANTIERS,
+            )
+            cur.execute("SELECT id FROM chantiers WHERE nom = 'DGH'")
+            dgh = _one(cur)
+            if dgh is not None:
+                cur.executemany(
+                    """
+                    INSERT INTO articles (chantier_id, numero, designation, unite, qte_marche, champ)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (chantier_id, designation) DO NOTHING
+                    """,
+                    [(dgh["id"],) + row for row in _SEED_ARTICLES_DGH],
+                )
 
 
 def write(
@@ -1041,10 +1135,17 @@ def list_persons() -> List[dict]:
         # hash ever leaving Postgres.
         cur.execute(
             """
-            SELECT id, name, role, manager_id, email, active, last_seen_at,
-                   profile, profile_updated_at, created_at,
-                   (password_hash IS NOT NULL) AS has_login
-              FROM persons ORDER BY name
+            SELECT p.id, p.name, p.role, p.manager_id, p.email, p.active,
+                   p.last_seen_at, p.profile, p.profile_updated_at, p.created_at,
+                   (p.password_hash IS NOT NULL) AS has_login,
+                   p.chantier_id, c.nom AS chantier,
+                   -- what their reports actually route to, own site or chef's
+                   COALESCE(c.nom, mc.nom) AS chantier_effectif
+              FROM persons p
+              LEFT JOIN persons m    ON m.id = p.manager_id
+              LEFT JOIN chantiers c  ON c.id = p.chantier_id
+              LEFT JOIN chantiers mc ON mc.id = m.chantier_id
+             ORDER BY p.name
             """
         )
         persons = {}
@@ -1190,6 +1291,119 @@ def delete_person(person_id: int) -> bool:
         return cur.rowcount > 0
 
 
+def list_chantiers(active_only: bool = False) -> List[dict]:
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT * FROM chantiers %s ORDER BY nom"
+            % ("WHERE active" if active_only else "")
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def create_chantier(nom: str, sheet_tab: Optional[str] = None,
+                    client: Optional[str] = None) -> dict:
+    """Add a site. The tab defaults to the name — that is what the director's
+    own file does, and a tab named after something else is a tab nobody finds."""
+    nom = nom.strip()
+    if not nom:
+        raise LogStoreError("nom is required")
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO chantiers (nom, client, sheet_tab) VALUES (%s, %s, %s)
+            ON CONFLICT (nom) DO UPDATE SET client = EXCLUDED.client
+            RETURNING *
+            """,
+            (nom, (client or None), (sheet_tab or nom).strip()),
+        )
+        return _iso(dict(_one(cur)))
+
+
+def delete_chantier(chantier_id: int) -> bool:
+    with _cursor() as cur:
+        cur.execute("DELETE FROM chantiers WHERE id = %s", (chantier_id,))
+        return cur.rowcount > 0
+
+
+def set_chantier(person_id: int, chantier_id: Optional[int]) -> bool:
+    """Assign a site to a person — in practice, to a chef.
+
+    Their technicians inherit it through manager_id, so this is the single edit
+    that moves a whole crew. Setting it on a technician is allowed and wins over
+    the chef's, which covers the one tech lent to another site without forcing a
+    reorganisation of the chart.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "UPDATE persons SET chantier_id = %s WHERE id = %s",
+            (chantier_id, person_id),
+        )
+        return cur.rowcount > 0
+
+
+def resolve_chantier(person_id: int) -> Optional[dict]:
+    """The site a person's reports belong to: their own, else their chef's.
+
+    Returns None when neither is set — deliberately, rather than guessing a
+    default site. A row filed to the wrong chantier is worse than a row the
+    dashboard shows as unrouted.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT COALESCE(c.id, mc.id)               AS id,
+                   COALESCE(c.nom, mc.nom)             AS nom,
+                   COALESCE(c.sheet_tab, mc.sheet_tab) AS sheet_tab
+              FROM persons p
+              LEFT JOIN persons m    ON m.id = p.manager_id
+              LEFT JOIN chantiers c  ON c.id = p.chantier_id
+              LEFT JOIN chantiers mc ON mc.id = m.chantier_id
+             WHERE p.id = %s
+            """,
+            (person_id,),
+        )
+        row = _one(cur)
+    if row is None or row["id"] is None:
+        return None
+    return dict(row)
+
+
+def list_articles(chantier_id: int) -> List[dict]:
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT * FROM articles WHERE chantier_id = %s ORDER BY numero NULLS LAST, designation",
+            (chantier_id,),
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def upsert_article(chantier_id: int, designation: str, unite: str = "U",
+                   qte_marche: Optional[float] = None, numero: Optional[int] = None,
+                   champ: Optional[str] = None) -> dict:
+    designation = designation.strip()
+    if not designation:
+        raise LogStoreError("designation is required")
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO articles (chantier_id, numero, designation, unite, qte_marche, champ)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (chantier_id, designation) DO UPDATE
+               SET numero = EXCLUDED.numero, unite = EXCLUDED.unite,
+                   qte_marche = EXCLUDED.qte_marche, champ = EXCLUDED.champ
+            RETURNING *
+            """,
+            (chantier_id, numero, designation, unite.strip() or "U", qte_marche, champ),
+        )
+        return _iso(dict(_one(cur)))
+
+
+def delete_article(article_id: int) -> bool:
+    with _cursor() as cur:
+        cur.execute("DELETE FROM articles WHERE id = %s", (article_id,))
+        return cur.rowcount > 0
+
+
 def find_technician(channel: str, external_id: str) -> Optional[dict]:
     """Lookup used by the reception workflow to authorize an incoming sender.
 
@@ -1203,15 +1417,26 @@ def find_technician(channel: str, external_id: str) -> Optional[dict]:
     The incoming id goes through the same normalization as writes, or a sender
     whose number was keyed in differently than the directory would be denied
     — one form, stored and looked up alike.
+
+    The resolved chantier rides along: this lookup already happens on every
+    message, and the routing rule is one COALESCE (own site, else the chef's).
+    Fetching it here means the tab is known before the row is built, so the
+    reply to the technician can name the site it was filed to.
     """
     external_id = normalize_external_id(channel, external_id)
     with _cursor() as cur:
         cur.execute(
             """
             SELECT p.id AS person_id, p.name, p.role, p.profile,
-                   t.id, t.channel, t.external_id, t.active
+                   t.id, t.channel, t.external_id, t.active,
+                   COALESCE(p.chantier_id, m.chantier_id) AS chantier_id,
+                   COALESCE(c.nom, mc.nom)                AS chantier,
+                   COALESCE(c.sheet_tab, mc.sheet_tab)    AS sheet_tab
               FROM technicians t
-              JOIN persons p ON p.id = t.person_id
+              JOIN persons p       ON p.id = t.person_id
+              LEFT JOIN persons m  ON m.id = p.manager_id
+              LEFT JOIN chantiers c  ON c.id = p.chantier_id
+              LEFT JOIN chantiers mc ON mc.id = m.chantier_id
              WHERE t.channel = %s AND t.external_id = %s AND t.active
             """,
             (channel, external_id.strip()),

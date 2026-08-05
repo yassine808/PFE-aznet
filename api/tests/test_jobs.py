@@ -30,35 +30,36 @@ QUEUED = {
         "technicien": "Yassine",
         "rapport_complet": "…",
         "warnings": ["short_transcription"],
-        "report": {"chantier": "Atlas", "goulottes_m": 150},
+        "report": {"goulotte_m": 150, "resume": "Pose de 150 m de goulotte."},
     },
 }
 
 
-def test_drain_appends_and_resolves(monkeypatch):
-    appended, resolved = [], []
+def test_drain_files_through_the_journal_and_resolves(monkeypatch):
+    """The drain must merge like the live path, not append blindly — a parked
+    row whose day already has a row would otherwise become a duplicate."""
+    filed, resolved = [], []
     monkeypatch.setattr(jobs.logs, "pending_writes", lambda n: [QUEUED])
-    monkeypatch.setattr(jobs.sheets, "append_report", lambda row: appended.append(row))
+    monkeypatch.setattr(jobs.journal, "file_report",
+                        lambda payload: filed.append(payload) or {"row": 12})
     monkeypatch.setattr(jobs.logs, "resolve_write", lambda i, ok, err=None: resolved.append((i, ok)))
 
     out = jobs.drain_sheet_queue()
 
     assert out == {"pending": 1, "written": 1, "failed": []}
     assert resolved == [(7, True)]
-    # Flattened report fields and metadata land in one row; the warning flags it.
-    assert appended[0]["chantier"] == "Atlas"
-    assert appended[0]["technicien"] == "Yassine"
-    assert appended[0]["flag_review"] is True
+    assert filed[0]["technicien"] == "Yassine"
+    assert filed[0]["warnings"] == ["short_transcription"]
 
 
 def test_drain_keeps_row_when_sheet_refuses(monkeypatch):
     resolved = []
 
-    def boom(row):
+    def boom(payload):
         raise SheetsError("quota")
 
     monkeypatch.setattr(jobs.logs, "pending_writes", lambda n: [QUEUED])
-    monkeypatch.setattr(jobs.sheets, "append_report", boom)
+    monkeypatch.setattr(jobs.journal, "file_report", boom)
     monkeypatch.setattr(jobs.logs, "resolve_write", lambda i, ok, err=None: resolved.append((i, ok, err)))
 
     out = jobs.drain_sheet_queue()
@@ -66,6 +67,25 @@ def test_drain_keeps_row_when_sheet_refuses(monkeypatch):
     assert out["written"] == 0
     assert out["failed"][0]["id"] == 7
     assert resolved == [(7, False, "quota")]  # attempt counted, row still pending
+
+
+def test_drain_does_not_stall_on_an_unprocessable_payload(monkeypatch):
+    """A payload the schema cannot parse never will — it must not block the
+    batch behind it, and it must not vanish either."""
+    resolved = []
+
+    def boom(payload):
+        raise ValueError("resume missing")
+
+    monkeypatch.setattr(jobs.logs, "pending_writes", lambda n: [QUEUED])
+    monkeypatch.setattr(jobs.journal, "file_report", boom)
+    monkeypatch.setattr(jobs.logs, "resolve_write", lambda i, ok, err=None: resolved.append((i, ok, err)))
+
+    out = jobs.drain_sheet_queue()
+
+    assert out["written"] == 0
+    assert "unprocessable" in out["failed"][0]["error"]
+    assert resolved[0][1] is False
 
 
 def test_daily_report_without_rows_sends_nothing(monkeypatch):

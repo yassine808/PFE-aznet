@@ -9,7 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, model_validator
 
-from app import auth, daily_report, drive, extraction, imagegen, jobs, logs, mailer, memory, prompt_loader, reply, sheets
+from app import auth, daily_report, drive, extraction, imagegen, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError, TranscriptionInfo
@@ -433,7 +433,7 @@ async def _extract_from_image(
     await _log(
         "extracted", "info", message="ok (image)",
         duration_ms=int((time.time() - t1) * 1000),
-        payload={"model": model_used, "chantier": report.chantier, "bytes": len(blob)}, **ctx,
+        payload={"model": model_used, "etages": report.etages, "bytes": len(blob)}, **ctx,
     )
     # Archive the photo in Postgres while the channel's ticket is still live —
     # a webhook media URL dies within minutes, the DB copy does not.
@@ -576,7 +576,7 @@ async def process(
     await _log(
         "extracted", "info", message="ok",
         duration_ms=int((time.time() - t1) * 1000),
-        payload={"model": model_used, "chantier": report.chantier}, **ctx,
+        payload={"model": model_used, "etages": report.etages}, **ctx,
     )
 
     return ProcessResponse(
@@ -1052,6 +1052,64 @@ def claim(payload: ClaimRequest, caller: dict = Depends(auth.require_user)) -> d
     return {"fresh": fresh}
 
 
+# ── Journal write ──────────────────────────────────────────────────────────
+# The Sheet write moved out of n8n and into here, because filing a report is no
+# longer an append: a second message from the same technician the same day
+# merges into their existing row, and stock has to be reconciled against the
+# last known level on the chantier. An IF node cannot read-modify-write a tab.
+#
+# What did NOT move is the ordering. n8n still replies to the technician first
+# and calls this afterwards, so a Sheets outage costs a row (parked in
+# `failed_writes`, drained every 5 minutes) and never a technician's summary.
+
+
+class JournalEntry(BaseModel):
+    report: dict
+    technicien: str
+    date: str
+    canal: Optional[str] = None
+    chantier: Optional[str] = None
+    rapport_complet: Optional[str] = None
+    lien_audio: Optional[str] = None
+    correlation_id: Optional[str] = None
+    message_id: Optional[str] = None
+    warnings: List[str] = Field(default_factory=list)
+
+
+@app.post("/journal", responses={502: {"description": "Sheets unreachable"}})
+async def file_journal_entry(
+    entry: JournalEntry, caller: dict = Depends(auth.require_user)
+) -> dict:
+    """File one report into its chantier's journal tab.
+
+    A Sheets failure is a 502 *and* a parked row: n8n does not have to decide
+    what to do with the error, and the drain picks it up. Returning the row
+    number lets a later `/modify` find what the technician just reported.
+    """
+    payload = entry.model_dump()
+    try:
+        result = await run_in_threadpool(journal.file_report, payload)
+    except sheets.SheetsError as exc:
+        try:
+            logs.queue_failed_write(payload, str(exc), entry.correlation_id)
+        except logs.LogStoreError as queue_exc:
+            logs.write_safe("api", "error", message=f"queue failed: {queue_exc}")
+        logs.write_safe("sheet", "error", message=f"journal write failed: {exc}",
+                        correlation_id=entry.correlation_id)
+        raise HTTPException(502, f"journal write failed: {exc}") from exc
+
+    if entry.message_id and result.get("row"):
+        try:
+            logs.link_message_row(entry.message_id, result["row"])
+        except logs.LogStoreError:
+            pass  # best-effort: the row is written, the link is a convenience
+    logs.write_safe(
+        "sheet", "info", message=f"journal row {result.get('row')} ({result.get('tab')})",
+        correlation_id=entry.correlation_id,
+    )
+    return result
+
+
 # ── Sheet retry queue ──────────────────────────────────────────────────────
 # Reply-first means the Sheet write is a recoverable side effect: failures park
 # here and the cron workflow drains them, so no report is lost to a Google outage.
@@ -1441,6 +1499,135 @@ def move_person(person_id: int, payload: NewManager, caller: dict = Depends(auth
         return {"id": person_id, "manager_id": payload.manager_id}
     except logs.LogStoreError as exc:
         raise HTTPException(422 if "themselves" in str(exc) else 502, str(exc)) from exc
+
+
+# ── Chantiers, routing and the bordereau ───────────────────────────────────
+# A site is a real entity: it owns a journal tab, a contract quantity list, and
+# the crews assigned to it. Routing lives on the chef (`chantier_id`), and their
+# technicians inherit it — one edit moves a whole crew.
+
+
+class NewChantier(BaseModel):
+    nom: str
+    client: Optional[str] = None
+    sheet_tab: Optional[str] = None
+
+
+class NewChantierAssignment(BaseModel):
+    chantier_id: Optional[int] = None
+
+
+class NewArticle(BaseModel):
+    designation: str
+    unite: str = "U"
+    qte_marche: Optional[float] = None
+    numero: Optional[int] = None
+    champ: Optional[str] = None
+
+
+@app.get("/chantiers", responses={502: {"description": "Log store unreachable"}})
+def get_chantiers(active_only: bool = False, caller: dict = Depends(auth.require_user)) -> dict:
+    try:
+        return {"chantiers": logs.list_chantiers(active_only)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/chantiers", responses={422: {"description": "Invalid input"}, 502: {"description": "Log store unreachable"}})
+def add_chantier(payload: NewChantier, caller: dict = Depends(auth.require_director)) -> dict:
+    try:
+        chantier = logs.create_chantier(payload.nom, payload.sheet_tab, payload.client)
+        auth.record(caller, "chantier_added", target=payload.nom)
+        return chantier
+    except logs.LogStoreError as exc:
+        raise HTTPException(422 if "required" in str(exc) else 502, str(exc)) from exc
+
+
+@app.delete("/chantiers/{chantier_id}", responses={502: {"description": "Log store unreachable"}})
+def remove_chantier(chantier_id: int, caller: dict = Depends(auth.require_director)) -> dict:
+    """Removes the site and its bordereau. The journal tab is left alone: it is
+    the director's record, and deleting a row in the dashboard must never erase
+    months of reports in his file."""
+    try:
+        deleted = logs.delete_chantier(chantier_id)
+        auth.record(caller, "chantier_removed", target=str(chantier_id))
+        return {"deleted": deleted}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.patch("/persons/{person_id}/chantier", responses={404: {"description": "Person not found"}, 502: {"description": "Log store unreachable"}})
+def assign_chantier(person_id: int, payload: NewChantierAssignment,
+                    caller: dict = Depends(auth.require_director)) -> dict:
+    """Assign a site — in practice to a chef, whose technicians then inherit it."""
+    try:
+        if not logs.set_chantier(person_id, payload.chantier_id):
+            raise HTTPException(404, f"no person {person_id}")
+        auth.record(caller, "chantier_assigned", target=str(person_id),
+                    after=str(payload.chantier_id))
+        return {"id": person_id, "chantier_id": payload.chantier_id}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/chantiers/{chantier_id}/bordereau", responses={404: {"description": "Chantier not found"}, 502: {"description": "Sheets or log store unreachable"}})
+def get_bordereau(chantier_id: int, caller: dict = Depends(auth.require_user)) -> dict:
+    """Contract quantities against what the journal actually recorded.
+
+    `qte_installee` is computed here on every call and stored nowhere: the
+    journal is the only place a quantity is entered, so a stored total could
+    only ever drift from it. Articles with no `champ` have no daily counterpart
+    (a switch, an onduleur) and come back with `qte_installee: null` rather than
+    0 — "not tracked here" is not "none installed".
+    """
+    try:
+        chantier = next((c for c in logs.list_chantiers() if c["id"] == chantier_id), None)
+        if chantier is None:
+            raise HTTPException(404, f"no chantier {chantier_id}")
+        articles = logs.list_articles(chantier_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    try:
+        rows = sheets.read_tab(chantier["sheet_tab"])
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+    totals = journal.totals(rows)
+    out = []
+    for article in articles:
+        installed = totals.get(article["champ"]) if article.get("champ") else None
+        marche = article.get("qte_marche")
+        out.append({
+            **article,
+            "qte_installee": installed,
+            "avancement": (
+                round(installed / float(marche), 4)
+                if installed is not None and marche not in (None, 0) else None
+            ),
+        })
+    return {"chantier": chantier, "articles": out, "totaux": totals}
+
+
+@app.post("/chantiers/{chantier_id}/articles", responses={422: {"description": "Invalid input"}, 502: {"description": "Log store unreachable"}})
+def add_article(chantier_id: int, payload: NewArticle,
+                caller: dict = Depends(auth.require_director)) -> dict:
+    try:
+        article = logs.upsert_article(chantier_id, payload.designation, payload.unite,
+                                      payload.qte_marche, payload.numero, payload.champ)
+        auth.record(caller, "article_saved", target=payload.designation)
+        return article
+    except logs.LogStoreError as exc:
+        raise HTTPException(422 if "required" in str(exc) else 502, str(exc)) from exc
+
+
+@app.delete("/articles/{article_id}", responses={502: {"description": "Log store unreachable"}})
+def remove_article(article_id: int, caller: dict = Depends(auth.require_director)) -> dict:
+    try:
+        deleted = logs.delete_article(article_id)
+        auth.record(caller, "article_removed", target=str(article_id))
+        return {"deleted": deleted}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
 
 
 @app.post("/persons/{person_id}/profile", responses={502: {"description": "Log store unreachable"}, 404: {"description": "Person not found"}})

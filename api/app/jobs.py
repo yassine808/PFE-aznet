@@ -22,7 +22,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional
 
-from app import daily_report, logs, mailer, memory, sheets
+from app import daily_report, journal, logs, mailer, memory, sheets
 from app.config import settings
 
 # How often the loop wakes to look for due work. Well under the tightest
@@ -71,31 +71,22 @@ def drain_sheet_queue() -> dict:
     written, failed = 0, []
     for item in pending:
         payload = item.get("payload") or {}
-        report = payload.get("report") or {}
-        warnings = payload.get("warnings") or []
-        row = {
-            "date": payload.get("date"),
-            "heure": payload.get("heure"),
-            "canal": payload.get("canal"),
-            "technicien": payload.get("technicien"),
-            "role": payload.get("role"),
-            "rapport_complet": payload.get("rapport_complet"),
-            "confidence": payload.get("confidence"),
-            "lien_audio": payload.get("lien_audio"),
-            # Same rule as the n8n node: anything the model was unsure about is
-            # flagged for a human rather than trusted because it was retried.
-            "flag_review": bool(
-                {"low_confidence_transcription", "short_transcription", "image_input"}
-                & set(warnings)
-            ),
-            **report,
-        }
         try:
-            appended_row = sheets.append_report(row)
+            # Through `journal.file_report`, not a raw append: a parked row
+            # whose day already has a row on the sheet must merge into it, or
+            # the retry would create the duplicate the live path avoided.
+            appended_row = journal.file_report(payload).get("row")
         except sheets.SheetsError as exc:
             # Left in the queue with the attempt counted, not dropped.
             logs.resolve_write(item["id"], False, str(exc))
             failed.append({"id": item["id"], "error": str(exc)})
+            continue
+        except Exception as exc:  # noqa: BLE001
+            # A payload the schema cannot parse will never parse: retrying it
+            # forever blocks the batch behind it, so it is resolved as failed
+            # and stays visible in the dashboard instead of stalling the drain.
+            logs.resolve_write(item["id"], False, f"unprocessable: {exc}")
+            failed.append({"id": item["id"], "error": f"unprocessable: {exc}"})
             continue
         logs.resolve_write(item["id"], True)
         # Link the parked message to the row it landed on, so a /modify reply

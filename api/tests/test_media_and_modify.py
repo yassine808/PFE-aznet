@@ -34,9 +34,9 @@ main.app.dependency_overrides[main.auth.require_user] = lambda: {
 }
 
 REPORT = ExtractedReport(
-    chantier="Tour Atlas",
-    goulottes_m=150,
-    cables_m=800,
+    etages=["E2"],
+    goulotte_m=150,
+    cables_installes_m=800,
     resume="Installation de 150 m de goulotte et pose de 800 m de câble réseau.",
 )
 

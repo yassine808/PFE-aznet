@@ -6,25 +6,32 @@ from app.schemas import ExtractedReport, ProcessResponse, TranscriptionInfo
 
 def test_full_report_valid():
     r = ExtractedReport(
-        chantier="Tour Atlas",
-        client="Banque X",
-        type_activite="câblage",
-        goulottes_m=150,
-        cables_m=800.5,
-        bureaux_termines=5,
-        panneaux_raccordes=2,
-        autres_travaux=None,
-        observations="manque de connecteurs RJ45",
-        resume="Installation de 150 m de goulotte et pose de 800 m de câble.",
+        cables_prepares_m=268,
+        cables_installes_m=202.5,
+        goulotte_m=27,
+        prises_connectees=14,
+        panneaux_prises_brassees=17,
+        prises_testees=15,
+        fibre_m=794,
+        interconnexions=6,
+        connexions_optiques_brins=48,
+        etages=["RDC", "E1"],
+        ailes=["Droite"],
+        locaux_techniques=["SR4"],
+        stock_cable_m=2274,
+        remarques="Deux bureaux fermés jusqu'à lundi.",
+        resume="Pose de 202 m de câble et raccordement de 14 prises.",
     )
-    assert r.goulottes_m == 150.0
-    assert r.bureaux_termines == 5
+    assert r.cables_installes_m == 202.5
+    assert r.prises_testees == 15
+    assert r.etages == ["RDC", "E1"]
 
 
 def test_minimal_report_only_resume():
     r = ExtractedReport(resume="Journée de préparation du chantier.")
-    assert r.chantier is None
-    assert r.goulottes_m is None
+    assert r.cables_installes_m is None
+    assert r.etages is None
+    assert not r.has_data()
 
 
 def test_resume_required():
@@ -34,12 +41,90 @@ def test_resume_required():
 
 def test_negative_quantity_rejected():
     with pytest.raises(ValidationError):
-        ExtractedReport(resume="x", cables_m=-10)
+        ExtractedReport(resume="x", cables_installes_m=-10)
 
 
 def test_numeric_string_coerced():
-    r = ExtractedReport(resume="x", goulottes_m="150")
-    assert r.goulottes_m == 150.0
+    r = ExtractedReport(resume="x", goulotte_m="150")
+    assert r.goulotte_m == 150.0
+
+
+def test_null_string_becomes_none():
+    r = ExtractedReport(resume="x", fibre_m="null", remarques="none")
+    assert r.fibre_m is None
+    assert r.remarques is None
+
+
+# --- has_data: the gate between a report and a greeting -------------------
+
+
+def test_remarks_only_report_counts_as_data():
+    """A blocked day is the report the director most needs to read."""
+    r = ExtractedReport(
+        remarques="Arrêtés 1h30 sur instruction. Bureaux fermés.",
+        resume="Intervention interrompue, aucun mètre posé.",
+    )
+    assert r.has_data()
+
+
+def test_location_only_report_counts_as_data():
+    r = ExtractedReport(etages=["E2"], resume="Présence sur site au 2e étage.")
+    assert r.has_data()
+
+
+def test_zero_is_data_not_absence():
+    r = ExtractedReport(goulotte_m=0, resume="Aucune goulotte posée aujourd'hui.")
+    assert r.has_data()
+
+
+# --- location normalization ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("rdc", "RDC"),
+        ("Rez-de-chaussee", "RDC"),
+        ("e1", "E1"),
+        ("1er etage", "E1"),
+        ("2ème étage", "E2"),
+        ("E4", "E4"),
+    ],
+)
+def test_etage_aliases_normalized(raw, expected):
+    assert ExtractedReport(resume="x", etages=[raw]).etages == [expected]
+
+
+def test_comma_string_splits_into_list():
+    r = ExtractedReport(resume="x", etages="RDC, E1, E2", ailes="Droite, Gauche")
+    assert r.etages == ["RDC", "E1", "E2"]
+    assert r.ailes == ["Droite", "Gauche"]
+
+
+def test_duplicate_locations_collapse():
+    assert ExtractedReport(resume="x", etages=["E1", "e1", "E1"]).etages == ["E1"]
+
+
+def test_aile_normalized_from_prefix():
+    assert ExtractedReport(resume="x", ailes=["droit"]).ailes == ["Droite"]
+    assert ExtractedReport(resume="x", ailes=["GAUCHE"]).ailes == ["Gauche"]
+
+
+def test_local_technique_tolerates_spacing():
+    assert ExtractedReport(resume="x", locaux_techniques=["SR 4"]).locaux_techniques == ["SR4"]
+
+
+def test_unknown_location_raises_loudly():
+    """An invented floor is a wrong row — the chain must retry, not write it."""
+    with pytest.raises(ValidationError):
+        ExtractedReport(resume="x", etages=["E9"])
+    with pytest.raises(ValidationError):
+        ExtractedReport(resume="x", locaux_techniques=["SR42"])
+    with pytest.raises(ValidationError):
+        ExtractedReport(resume="x", ailes=["Nord"])
+
+
+# --- ProcessResponse ------------------------------------------------------
 
 
 def test_process_response_text_mode_has_no_transcription():

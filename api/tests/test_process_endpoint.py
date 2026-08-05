@@ -38,11 +38,11 @@ main.app.dependency_overrides[main.auth.require_user] = lambda: {
 main.drive.upload_audio = lambda filename, mime, data: "https://drive.google.com/uc?id=test"
 
 REPORT = ExtractedReport(
-    chantier="Tour Atlas",
-    goulottes_m=150,
-    cables_m=800,
-    bureaux_termines=5,
-    panneaux_raccordes=2,
+    etages=["E2"],
+    goulotte_m=150,
+    cables_installes_m=800,
+    prises_connectees=5,
+    panneaux_prises_brassees=2,
     resume="Installation de 150 m de goulotte et pose de 800 m de câble réseau.",
 )
 
@@ -65,7 +65,7 @@ def test_text_mode(monkeypatch):
     r = client.post("/process", data={"text": "Installation de 150m de goulotte"})
     assert r.status_code == 200
     body = r.json()
-    assert body["report"]["goulottes_m"] == 150
+    assert body["report"]["goulotte_m"] == 150
     assert body["transcription"] is None
     assert body["warnings"] == []
 
@@ -454,12 +454,12 @@ def test_image_card_totals_are_computed_locally():
     from app import imagegen
 
     summary = imagegen.summarise([
-        {"goulottes_m": "150", "cables_m": "800", "chantier": "Marina", "technicien": "Ali"},
-        {"goulottes_m": "50.5", "cables_m": "", "chantier": "Marina", "technicien": "Sara"},
-        {"goulottes_m": "n/a", "bureaux_termines": "3", "technicien": "Ali"},
+        {"goulotte_m": "150", "cables_installes_m": "800", "chantier": "Marina", "technicien": "Ali"},
+        {"goulotte_m": "50.5", "cables_installes_m": "", "chantier": "Marina", "technicien": "Sara"},
+        {"goulotte_m": "n/a", "prises_connectees": "3", "technicien": "Ali"},
     ])
     assert "Goulottes (m): 200.5" in summary
     assert "Câbles (m): 800" in summary
-    assert "Bureaux terminés: 3" in summary
+    assert "Prises: 3" in summary
     assert "Techniciens: 2" in summary
     assert "Chantiers: 1" in summary
