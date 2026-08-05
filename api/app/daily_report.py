@@ -32,16 +32,32 @@ class DailyReportContent(BaseModel):
 
 _INSTRUCTIONS = """Tu rédiges le rapport de fin de journée destiné au directeur d'une société
 de câblage réseau au Maroc, à partir des rapports individuels des techniciens ci-dessous
-(déjà structurés). Règles :
+(déjà structurés).
+
+STRUCTURE OBLIGATOIRE du champ "corps" — exactement ces trois sections, dans cet
+ordre, chaque titre sur sa propre ligne et préfixé de "## " :
+
+## Synthèse
+Un paragraphe court : nombre d'interventions, techniciens mobilisés, chantiers
+couverts, et les totaux fournis (goulottes, câbles, bureaux terminés, panneaux
+raccordés). Uniquement des chiffres présents dans les rapports.
+
+## Détail par chantier
+Une puce par chantier (ou par technicien si le chantier n'est pas renseigné),
+commençant par "- ", au format : "- <Chantier> — <technicien> : <ce qui a été fait>".
+
+## Problèmes et besoins
+Une puce par problème ou besoin matériel signalé (champ "observations").
+S'il n'y en a aucun, écrire exactement : "- Aucun problème signalé."
+
+Règles de rédaction :
 - Français professionnel, ton compte rendu, 3e personne.
-- Commence par une synthèse chiffrée de la journée (totaux : goulottes, câbles,
-  bureaux terminés, panneaux raccordés) uniquement à partir des chiffres fournis.
-- Ensuite un court paragraphe ou point par chantier/technicien.
-- Termine par les problèmes et besoins matériels signalés ("observations"), s'il y en a.
-- N'invente JAMAIS de chiffre ni d'information absente des rapports.
+- N'invente JAMAIS un chiffre ni une information absente des rapports.
 - Pas de formule de politesse d'ouverture ni de clôture, pas de mots de remplissage
   (« veuillez », « n'hésitez pas », « bien sûr ») : le directeur lit ce rapport
   d'affilée avec d'autres.
+- Aucun autre titre que les trois ci-dessus, et aucun gras Markdown : les titres
+  "## " sont le seul balisage, parce qu'ils sont convertis en vrais styles Word.
 - "objet" : une ligne du type "Rapport journalier — <date> — <n> intervention(s)".
 
 Date du jour : {date}

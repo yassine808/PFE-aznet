@@ -235,6 +235,36 @@ CREATE TABLE IF NOT EXISTS manager_reports (
 );
 CREATE INDEX IF NOT EXISTS manager_reports_mgr_idx ON manager_reports (manager_id, generated_at DESC);
 
+-- Edited report versions: the manager's own drafts of a daily or weekly
+-- report, one row per save, never overwritten.
+--
+-- Separate from `manager_reports`, which holds what the *model* produced for a
+-- period and is keyed one-row-per-manager-per-period. This is the human's
+-- editing history on top of that: the model writes a first draft, a manager
+-- corrects a site name or softens a sentence, and both versions have to remain
+-- readable — the machine's output is evidence, and silently replacing it with
+-- an edit destroys the only record of what the pipeline actually said.
+--
+-- `image` is the illustrated summary card, embedded in the exported .docx. It
+-- is stored per version because a version is meant to reproduce a document
+-- exactly, and a document whose picture changed underneath it is not the
+-- document that was signed off.
+CREATE TABLE IF NOT EXISTS report_versions (
+    id           BIGSERIAL PRIMARY KEY,
+    kind         TEXT NOT NULL,               -- 'daily' | 'weekly'
+    period       TEXT NOT NULL,               -- the date, or the week's first day
+    version      INTEGER NOT NULL,            -- 1, 2, 3 … per (kind, period)
+    objet        TEXT NOT NULL,
+    corps        TEXT NOT NULL,
+    image        TEXT,                        -- data: URI of the summary card
+    author       TEXT NOT NULL DEFAULT 'inconnu',
+    note         TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (kind, period, version)
+);
+CREATE INDEX IF NOT EXISTS report_versions_doc_idx
+    ON report_versions (kind, period, version DESC);
+
 -- Media archive: every voice note / photo /document the pipeline receives,
 -- copied into Postgres while it is still downloadable. Telegram file_ids and
 -- WhatsApp media ids are tickets, not URLs — Meta's media URLs expire within
@@ -916,6 +946,67 @@ def resolve_write(write_id: int, ok: bool, error: Optional[str] = None) -> None:
                 "UPDATE failed_writes SET attempts = attempts + 1, last_error = %s WHERE id = %s",
                 (error, write_id),
             )
+
+
+# ── Report versions ────────────────────────────────────────────────────────
+# The manager's editing history for one daily or weekly report. Append-only:
+# there is no update and no delete, because the point of the table is that an
+# earlier wording can always be recovered.
+
+def list_report_versions(kind: str, period: str, with_body: bool = True) -> List[dict]:
+    """Every saved version for one report, newest first.
+
+    `with_body=False` returns the index alone — id, version, author, timestamp.
+    A version list beside an editor is opened far more often than any single old
+    version is read, and shipping every stored body (plus its embedded image) to
+    draw a list of dates is how a small feature becomes a slow page.
+    """
+    columns = (
+        "id, kind, period, version, objet, corps, image, author, note, created_at"
+        if with_body
+        else "id, kind, period, version, objet, author, note, created_at"
+    )
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT {} FROM report_versions WHERE kind = %s AND period = %s "
+            "ORDER BY version DESC".format(columns),
+            (kind, period),
+        )
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def save_report_version(
+    kind: str,
+    period: str,
+    objet: str,
+    corps: str,
+    image: Optional[str] = None,
+    author: str = "inconnu",
+    note: Optional[str] = None,
+) -> dict:
+    """Append one version, numbering it from whatever is already stored.
+
+    The number is computed inside the INSERT rather than read first and written
+    second: two managers saving the same report at the same moment would both
+    read version 3 and both try to write 4, and the loser would take a unique
+    violation rather than simply becoming version 5. The sub-select plus the
+    UNIQUE constraint make the race a retryable error at worst, never a
+    silently lost edit.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO report_versions (kind, period, version, objet, corps, image, author, note)
+            VALUES (
+                %s, %s,
+                (SELECT COALESCE(MAX(version), 0) + 1 FROM report_versions WHERE kind = %s AND period = %s),
+                %s, %s, %s, %s, %s
+            )
+            RETURNING id, kind, period, version, objet, corps, image, author, note, created_at
+            """,
+            (kind, period, kind, period, objet, corps, image, author, note),
+        )
+        return _iso(dict(_one(cur) or {}))
 
 
 # ── Technician directory ───────────────────────────────────────────────────

@@ -96,6 +96,90 @@ def _call_gemini(model: str, prompt: str) -> Tuple[bytes, str]:
     raise ImageGenerationError(f"gemini/{model}: response contained no image part")
 
 
+# ── the local card ─────────────────────────────────────────────────────────
+# Drawn here, with no model at all.
+#
+# Google's free tier reports `limit: 0` for every image model — not a rate that
+# resets, but "this is not available without billing". A chain of image models
+# that are all the same vendor therefore has no working entry, and a feature
+# that exists only when a metered quota happens to be open is not a feature the
+# pilot can rely on.
+#
+# So the last entry in the chain draws the card from the numbers the summary
+# already computed. It invents nothing, costs nothing and cannot fail, and it
+# is the card that ends up in the .docx when the model path is unavailable.
+# Which renderer produced it is reported back to the caller — this is a
+# fallback the operator can see, never a silent substitution.
+
+_CARD_SIZE = (1200, 675)  # 16:9, the ratio the .docx export lays out for
+
+
+def _draw_card(title: str, rows: List[Dict[str, Any]]) -> Tuple[bytes, str]:
+    """A flat, typographic summary card. Pillow only, no network."""
+    import io
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    ink = (15, 23, 42)
+    muted = (100, 116, 139)
+    accent = (37, 99, 235)
+    canvas = Image.new("RGB", _CARD_SIZE, (248, 250, 252))
+    draw = ImageDraw.Draw(canvas)
+
+    def font(size: int, bold: bool = False):
+        """A scalable font, wherever this happens to be running.
+
+        The API runs in a slim image with no system fonts and on a Windows host
+        with a different set again, so each candidate is tried in turn. The last
+        resort is `load_default(size)` — Pillow ≥ 10.1 bundles a scalable font
+        for it. `load_default()` *without* a size is the trap: it returns a
+        fixed bitmap face that silently ignores `size` and cannot draw `é`, so
+        the card comes out in tiny mojibake instead of failing.
+        """
+        candidates = (
+            ("DejaVuSans-Bold.ttf", "DejaVuSans.ttf"),
+            ("arialbd.ttf", "arial.ttf"),
+            ("LiberationSans-Bold.ttf", "LiberationSans-Regular.ttf"),
+        )
+        for bold_name, regular_name in candidates:
+            try:
+                return ImageFont.truetype(bold_name if bold else regular_name, size)
+            except OSError:
+                continue
+        return ImageFont.load_default(size)
+
+    totals = _accumulate_totals(rows)
+    chantiers = _unique_names(rows, "chantier")
+    techniciens = _unique_names(rows, "technicien")
+
+    draw.rectangle((0, 0, _CARD_SIZE[0], 12), fill=accent)
+    draw.text((64, 72), title, font=font(46, bold=True), fill=ink)
+    draw.text((64, 140), "aznet · rapport de chantier", font=font(24), fill=muted)
+
+    cells = [
+        (str(len(rows)), "Rapports"),
+        (str(len(techniciens)), "Techniciens"),
+        (str(len(chantiers)), "Chantiers"),
+    ]
+    for key, label in _TOTALS:
+        value = totals[key]
+        if value:
+            cells.append((str(int(value) if value.is_integer() else value), label))
+
+    for index, (value, label) in enumerate(cells[:6]):
+        x = 64 + (index % 3) * 360
+        y = 240 + (index // 3) * 180
+        draw.text((x, y), value, font=font(64, bold=True), fill=accent)
+        draw.text((x, y + 82), label, font=font(24), fill=muted)
+
+    if chantiers:
+        draw.text((64, 600), " · ".join(chantiers[:4]), font=font(22), fill=muted)
+
+    buffer = io.BytesIO()
+    canvas.save(buffer, format="PNG")
+    return buffer.getvalue(), "image/png"
+
+
 def generate_card(rows: List[Dict[str, Any]], title: str, extra: Optional[str] = None) -> Tuple[bytes, str, str]:
     """Render a summary card. Returns (image bytes, mime type, winning model).
 
@@ -114,8 +198,11 @@ def generate_card(rows: List[Dict[str, Any]], title: str, extra: Optional[str] =
         if not entry:
             continue
         provider, _, model = entry.partition(":")
+        if provider.strip() == "local":
+            data, mime = _draw_card(title, rows)
+            return data, mime, "local"
         if provider.strip() != "gemini" or not model:
-            failures.append(f"{entry}: only 'gemini:<model>' is supported")
+            failures.append(f"{entry}: only 'gemini:<model>' or 'local' is supported")
             continue
         try:
             data, mime = _call_gemini(model.strip(), prompt)

@@ -713,6 +713,80 @@ def list_generated_reports(caller: dict = Depends(auth.require_human)) -> dict:
         raise HTTPException(502, f"log store read failed: {exc}") from exc
 
 
+KINDS = ("daily", "weekly")
+
+
+@app.get("/report-versions", responses={502: {"description": "Log store unreachable"}})
+def list_report_versions(
+    kind: str = Query(..., description="daily | weekly"),
+    period: str = Query(..., description="La date, ou le premier jour de la semaine"),
+    full: bool = Query(False, description="Inclure le corps et l'image de chaque version"),
+    caller: dict = Depends(auth.require_human),
+) -> dict:
+    """The editing history of one report, newest first.
+
+    Defaults to the index without bodies: the dashboard draws a list of saves
+    on every open and reads a single old version only when one is clicked.
+    """
+    if kind not in KINDS:
+        raise HTTPException(422, f"kind must be one of {KINDS}")
+    try:
+        return {"versions": logs.list_report_versions(kind, period, with_body=full)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, f"log store read failed: {exc}") from exc
+
+
+class ReportVersionIn(BaseModel):
+    kind: str = Field(..., description="daily | weekly")
+    period: str = Field(..., description="La date, ou le premier jour de la semaine")
+    objet: str
+    corps: str
+    image: Optional[str] = Field(None, description="Carte illustrée, en data: URI")
+    note: Optional[str] = None
+
+
+@app.post("/report-versions", status_code=201, responses={502: {"description": "Log store unreachable"}})
+def save_report_version(payload: ReportVersionIn, caller: dict = Depends(auth.require_human)) -> dict:
+    """Append one saved version. Never overwrites: history is the feature."""
+    if payload.kind not in KINDS:
+        raise HTTPException(422, f"kind must be one of {KINDS}")
+    if not payload.corps.strip():
+        raise HTTPException(422, "corps must not be empty")
+    try:
+        version = logs.save_report_version(
+            kind=payload.kind,
+            period=payload.period,
+            objet=payload.objet,
+            corps=payload.corps,
+            image=payload.image,
+            author=caller.get("name") or "inconnu",
+            note=payload.note,
+        )
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, f"log store write failed: {exc}") from exc
+
+    # The Reports page reads `manager_reports`, so an edit that stayed only in
+    # `report_versions` would leave that page showing the model's draft while
+    # the manager was looking at their corrected text. The version history is
+    # the append-only record; this is the "current text" the rest of the app
+    # reads, so the newest save wins here.
+    if caller.get("id"):
+        try:
+            logs.save_manager_report(
+                caller["id"],
+                payload.period,
+                payload.objet,
+                payload.corps,
+                caller.get("name") or "inconnu",
+                payload.kind,
+            )
+        except logs.LogStoreError:
+            pass  # the version itself is already stored; this is the mirror
+
+    auth.record(caller, "report_version_saved", target=f"{payload.kind} {payload.period}")
+    return version
+
+
 class ReportPatch(BaseModel):
     field: str
     value: Optional[str] = None
@@ -778,6 +852,27 @@ def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(au
         content = daily_report.generate_daily_report(payload.date, payload.rows)
     except daily_report.DailyReportError as exc:
         raise HTTPException(502, f"daily report failed: {exc}") from exc
+    # Store it, exactly as the scheduler does with its own runs.
+    #
+    # Without this a report generated from the dashboard existed only in the
+    # browser tab that asked for it: the Reports page reads `manager_reports`,
+    # so a manager pressed "générer", read the report, navigated away and found
+    # the list empty — the feature looked broken because two paths produced
+    # reports and only one of them wrote anything down.
+    #
+    # It is filed under the caller: a dashboard run covers the whole company
+    # rather than one chef's crew, and the person who asked for it is the
+    # honest owner. A weekly run reaches this same endpoint with a range label
+    # (`2026-08-03 → 2026-08-09`), which is what distinguishes the two periods.
+    period_type = "weekly" if "→" in payload.date else "daily"
+    if caller.get("id"):
+        try:
+            logs.save_manager_report(
+                caller["id"], payload.date, content.objet, content.corps, caller["name"], period_type
+            )
+        except logs.LogStoreError:
+            pass  # an unreachable log store must not cost the operator their report
+
     # The scheduled mail is signed "automatique"; a manual run is signed by the
     # account that asked — the dashboard shows it next to the panel.
     return DailyReportResponse(
