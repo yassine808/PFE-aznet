@@ -301,6 +301,46 @@ export interface Technician {
   created_at?: string
 }
 
+/**
+ * One saved state of an edited report.
+ *
+ * The index call omits `corps` and `image`, so a version list costs a few
+ * hundred bytes rather than every stored document; ask for `full` only when an
+ * old version is actually opened.
+ */
+export interface ReportVersion {
+  id: number
+  kind: 'daily' | 'weekly'
+  period: string
+  version: number
+  objet: string
+  corps?: string
+  image?: string | null
+  author: string
+  note?: string | null
+  created_at: string
+}
+
+export const reportVersions = (
+  kind: 'daily' | 'weekly',
+  period: string,
+  full = false,
+  signal?: AbortSignal,
+) =>
+  get<{ versions: ReportVersion[] }>(
+    `/report-versions?kind=${kind}&period=${encodeURIComponent(period)}&full=${full}`,
+    signal,
+  )
+
+export const saveReportVersion = (input: {
+  kind: 'daily' | 'weekly'
+  period: string
+  objet: string
+  corps: string
+  image?: string | null
+  note?: string | null
+}) => post<ReportVersion>('/report-versions', input)
+
 /** The org chart's "+": a chef with no channel and no login yet. */
 export const addPerson = (input: { name: string; role?: string }) =>
   post<{ id: number; name: string; role: string }>('/persons', input)
@@ -399,7 +439,6 @@ export interface AppSettings {
   weekly_day?: number
   weekly_time?: string
   emails?: string[]
-  report_format?: string
 }
 
 /** This account's dashboard preferences, stored per person in the database.

@@ -15,10 +15,13 @@ export function ReportImageCard({
   rows,
   title,
   disabled,
+  onImage,
 }: {
   readonly rows: ReportRow[]
   readonly title: string
   readonly disabled: boolean
+  /** Hands the card up so the editor can embed it in the exported .docx. */
+  readonly onImage?: (dataUri: string | null) => void
 }) {
   const { t } = useI18n()
   const [busy, setBusy] = useState(false)
@@ -29,8 +32,11 @@ export function ReportImageCard({
     setBusy(true)
     setError(null)
     setImage(null)
+    onImage?.(null)
     try {
-      setImage(await generateImage(rows, title))
+      const made = await generateImage(rows, title)
+      setImage(made)
+      onImage?.(made.data_uri)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

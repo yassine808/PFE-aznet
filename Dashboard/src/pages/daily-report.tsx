@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { CopyIcon, DownloadSimpleIcon, SparkleIcon } from '@phosphor-icons/react'
+import { SparkleIcon } from '@phosphor-icons/react'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
-import { exportReport, type ReportFormat } from '@/lib/report-export'
 import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ActivityGraphSection } from '@/components/activity-graph-section'
+import { ReportEditor } from '@/components/report-editor'
 import { ReportImageCard } from '@/components/report-image'
-import { copyText } from '@/lib/utils'
 
 export function DailyReportPage() {
   const { t, locale } = useI18n()
@@ -16,12 +15,12 @@ export function DailyReportPage() {
 
   const [date, setDate] = useState(todayISO())
   const [content, setContent] = useState<DailyReportContent | null>(null)
-  // Format preference comes from the Automation panel; markdown until it loads.
-  const settings = useApi('settings', api.settings)
-  const format = (settings.data?.settings.report_format ?? 'markdown') as ReportFormat
+  // The illustrated card, once generated below. Held here rather than inside
+  // the card component because the editor embeds it in the exported .docx and
+  // saves it with the version.
+  const [image, setImage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   const fmt = useMemo(() => new Intl.NumberFormat(intlLocaleOf(locale)), [locale])
 
@@ -72,13 +71,6 @@ export function DailyReportPage() {
     } finally {
       setBusy(false)
     }
-  }
-
-  const copy = async () => {
-    if (!content) return
-    await copyText(`${content.objet}\n\n${content.corps}`)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 2000)
   }
 
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
@@ -200,56 +192,33 @@ export function DailyReportPage() {
             rows={rows}
             title={t('image.dayTitle', { date })}
             disabled={rows.length === 0}
+            onImage={setImage}
           />
         </>
       )}
 
       {content && (
-        <motion.article
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-          className="border-line bg-surface edge rounded-xl border p-6"
-        >
-          <div className="border-line flex items-start justify-between gap-4 border-b pb-4">
-            <div>
-              <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
-                {t('daily.subject')}
-              </p>
-              <h2 className="text-ink mt-1 text-lg font-medium tracking-tight">{content.objet}</h2>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void exportReport(content.objet, content.corps, format)}
-                className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
-              >
-                <DownloadSimpleIcon size={13} />
-                {t('daily.download')}
-              </button>
-              <button
-                type="button"
-                onClick={copy}
-                className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
-              >
-                <CopyIcon size={13} />
-                {copied ? t('daily.copied') : t('daily.copy')}
-              </button>
-            </div>
-          </div>
-          {/* Provenance: manual runs are signed with the account that asked, so
-              an emailed report and a panel report are never confused. */}
-          <p className="text-ink-faint mt-3 text-xs">
-            {content.generated_by && content.generated_by !== 'automatique'
-              ? t('daily.generatedBy', { name: content.generated_by })
-              : t('daily.generatedAuto')}
-          </p>
-          {/* Preserve the model's paragraph breaks; it writes prose, not markup. */}
-          <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">
-            {content.corps}
-          </p>
-        </motion.article>
+        <ReportEditor
+          kind="daily"
+          period={date}
+          objet={content.objet}
+          corps={content.corps}
+          image={image}
+          generatedBy={content.generated_by}
+          figures={{
+            rapports: rows.length,
+            techniciens: stats.techniciens,
+            chantiers: stats.chantiers,
+            flagged: stats.flagged,
+            goulottes: stats.totals.goulottes,
+            cables: stats.totals.cables,
+            bureaux: stats.totals.bureaux,
+            panneaux: stats.totals.panneaux,
+          }}
+          byTech={stats.byTech.map(([name, v]) => ({ name, ...v }))}
+        />
       )}
+
     </motion.div>
   )
 }

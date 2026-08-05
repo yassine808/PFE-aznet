@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { CopyIcon, DownloadSimpleIcon, SparkleIcon } from '@phosphor-icons/react'
+import { SparkleIcon } from '@phosphor-icons/react'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
-import { exportReport, type ReportFormat } from '@/lib/report-export'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ContributionGraph, isoOf as iso, weekStart } from '@/components/contribution-graph'
+import { ReportEditor } from '@/components/report-editor'
 import { ReportImageCard } from '@/components/report-image'
-import { cn, copyText } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 const DAY_MS = 86_400_000
 
@@ -18,12 +18,11 @@ export function WeeklyReportPage() {
   // Selected week as its Monday. Picked from the year graph below.
   const [selected, setSelected] = useState(() => iso(weekStart(new Date())))
   const [year, setYear] = useState(() => new Date().getFullYear())
-  const [copied, setCopied] = useState(false)
   const [content, setContent] = useState<DailyReportContent | null>(null)
   const [busy, setBusy] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
-  const settings = useApi('settings', api.settings)
-  const format = (settings.data?.settings.report_format ?? 'markdown') as ReportFormat
+  // The illustrated card, held here so the editor can embed it in the .docx.
+  const [image, setImage] = useState<string | null>(null)
 
   const fmt = useMemo(() => new Intl.NumberFormat(intlLocaleOf(locale)), [locale])
   const dayName = useMemo(
@@ -102,27 +101,6 @@ export function WeeklyReportPage() {
     }
   }
 
-  const copy = async () => {
-    const lines = [
-      `${t('weekly.title')} ${iso(days[0])} → ${iso(days[6])}`,
-      '',
-      `${t('metric.total')}: ${week.rows.length}`,
-      `${t('metric.techniciens')}: ${week.techniciens}`,
-      `${t('weekly.chantiers')}: ${week.chantiers}`,
-      `${t('metric.flagged')}: ${week.flagged}`,
-      '',
-      `${t('metric.goulottes')}: ${week.totals.goulottes} m`,
-      `${t('metric.cables')}: ${week.totals.cables} m`,
-      `${t('metric.bureaux')}: ${week.totals.bureaux}`,
-      `${t('metric.panneaux')}: ${week.totals.panneaux}`,
-      '',
-      ...week.byTech.map(([name, v]) => `- ${name}: ${v.count} (${v.goulottes} m)`),
-    ]
-    await copyText(lines.join('\n'))
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 2000)
-  }
-
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
   if (reports.loading) return <Skeleton className="mt-8 h-64 rounded-xl" />
 
@@ -155,45 +133,31 @@ export function WeeklyReportPage() {
             {busy ? t('daily.generating') : t('daily.generate')}
           </button>
 
-          {content && (
-            <button
-              type="button"
-              onClick={() => void exportReport(content.objet, content.corps, format)}
-              className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
-            >
-              <DownloadSimpleIcon size={13} />
-              {t('daily.download')}
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={copy}
-            className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px"
-          >
-            <CopyIcon size={13} />
-            {copied ? t('daily.copied') : t('daily.copy')}
-          </button>
         </div>
       </div>
 
       {genError && <ErrorState message={genError} onRetry={generate} />}
 
       {content && (
-        <section className="border-line rounded-xl border p-6">
-          <p className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
-            {t('daily.subject')}
-          </p>
-          <h2 className="text-ink mt-1 text-lg font-medium tracking-tight">{content.objet}</h2>
-          <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">
-            {content.corps}
-          </p>
-          <p className="text-ink-faint mt-3 text-xs">
-            {content.generated_by && content.generated_by !== 'automatique'
-              ? t('daily.generatedBy', { name: content.generated_by })
-              : t('daily.generatedAuto')}
-          </p>
-        </section>
+        <ReportEditor
+          kind="weekly"
+          period={selected}
+          objet={content.objet}
+          corps={content.corps}
+          image={image}
+          generatedBy={content.generated_by}
+          figures={{
+            rapports: week.rows.length,
+            techniciens: week.techniciens,
+            chantiers: week.chantiers,
+            flagged: week.flagged,
+            goulottes: week.totals.goulottes,
+            cables: week.totals.cables,
+            bureaux: week.totals.bureaux,
+            panneaux: week.totals.panneaux,
+          }}
+          byTech={week.byTech.map(([name, v]) => ({ name, ...v }))}
+        />
       )}
 
       {/* Pick a week by clicking its column. One year at a time; the rail on the
@@ -326,6 +290,7 @@ export function WeeklyReportPage() {
             rows={week.rows}
             title={t('image.weekTitle', { start: iso(days[0]), end: iso(days[6]) })}
             disabled={week.rows.length === 0}
+            onImage={setImage}
           />
         </>
       )}
