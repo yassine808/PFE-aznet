@@ -6,6 +6,8 @@ smtplib is lazy-imported for symmetry with the other providers; credentials are
 checked at call time so an unconfigured install starts fine and fails loudly
 only when someone actually tries to send.
 """
+from functools import lru_cache
+from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
 from app.config import settings
@@ -27,7 +29,13 @@ def _escape(text: str) -> str:
 # slab. Mail cannot read OKLCH and cannot read a CSS variable either, so the
 # palette crosses over as hex, in one place, rather than as literals scattered
 # through the markup.
-SLAB = "#0f172a"
+# The masthead is navy rather than the dashboard's slate-950: this is the one
+# artefact that leaves the building, and fr.aznet.ma is navy — a client or a
+# chef who has seen the company site should recognise the sender before they
+# read the subject. Everything below the slab stays on the dashboard ramp, so
+# the body still reads as the same instrument panel.
+SLAB = "#062a4f"
+SLAB_LINE = "#12456f"  # hairline between the slab and the sheet, one tonal step up
 CANVAS = "#f1f5f9"
 SURFACE = "#ffffff"
 LINE = "#e2e8f0"
@@ -35,7 +43,10 @@ INK = "#0f172a"
 MUTED = "#475569"
 FAINT = "#94a3b8"
 LABEL = "#64748b"
-ACCENT = "#2563eb"
+# Sampled from the mark itself (`assets/AZ-bot.png`, the circle is rgb(1,119,227)),
+# not picked to look nice beside it. One accent, and it is the brand's own.
+ACCENT = "#0177e3"
+ACCENT_SOFT = "#81c2fd"  # the mark's node colour, for text on the navy slab
 
 # Geist Mono never loads in an inbox; this is the same instrument, borrowed
 # from whatever the reader already has. Tabular by construction — every glyph
@@ -61,6 +72,29 @@ SANS = "-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif"
 # grow with the window, a paragraph should not — past ~78 characters the eye
 # loses the line it is returning to. DESIGN.md caps body copy the same way.
 MEASURE = "max-width:78ch"
+
+
+LOGO_CID = "aznet-logo"
+# 128px crop of `assets/AZ-bot.png`, kept inside `api/` because the Docker
+# image only copies that directory — a path to the repo root resolves at
+# development time and 404s in the container.
+_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "az-bot.png"
+
+
+@lru_cache(maxsize=1)
+def logo_png() -> Optional[bytes]:
+    """The brand mark, read once and cached for the scheduler's send loop.
+
+    Returns None rather than raising if the file is missing: a report that
+    arrives with a broken image is still the report, one that never left
+    because an icon could not be found is not. The `alt` text carries the
+    company name either way, so the header still says who sent it.
+    """
+    try:
+        return _LOGO_PATH.read_bytes()
+    except OSError as exc:
+        print(f"[mail] logo unavailable ({exc}) — sending without it")
+        return None
 
 
 def _is_figure(value: str) -> bool:
@@ -231,30 +265,46 @@ def render_document(
     # arriving as a grey box, and it cost Pillow, a hex-in-Content-ID round
     # trip and a catch-all `except` that shipped headerless mail on failure.
     # `banner` now chooses how much the slab says, not whether there is one.
-    # Wordmark and strapline sit on one line rather than stacked: the slab was
-    # costing ~90px of a 16:9 viewport before the reader saw a single figure.
-    # The accent rule is now a vertical bar between them, which is the same
-    # structural mark doing the same job in a third of the height.
-    mark = (
-        f'<td style="padding:0"><span style="color:#f8fafc;font-size:20px;font-weight:600;'
-        'letter-spacing:-0.4px">aznet</span>'
-        f'<span style="display:inline-block;width:2px;height:13px;background:{ACCENT};'
-        'margin:0 10px;vertical-align:-1px"></span>'
-        f'<span style="color:{FAINT};font-size:11px;letter-spacing:1.2px">RAPPORTS DE CHANTIER</span></td>'
-        if banner
-        else '<td style="padding:0"><span style="color:#f8fafc;font-size:16px;font-weight:600">aznet</span></td>'
+    # The mark travels with the message (Content-ID), because a remote src is
+    # blocked by default in Gmail and a data: URI is stripped outright. It is
+    # the company's real logo file, not something drawn at send time — and the
+    # slab is navy precisely so its transparent edge has something to sit on.
+    # `width`/`height` as attributes as well as CSS: Outlook ignores the CSS.
+    logo = (
+        f'<td width="40" style="padding:0 12px 0 0;vertical-align:middle">'
+        f'<img src="cid:{LOGO_CID}" width="36" height="36" alt="AZ Net"'
+        ' style="display:block;width:36px;height:36px;border:0"></td>'
     )
+    # Name and positioning stacked beside the mark, the way the company sets it
+    # on fr.aznet.ma — "AZ Net Security & Networking", trading since 2000. The
+    # dashboard says "aznet" because it is internal furniture; a report leaving
+    # for a client's inbox says the whole name.
+    mark = (
+        f'<td style="padding:0;vertical-align:middle">'
+        f'<div style="color:#ffffff;font-size:17px;font-weight:600;letter-spacing:-0.2px;'
+        'line-height:1.2">AZ Net<span style="color:'
+        f'{ACCENT_SOFT};font-weight:400"> Security &amp; Networking</span></div>'
+        f'<div style="margin-top:3px;color:#8fb4d4;font-size:10px;letter-spacing:1.4px">'
+        "RÉSEAUX &middot; SÉCURITÉ &middot; CÂBLAGE</div></td>"
+        if banner
+        else '<td style="padding:0;vertical-align:middle"><span style="color:#ffffff;'
+        'font-size:15px;font-weight:600">AZ Net</span></td>'
+    )
+    # The period sits under a hairline of its own so it reads as a stamp on the
+    # slab rather than as a third piece of the wordmark.
     period = (
-        f'<td align="right" valign="middle" style="padding:0;color:#f8fafc;'
-        f'font-family:{MONO};font-size:11px;letter-spacing:1px">{_escape(caption.upper())}</td>'
+        f'<td align="right" valign="middle" style="padding:0;color:#ffffff;'
+        f'font-family:{MONO};font-size:10px;letter-spacing:1.4px">'
+        f'<span style="display:inline-block;border:1px solid {SLAB_LINE};'
+        f'padding:5px 9px">{_escape(caption.upper())}</span></td>'
         if caption
         else ""
     )
     return f"""\
 <div style="margin:0;padding:12px;background:{CANVAS};font-family:{SANS}">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;max-width:{WIDTH}px;margin:0 auto">
-    <tr><td bgcolor="{SLAB}" style="background:{SLAB};padding:13px 22px">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>{mark}{period}</tr></table>
+    <tr><td bgcolor="{SLAB}" style="background:{SLAB};padding:14px 22px;border-bottom:3px solid {ACCENT}">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>{logo}{mark}{period}</tr></table>
     </td></tr>
     <tr><td style="background:{SURFACE};border:1px solid {LINE};border-top:0;padding:16px 22px 20px">
       <h1 style="margin:0;color:{INK};font-size:18px;font-weight:600;letter-spacing:-0.3px;line-height:1.3">{_escape(title)}</h1>
@@ -263,6 +313,9 @@ def render_document(
       {details}
       {button}
       {foot}
+    </td></tr>
+    <tr><td style="padding:10px 22px 0;color:{FAINT};font-size:11px;line-height:1.5">
+      AZ Net Security &amp; Networking &middot; réseaux, sécurité et câblage depuis 2000
     </td></tr>
   </table>
 </div>"""
@@ -372,9 +425,18 @@ def send(
     msg["To"] = ", ".join(recipients)
     msg.set_content(body)
     if html_body:
-        # No related part any more: the masthead is text in the HTML itself, so
-        # there is nothing to attach and nothing that can fail to be drawn.
         msg.add_alternative(html_body, subtype="html")
+        # The mark rides along as a related part rather than a URL: a remote
+        # src is blocked by default in Gmail, Outlook and Apple Mail, and a
+        # data: URI is stripped. Attached only when the HTML references it, so
+        # a message built without the masthead carries no orphan attachment —
+        # which some clients would still show as a paperclip.
+        if f"cid:{LOGO_CID}" in html_body:
+            blob = logo_png()
+            if blob:
+                msg.get_payload()[-1].add_related(  # type: ignore[union-attr]
+                    blob, maintype="image", subtype="png", cid=f"<{LOGO_CID}>"
+                )
     elif html:
         msg.add_alternative(body.replace("\n", "<br>"), subtype="html")
 

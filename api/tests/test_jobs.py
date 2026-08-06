@@ -383,9 +383,11 @@ def test_report_mail_carries_banner_and_button():
         DailyReportContent(objet="Rapport du 5", corps="Trois interventions."),
         3,
     )
-    # The masthead is text, not an attached picture: an image header is one
-    # "load remote content?" prompt away from arriving as a grey box.
-    assert "cid:" not in html
-    assert "RAPPORTS DE CHANTIER" in html
+    # The masthead is text plus the brand mark, and the mark travels *with* the
+    # message: a remote src would be blocked by default in Gmail, so a header
+    # referencing anything but a cid: would arrive as a grey box.
+    assert "cid:aznet-logo" in html
+    assert "AZ Net" in html
+    assert "https://" not in html.split("<h1")[0]  # nothing remote above the fold
     assert "Ouvrir le rapport" in html
     assert "<table" in html
