@@ -383,6 +383,9 @@ def test_report_mail_carries_banner_and_button():
         DailyReportContent(objet="Rapport du 5", corps="Trois interventions."),
         3,
     )
-    assert "cid:aznet-banner" in html   # the picture travels with the message
+    # The masthead is text, not an attached picture: an image header is one
+    # "load remote content?" prompt away from arriving as a grey box.
+    assert "cid:" not in html
+    assert "RAPPORTS DE CHANTIER" in html
     assert "Ouvrir le rapport" in html
     assert "<table" in html

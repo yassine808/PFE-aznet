@@ -1792,12 +1792,21 @@ def send_test_mail(payload: TestMailIn, caller: dict = Depends(auth.require_huma
             "(Gmail requires an app password, not the account password)"
         )))
     try:
+        # A full report with randomised figures, not one sentence: the point of
+        # the probe is to show the recipient what they are subscribing to, and
+        # the plain line proved delivery while showing nothing. The plain-text
+        # part stays plain — it is the fallback, and it says outright that the
+        # numbers are invented so nobody forwards the sample as a real day.
+        subject, html = mailer.sample_report(payload.to)
         mailer.send(
             [payload.to],
-            "aznet — test de notification",
+            subject,
             "Ceci est un message de test envoyé depuis le tableau de bord aznet.\n"
+            "Il reprend la mise en page des rapports quotidiens, avec des chiffres "
+            "tirés au hasard — ce ne sont pas les données réelles de la journée.\n"
             "Si vous le recevez, l'adresse est correctement configurée pour les "
             "rapports quotidiens et hebdomadaires.",
+            html_body=html,
         )
     except mailer.MailError as exc:
         # 502: the mail relay refused us, which is not the caller's mistake.

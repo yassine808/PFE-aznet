@@ -6,9 +6,6 @@ smtplib is lazy-imported for symmetry with the other providers; credentials are
 checked at call time so an unconfigured install starts fine and fails loudly
 only when someone actually tries to send.
 """
-import io
-import re
-from functools import lru_cache
 from typing import List, Optional, Sequence, Tuple
 
 from app.config import settings
@@ -24,124 +21,72 @@ def _escape(text: str) -> str:
     )
 
 
-BANNER_CID = "aznet-banner"
-_BANNER_SIZE = (1120, 300)
+# The dashboard's own tokens, resolved to sRGB once (`Dashboard/src/index.css`,
+# `:root`): canvas slate-50, surface white, line slate-200, ink slate-900,
+# muted slate-600, faint slate-400, accent-600, and slate-950 for the masthead
+# slab. Mail cannot read OKLCH and cannot read a CSS variable either, so the
+# palette crosses over as hex, in one place, rather than as literals scattered
+# through the markup.
+SLAB = "#0f172a"
+CANVAS = "#f1f5f9"
+SURFACE = "#ffffff"
+LINE = "#e2e8f0"
+INK = "#0f172a"
+MUTED = "#475569"
+FAINT = "#94a3b8"
+LABEL = "#64748b"
+ACCENT = "#2563eb"
+
+# Geist Mono never loads in an inbox; this is the same instrument, borrowed
+# from whatever the reader already has. Tabular by construction — every glyph
+# in a monospace face is one advance wide, which is all the Aligned Column
+# Rule actually asks for.
+MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+
+# A ceiling, not a width. The table is `width="100%"` and every horizontal
+# value below is padding rather than a fixed column, so the message fills
+# whatever pane it lands in and reflows down to a phone without a media query
+# — which matters because Gmail's mobile app strips <style> blocks, so a media
+# query is exactly the tool not available here.
+#
+# 940 rather than the 560–680 newsletter convention: this is a report read on a
+# desktop, and at 680 Gmail's reading pane left ~400px of empty gutter on
+# either side while the per-chantier bullets still wrapped. The prose bands
+# below cap themselves at 78ch so the paragraphs stay readable even when the
+# frame is wider than a comfortable measure.
+WIDTH = 940
+SANS = "-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif"
+
+# Reading measure for prose. Independent of WIDTH on purpose: the frame should
+# grow with the window, a paragraph should not — past ~78 characters the eye
+# loses the line it is returning to. DESIGN.md caps body copy the same way.
+MEASURE = "max-width:78ch"
 
 
-def _banner_cid(caption: str = "") -> str:
-    """Content-ID for a banner, carrying its own caption.
+def _is_figure(value: str) -> bool:
+    """Does this value belong in the numeric ledger, or under its own heading?
 
-    The header picture is per-message now — it prints the period the report
-    covers — but `send()` only ever sees the finished HTML, so it has to be
-    able to work out *which* banner to attach from the reference alone. Hex
-    keeps the id to the characters a Content-ID may legally contain, and an
-    empty caption keeps the plain id, so nothing that never sets one changes.
+    Shape, not type: a date and a count both fit a right-aligned mono column,
+    a sentence does not. Four words is the cut because "3 jours avant
+    l'échéance" is still a reading, while anything longer is prose that would
+    wrap inside a column meant to stay one line.
     """
-    return f"{BANNER_CID}.{caption.encode('utf-8').hex()}" if caption else BANNER_CID
+    text = value.strip()
+    return len(text) <= 28 and len(text.split()) <= 4 and "\n" not in text
 
 
-def _caption_of(cid: str) -> str:
-    """Inverse of `_banner_cid`, used by `send()` when attaching the image."""
-    _, _, token = cid.partition(".")
-    try:
-        return bytes.fromhex(token).decode("utf-8") if token else ""
-    except ValueError:
-        return ""
+def _band(label: str, content: str) -> str:
+    """DESIGN.md's grouping primitive: a label over a top rule, not a box.
 
-# The dashboard's own tokens, resolved to sRGB once (`Dashboard/src/index.css`:
-# slate-950 / slate-900 / slate-400 / slate-50 and accent-500). Mail cannot read
-# OKLCH, and it cannot read a CSS variable either — so the palette crosses over
-# as numbers, in one place, rather than as magic triples scattered through the
-# drawing code.
-INK = (18, 24, 33)
-INK_DEEP = (12, 16, 23)
-ACCENT = (45, 128, 224)
-PAPER = (248, 250, 252)
-MUTED = (148, 163, 184)
-
-
-@lru_cache(maxsize=8)
-def banner_png(caption: str = "") -> bytes:
-    """The header picture, drawn rather than shipped.
-
-    A remote `<img src="https://…">` is blocked by default in Gmail, Outlook
-    and Apple Mail until the reader clicks "load images", so a banner served
-    from a URL arrives as a grey box on a routine report. A `data:` URI is
-    worse — Gmail strips it outright. What does work everywhere is an image
-    *attached* to the message and referenced by Content-ID, which is what this
-    feeds.
-
-    Drawn with Pillow because the alternative is committing a binary asset that
-    nobody can diff and everybody forgets to update: this way the wordmark and
-    the palette come from the same constants as the rest of the project, and
-    the render is deterministic. Cached: it is identical for every message and
-    the scheduler sends in a loop.
+    The old layout wrapped every group in a bordered, rounded card — the
+    "endless identical rounded card grid" the design system bans by name. A
+    band is cheaper in markup *and* the thing the dashboard actually draws.
     """
-    from PIL import Image, ImageDraw
-
-    from app.imagegen import _font  # same fallback chain: slim image, no system fonts
-
-    w, h = _BANNER_SIZE
-    canvas = Image.new("RGB", (w, h), INK)
-    draw = ImageDraw.Draw(canvas)
-
-    # A vertical settle from slate to a deeper slate — the tonal step DESIGN.md
-    # asks for, not the violet-to-blue wash it names as the generic-SaaS tell.
-    # The accent stays out of the background entirely so it can mean one thing
-    # in the foreground.
-    for y in range(h):
-        t = y / h
-        draw.line(
-            [(0, y), (w, y)],
-            fill=(
-                int(INK[0] + (INK_DEEP[0] - INK[0]) * t),
-                int(INK[1] + (INK_DEEP[1] - INK[1]) * t),
-                int(INK[2] + (INK_DEEP[2] - INK[2]) * t),
-            ),
-        )
-
-    # Faint grid, so the surface reads as a plan rather than a flat rectangle.
-    # Drawn on its own layer and blended down: painting near-black lines
-    # directly needs a fill per column to stay readable over the gradient,
-    # whereas one blend fades the whole grid evenly.
-    grid = Image.new("RGB", (w, h), (0, 0, 0))
-    gdraw = ImageDraw.Draw(grid)
-    for gx in range(0, w, 56):
-        gdraw.line([(gx, 0), (gx, h)], fill=(255, 255, 255), width=1)
-    for gy in range(0, h, 56):
-        gdraw.line([(0, gy), (w, gy)], fill=(255, 255, 255), width=1)
-    canvas = Image.blend(canvas, Image.blend(canvas, grid, 0.30), 0.22)
-    draw = ImageDraw.Draw(canvas)
-
-    # One accent mark, and it is structural: a rule down the inline-start edge
-    # that the wordmark hangs off, so the whole header is read as one block
-    # rather than as text floating on a texture.
-    draw.rectangle([(0, 0), (6, h)], fill=ACCENT)
-
-    # The rule sits *below* the wordmark, not through it: at 72px the glyphs
-    # run to about y+92, so anything drawn at the old y=156 crossed the
-    # baseline and read as a strikethrough.
-    draw.text((64, 72), "aznet", font=_font(72, bold=True), fill=PAPER)
-    draw.line([(64, 184), (188, 184)], fill=ACCENT, width=5)
-    draw.text((64, 206), "RAPPORTS DE CHANTIER", font=_font(24), fill=MUTED)
-
-    # What this particular message is about, set against the inline-end edge —
-    # the header stops being a logo plate and starts carrying information the
-    # reader needs before they have scrolled at all.
-    if caption:
-        text = caption.upper()
-        font = _font(26)
-        try:
-            width = int(draw.textlength(text, font=font))
-        except AttributeError:  # very old Pillow
-            width = len(text) * 13
-        x = max(64, w - 64 - width)
-        draw.text((x, 206), text, font=font, fill=PAPER)
-        draw.line([(x, 184), (x + width, 184)], fill=(70, 84, 104), width=2)
-
-    buf = io.BytesIO()
-    canvas.save(buf, format="PNG", optimize=True)
-    return buf.getvalue()
+    return (
+        f'<div style="margin:16px 0 0;border-top:1px solid {LINE};padding-top:8px">'
+        f'<div style="color:{LABEL};font-size:11px;font-weight:600;letter-spacing:0.8px;'
+        f'text-transform:uppercase">{_escape(label)}</div>{content}</div>'
+    )
 
 
 def render_rich_text(text: str) -> str:
@@ -165,23 +110,27 @@ def render_rich_text(text: str) -> str:
         if not line:
             continue
         if line.startswith("#"):
+            # A `## Synthèse` is a band heading, same treatment as the ones
+            # `render_document` draws — the model's structure and ours have to
+            # look like one document, not two stacked ones.
             label = line.lstrip("#").strip()
             out.append(
-                '<p style="margin:22px 0 8px;color:#64748b;font-size:11px;'
+                f'<p style="margin:16px 0 6px;border-top:1px solid {LINE};padding-top:8px;'
+                f'color:{LABEL};font-size:11px;'
                 'font-weight:600;letter-spacing:0.8px;text-transform:uppercase">'
                 f"{_escape(label)}</p>"
             )
         elif line[:1] in {"-", "*", "•"}:
             out.append(
                 '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
-                '<tr><td width="14" style="padding:3px 0 3px 0;color:#94a3b8;'
+                f'<tr><td width="14" style="padding:3px 0 3px 0;color:{FAINT};'
                 'font-size:14px;vertical-align:top">&bull;</td>'
-                '<td style="padding:3px 0;color:#0f172a;font-size:14px;line-height:1.6">'
+                f'<td style="padding:2px 0;color:{INK};font-size:14px;line-height:1.55;{MEASURE}">'
                 f"{_escape(line[1:].strip())}</td></tr></table>"
             )
         else:
             out.append(
-                '<p style="margin:0 0 10px;color:#334155;font-size:14px;line-height:1.65">'
+                f'<p style="margin:0 0 8px;color:{MUTED};font-size:14px;line-height:1.6;{MEASURE}">'
                 f"{_escape(line)}</p>"
             )
     return "".join(out)
@@ -209,80 +158,186 @@ def render_document(
 
     Callers pass plain text; escaping happens here so no call site can forget.
     """
-    # Figures as a strip of tiles rather than a label/value table: the two or
-    # three numbers a report carries are what the reader scans first, and a
-    # table row put them at the same weight as their own labels. Tiles inside
-    # one bordered box, not a grid of bordered cards — the box is the group.
-    cells = [(str(label), str(value)) for label, value in rows if value]
-    def _tile(index: int, label: str, value: str) -> str:
-        # The separator is a border on every tile but the first, so the strip
-        # reads as one object with divisions rather than as three boxes.
-        rule = ";border-left:1px solid #e2e8f0" if index else ""
-        return (
-            f'<td style="padding:12px 16px;vertical-align:top{rule}">'
-            f'<div style="color:#0f172a;font-size:17px;font-weight:600;line-height:1.2">'
-            f"{_escape(value)}</div>"
-            f'<div style="margin-top:4px;color:#94a3b8;font-size:11px;letter-spacing:0.6px;'
-            f'text-transform:uppercase">{_escape(label)}</div></td>'
-        )
+    # One `rows` list carries two different things — `("Rapports", "12")` is a
+    # figure, `("Notes", "Prévoir le matériel fibre…")` is prose — and the
+    # ledger can only hold the first. Splitting here rather than at the call
+    # sites keeps one signature and, more to the point, means a future caller
+    # cannot put a sentence in the numbers column by forgetting a parameter.
+    pairs = [(str(label), str(value)) for label, value in rows if value]
+    figures_rows = [(k, v) for k, v in pairs if _is_figure(v)]
+    prose_rows = [(k, v) for k, v in pairs if not _is_figure(v)]
 
-    tiles = "".join(_tile(i, label, value) for i, (label, value) in enumerate(cells))
+    # The Ledger, not a tile strip: label left, value right in tabular mono,
+    # one hairline per row. Same shape as the dashboard's report table, which
+    # is the whole point — the reader should recognise it before reading it.
+    ledger = "".join(
+        f'<tr><td style="padding:5px 0;border-top:1px solid {LINE};color:{MUTED};'
+        f'font-size:13px">{_escape(label)}</td>'
+        f'<td align="right" style="padding:5px 0;border-top:1px solid {LINE};color:{INK};'
+        f'font-family:{MONO};font-size:14px;white-space:nowrap">{_escape(value)}</td></tr>'
+        for label, value in figures_rows
+    )
     figures = (
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"'
-        ' style="margin:18px 0 4px;border:1px solid #e2e8f0;border-radius:10px;'
-        f'background:#f8fafc"><tr>{tiles}</tr></table>'
-        if tiles
+        _band(
+            "Chiffres",
+            '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"'
+            f' style="margin-top:4px">{ledger}</table>',
+        )
+        if ledger
         else ""
+    )
+    details = "".join(
+        _band(
+            label,
+            f'<p style="margin:5px 0 0;color:{MUTED};font-size:14px;line-height:1.6;{MEASURE}">'
+            f"{_escape(value)}</p>",
+        )
+        for label, value in prose_rows
     )
     # `rich` is opt-in: a reminder's lead is one sentence and would gain
     # nothing, while a report's is a structured document that the single-<p>
-    # treatment flattened into a wall with visible `##` in it.
+    # treatment flattened into a wall with visible `##` in it. The rich path
+    # writes its own band headings, so it is not wrapped in one.
     body = (
-        render_rich_text(lead)
+        f'<div style="margin-top:4px">{render_rich_text(lead)}</div>'
         if rich
-        else f'<p style="margin:0;color:#475569;font-size:14px;line-height:1.6">{_escape(lead)}</p>'
+        else _band(
+            "Objet",
+            f'<p style="margin:5px 0 0;color:{MUTED};font-size:14px;line-height:1.6;{MEASURE}">'
+            f"{_escape(lead)}</p>",
+        )
     )
     foot = (
-        f'<p style="margin:24px 0 0;color:#94a3b8;font-size:12px;line-height:1.6">'
+        f'<p style="margin:18px 0 0;border-top:1px solid {LINE};padding-top:10px;'
+        f'color:{FAINT};font-size:12px;line-height:1.55;{MEASURE}">'
         f"{_escape(footer)}</p>"
         if footer
         else ""
     )
-    # A bulletproof button: the padding lives on the <a>, not on a <td>, and
-    # there is no border-radius fallback drama because a square-ish button that
-    # renders everywhere beats a rounded one that collapses in Outlook.
+    # A bulletproof button: the padding lives on the <a>, not on a <td>. Square
+    # corners, because this system is flat and hairline everywhere else and a
+    # lone rounded pill would be the only soft thing on the page.
     button = (
-        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 4px">'
-        f'<tr><td style="background:#2563eb;border-radius:8px">'
-        f'<a href="{_escape(cta[1])}" style="display:inline-block;padding:12px 22px;'
+        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 0">'
+        f'<tr><td style="background:{ACCENT}">'
+        f'<a href="{_escape(cta[1])}" style="display:inline-block;padding:11px 20px;'
         f'color:#ffffff;font-size:14px;font-weight:600;text-decoration:none">{_escape(cta[0])}</a>'
         f'</td></tr></table>'
         if cta
         else ""
     )
-    head = (
-        f'<tr><td style="padding:0;line-height:0">'
-        f'<img src="cid:{_banner_cid(caption)}" width="560" alt="aznet"'
-        f' style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:12px 12px 0 0"></td></tr>'
+    # The Masthead, as real text rather than the drawn PNG this used to attach
+    # by Content-ID. An image header is one blocked-images setting away from
+    # arriving as a grey box, and it cost Pillow, a hex-in-Content-ID round
+    # trip and a catch-all `except` that shipped headerless mail on failure.
+    # `banner` now chooses how much the slab says, not whether there is one.
+    # Wordmark and strapline sit on one line rather than stacked: the slab was
+    # costing ~90px of a 16:9 viewport before the reader saw a single figure.
+    # The accent rule is now a vertical bar between them, which is the same
+    # structural mark doing the same job in a third of the height.
+    mark = (
+        f'<td style="padding:0"><span style="color:#f8fafc;font-size:20px;font-weight:600;'
+        'letter-spacing:-0.4px">aznet</span>'
+        f'<span style="display:inline-block;width:2px;height:13px;background:{ACCENT};'
+        'margin:0 10px;vertical-align:-1px"></span>'
+        f'<span style="color:{FAINT};font-size:11px;letter-spacing:1.2px">RAPPORTS DE CHANTIER</span></td>'
         if banner
-        else (
-            '<tr><td style="background:#0f172a;border-radius:12px 12px 0 0;padding:18px 24px">'
-            '<span style="color:#f8fafc;font-size:15px;font-weight:600">aznet</span></td></tr>'
-        )
+        else '<td style="padding:0"><span style="color:#f8fafc;font-size:16px;font-weight:600">aznet</span></td>'
+    )
+    period = (
+        f'<td align="right" valign="middle" style="padding:0;color:#f8fafc;'
+        f'font-family:{MONO};font-size:11px;letter-spacing:1px">{_escape(caption.upper())}</td>'
+        if caption
+        else ""
     )
     return f"""\
-<div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;margin:0 auto">
-    {head}
-    <tr><td style="background:#ffffff;border-radius:0 0 12px 12px;padding:24px">
-      <h1 style="margin:0 0 14px;color:#0f172a;font-size:19px;font-weight:600;letter-spacing:-0.3px">{_escape(title)}</h1>
+<div style="margin:0;padding:12px;background:{CANVAS};font-family:{SANS}">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;max-width:{WIDTH}px;margin:0 auto">
+    <tr><td bgcolor="{SLAB}" style="background:{SLAB};padding:13px 22px">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>{mark}{period}</tr></table>
+    </td></tr>
+    <tr><td style="background:{SURFACE};border:1px solid {LINE};border-top:0;padding:16px 22px 20px">
+      <h1 style="margin:0;color:{INK};font-size:18px;font-weight:600;letter-spacing:-0.3px;line-height:1.3">{_escape(title)}</h1>
       {figures}
-      <div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:14px">{body}</div>
+      {body}
+      {details}
       {button}
       {foot}
     </td></tr>
   </table>
 </div>"""
+
+
+def sample_report(to: str = "") -> Tuple[str, str]:
+    """A fake but complete daily report — subject and HTML — for the test probe.
+
+    `POST /notify/test` used to send one plain sentence, which proves the
+    address works and nothing else: the manager configuring their mailbox
+    could not see what the thing they were subscribing to would look like, and
+    the first real report at 19:00 was the first time anyone saw the layout.
+    This sends the *shape* of a report instead, with the figures randomised so
+    nobody mistakes it for a real day's numbers — a fixed set would be read as
+    data, and today's real totals would be a lie.
+
+    Kept here rather than in main.py because the preview script renders it too,
+    and a second copy would drift from the first the day the layout changes.
+    """
+    import random
+    from datetime import date
+
+    techs = random.sample(
+        ["Yassine", "Karim", "Rachid", "Mehdi", "Anas", "Hicham", "Youssef"], 3
+    )
+    sites = random.sample(["Sidi Maarouf", "Aïn Sebaâ", "Anfa", "Nouaceur"], 3)
+    goulottes = random.randrange(60, 260, 10)
+    cables = random.randrange(120, 700, 10)
+    prises = random.randrange(2, 20)
+    reports = random.randint(4, 12)
+    corps = f"""## Synthèse
+Journée de démonstration : {reports} interventions menées par {len(techs)} techniciens \
+sur {len(sites)} chantiers, pour {goulottes} m de goulottes posées, {cables} m de \
+câbles installés et {prises} prises testées. Les chiffres de ce message sont \
+fictifs et tirés au hasard.
+
+## Détail par chantier
+- {sites[0]} — {techs[0]} : pose de {goulottes // 2} m de goulottes, \
+raccordement de {random.randint(2, 6)} panneaux, RDC et 1er étage.
+- {sites[1]} — {techs[1]} : {cables // 3} m de câble tiré, \
+{random.randint(1, 4)} bureaux terminés, local technique SR{random.randint(1, 9)}.
+- {sites[2]} — {techs[2]} : reprise de brassage, aucun métrage déclaré.
+
+## Problèmes et besoins
+- Message de test : aucun problème réel n'est signalé ici.
+"""
+    today = date.today().strftime("%d/%m/%Y")
+    subject = f"aznet — test de notification (exemple de rapport du {today})"
+    html = render_document(
+        title=f"Rapport journalier — {today} — {reports} interventions",
+        lead=corps,
+        rows=[
+            ("Rapports", str(reports)),
+            ("Techniciens", str(len(techs))),
+            ("Chantiers", str(len(sites))),
+            ("Destinataire", to),
+        ],
+        footer=(
+            "Message de test envoyé depuis les réglages du tableau de bord. "
+            "Si vous le recevez, cette adresse recevra les rapports quotidiens "
+            "et hebdomadaires — avec, à la place de ces chiffres tirés au "
+            "hasard, les données réelles de la journée."
+        ),
+        cta=(
+            "Ouvrir le rapport du jour",
+            # The same deep link the real report mails carry, built here rather
+            # than imported from `jobs` — jobs imports this module, so reaching
+            # back for `_report_link` would be a cycle. One f-string is cheaper
+            # than untangling that for a URL shape that has not changed.
+            f"{settings.dashboard_url.rstrip('/')}/#/daily?date={date.today().isoformat()}",
+        ),
+        caption="Exemple",
+        rich=True,  # `corps` carries `##` headings, same as a real report
+    )
+    return subject, html
 
 
 def send(
@@ -317,25 +372,9 @@ def send(
     msg["To"] = ", ".join(recipients)
     msg.set_content(body)
     if html_body:
+        # No related part any more: the masthead is text in the HTML itself, so
+        # there is nothing to attach and nothing that can fail to be drawn.
         msg.add_alternative(html_body, subtype="html")
-        # The banner rides along as a related part, not a URL. Attached only
-        # when the HTML actually references it, so a message built with
-        # `banner=False` does not carry a picture nobody sees — which some
-        # clients would still show as a paperclip.
-        found = re.search(rf"cid:({re.escape(BANNER_CID)}[.\w]*)", html_body)
-        if found:
-            cid = found.group(1)
-            try:
-                msg.get_payload()[-1].add_related(
-                    banner_png(_caption_of(cid)),
-                    maintype="image",
-                    subtype="png",
-                    cid=f"<{cid}>",
-                )
-            except Exception as exc:  # noqa: BLE001 — Pillow missing, font gone, anything
-                # A message with a broken header image is still the report; one
-                # that never left because the banner failed to draw is not.
-                print(f"[mail] banner skipped: {exc}")
     elif html:
         msg.add_alternative(body.replace("\n", "<br>"), subtype="html")
 
