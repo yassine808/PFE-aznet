@@ -16,3 +16,5 @@ Full-read audit of the backend + the dashboard's data spine. 11 findings, each w
 - [] check Automated reports.
 - [] check Automated weekly reports
 - [] check images
+- [] better sign-in design (profesionnal)
+- [] adds 404 page.

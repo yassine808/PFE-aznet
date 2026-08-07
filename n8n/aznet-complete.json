@@ -400,6 +400,7 @@
     "options": {
      "timeout": 120000
     },
+    "sendHeaders": true,
     "headerParameters": {
      "parameters": [
       {
@@ -455,6 +456,7 @@
     "options": {
      "timeout": 120000
     },
+    "sendHeaders": true,
     "headerParameters": {
      "parameters": [
       {
@@ -546,17 +548,19 @@
   },
   {
    "parameters": {
-    "resource": "message",
-    "operation": "send",
-    "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
-    "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
-    "textBody": "❌ Erreur lors du traitement de votre rapport. Merci de réessayer dans quelques minutes.",
-    "additionalFields": {}
+    "method": "POST",
+    "url": "=https://graph.facebook.com/v20.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "whatsAppApi",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'text', context: { message_id: $('Filtrer accès').item.json.message_id }, text: { body: \"❌ Erreur lors du traitement de votre rapport. Merci de réessayer dans quelques minutes.\" } }) }}",
+    "options": {}
    },
    "id": "e1000000-0000-4000-8000-000000000021",
    "name": "WA fail reply",
-   "type": "n8n-nodes-base.whatsApp",
-   "typeVersion": 1,
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
    "position": [
     7640,
     555
@@ -933,17 +937,19 @@
   },
   {
    "parameters": {
-    "resource": "message",
-    "operation": "send",
-    "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
-    "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
-    "textBody": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}",
-    "additionalFields": {}
+    "method": "POST",
+    "url": "=https://graph.facebook.com/v20.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "whatsAppApi",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'text', context: { message_id: $('Filtrer accès').item.json.message_id }, text: { body: (($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n') + ($('Process output').item.json.report.resume) + ($('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '') + (($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '') } }) }}",
+    "options": {}
    },
    "id": "e1000000-0000-4000-8000-000000000028",
    "name": "WA reply summary",
-   "type": "n8n-nodes-base.whatsApp",
-   "typeVersion": 1,
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
    "position": [
     8000,
     460
@@ -1083,17 +1089,19 @@
   },
   {
    "parameters": {
-    "resource": "message",
-    "operation": "send",
-    "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
-    "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
-    "textBody": "={{ $json.found ? '📋 ' + $json.objet + '\\n\\n' + $json.corps : ($json.detail === 'inconnu' ? 'ℹ️ Je ne te connais pas encore — contacte le directeur pour être ajouté' : ($json.detail === 'pas de responsable' ? 'ℹ️ Aucun responsable assigné à toi pour le moment' : 'ℹ️ Aucun rapport généré pour ton responsable pour le moment')) }}",
-    "additionalFields": {}
+    "method": "POST",
+    "url": "=https://graph.facebook.com/v20.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "whatsAppApi",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'text', context: { message_id: $('Filtrer accès').item.json.message_id }, text: { body: ($json.found ? '📋 ' + $json.objet + '\\n\\n' + $json.corps : ($json.detail === 'inconnu' ? 'ℹ️ Je ne te connais pas encore — contacte le directeur pour être ajouté' : ($json.detail === 'pas de responsable' ? 'ℹ️ Aucun responsable assigné à toi pour le moment' : 'ℹ️ Aucun rapport généré pour ton responsable pour le moment'))) } }) }}",
+    "options": {}
    },
    "id": "e1000000-0000-4000-8000-000000000048",
    "name": "WA reply rapport",
-   "type": "n8n-nodes-base.whatsApp",
-   "typeVersion": 1,
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
    "position": [
     6200,
     785
@@ -1551,6 +1559,7 @@
     "options": {
      "timeout": 120000
     },
+    "sendHeaders": true,
     "headerParameters": {
      "parameters": [
       {
@@ -1953,17 +1962,19 @@
   },
   {
    "parameters": {
-    "resource": "message",
-    "operation": "send",
-    "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
-    "recipientPhoneNumber": "={{ $('Filtrer accès').item.json.chat_id }}",
-    "textBody": "={{ $json.detail === 'aucun rapport lié à ce message' ? '⚠️ Je ne trouve pas de rapport lié à ce message — réponds au message de ton propre rapport.' : ($json.detail === 'des champs sont requis pour /modify' ? '⚠️ Précise les champs à modifier, ex: /modify goulottes_m=10, localisation=Tour Atlas' : ($json.action === 'supprimer' ? '🗑️ Rapport supprimé.' : ($json.action === 'modify' ? '✅ Rapport modifié.' : '⚠️ Erreur technique — réessaie dans quelques minutes.'))) }}",
-    "additionalFields": {}
+    "method": "POST",
+    "url": "=https://graph.facebook.com/v20.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "whatsAppApi",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'text', context: { message_id: $('Filtrer accès').item.json.message_id }, text: { body: ($json.detail === 'aucun rapport lié à ce message' ? '⚠️ Je ne trouve pas de rapport lié à ce message — réponds au message de ton propre rapport.' : ($json.detail === 'des champs sont requis pour /modify' ? '⚠️ Précise les champs à modifier, ex: /modify goulottes_m=10, localisation=Tour Atlas' : ($json.action === 'supprimer' ? '🗑️ Rapport supprimé.' : ($json.action === 'modify' ? '✅ Rapport modifié.' : '⚠️ Erreur technique — réessaie dans quelques minutes.')))) } }) }}",
+    "options": {}
    },
    "id": "e1000000-0000-4000-8000-00000000004d",
    "name": "WA reply modify",
-   "type": "n8n-nodes-base.whatsApp",
-   "typeVersion": 1,
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
    "position": [
     5840,
     1245
