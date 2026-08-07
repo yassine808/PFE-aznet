@@ -24,6 +24,11 @@ benchmark/dataset/audio/
 # per-run artifacts — both regenerate, neither belongs in history
 benchmark/dataset/images/
 benchmark/results/
+# local STT experiment: ~25 GB of Hub weights and a torch+CUDA venv. The
+# catalogue that reproduces them lives in download_models.py, which IS in git —
+# ".venv/" above does not match ".venv-local/".
+benchmark/models/
+benchmark/.venv-local/
 
 # n8n local state
 .n8n/
