@@ -226,11 +226,18 @@ convenience, not information loss.
 | TaloCreations | ❌ | ~ | ربعين ✅ | ❌ | ❌ |
 | ychafiqui/small-darija | ❌ | ~ | ربعين ✅ | ~ | طناشر ✅ |
 
-### The hypothesis did not survive
+### CORRECTED after the gated flagship arrived (same day)
 
-The two **untuned** OpenAI controls match or beat every Moroccan-Darija fine-tune
-on this audio. Without the control in the catalogue the conclusion would have been
-"`ychafiqui/medium-darija` is best" with no way to see that generic Whisper equals it.
+The paragraph below was written before `BounharAbdelaziz/Morocco-Darija-STT-large`
+could be downloaded — it was licence-gated all session. **With it in the run, the
+hypothesis holds after all: Darija fine-tuning does help, when the fine-tune is
+big enough.** See §5d. The comparison against the five smaller fine-tunes stands;
+the general conclusion drawn from it did not.
+
+~~The two **untuned** OpenAI controls match or beat every Moroccan-Darija fine-tune
+on this audio.~~ Still true of the five *small* fine-tunes, and still the reason the
+controls were worth downloading — without them, `ychafiqui/medium-darija` would have
+looked like the winner.
 
 `whisper-large-v3-turbo` is the standout: same content as full large-v3 at **1.0 s
 vs 5.7 s** mean latency — 5.7× faster locally, comparable to Groq's 1.53 s API
@@ -238,6 +245,60 @@ latency, with no rate limit and no vendor.
 
 **This ranking is Claude's reading of the Arabic, not a native speaker's.** It needs
 confirming by ear before it decides anything.
+
+## 5d. The gated flagship — and the current best model (2026-08-07)
+
+`HF_TOKEN` is now in `.env`, all **13/13** checkpoints are downloaded, and the two
+formerly-gated models ran: `results/local_20260807_191212.csv`.
+
+One ambiguity closed for good: with a valid token,
+`BounharAbdelaziz/Morocco-Darija-STT-large-v1.6` returns **404
+RepositoryNotFoundError** — it genuinely does not exist. The earlier 401 was
+"unauthenticated", not "gated". So `api/app/providers/hf_darija.py:12` has been
+pinned to a phantom checkpoint since the day it was written, and the unset
+`HF_TOKEN` hid it: every call failed at the token check before it could reach the
+404. Two faults stacked, the cheap one masking the fatal one. The real repo is
+`Morocco-Darija-STT-large`, no version suffix.
+
+### Full ranking, all 12 working local models (sorted by confidence)
+
+| model | lat s | conf | chars | digits |
+|---|---|---|---|---|
+| `boumehdi/wav2vec2-…-moroccan-darija` | 0.7 | 0.916 | 501 | 0 |
+| `amineouaki/…xlsr-53-darija-combined` | 6.3 | 0.884 | 493 | 7 |
+| `amineouaki/wav2vec2-darija-combined` | 4.0 | 0.853 | 439 | 22 |
+| `ychafiqui/whisper-medium-darija` | 3.7 | 0.843 | 184 | 0 |
+| **`BounharAbdelaziz/Morocco-Darija-STT-large`** | **7.7** | **0.791** | **249** | **45** |
+| `TaloCreations/whisper-darija-finetuned` | 2.3 | 0.735 | 198 | 0 |
+| `ychafiqui/whisper-small-darija` | 2.3 | 0.716 | 199 | 0 |
+| `openai/whisper-large-v3-turbo` | 1.0 | 0.597 | 174 | 30 |
+| `openai/whisper-large-v3` | 5.7 | 0.582 | 214 | 55 |
+| `C-Ilyas/whisper-base-darija` | 5.0 | 0.548 | 0 | 0 |
+
+**Sorted by confidence purely to show that you must not sort by confidence.**
+`boumehdi` tops the column at 0.916 and drops the `40` entirely; the best model
+sits fifth. Third independent confirmation that `exp(mean logprob)` measures
+decoder certainty, not correctness.
+
+### Why Morocco-Darija-STT-large is the current best
+
+Clip `…3.40.50 AM (1).ogg`. Reference content: *hier 20/07/2026, arrivés à
+Essaouira à 1h, vérifié le chemin de 27 câbles, pris le métrage, coupés, vérifié
+le chemin de la fibre, sortis à 7h.*
+
+| model | what it did to the data fields |
+|---|---|
+| **Morocco-Darija-STT-large** | `20 سبعة 2026` ✅ · `27 كابل` ✅ · `فيريفينا` (vérifier) ✅ · `لافيبر` (la fibre) ✅ · `السبع` (7h) ✅ — every extractable field survives |
+| `whisper-large-v3` | date ✅, `27 كابل` ✅, but `vérifina` → **`فرحنا`** ("we rejoiced") — a French technical verb became an unrelated Arabic word |
+| `ychafiqui/medium-darija` | date spelled out in words, and **`27 câbles` → `السبعة وعشر وعشر الين كابل`** — the quantity is destroyed; that row reaches the Sheet with no cable count |
+
+It also holds `نوفيك` (Novec), `الصويرة` (Essaouira), `قنيطرة` (Kenitra),
+`عبدالحق`, `الحسين` across clips, and produces 45 digits — second only to
+large-v3's 55 but far more often correct.
+
+**Cost: 7.7 s mean latency**, the slowest of the twelve, ~4 GB VRAM in fp16 on the
+8 GB card. Against Groq's 1.53 s API. That trade — best accuracy for 5× the wait —
+is the real decision, and it needs a native speaker to confirm the accuracy half.
 
 ## 6. Disk waste to reclaim (~15 GB)
 
