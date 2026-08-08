@@ -123,7 +123,7 @@ def health() -> dict:
         "uptime_seconds": round(time.time() - _STARTED_AT, 1),
         "started_at": _STARTED_AT,
         "stt_providers": available_providers(),
-        "stt_default": settings.stt_provider,
+        "stt_chain": _stt_chain(),
         # Chains and prompt sizes are here so an operator can confirm what the
         # running process actually loaded, without shelling into the container.
         "chains": {
@@ -351,7 +351,7 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
         await _log(
             "transcribed", "error", message=f"transcription failed: {exc}",
             duration_ms=int((time.time() - t0) * 1000),
-            payload={"engine": provider or settings.stt_chain}, **ctx,
+            payload={"engine": provider or _stt_chain()}, **ctx,
         )
         raise HTTPException(502, f"transcription failed: {exc}") from exc
 
@@ -371,6 +371,22 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
     return transcription, rapport_complet, warnings, blob
 
 
+def _stt_chain() -> str:
+    """The live STT order.
+
+    Stored in app_settings so the director can reorder the engines from the
+    dashboard without a restart; `settings.stt_chain` from .env is the fallback
+    for a fresh database or an unreachable log store. Read on every call rather
+    than cached, for the same reason the scheduler re-reads its times: an edited
+    order must take effect on the next voice note, not the next deploy.
+    """
+    try:
+        stored = (logs.get_settings() or {}).get("stt_chain")
+    except Exception:  # noqa: BLE001 — Postgres down must not stop transcription
+        stored = None
+    return stored if isinstance(stored, str) and stored.strip() else settings.stt_chain
+
+
 def _transcribe_engine(
     blob: bytes, mime_type: Optional[str], forced: Optional[str]
 ) -> TranscriptionInfo:
@@ -387,7 +403,7 @@ def _transcribe_engine(
         # needs to learn a typo, not silently fall back to another engine.
         return get_provider(forced).transcribe(blob, mime_type or DEFAULT_AUDIO_MIME)
     failures: List[str] = []
-    for name in (part.strip() for part in settings.stt_chain.split(",") if part.strip()):
+    for name in (part.strip() for part in _stt_chain().split(",") if part.strip()):
         try:
             return get_provider(name).transcribe(blob, mime_type or DEFAULT_AUDIO_MIME)
         except (TranscriptionError, ValueError) as exc:
@@ -1074,6 +1090,14 @@ class JournalEntry(BaseModel):
     correlation_id: Optional[str] = None
     message_id: Optional[str] = None
     warnings: List[str] = Field(default_factory=list)
+    stt_engine: Optional[str] = Field(
+        None,
+        description=(
+            "Moteur STT qui a effectivement transcrit (transcription.provider de "
+            "/process). Absent pour un rapport texte ou photo. Le moteur réel, pas "
+            "l'ordre configuré : la chaîne bascule en cas d'échec."
+        ),
+    )
 
 
 @app.post("/journal", responses={502: {"description": "Sheets unreachable"}})
@@ -1735,6 +1759,24 @@ def read_settings(caller: dict = Depends(auth.require_human)) -> dict:
 
 @app.put("/settings", responses={502: {"description": "Log store unreachable"}})
 def write_settings(payload: SettingsIn, caller: dict = Depends(auth.require_human)) -> dict:
+    # The STT order decides which engine hears every voice note, so it is
+    # director-only — narrower than the rest of this endpoint, which any account
+    # may write. Enforced here rather than by a separate endpoint because the
+    # dashboard saves the whole settings object in one PUT; a 403 on the field is
+    # clearer than silently dropping it, which would look like a save that worked.
+    if "stt_chain" in payload.values and caller.get("role") != "directeur":
+        raise HTTPException(403, "Seul le directeur peut modifier l'ordre des moteurs STT")
+    if "stt_chain" in payload.values:
+        known = set(available_providers())
+        asked = [p.strip() for p in str(payload.values["stt_chain"]).split(",") if p.strip()]
+        unknown = [p for p in asked if p not in known]
+        # Reject a typo instead of storing it: an unknown name is skipped at
+        # transcription time, so "grok,gemini" would quietly run one engine short.
+        if unknown or not asked:
+            raise HTTPException(
+                422, f"Moteurs STT inconnus: {unknown or ['(vide)']}. Disponibles: {sorted(known)}"
+            )
+        payload.values["stt_chain"] = ",".join(asked)
     auth.record(caller, "settings_saved", detail=payload.values)
     try:
         return {"settings": logs.put_settings(payload.values)}

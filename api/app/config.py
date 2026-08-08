@@ -15,15 +15,26 @@ class Settings(BaseSettings):
 
     groq_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
-    hf_token: Optional[str] = None
+    # HF_TOKEN is NOT read here any more. It only ever served hf_darija, deleted
+    # 2026-08-08, and it is a download credential — benchmark/download_models.py
+    # needs it to fetch gated weights, nothing at runtime does.
 
-    # default engine until the week-1 benchmark decides (PLAN.md sprint 1)
-    stt_provider: str = "groq"
-    # Ordered STT fallback chain, same spirit as the extraction chains: tried
-    # left to right, first success wins, all failing raises one combined error
-    # (main.py:_transcribe_engine). A Groq outage must fall through to Gemini's
-    # native audio instead of costing the technician their report.
-    stt_chain: str = "groq,gemini"
+    # Ordered STT fallback chain: tried left to right, first success wins, all
+    # failing raises one combined error (main.py:_transcribe_engine). A Groq
+    # outage must fall through instead of costing the technician their report.
+    #
+    # This is the DEFAULT only. The live order is stored in app_settings and
+    # edited by the director from the dashboard, so changing it needs no restart
+    # (logs.get_settings -> "stt_chain").
+    #
+    # Order is the 2026-08-07 benchmark result: groq 1.9 s, gemini 4.8 s, local
+    # ~19 s. local last because it is the slowest by far and its value is being
+    # there when both free tiers are exhausted — see benchmark/STT-BENCHMARK-STATUS.md.
+    stt_chain: str = "groq,gemini,local"
+    # GPU sidecar running BounharAbdelaziz/Morocco-Darija-STT-large
+    # (benchmark/stt_server.py). Unset means the `local` engine is unavailable
+    # and the chain simply skips it — never a silent fallback to nothing.
+    stt_local_url: Optional[str] = None
 
     # pipeline log store (app/logs.py). Read here rather than via os.getenv so the
     # host-run uvicorn sees .env too — Docker's env_file only populates the real

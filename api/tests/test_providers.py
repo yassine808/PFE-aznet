@@ -5,10 +5,10 @@ from app.providers.base import TranscriptionError, TranscriptionProvider
 
 
 def test_all_three_adapters_registered():
-    assert available_providers() == ["gemini", "groq", "hf-darija"]
+    assert available_providers() == ["gemini", "groq", "local"]
 
 
-@pytest.mark.parametrize("name", ["groq", "gemini", "hf-darija"])
+@pytest.mark.parametrize("name", ["groq", "gemini", "local"])
 def test_registry_returns_provider_instances(name):
     p = get_provider(name)
     assert isinstance(p, TranscriptionProvider)
@@ -21,14 +21,14 @@ def test_unknown_provider_raises_with_available_list():
     assert "gemini" in str(exc.value)
 
 
-@pytest.mark.parametrize("name", ["groq", "gemini", "hf-darija"])
+@pytest.mark.parametrize("name", ["groq", "gemini", "local"])
 def test_missing_api_key_fails_loudly(name, monkeypatch):
     """No silent fallbacks: unconfigured engine must raise, not return junk."""
     from app import config
 
     monkeypatch.setattr(config.settings, "groq_api_key", None)
     monkeypatch.setattr(config.settings, "gemini_api_key", None)
-    monkeypatch.setattr(config.settings, "hf_token", None)
+    monkeypatch.setattr(config.settings, "stt_local_url", None)
     provider_instance = get_provider(name)
     with pytest.raises(TranscriptionError, match="not configured"):
         provider_instance.transcribe(b"fake-audio", "audio/ogg")

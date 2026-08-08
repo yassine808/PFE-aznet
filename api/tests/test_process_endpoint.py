@@ -57,7 +57,7 @@ class FakeProvider(TranscriptionProvider):
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert set(r.json()["stt_providers"]) == {"gemini", "groq", "hf-darija"}
+    assert set(r.json()["stt_providers"]) == {"gemini", "groq", "local"}
 
 
 def test_text_mode(monkeypatch):
@@ -169,7 +169,7 @@ def test_high_confidence_not_flagged(monkeypatch):
 
 
 def test_missing_confidence_not_flagged(monkeypatch):
-    """Providers with no confidence signal (gemini, hf-darija) must not be
+    """Providers with no confidence signal (gemini, local) must not be
     falsely flagged — None means 'unknown', not 'low'."""
     monkeypatch.setattr(main, "get_provider", lambda name: FakeProvider())
     monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t, profile=None: (REPORT, "test/stub"))

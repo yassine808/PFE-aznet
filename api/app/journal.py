@@ -80,6 +80,12 @@ COL_CANAL = "Canal"
 COL_LIEN_AUDIO = "Lien audio"
 COL_FLAG = "Flag review"
 COL_CORRELATION = "Correlation id"
+# Which STT engine actually heard this voice note. The chain falls through on
+# failure, so the configured order does NOT tell you what ran: a row served by
+# `local` means both free tiers were unavailable at that moment. Empty for text
+# and photo reports, which never touch STT — blank, never "n/a", because the
+# column is a fact about audio and there was none.
+COL_STT = "Moteur STT"
 
 HEADERS: Tuple[str, ...] = (
     (COL_DATE, COL_TECHNICIEN, COL_CHANTIER)
@@ -88,7 +94,8 @@ HEADERS: Tuple[str, ...] = (
     + tuple(LIST_COLUMNS.values())
     + tuple(col for col, _ in STOCK_COLUMNS.values())
     + tuple(TEXT_COLUMNS.values())
-    + (COL_RESUME, COL_RAPPORT, COL_CANAL, COL_LIEN_AUDIO, COL_FLAG, COL_CORRELATION)
+    + (COL_RESUME, COL_RAPPORT, COL_CANAL, COL_STT, COL_LIEN_AUDIO,
+       COL_FLAG, COL_CORRELATION)
 )
 
 
@@ -343,6 +350,7 @@ def file_report(payload: Dict) -> Dict:
         COL_RESUME: report.resume,
         COL_RAPPORT: payload.get("rapport_complet"),
         COL_CANAL: payload.get("canal"),
+        COL_STT: payload.get("stt_engine"),
         COL_LIEN_AUDIO: payload.get("lien_audio"),
         COL_CORRELATION: payload.get("correlation_id"),
         COL_FLAG: bool(REVIEW_WARNINGS & set(warnings)),
