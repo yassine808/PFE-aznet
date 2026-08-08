@@ -36,6 +36,9 @@ COLUMNS = ["file", "provider", "latency_s", "confidence", "chars", "transcript",
 AUDIO_EXT = {".ogg", ".opus", ".oga", ".mp3", ".wav", ".m4a"}
 SR = 16_000  # every model here was trained at 16 kHz
 
+# Whisper's ENCODER window is a fixed 30 s = 3000 mel frames at a 10 ms hop.
+# Anything longer needs long-form (sequential chunked) generation.
+ENCODER_FRAMES = 3000
 # Whisper's decoder window: prompt + special tokens + transcript must all fit.
 DECODER_CONTEXT = 448
 SPECIAL_TOKEN_SLACK = 8   # <|startoftranscript|>, language, task, timestamps, EOT
@@ -109,10 +112,37 @@ class WhisperRunner:
         from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
         self.torch = torch
-        self.processor = WhisperProcessor.from_pretrained(str(path))
+        # A LoRA repo ships adapter weights only (adapter_model.safetensors, no
+        # model.safetensors), so from_pretrained on it finds no base to load.
+        # The base is named in adapter_config.json and must already be in
+        # models/ -- resolved locally so this stays offline.
+        adapter_cfg = path / "adapter_config.json"
+        base = path
+        if adapter_cfg.exists():
+            import json
+
+            base_id = json.loads(adapter_cfg.read_text(encoding="utf-8"))["base_model_name_or_path"]
+            base = MODELS_DIR / base_id.replace("/", "__")
+            if not base.exists():
+                raise FileNotFoundError(
+                    f"LoRA base {base_id!r} not downloaded — expected {base}"
+                )
+            print(f"  LoRA adapter over {base.name}")
+        # The processor lives with the base for an adapter repo; a LoRA fine-tune
+        # does not change the tokenizer or the feature extractor.
+        proc_src = path if (path / "tokenizer_config.json").exists() else base
+        self.processor = WhisperProcessor.from_pretrained(str(proc_src))
         self.model = WhisperForConditionalGeneration.from_pretrained(
-            str(path), torch_dtype=dtype
-        ).to(device).eval()
+            str(base), torch_dtype=dtype
+        )
+        if adapter_cfg.exists():
+            from peft import PeftModel
+
+            # merge_and_unload folds the adapter into the base weights, so
+            # generate() behaves exactly like a normal Whisper afterwards --
+            # no PEFT wrapper in the hot path and no separate code branch below.
+            self.model = PeftModel.from_pretrained(self.model, str(path)).merge_and_unload()
+        self.model = self.model.to(device).eval()
         self.device = device
         self.dtype = dtype
         # Default OFF, and measured rather than assumed (2026-08-07): Groq's API
@@ -154,15 +184,25 @@ class WhisperRunner:
 
     def transcribe(self, audio) -> Tuple[str, Optional[float]]:
         torch = self.torch
-        feats = self.processor(
-            audio, sampling_rate=SR, return_tensors="pt"
-        ).input_features.to(self.device, self.dtype)
+        # Whisper's encoder takes a FIXED 30 s window, and the processor silently
+        # truncates to it by default -- a 63.5 s voice note produced input_features
+        # of shape [1, 80, 3000] (3000 mel frames x 10 ms hop = exactly 30.000 s)
+        # and the second half was discarded without a warning. Every local result
+        # before 2026-08-07 evening was measured on partial audio.
+        # truncation=False + padding="longest" + an attention mask is what switches
+        # transformers to sequential long-form decoding, which chunks the audio the
+        # way Groq and Gemini do server-side.
+        inputs = self.processor(
+            audio, sampling_rate=SR, return_tensors="pt",
+            truncation=False, padding="longest", return_attention_mask=True,
+        )
+        long_form = inputs.input_features.shape[-1] > ENCODER_FRAMES
+        feats = inputs.input_features.to(self.device, self.dtype)
         kwargs = dict(
             # Darija has no Whisper language tag; 'ar' beats autodetect, same
             # choice as the Groq adapter.
             language="ar",
             task="transcribe",
-            max_new_tokens=self.max_new_tokens,
             # Without this the model loops: gemini produced 222k characters for
             # one 84 KB clip in the API run. no_repeat_ngram_size is the guard a
             # generateContent call does not have.
@@ -170,30 +210,65 @@ class WhisperRunner:
             return_dict_in_generate=True,
             output_scores=True,
         )
+        if long_form:
+            # Long-form owns the token budget per 30 s chunk itself; passing
+            # max_new_tokens caps the WHOLE transcript and re-truncates it.
+            kwargs["attention_mask"] = inputs.attention_mask.to(self.device)
+            # Required, not optional: transformers refuses long-form without it
+            # ("...requires the model to predict timestamp tokens"). The
+            # timestamps are how it stitches consecutive 30 s chunks together.
+            kwargs["return_timestamps"] = True
+        else:
+            kwargs["max_new_tokens"] = self.max_new_tokens
         if self.prompt_ids is not None:
             kwargs["prompt_ids"] = self.prompt_ids
         with torch.no_grad():
             out = self.model.generate(feats, **kwargs)
+        # Long-form returns a plain dict (with a "segments" key), short-form a
+        # ModelOutput. Same field names, different access -- hence the branch.
+        as_dict = isinstance(out, dict)
         # generate() returns the prompt tokens PREPENDED to the transcript, so
         # decoding the whole sequence hands back the chantier vocabulary itself.
         # It looked plausible -- every clip returned the same fluent Darija --
         # which is exactly why it has to be sliced off, not eyeballed.
-        seq = out.sequences
+        seq = out["sequences"] if as_dict else out.sequences
         if self.prompt_ids is not None:
             seq = seq[:, self.prompt_ids.numel():]
         text = self.processor.batch_decode(
             seq, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )[0].strip()
+
         mean_lp = None
-        try:
-            trans = self.model.compute_transition_scores(
-                out.sequences, out.scores, normalize_logits=True
-            )[0]
-            valid = trans[torch.isfinite(trans)]
-            if len(valid):
-                mean_lp = float(valid.mean())
-        except Exception:  # noqa: BLE001 — no scores is None, never a fake number
-            mean_lp = None
+        segments = out.get("segments") if as_dict else None
+        if segments:
+            # Long-form: Whisper computes its own avg_logprob per 30 s segment.
+            # That is the SAME quantity groq_whisper._confidence_from_segments
+            # averages, so using it keeps the column comparable to Groq's rather
+            # than substituting a lookalike number computed a different way.
+            # Shape varies by transformers version (list of lists per batch item,
+            # or a flat list), so flatten defensively instead of assuming.
+            def _walk(node):
+                if isinstance(node, dict):
+                    v = node.get("avg_logprob")
+                    if v is not None:
+                        yield float(v)
+                elif isinstance(node, (list, tuple)):
+                    for child in node:
+                        yield from _walk(child)
+
+            lps = list(_walk(segments))
+            if lps:
+                mean_lp = sum(lps) / len(lps)
+        else:
+            try:
+                trans = self.model.compute_transition_scores(
+                    seq, out.scores, normalize_logits=True
+                )[0]
+                valid = trans[torch.isfinite(trans)]
+                if len(valid):
+                    mean_lp = float(valid.mean())
+            except Exception:  # noqa: BLE001 — no scores is None, never a fake number
+                mean_lp = None
         return text, _confidence(mean_lp)
 
 
@@ -229,12 +304,86 @@ class Wav2Vec2Runner:
         return text, conf
 
 
-RUNNERS = {"whisper": WhisperRunner, "wav2vec2": Wav2Vec2Runner}
+class QwenASRRunner:
+    """Qwen3-ASR — a multimodal LLM with an audio encoder, not a Whisper.
+    Different processor contract (chat template + audio), no 30 s window, and
+    no per-segment logprob, so confidence is None rather than invented.
+
+    STATUS 2026-08-08: does NOT work. Three successive contract mismatches,
+    each hidden behind the previous one:
+      1. encoder wants padded_feature_length % 100 == 0
+      2. processor emits fp32 features into an fp16 model
+      3. after padding, "Audio features and audio tokens do not match" -- the
+         chat template's audio-placeholder token count is derived from the
+         unpadded length, so padding to satisfy (1) breaks (3).
+    Fixing (3) means matching Qwen's internal length accounting rather than
+    padding the waveform, which is a bigger job than the model is worth here:
+    it is the only non-Darija generalist in a 13-model Darija catalogue, and
+    the other twelve run. Left in place so the failure is recorded as a result
+    instead of being silently dropped from the table."""
+
+    family = "qwen3_asr"
+
+    def __init__(self, path: Path, device: str, dtype, use_prompt: bool = False):
+        import torch
+        from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+
+        self.torch = torch
+        self.processor = AutoProcessor.from_pretrained(str(path))
+        self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            str(path), torch_dtype=dtype
+        ).to(device).eval()
+        self.device = device
+        self.dtype = dtype
+
+    def transcribe(self, audio) -> Tuple[str, Optional[float]]:
+        torch = self.torch
+        import numpy as np
+
+        # Qwen3ASREncoder requires padded_feature_length % (n_window * 2) == 0,
+        # i.e. a multiple of 100 frames. Frames advance every 160 samples (10 ms
+        # at 16 kHz), so padding the WAVEFORM up to a whole second guarantees a
+        # frame count divisible by 100. Silence padding, so it adds no content.
+        block = SR  # 16000 samples = 100 frames
+        remainder = len(audio) % block
+        if remainder:
+            audio = np.concatenate([audio, np.zeros(block - remainder, dtype="float32")])
+        conversation = [{"role": "user", "content": [
+            {"type": "audio", "audio": audio},
+            {"type": "text", "text": "Transcris fidèlement cet audio."},
+        ]}]
+        inputs = self.processor.apply_chat_template(
+            conversation, add_generation_prompt=True, tokenize=True,
+            return_dict=True, return_tensors="pt", sampling_rate=SR,
+        ).to(self.device)
+        # The processor emits float32 features while the model was loaded in
+        # fp16 -> "Input type (float) and bias type (c10::Half) should be the
+        # same". Cast only the float tensors: input_ids and masks are integer
+        # and casting them to half would corrupt the token values.
+        inputs = {k: (v.to(self.dtype) if hasattr(v, "is_floating_point")
+                      and v.is_floating_point() else v)
+                  for k, v in inputs.items()}
+        with torch.no_grad():
+            out = self.model.generate(**inputs, max_new_tokens=1024)
+        # Strip the echoed prompt: keep only what was generated after the input.
+        gen = out[:, inputs["input_ids"].shape[-1]:]
+        text = self.processor.batch_decode(gen, skip_special_tokens=True)[0].strip()
+        return text, None
+
+
+RUNNERS = {"whisper": WhisperRunner, "wav2vec2": Wav2Vec2Runner,
+           "qwen3_asr": QwenASRRunner}
 
 
 def detect_family(path: Path) -> Optional[str]:
     """Read config.json rather than the folder name: the catalogue's family label
     is a human note, the config is what transformers will actually instantiate."""
+    # A LoRA repo has no config.json at all -- only adapter_config.json, which
+    # names the base. Its family is the base's family; whisper here because the
+    # adapter catalogue entry targets whisper-large-v3-turbo.
+    adapter = path / "adapter_config.json"
+    if adapter.exists() and not (path / "config.json").exists():
+        return "whisper"
     cfg = path / "config.json"
     if not cfg.exists():
         return None
