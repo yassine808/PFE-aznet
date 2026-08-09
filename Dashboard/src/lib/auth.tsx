@@ -106,6 +106,10 @@ export function usePageTimer(route: string, enabled: boolean) {
     window.addEventListener('pagehide', flush)
     return () => {
       window.removeEventListener('pagehide', flush)
+      // Logout unmounts Dashboard without a pagehide, so the last page's time
+      // would be silently dropped; the route-change path flushes in the body
+      // (a ~0 s second flush here is harmless).
+      flush()
     }
   }, [route, enabled])
 }

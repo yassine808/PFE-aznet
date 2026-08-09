@@ -134,14 +134,26 @@ def invalidate_reports() -> None:
     _headers_cached_at = 0.0
 
 
-def _headers(svc) -> List[str]:
-    """The Rapports header row, TTL-cached.
+def _headers(svc, tab: str = RAPPORTS_TAB) -> List[str]:
+    """A tab's header row; TTL-cached for Rapports only.
 
     Column names are resolved by name on every write so a reordered column
     moves its value with it — but that meant a second Google call per write,
     and the retry drain pays it once per parked row. The header is the one part
     of the sheet that does not change between two requests.
+
+    Journal tabs are created by the API itself with a known header, so their
+    row 1 is read live on the rare write that needs it (a /modify reply); the
+    cache stays a single global slot for the tab the dashboard reads.
     """
+    if tab != RAPPORTS_TAB:
+        resp = (
+            svc.spreadsheets()
+            .values()
+            .get(spreadsheetId=settings.sheet_id, range=f"{tab}!1:1")
+            .execute(num_retries=_RETRIES)
+        )
+        return resp.get("values", [[]])[0]
     global _headers_cache, _headers_cached_at
     now = time.monotonic()
     if _headers_cache is not None and now - _headers_cached_at < HEADERS_TTL_SECONDS:
@@ -158,20 +170,23 @@ def _headers(svc) -> List[str]:
     return list(headers)
 
 
-def update_report_field(row: int, field: str, value: Optional[str]) -> None:
+def update_report_field(row: int, field: str, value: Optional[str],
+                        tab: str = RAPPORTS_TAB) -> None:
     """Write one cell back (manual correction). Column resolved from the header row."""
-    update_report_fields(row, {field: value})
+    update_report_fields(row, {field: value}, tab)
 
 
-def update_report_fields(row: int, values: dict) -> None:
+def update_report_fields(row: int, values: dict, tab: str = RAPPORTS_TAB) -> None:
     """Write several cells of one row in one batch call (the /modify write-back).
 
     Column resolved from the header row like the single-cell variant, so a
-    column reordered in the Sheet moves the value with it.
+    column reordered in the Sheet moves the value with it. `tab` is where the
+    row lives — Rapports for the dashboard editor, a journal tab for a /modify
+    reply on a journal-linked message.
     """
     svc = _service()
     try:
-        headers = _headers(svc)
+        headers = _headers(svc, tab)
         data = []
         for field, value in values.items():
             if field not in headers:
@@ -179,7 +194,7 @@ def update_report_fields(row: int, values: dict) -> None:
             col = _col_letter(headers.index(field) + 1)
             data.append(
                 {
-                    "range": f"{RAPPORTS_TAB}!{col}{row}",
+                    "range": f"{tab}!{col}{row}",
                     "values": [[value if value is not None else ""]],
                 }
             )
@@ -196,7 +211,7 @@ def update_report_fields(row: int, values: dict) -> None:
         raise SheetsError(f"sheets write failed: {exc}") from exc
 
 
-def clear_row(row: int) -> None:
+def clear_row(row: int, tab: str = RAPPORTS_TAB) -> None:
     """Empty every cell of a row (the /supprimer command).
 
     The row stays in place on purpose: Google has no cheap positional delete
@@ -206,10 +221,10 @@ def clear_row(row: int) -> None:
     """
     svc = _service()
     try:
-        ncols = max(1, len(_headers(svc)))
+        ncols = max(1, len(_headers(svc, tab)))
         svc.spreadsheets().values().clear(
             spreadsheetId=settings.sheet_id,
-            range=f"{RAPPORTS_TAB}!A{row}:{_col_letter(ncols)}{row}",
+            range=f"{tab}!A{row}:{_col_letter(ncols)}{row}",
             body={},
         ).execute(num_retries=_RETRIES)
         invalidate_reports()

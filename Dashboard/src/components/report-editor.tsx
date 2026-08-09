@@ -444,7 +444,11 @@ function VersionModal({
 }) {
   const { t } = useI18n()
   const ref = useRef<HTMLDialogElement>(null)
-  useEffect(() => ref.current?.showModal(), [])
+  // Guarded: StrictMode double-invokes this effect in dev, and a second
+  // showModal() on an already-open dialog throws InvalidStateError.
+  useEffect(() => {
+    if (ref.current && !ref.current.open) ref.current.showModal()
+  }, [])
 
   return (
     <dialog

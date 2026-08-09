@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowUUpLeftIcon, CalendarBlankIcon } from '@phosphor-icons/react'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
-import { isFlagged, num, toISODate } from '@/lib/metrics'
+import { isFlagged, num, parseISODay, toISODate } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -37,10 +37,7 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
     [locale],
   )
 
-  const start = useMemo(() => {
-    const [y, m, d] = selected.split('-').map(Number)
-    return new Date(y, m - 1, d)
-  }, [selected])
+  const start = useMemo(() => parseISODay(selected), [selected])
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * DAY_MS)),
     [start],

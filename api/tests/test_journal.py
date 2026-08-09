@@ -194,6 +194,7 @@ class FakeSheet:
         self.created = []
         self.appended = []
         self.written = []
+        self.mirrored = []
 
     def read_tab(self, tab):
         return [dict(r) for r in self.rows]
@@ -210,6 +211,11 @@ class FakeSheet:
 
     def write_row(self, tab, row, values):
         self.written.append((tab, row, values))
+
+    def append_report(self, values):
+        """The Rapports mirror append — file_report calls this best-effort."""
+        self.mirrored.append(values)
+        return len(self.rows) + 2
 
 
 @pytest.fixture
@@ -315,6 +321,84 @@ def test_metadata_columns_ride_along(fake):
     write_report("DGH", "2026-08-05", "NAROUZE", "DGH", rep(),
                  metadata={COL_CANAL: "telegram", COL_RESUME: "Résumé."})
     assert fake.appended[0][1][COL_CANAL] == "telegram"
+
+
+# --- the Rapports mirror (the dashboard's flat feed) ------------------------
+
+
+def test_rapports_cells_map_the_new_schema_onto_old_columns():
+    """The mapping the old n8n expressions used to be — testable here."""
+    from app.journal import _rapports_cells
+
+    payload = {
+        "date": "2026-08-05", "heure": "09:15", "canal": "telegram",
+        "technicien": "NAROUZE", "role": "technicien", "chantier": "DGH",
+        "rapport_complet": "…", "confidence": 0.92, "lien_audio": "https://x",
+        "stt_engine": "groq", "warnings": ["short_transcription"],
+        "report": {
+            "goulotte_m": 150, "cables_installes_m": 800,
+            "prises_connectees": 14, "panneaux_prises_brassees": 12,
+            "remarques": "Bureaux fermés au RDC.",
+            "resume": "Résumé professionnel.",
+        },
+    }
+    cells = _rapports_cells(payload, "DGH", ["short_transcription"])
+    assert cells["goulottes_m"] == 150
+    assert cells["cables_m"] == 800
+    assert cells["bureaux_termines"] == 14
+    assert cells["panneaux_raccordes"] == 12
+    assert cells["observations"] == "Bureaux fermés au RDC."
+    assert cells["heure"] == "09:15"
+    assert cells["chantier"] == "DGH"
+    assert cells["STT_model"] == "groq"
+    assert cells["flag_review"] is True
+
+
+def test_rapports_cells_leave_unmapped_fields_blank():
+    from app.journal import _rapports_cells
+
+    cells = _rapports_cells(
+        {"report": {"cables_prepares_m": 50, "resume": "Résumé."}}, "DGH", []
+    )
+    # Prepared cable has no old column; absence must not invent one.
+    assert "cables_m" not in cells
+    assert "goulottes_m" not in cells
+    assert cells["flag_review"] is False
+
+
+def test_file_report_mirrors_to_the_flat_tab(fake):
+    """The journal write and the dashboard mirror happen in one call — n8n no
+    longer owns the Rapports append, so it can no longer drift."""
+    from app.journal import file_report
+
+    result = file_report({
+        "date": "2026-08-05", "heure": "09:15", "canal": "telegram",
+        "technicien": "NAROUZE", "chantier": "DGH",
+        "rapport_complet": "…", "warnings": ["short_transcription"],
+        "report": {"goulotte_m": 150, "resume": "Pose de 150 m."},
+    })
+    assert result["tab"] == "DGH"
+    assert fake.appended[0][0] == "DGH"          # journal row
+    assert fake.mirrored[-1]["goulottes_m"] == 150  # Rapports row
+    assert fake.mirrored[-1]["chantier"] == "DGH"
+    assert fake.mirrored[-1]["flag_review"] is True
+
+
+def test_mirror_failure_never_costs_the_journal_row(fake, monkeypatch):
+    """The mirror is best-effort: a rejected flat append must not 502 a report
+    that already landed on the journal tab."""
+    from app import journal as mod
+
+    def boom(values):
+        raise ValueError("google says no")
+
+    monkeypatch.setattr(mod.sheets, "append_report", boom)
+    result = mod.file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "report": {"cables_installes_m": 120, "resume": "Résumé."},
+    })
+    assert result["row"] == 2
+    assert fake.appended[0][1]["Câble installé"] == "120"
 
 
 def test_excel_serial_date_matches_the_same_day(fake):

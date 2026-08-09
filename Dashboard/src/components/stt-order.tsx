@@ -71,7 +71,7 @@ export function SttOrder() {
   }
 
   if (error && !status) {
-    return <p className="text-danger text-xs">{error}</p>
+    return <p className="text-status-fail text-xs">{error}</p>
   }
   if (!status) {
     return <p className="text-ink-faint text-xs">{t('common.loading')}</p>
@@ -102,7 +102,7 @@ export function SttOrder() {
                 weight="fill"
                 className={cn(
                   'size-2 shrink-0',
-                  localDown ? 'text-danger' : 'text-success',
+                  localDown ? 'text-status-fail' : 'text-status-ok',
                 )}
                 aria-hidden
               />
@@ -161,7 +161,7 @@ export function SttOrder() {
       {!status.local.url_set && (
         <p className="text-ink-faint text-[0.6875rem]">{t('settings.sttLocalUnset')}</p>
       )}
-      {error && <p className="text-danger text-xs">{error}</p>}
+      {error && <p className="text-status-fail text-xs">{error}</p>}
     </fieldset>
   )
 }

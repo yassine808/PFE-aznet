@@ -15,7 +15,7 @@ with no database and no API keys (see CLAUDE.md).
 import json
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from app.config import settings
 
@@ -299,10 +299,13 @@ CREATE INDEX IF NOT EXISTS chat_messages_ts_idx ON chat_messages (created_at DES
 -- The /modify command: a technician replies to their own message and the row
 -- it became has to be found by the id of that message. The claim already
 -- stores the canonical message key (`tg:123:456` / `wa:<id>`, the workflow's
--- msg_key); these two columns record which Sheet row it landed on, written by
--- whoever performed the append (n8n on the happy path, the retry drain after
--- a Sheets outage).
+-- msg_key); these columns record which Sheet row it landed on, written by
+-- whoever performed the append (the API on the happy path, the retry drain
+-- after a Sheets outage). `sheet_tab` came with the journal: the row number
+-- only means something together with the tab it lives in — Rapports for the
+-- old flat append, a chantier's tab for a journal write.
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_row BIGINT;
+ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_tab TEXT;
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ;
 
 -- Per-account in-app notifications (the dashboard bell). Every row is owned
@@ -968,31 +971,45 @@ def list_messages(
 # The /modify reply has to find the row its report landed on, and the only id
 # it carries is the origin message's — the same canonical message key the
 # claim stores (`tg:123:456` / `wa:<id>`). The link is written by whoever
-# performed the append.
+# performed the write (the API after a journal write, the retry drain after a
+# Sheets outage). `tab` matters: the row number alone means nothing without the
+# tab it lives in, and /modify must edit the row the technician just reported
+# — which since the journal is a chantier tab, not the Rapports flat feed.
 
-def link_message_row(message_id: str, row: Optional[int]) -> bool:
+def link_message_row(message_id: str, row: Optional[int],
+                     tab: Optional[str] = None) -> bool:
     """Remember which Sheet row a processed message landed on; None clears it.
 
     Upsert-free by design: the row already exists (the claim inserted it), so
     this is an UPDATE — clearing with None is how /supprimer unlinks a row.
+    `tab` defaults to None: older links predate the journal and always meant
+    the Rapports tab, and `message_row` resolves None the same way.
     """
     with _cursor() as cur:
         cur.execute(
-            "UPDATE processed_messages SET sheet_row = %s, linked_at = now() "
-            "WHERE message_id = %s",
-            (row, message_id),
+            "UPDATE processed_messages SET sheet_row = %s, sheet_tab = %s, "
+            "linked_at = now() WHERE message_id = %s",
+            (row, tab, message_id),
         )
         return cur.rowcount > 0
 
 
-def message_row(message_id: str) -> Optional[int]:
-    """The Sheet row a message landed on, if anyone linked it."""
+def message_row(message_id: str) -> Optional[Tuple[Optional[str], int]]:
+    """The (tab, row) a message landed on, if anyone linked it.
+
+    None tab means Rapports — every link written before the journal existed
+    pointed there, and the dashboard editor still writes there.
+    """
     with _cursor() as cur:
-        cur.execute("SELECT sheet_row FROM processed_messages WHERE message_id = %s", (message_id,))
+        cur.execute(
+            "SELECT sheet_row, sheet_tab FROM processed_messages "
+            "WHERE message_id = %s",
+            (message_id,),
+        )
         row = _one(cur)
     if row is None or row["sheet_row"] is None:
         return None
-    return int(row["sheet_row"])
+    return row.get("sheet_tab"), int(row["sheet_row"])
 
 
 # ── sheet retry queue ──────────────────────────────────────────────────────

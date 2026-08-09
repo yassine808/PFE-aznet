@@ -27,7 +27,12 @@ import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
 
-const DEFAULTS: Required<AppSettings> = {
+// The four fields this form edits. `stt_chain` is deliberately absent even
+// though AppSettings has it: the save PUTs this whole object, and the director
+//'s live STT order lives in a different panel — a whole-object save here must
+// not reset it to a default it never chose.
+type EditableSettings = Required<Omit<AppSettings, 'stt_chain'>>
+const DEFAULTS: EditableSettings = {
   daily_time: '18:30',
   weekly_day: 4,
   weekly_time: '17:00',
@@ -558,7 +563,7 @@ export function AutomationPage() {
   // 30s: the tightest job runs every 5 min, so anything faster repaints the same row.
   const jobs = useApi('jobs', api.jobs, 30_000)
 
-  const [values, setValues] = useState<Required<AppSettings>>(DEFAULTS)
+  const [values, setValues] = useState<EditableSettings>(DEFAULTS)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -577,7 +582,7 @@ export function AutomationPage() {
     if (stored.data && !dirty) setValues({ ...DEFAULTS, ...stored.data.settings })
   }, [stored.data, dirty])
 
-  const set = <K extends keyof Required<AppSettings>>(key: K, value: Required<AppSettings>[K]) => {
+  const set = <K extends keyof EditableSettings>(key: K, value: EditableSettings[K]) => {
     setValues((v) => ({ ...v, [key]: value }))
     setDirty(true)
     setSaved(false)

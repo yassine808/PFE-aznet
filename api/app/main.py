@@ -648,13 +648,16 @@ def list_messages(
 class LinkIn(BaseModel):
     message_id: str
     row: Optional[int] = Field(None, description="1-based Sheet row; None clears the link")
+    tab: Optional[str] = Field(
+        None, description="Tab the row lives in; None means Rapports (legacy links)"
+    )
 
 
 @app.post("/messages/link", responses={404: {"description": "Unknown message"}, 502: {"description": "Log store unreachable"}})
 def link_message(payload: LinkIn, caller: dict = Depends(auth.require_user)) -> dict:
     """Record which Sheet row a message became (called by n8n after the append)."""
     try:
-        linked = logs.link_message_row(payload.message_id, payload.row)
+        linked = logs.link_message_row(payload.message_id, payload.row, payload.tab)
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     if not linked:
@@ -676,34 +679,38 @@ def modify_command(payload: ModifyIn, caller: dict = Depends(auth.require_user))
 
     The technician replies to their own report message; n8n resolves the reply
     to its origin message_id and calls here. The row number comes from the link
-    the append wrote (processed_messages.sheet_row), never from anything the
-    technician typed — same reason /rapport never parses the text.
+    the journal write created (processed_messages.sheet_row + sheet_tab), never
+    from anything the technician typed — same reason /rapport never parses the
+    text. The link's tab is honored, so the edit lands on the journal row the
+    technician just reported, not the flat Rapports feed.
     """
     try:
-        row = logs.message_row(payload.message_id)
+        location = logs.message_row(payload.message_id)
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
-    if row is None:
+    if location is None:
         raise HTTPException(404, "aucun rapport lié à ce message")
+    tab, row = location
+    tab = tab or sheets.RAPPORTS_TAB  # pre-journal links always meant Rapports
 
     if payload.action == "supprimer":
         try:
-            sheets.clear_row(row)
+            sheets.clear_row(row, tab=tab)
         except sheets.SheetsError as exc:
             raise HTTPException(502, f"sheets clear failed: {exc}") from exc
         try:
             logs.link_message_row(payload.message_id, None)  # unlink: nothing left to edit
         except logs.LogStoreError:
             pass  # the Sheet is the source of truth; the link is best-effort
-        return {"action": "supprimer", "row": row}
+        return {"action": "supprimer", "row": row, "tab": tab}
 
     if not payload.fields:
         raise HTTPException(422, "des champs sont requis pour /modify")
     try:
-        sheets.update_report_fields(row, payload.fields)
+        sheets.update_report_fields(row, payload.fields, tab=tab)
     except sheets.SheetsError as exc:
         raise HTTPException(502, f"sheets write failed: {exc}") from exc
-    return {"action": "modify", "row": row, "fields": sorted(payload.fields)}
+    return {"action": "modify", "row": row, "tab": tab, "fields": sorted(payload.fields)}
 
 
 # No auth: dashboard + API run only on the admin's machine (localhost), decided 2026-07-23.
@@ -1083,7 +1090,9 @@ class JournalEntry(BaseModel):
     report: dict
     technicien: str
     date: str
+    heure: Optional[str] = None
     canal: Optional[str] = None
+    role: Optional[str] = None
     chantier: Optional[str] = None
     rapport_complet: Optional[str] = None
     lien_audio: Optional[str] = None
@@ -1124,7 +1133,7 @@ async def file_journal_entry(
 
     if entry.message_id and result.get("row"):
         try:
-            logs.link_message_row(entry.message_id, result["row"])
+            logs.link_message_row(entry.message_id, result["row"], result.get("tab"))
         except logs.LogStoreError:
             pass  # best-effort: the row is written, the link is a convenience
     logs.write_safe(

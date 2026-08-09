@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowUUpLeftIcon, FileTextIcon } from '@phosphor-icons/react'
 import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
-import { isFlagged, num, toISODate, todayISO } from '@/lib/metrics'
+import { isFlagged, num, parseISODay, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -34,12 +34,11 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
   // The chosen day as the reader's locale writes it — used by the empty state,
   // which has to name the day it is empty *for* to be worth more than "rien".
   const dayLabel = useMemo(() => {
-    const [y, m, d] = date.split('-').map(Number)
     return new Intl.DateTimeFormat(intlLocaleOf(locale), {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-    }).format(new Date(y, (m || 1) - 1, d || 1))
+    }).format(parseISODay(date))
   }, [date, locale])
 
   // The most recent day that actually has rows — the empty state's way out.

@@ -31,6 +31,22 @@ export function todayISO(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** `2026-08-05` → local `Date`. A malformed value falls back to today instead
+ *  of producing an Invalid Date, whose `Intl.DateTimeFormat.format` would throw
+ *  a RangeError and white-screen the page from a hand-edited `?date=` deep link. */
+export function parseISODay(v: string | undefined): Date {
+  const [y, m, d] = (v ?? '').split('-').map(Number)
+  if (
+    Number.isInteger(y) && y > 1900 && y < 10000 &&
+    Number.isInteger(m) && m >= 1 && m <= 12
+  ) {
+    const day = Number.isInteger(d) && d >= 1 && d <= 31 ? d : 1
+    return new Date(y, m - 1, day)
+  }
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
 /** Local-date key for N days ago. Local, not UTC: `toISOString()` would shift the
  *  day by one in Africa/Casablanca and misalign against the API's local dates. */
 export function daysAgoISO(n: number): string {

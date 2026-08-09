@@ -813,7 +813,11 @@ function Modal({
 
   // showModal() is imperative — there is no `open modally` attribute, and the
   // `open` attribute alone renders a non-modal dialog with no focus trap.
-  useEffect(() => ref.current?.showModal(), [])
+  // Guarded: under StrictMode the effect runs twice in dev, and a second
+  // showModal() on an already-open dialog throws InvalidStateError.
+  useEffect(() => {
+    if (ref.current && !ref.current.open) ref.current.showModal()
+  }, [])
 
   return (
     <dialog

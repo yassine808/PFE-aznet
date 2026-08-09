@@ -145,6 +145,11 @@ def refresh_person(person: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[s
         # than none, and clearing on failure would erase a good summary because
         # a free-tier model was busy at 3am.
         return {"person_id": person["id"], "name": name, "updated": False, "reason": str(exc)}
-    logs.save_profile(person["id"], profile)
+    try:
+        logs.save_profile(person["id"], profile)
+    except logs.LogStoreError as exc:
+        # Same contract as the model failure above: one technician whose row
+        # cannot be written must not stop the rest of the loop.
+        return {"person_id": person["id"], "name": name, "updated": False, "reason": f"save: {exc}"}
     return {"person_id": person["id"], "name": name, "updated": True, "model": model,
             "profile": profile}

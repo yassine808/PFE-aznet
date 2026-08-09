@@ -223,25 +223,26 @@ def test_list_messages(monkeypatch):
 # ── message → Sheet row link + /modify (TO-DO #13) ─────────────────────────
 
 def test_link_message(monkeypatch):
-    monkeypatch.setattr(main.logs, "link_message_row", lambda mid, row: True)
+    monkeypatch.setattr(main.logs, "link_message_row", lambda mid, row, tab=None: True)
     r = client.post("/messages/link", json={"message_id": "tg:1:2", "row": 42})
     assert r.status_code == 200
     assert r.json()["row"] == 42
 
 
 def test_link_unknown_message_404(monkeypatch):
-    monkeypatch.setattr(main.logs, "link_message_row", lambda mid, row: False)
+    monkeypatch.setattr(main.logs, "link_message_row", lambda mid, row, tab=None: False)
     r = client.post("/messages/link", json={"message_id": "tg:1:2", "row": 42})
     assert r.status_code == 404
 
 
 def test_modify_command_updates_row(monkeypatch):
-    monkeypatch.setattr(main.logs, "message_row", lambda mid: 42)
+    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 42))
     written = {}
 
-    def fake_update(row, values):
+    def fake_update(row, values, tab):
         written["row"] = row
         written["values"] = values
+        written["tab"] = tab
 
     monkeypatch.setattr(main.sheets, "update_report_fields", fake_update)
     r = client.post(
@@ -252,15 +253,37 @@ def test_modify_command_updates_row(monkeypatch):
     assert r.status_code == 200
     assert written["row"] == 42
     assert written["values"]["chantier"] == "Tour Yasmine"
+    assert written["tab"] == "Rapports"  # legacy link without a tab
+
+
+def test_modify_on_journal_tab_targets_that_tab(monkeypatch):
+    """A /modify reply after a journal write must edit the journal row, not the
+    flat Rapports feed — the tab from the link decides where the edit lands."""
+    monkeypatch.setattr(main.logs, "message_row", lambda mid: ("Siège Casablanca", 5))
+    written = {}
+
+    def fake_update(row, values, tab):
+        written["row"] = row
+        written["tab"] = tab
+
+    monkeypatch.setattr(main.sheets, "update_report_fields", fake_update)
+    r = client.post(
+        "/modify-command",
+        json={"message_id": "tg:1:2", "action": "modify",
+              "fields": {"remarques": "corrigé"}},
+    )
+    assert r.status_code == 200
+    assert written["row"] == 5
+    assert written["tab"] == "Siège Casablanca"
 
 
 def test_supprimer_clears_row_and_unlinks(monkeypatch):
-    monkeypatch.setattr(main.logs, "message_row", lambda mid: 7)
+    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 7))
     cleared = []
     unlinked = []
 
-    def fake_clear(row):
-        cleared.append(row)
+    def fake_clear(row, tab):
+        cleared.append((row, tab))
 
     def fake_unlink(mid, row):
         unlinked.append((mid, row))
@@ -271,7 +294,7 @@ def test_supprimer_clears_row_and_unlinks(monkeypatch):
         "/modify-command", json={"message_id": "tg:1:2", "action": "supprimer"}
     )
     assert r.status_code == 200
-    assert cleared == [7]
+    assert cleared == [(7, "Rapports")]
     assert unlinked == [("tg:1:2", None)]
 
 
@@ -285,7 +308,7 @@ def test_modify_unknown_message_404(monkeypatch):
 
 
 def test_modify_without_fields_422(monkeypatch):
-    monkeypatch.setattr(main.logs, "message_row", lambda mid: 1)
+    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 1))
     r = client.post(
         "/modify-command", json={"message_id": "tg:1:2", "action": "modify"}
     )

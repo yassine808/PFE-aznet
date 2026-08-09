@@ -434,7 +434,7 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
                       </span>
                     </span>
                     <span className="tabular text-ink-faint shrink-0 text-[0.6875rem]">
-                      {p.last.split(' ')[0]}
+                      {toISODate(p.last) ?? '—'}
                     </span>
                   </button>
                 </li>

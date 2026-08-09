@@ -44,6 +44,7 @@ const TITLE_KEY: Record<Route, string> = {
   logs: 'page.logs.title',
   queue: 'page.queue.title',
   equipe: 'page.equipe.title',
+  notfound: 'page.notfound.title',
 }
 
 export default function App() {
@@ -73,9 +74,11 @@ function Gate() {
   const { t } = useI18n()
   // Blank rather than the login screen while /auth/me is in flight: flashing
   // "sign in" on every refresh reads as having been logged out.
+  useEffect(() => {
+    if (!user) document.title = `${t('page.login.title')} — ${t('app.name')}`
+  }, [user, t])
   if (loading) return <main className="bg-canvas min-h-screen" />
   if (!user) {
-    document.title = `${t('page.login.title')} �?" ${t('app.name')}`
     return (
       <Suspense fallback={<main className="bg-canvas min-h-screen" />}>
         <LoginPage />

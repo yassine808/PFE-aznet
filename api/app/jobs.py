@@ -75,7 +75,8 @@ def drain_sheet_queue() -> dict:
             # Through `journal.file_report`, not a raw append: a parked row
             # whose day already has a row on the sheet must merge into it, or
             # the retry would create the duplicate the live path avoided.
-            appended_row = journal.file_report(payload).get("row")
+            filed = journal.file_report(payload)
+            appended_row, appended_tab = filed.get("row"), filed.get("tab")
         except sheets.SheetsError as exc:
             # Left in the queue with the attempt counted, not dropped.
             logs.resolve_write(item["id"], False, str(exc))
@@ -90,11 +91,12 @@ def drain_sheet_queue() -> dict:
             continue
         logs.resolve_write(item["id"], True)
         # Link the parked message to the row it landed on, so a /modify reply
-        # can find it even when the happy path's append is the one that failed.
+        # can find it even when the happy path's write is the one that failed.
+        # The tab matters: /modify edits where the row lives, not the flat feed.
         message_id = payload.get("message_id")
         if message_id and appended_row:
             try:
-                logs.link_message_row(message_id, appended_row)
+                logs.link_message_row(message_id, appended_row, appended_tab)
             except logs.LogStoreError:
                 pass  # best-effort like the append itself
         written += 1
@@ -492,8 +494,9 @@ def run(name: str) -> dict:
     if timeout is None:
         return _execute(job, name, started)
     result: Dict[str, dict] = {}
+    timed_out = threading.Event()
     worker = threading.Thread(
-        target=_execute, args=(job, name, started, result), name=f"job-{name}", daemon=True
+        target=_execute, args=(job, name, started, result, timed_out), name=f"job-{name}", daemon=True
     )
     worker.start()
     worker.join(timeout)
@@ -501,6 +504,9 @@ def run(name: str) -> dict:
         # The thread is a daemon: once it finishes (or the process exits) it
         # dies, so an overrun cannot accumulate. Its status would have arrived
         # too late to matter; the timeout record is the one the operator sees.
+        # `timed_out` stops the worker from later overwriting that record with
+        # a success that arrived after the deadline.
+        timed_out.set()
         return _record(name, {"ok": False, "error": f"timed out after {timeout}s"}, started)
     # .get, not [...]: a worker that died before writing its status would make
     # this raise KeyError straight into _loop, and the rule this module opens
@@ -511,7 +517,11 @@ def run(name: str) -> dict:
     return status
 
 
-def _execute(job, name: str, started: float, result: Optional[Dict[str, dict]] = None) -> dict:
+def _execute(
+    job, name: str, started: float,
+    result: Optional[Dict[str, dict]] = None,
+    timed_out: Optional[threading.Event] = None,
+) -> dict:
     """Body shared by the direct and the timed path. Never raises."""
     try:
         payload: dict = job()
@@ -520,6 +530,10 @@ def _execute(job, name: str, started: float, result: Optional[Dict[str, dict]] =
         status = {"job": name, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
     if result is not None:
         result["status"] = status
+    if timed_out is not None and timed_out.is_set():
+        # The caller already recorded a timeout; a result arriving after the
+        # deadline is not a run the panel should show as a success.
+        return status
     return _record(name, status, started)
 
 

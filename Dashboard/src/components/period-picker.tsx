@@ -1,15 +1,14 @@
 import { useRef } from 'react'
 import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon } from '@phosphor-icons/react'
+import { parseISODay } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 const DAY_MS = 86_400_000
 
-/** `2026-08-05` → local `Date` (never `new Date(iso)`, which parses as UTC and shifts the day). */
-function parse(isoDay: string): Date {
-  const [y, m, d] = isoDay.split('-').map(Number)
-  return new Date(y, (m || 1) - 1, d || 1)
-}
+// `2026-08-05` → local `Date`, invalid values fall back to today. Never
+// `new Date(iso)`, which parses as UTC and shifts the day.
+const parse = parseISODay
 
 function iso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

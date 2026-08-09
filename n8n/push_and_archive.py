@@ -73,6 +73,8 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--push", action="store_true", help="update the active workflow")
     p.add_argument("--archive-only", action="store_true", help="archive, do not push")
+    p.add_argument("--allow-node-diff", action="store_true",
+                   help="push despite node-set mismatch (reviewed structural change only)")
     args = p.parse_args()
 
     base = env("N8N_URL") or "http://localhost:5678"
@@ -106,13 +108,18 @@ def main() -> None:
     local = json.loads(FILE.read_text(encoding="utf-8"))
 
     # Safety: the file must match the target, or this is not the workflow the
-    # reviewed diff described.
+    # reviewed diff described. --allow-node-diff is the escape hatch for a
+    # *reviewed structural change* (a node removed/renamed, e.g. the 2026-08-09
+    # rewire of the Sheet append into POST /journal) — the set check would
+    # refuse that forever. It must stay opt-in: an unreviewed mismatch is how
+    # a push silently reverts a UI edit.
     live_names = {n["name"] for n in target.get("nodes") or []}
     file_names = {n["name"] for n in local["nodes"]}
-    if live_names != file_names:
+    if live_names != file_names and not args.allow_node_diff:
         raise SystemExit(
             f"node sets differ (live-only={sorted(live_names - file_names)}, "
-            f"file-only={sorted(file_names - live_names)}) — refusing to push"
+            f"file-only={sorted(file_names - live_names)}) — refusing to push; "
+            f"use --allow-node-diff only after reviewing diff_live.py output"
         )
 
     payload = {k: local[k] for k in ("nodes", "connections") if k in local}

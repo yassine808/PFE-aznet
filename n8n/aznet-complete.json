@@ -11,7 +11,7 @@
         -220
       ],
       "parameters": {
-        "content": "## 1 — Réception (Telegram + WhatsApp)\nPoll TG toutes les 15s + webhooks WA → contrôle d'accès → dédup → /process →\n**réponse au technicien D'ABORD**, puis écriture Sheet (échec = file d'attente).\nLes nœuds `Log *` en bas sont des feuilles : ils n'altèrent jamais le flux.",
+        "content": "## 1 — Réception (Telegram + WhatsApp)\nPoll TG toutes les 15s + webhooks WA → contrôle d'accès → dédup → /process →\n**réponse au technicien D'ABORD**, puis POST /journal (l'API écrit le journal\ndu chantier ET le miroir Rapports du dashboard; échec = file d'attente côté\nAPI, drain toutes les 5 min).\nLes nœuds `Log *` en bas sont des feuilles : ils n'altèrent jamais le flux.",
         "height": 180,
         "width": 900,
         "color": 7
@@ -650,236 +650,33 @@
     },
     {
       "parameters": {
-        "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "={{ $env.GOOGLE_SHEET_ID }}"
-        },
-        "sheetName": {
-          "__rl": true,
-          "mode": "name",
-          "value": "Rapports"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "date": "={{ $now.toFormat('yyyy-MM-dd') }}",
-            "heure": "={{ $now.toFormat('HH:mm') }}",
-            "canal": "={{ $('Filtrer accès').item.json.channel }}",
-            "technicien": "={{ $('Filtrer accès').item.json.technicien }}",
-            "role": "={{ $('Filtrer accès').item.json.role }}",
-            "chantier": "={{ $('Process output').item.json.report.chantier }}",
-            "client": "={{ $('Process output').item.json.report.client }}",
-            "type_activite": "={{ $('Process output').item.json.report.type_activite }}",
-            "goulottes_m": "={{ $('Process output').item.json.report.goulottes_m }}",
-            "cables_m": "={{ $('Process output').item.json.report.cables_m }}",
-            "bureaux_termines": "={{ $('Process output').item.json.report.bureaux_termines }}",
-            "panneaux_raccordes": "={{ $('Process output').item.json.report.panneaux_raccordes }}",
-            "autres_travaux": "={{ $('Process output').item.json.report.autres_travaux }}",
-            "observations": "={{ $('Process output').item.json.report.observations }}",
-            "resume": "={{ $('Process output').item.json.report.resume }}",
-            "rapport_complet": "={{ $('Process output').item.json.rapport_complet }}",
-            "confidence": "={{ $('Process output').item.json.transcription?.confidence }}",
-            "flag_review": "={{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') || ($('Process output').item.json.warnings ?? []).includes('short_transcription') || ($('Process output').item.json.warnings ?? []).includes('image_input') }}",
-            "lien_audio": "={{ $('Process output').item.json.lien_audio ?? $('Filtrer accès').item.json.file_ref }}"
-          },
-          "matchingColumns": [],
-          "schema": [
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/journal",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "id": "date",
-              "displayName": "date",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "heure",
-              "displayName": "heure",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "canal",
-              "displayName": "canal",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "technicien",
-              "displayName": "technicien",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "role",
-              "displayName": "role",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "chantier",
-              "displayName": "chantier",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "client",
-              "displayName": "client",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "type_activite",
-              "displayName": "type_activite",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "goulottes_m",
-              "displayName": "goulottes_m",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "cables_m",
-              "displayName": "cables_m",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "bureaux_termines",
-              "displayName": "bureaux_termines",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "panneaux_raccordes",
-              "displayName": "panneaux_raccordes",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "autres_travaux",
-              "displayName": "autres_travaux",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "observations",
-              "displayName": "observations",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "resume",
-              "displayName": "resume",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "rapport_complet",
-              "displayName": "rapport_complet",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "confidence",
-              "displayName": "confidence",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "flag_review",
-              "displayName": "flag_review",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "lien_audio",
-              "displayName": "lien_audio",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
+              "name": "X-API-Key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
         },
-        "options": {},
-        "authentication": "serviceAccount"
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({date: $now.toFormat('yyyy-MM-dd'), heure: $now.toFormat('HH:mm'), canal: $('Filtrer accès').item.json.channel, technicien: $('Filtrer accès').item.json.technicien, role: $('Filtrer accès').item.json.role, rapport_complet: $('Process output').item.json.rapport_complet, lien_audio: $('Process output').item.json.lien_audio ?? ($('Filtrer accès').item.json.file_ref ?? ''), correlation_id: $('Restore message').item.json.correlation_id, message_id: $('Filtrer accès').item.json.msg_key, warnings: $('Process output').item.json.warnings ?? [], stt_engine: $('Process output').item.json.transcription?.provider ?? null, report: $('Process output').item.json.report}) }}",
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "e1000000-0000-4000-8000-000000000025",
-      "name": "Append Sheet row",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
+      "name": "POST /journal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         8360,
         365
       ],
-      "credentials": {
-        "googleApi": {
-          "id": "zRwJLWyZJQXZRtsm",
-          "name": "Google Service Account account"
-        }
-      },
-      "onError": "continueErrorOutput",
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -1371,38 +1168,8 @@
       }
     },
     {
-      "id": "e1000000-0000-4000-8000-000000000040",
-      "name": "Log sheet OK",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        8720,
-        885
-      ],
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.API_BASE_URL }}/logs",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\"stage\":\"sheet_written\",\"level\":\"info\",\"message\":\"row appended\",\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
-        "options": {
-          "timeout": 5000
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-API-Key",
-              "value": "={{ $env.INTERNAL_API_KEY }}"
-            }
-          ]
-        }
-      }
-    },
-    {
       "id": "e1000000-0000-4000-8000-000000000041",
-      "name": "Log sheet failed",
+      "name": "Log journal failed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -1415,7 +1182,7 @@
         "url": "={{ $env.API_BASE_URL }}/logs",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\"stage\":\"sheet_failed\",\"level\":\"error\",\"message\":(\"Sheet write failed: \" + ($json.error?.message ?? $json.error ?? \"unknown\")),\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
+        "jsonBody": "={{ JSON.stringify({\"stage\":\"sheet_failed\",\"level\":\"error\",\"message\":(\"Journal write failed: \" + ($json.error?.message ?? JSON.stringify($json).slice(0,300))),\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
         "options": {
           "timeout": 5000
         },
@@ -1448,36 +1215,6 @@
         "jsonBody": "={{ JSON.stringify({\"stage\":\"api\",\"level\":\"error\",\"message\":(\"/process failed: \" + ($json.error?.message ?? JSON.stringify($json).slice(0,300))),\"correlation_id\": $('Restore message').item.json.correlation_id ?? null,\"channel\": $('Restore message').item.json.channel ?? null,\"technicien\": $('Restore message').item.json.technicien ?? null}) }}",
         "options": {
           "timeout": 5000
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-API-Key",
-              "value": "={{ $env.INTERNAL_API_KEY }}"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "id": "e1000000-0000-4000-8000-000000000043",
-      "name": "Queue failed write",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        8720,
-        365
-      ],
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.API_BASE_URL }}/sheet-queue",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({correlation_id: $('Restore message').item.json.correlation_id,error: 'sheet append failed',payload: {date: $now.toFormat('yyyy-MM-dd'),heure: $now.toFormat('HH:mm'),canal: $('Filtrer accès').item.json.channel,technicien: $('Filtrer accès').item.json.technicien,role: $('Filtrer accès').item.json.role,lien_audio: $('Process output').item.json.lien_audio ?? ($('Filtrer accès').item.json.file_ref ?? ''),report: $('Process output').item.json.report,warnings: $('Process output').item.json.warnings ?? [],confidence: $('Process output').item.json.transcription?.confidence ?? '',rapport_complet: $('Process output').item.json.rapport_complet,message_id: $('Filtrer accès').item.json.msg_key}}) }}",
-        "options": {
-          "timeout": 10000
         },
         "sendHeaders": true,
         "headerParameters": {
@@ -1985,35 +1722,6 @@
           "name": "WhatsApp account"
         }
       }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.API_BASE_URL }}/messages/link",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-API-Key",
-              "value": "={{ $env.INTERNAL_API_KEY }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ message_id: $('Filtrer accès').item.json.msg_key, row: $json.rowNumber }) }}",
-        "options": {
-          "timeout": 5000
-        }
-      },
-      "id": "e1000000-0000-4000-8000-00000000004e",
-      "name": "POST /messages/link",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        8720,
-        625
-      ]
     }
   ],
   "connections": {
@@ -2326,24 +2034,6 @@
         ]
       ]
     },
-    "Append Sheet row": {
-      "main": [
-        [
-          {
-            "node": "POST /messages/link",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Queue failed write",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "TG or WA? (reply)": {
       "main": [
         [
@@ -2502,27 +2192,6 @@
         []
       ]
     },
-    "Queue failed write": {
-      "main": [
-        [
-          {
-            "node": "Log sheet failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Log sheet OK": {
-      "main": [
-        []
-      ]
-    },
-    "Log sheet failed": {
-      "main": [
-        []
-      ]
-    },
     "Log process failed": {
       "main": [
         []
@@ -2668,7 +2337,7 @@
       "main": [
         [
           {
-            "node": "Append Sheet row",
+            "node": "POST /journal",
             "type": "main",
             "index": 0
           }
@@ -2723,15 +2392,21 @@
         ]
       ]
     },
-    "POST /messages/link": {
+    "POST /journal": {
       "main": [
+        [],
         [
           {
-            "node": "Log sheet OK",
+            "node": "Log journal failed",
             "type": "main",
             "index": 0
           }
         ]
+      ]
+    },
+    "Log journal failed": {
+      "main": [
+        []
       ]
     }
   },

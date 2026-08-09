@@ -174,9 +174,11 @@ def _draw_card(title: str, rows: List[Dict[str, Any]]) -> Tuple[bytes, str]:
         if value:
             cells.append((str(int(value) if value.is_integer() else value), label))
 
-    for index, (value, label) in enumerate(cells[:6]):
-        x = 64 + (index % 3) * 360
-        y = 240 + (index // 3) * 180
+    for index, (value, label) in enumerate(cells[:8]):
+        # 4 per row: the 3 fixed cells plus all 4 totals fit without silently
+        # dropping the last one (6 cells dropped "Fibre (m)" on a full day).
+        x = 64 + (index % 4) * 290
+        y = 240 + (index // 4) * 180
         draw.text((x, y), value, font=font(64, bold=True), fill=accent)
         draw.text((x, y + 82), label, font=font(24), fill=muted)
 

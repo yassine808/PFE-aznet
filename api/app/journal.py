@@ -334,6 +334,73 @@ def resolve_tab(technicien: str, chantier: Optional[str] = None) -> Tuple[str, s
     return UNROUTED_TAB, UNROUTED_TAB, ["chantier_non_defini"]
 
 
+# --- the Rapports mirror ---------------------------------------------------
+#
+# The dashboard reads the flat Rapports tab, whose columns are the schema the
+# journal's tab is not. Every /journal call appends one flat row there — one
+# row per message, like the old n8n append — so the two feeds stay in step and
+# a drain-retried row gets mirrored too. The mapping is the one place the two
+# schemas meet; the old n8n expressions (report.goulottes_m, ...) were that
+# mapping and could not be tested, which is why this lives in Python now.
+
+RAPPORTS_COLUMNS = {
+    "goulotte_m": "goulottes_m",
+    "cables_installes_m": "cables_m",
+    "prises_connectees": "bureaux_termines",
+    "panneaux_prises_brassees": "panneaux_raccordes",
+    "remarques": "observations",
+}
+
+
+def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
+    """The flat Rapports row for one message, keyed by its header names."""
+    report = payload.get("report")
+    if not isinstance(report, ExtractedReport):
+        report = ExtractedReport(**(report or {}))
+    cells: Dict = {
+        "date": payload.get("date"),
+        "heure": payload.get("heure"),
+        "canal": payload.get("canal"),
+        "technicien": payload.get("technicien"),
+        "role": payload.get("role"),
+        "chantier": chantier,
+        "resume": report.resume,
+        "rapport_complet": payload.get("rapport_complet"),
+        "confidence": payload.get("confidence"),
+        "flag_review": bool(REVIEW_WARNINGS & set(warnings)),
+        "lien_audio": payload.get("lien_audio"),
+        "STT_model": payload.get("stt_engine"),
+    }
+    for field, column in RAPPORTS_COLUMNS.items():
+        value = getattr(report, field)
+        if value is not None:
+            cells[column] = value
+    return cells
+
+
+def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str]) -> None:
+    """Append the flat Rapports row for this message; never raises.
+
+    The journal row is the record; the mirror is for the dashboard. When
+    Google refuses it, the report itself is not lost — the journal write
+    already succeeded — so this logs and moves on instead of failing the
+    whole /journal call.
+    """
+    try:
+        sheets.append_report(_rapports_cells(payload, chantier, warnings))
+    except Exception as exc:  # noqa: BLE001 - best-effort by design
+        try:
+            from app import logs
+
+            logs.write_safe(
+                "sheet", "error",
+                message=f"rapports mirror failed: {exc}",
+                correlation_id=payload.get("correlation_id"),
+            )
+        except Exception:  # noqa: BLE001 - the mirror must never take the row down
+            pass
+
+
 def file_report(payload: Dict) -> Dict:
     """File one report into the right journal tab. Raises SheetsError on failure
     so the caller can park it in the retry queue — never a silent loss."""
@@ -359,11 +426,15 @@ def file_report(payload: Dict) -> Dict:
         tab, payload.get("date") or "", technicien, chantier, report,
         {k: v for k, v in metadata.items() if v not in (None, "")},
     )
+    warnings = warnings + stock_warnings
+    # After the journal write succeeded, so a mirror failure cannot cost the
+    # row — but before the reply, because the dashboard shows it.
+    _mirror_rapports(payload, chantier, warnings)
     return {
         "row": row,
         "tab": tab,
         "chantier": chantier,
-        "warnings": warnings + stock_warnings,
+        "warnings": warnings,
     }
 
 
