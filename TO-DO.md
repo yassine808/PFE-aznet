@@ -19,3 +19,4 @@ Full-read audit of the backend + the dashboard's data spine. 11 findings, each w
 - [] better sign-in design (profesionnal)
 - [] adds 404 page.
 - [] remove image card generating in reports pages (make it auto when generating reports)
+- [] Add charging animation in the website, if things are getting charged from the database
