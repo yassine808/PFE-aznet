@@ -41,6 +41,7 @@ MODEL_DIR = MODELS_DIR / "BounharAbdelaziz__Morocco-Darija-STT-large"
 
 _runner = None
 _loaded_at = None
+_load_error = None
 
 
 def build_app(device: str, dtype):
@@ -48,29 +49,54 @@ def build_app(device: str, dtype):
 
     app = FastAPI(title="aznet local STT", version="1.0")
 
-    @app.on_event("startup")
-    def _load() -> None:
-        global _runner, _loaded_at
+    def _load_blocking() -> None:
+        global _runner, _loaded_at, _load_error
         if not MODEL_DIR.exists():
-            raise RuntimeError(
+            _load_error = (
                 f"{MODEL_DIR} missing — run download_models.py (the repo is gated: "
                 "accept its licence on huggingface.co and set HF_TOKEN)"
             )
+            print(f"[stt] ERROR {_load_error}")
+            return
         start = time.perf_counter()
-        # use_prompt=False: the chantier vocabulary prompt makes local Whisper
-        # collapse into a repetition loop. Measured 2026-08-07, see
-        # STT-BENCHMARK-STATUS.md §5b -- audio decode and fp16 were ruled out first.
-        _runner = WhisperRunner(MODEL_DIR, device, dtype, use_prompt=False)
+        try:
+            # use_prompt=False: the chantier vocabulary prompt makes local Whisper
+            # collapse into a repetition loop. Measured 2026-08-07, see
+            # STT-BENCHMARK-STATUS.md §5b -- audio decode and fp16 were ruled out first.
+            _runner = WhisperRunner(MODEL_DIR, device, dtype, use_prompt=False)
+        except Exception as exc:  # noqa: BLE001 — a dead model is a state to report
+            _load_error = f"{type(exc).__name__}: {exc}"
+            print(f"[stt] ERROR loading model: {_load_error}", flush=True)
+            return
         _loaded_at = time.perf_counter() - start
-        print(f"[stt] {MODEL_DIR.name} loaded on {device} in {_loaded_at:.1f}s")
+        print(f"[stt] {MODEL_DIR.name} ready on {device} in {_loaded_at:.1f}s", flush=True)
+
+    @app.on_event("startup")
+    def _load() -> None:
+        # Loading takes ~4 minutes for this checkpoint (measured 235.6 s), and
+        # uvicorn binds the socket BEFORE running startup — so doing it inline
+        # left the port accepting connections while answering nothing, with no
+        # way to tell "still loading" from "hung". On a thread, /health answers
+        # "loading" from the first second and the API's reachability probe gets
+        # a truthful state instead of a timeout.
+        import threading
+
+        print(f"[stt] loading {MODEL_DIR.name} on {device} — this takes minutes",
+              flush=True)
+        threading.Thread(target=_load_blocking, name="model-load", daemon=True).start()
 
     @app.get("/health")
     def health() -> dict:
+        # Three states, not two: a model that failed to load is neither ready
+        # nor still coming, and reporting it as "loading" forever would hide
+        # the reason from the dashboard.
+        status = "ok" if _runner is not None else ("error" if _load_error else "loading")
         return {
-            "status": "ok" if _runner is not None else "loading",
+            "status": status,
             "model": MODEL_DIR.name,
             "device": device,
             "load_seconds": round(_loaded_at, 1) if _loaded_at else None,
+            "error": _load_error,
         }
 
     @app.post("/transcribe")
