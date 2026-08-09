@@ -27,10 +27,13 @@ class Settings(BaseSettings):
     # edited by the director from the dashboard, so changing it needs no restart
     # (logs.get_settings -> "stt_chain").
     #
-    # Order is the 2026-08-07 benchmark result: groq 1.9 s, gemini 4.8 s, local
-    # ~19 s. local last because it is the slowest by far and its value is being
-    # there when both free tiers are exhausted — see benchmark/STT-BENCHMARK-STATUS.md.
-    stt_chain: str = "groq,gemini,local"
+    # Order is ACCURACY, judged by a native Darija speaker against the audio
+    # (2026-08-08), not latency: gemini first, then the local Darija fine-tune,
+    # then groq. The chain is first-success-wins, so position 1 serves
+    # essentially every note — gemini's 4.8 s is the deliberate price of its
+    # accuracy over groq's 1.9 s. groq sits last as the fast, always-available
+    # floor. Measurements: benchmark/STT-BENCHMARK-STATUS.md.
+    stt_chain: str = "gemini,local,groq"
     # GPU sidecar running BounharAbdelaziz/Morocco-Darija-STT-large
     # (benchmark/stt_server.py). Unset means the `local` engine is unavailable
     # and the chain simply skips it — never a silent fallback to nothing.

@@ -448,6 +448,8 @@ export interface AppSettings {
 export interface SttStatus {
   available: string[]
   chain: string[]
+  /** Ordre par défaut (.env), pour le bouton de réinitialisation. */
+  default_chain: string[]
   usage: {
     days: number
     error: string | null

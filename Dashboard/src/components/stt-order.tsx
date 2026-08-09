@@ -41,13 +41,9 @@ export function SttOrder() {
     void load()
   }, [load])
 
-  const move = async (from: number, to: number) => {
-    if (to < 0 || to >= chain.length) return
-    const next = [...chain]
-    const [item] = next.splice(from, 1)
-    next.splice(to, 0, item)
-    // Optimistic: the list reorders instantly, and a rejected save snaps back
-    // to the server's truth rather than leaving the UI lying about the order.
+  /** Persist an order, optimistically. Shared by reorder and reset so both
+   *  behave identically on failure: snap back to the server's truth. */
+  const persist = async (next: string[]) => {
     setChain(next)
     setSaving(true)
     setError(null)
@@ -62,6 +58,16 @@ export function SttOrder() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const move = async (from: number, to: number) => {
+    if (to < 0 || to >= chain.length) return
+    const next = [...chain]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    // Optimistic: the list reorders instantly, and a rejected save snaps back
+    // to the server's truth rather than leaving the UI lying about the order.
+    await persist(next)
   }
 
   if (error && !status) {
@@ -135,6 +141,19 @@ export function SttOrder() {
           )
         })}
       </ol>
+
+      {/* Reset restores the benchmarked default from the API, not a list
+          hardcoded here that would drift from config.py. */}
+      {isDirector && status.default_chain.join(',') !== chain.join(',') && (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => void persist(status.default_chain)}
+          className="text-ink-faint hover:text-ink self-start text-xs underline underline-offset-2 disabled:opacity-40"
+        >
+          {t('settings.sttReset', { order: status.default_chain.join(' → ') })}
+        </button>
+      )}
 
       {status.local.url_set && status.local.status !== 'ok' && (
         <p className="text-ink-faint text-[0.6875rem]">{t('settings.sttLocalDown')}</p>

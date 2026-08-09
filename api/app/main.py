@@ -1784,6 +1784,10 @@ def stt_status(days: int = 7, caller: dict = Depends(auth.require_human)) -> dic
     return {
         "available": available_providers(),
         "chain": chain,
+        # The .env order, so the dashboard's reset restores the benchmarked
+        # default rather than a hardcoded list the frontend would have to keep
+        # in sync with config.py.
+        "default_chain": [p.strip() for p in settings.stt_chain.split(",") if p.strip()],
         "usage": usage,
         "local": {"url_set": bool(settings.stt_local_url), "status": local_state},
         # What the dashboard may show as a real remaining quota, versus a plain
