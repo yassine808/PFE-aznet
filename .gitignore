@@ -41,3 +41,7 @@ Thumbs.db
 
 # Local mail design preview (scripts/preview_mail.py)
 api/preview-mail.html
+
+# Exported dead n8n workflows: kept locally for reference, never committed —
+# they embed real credentials (a Telegram bot token leaked this way).
+n8n/archive/
