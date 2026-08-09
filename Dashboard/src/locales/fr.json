@@ -485,5 +485,12 @@
   "reports.noMatchTitle": "Aucun résultat",
   "reports.noMatchBody": "Aucun rapport archivé ne correspond à ce filtre ou à cette recherche.",
   "reports.noMatch": "Aucun rapport ne correspond à ce filtre.",
-  "reports.intro": "Les rapports journaliers et hebdomadaires générés par le système — le même texte que l'e-mail et que la commande /rapport."
+  "reports.intro": "Les rapports journaliers et hebdomadaires générés par le système — le même texte que l'e-mail et que la commande /rapport.",
+  "settings.sttOrder": "Ordre des moteurs STT",
+  "settings.sttOrderHint": "Essayés de haut en bas ; le premier qui répond gagne. Directeur uniquement.",
+  "settings.sttUsage": "auj. {today} · {period}",
+  "settings.sttMoveUp": "Monter {engine}",
+  "settings.sttMoveDown": "Descendre {engine}",
+  "settings.sttLocalDown": "Moteur local injoignable — la chaîne passe au suivant.",
+  "settings.sttLocalUnset": "Moteur local non configuré (STT_LOCAL_URL)."
 }

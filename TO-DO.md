@@ -18,3 +18,4 @@ Full-read audit of the backend + the dashboard's data spine. 11 findings, each w
 - [] check images
 - [] better sign-in design (profesionnal)
 - [] adds 404 page.
+- [] remove image card generating in reports pages (make it auto when generating reports)

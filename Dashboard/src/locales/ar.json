@@ -485,5 +485,12 @@
   "reports.noMatchTitle": "لا نتائج",
   "reports.noMatchBody": "لا يوجد تقرير مؤرشف يطابق هذه التصفية أو هذا البحث.",
   "reports.noMatch": "لا يوجد تقرير يطابق هذه التصفية.",
-  "reports.intro": "التقارير اليومية والأسبوعية التي ولّدها النظام — النص نفسه الذي يحمله البريد وأمر ‎/rapport‎."
+  "reports.intro": "التقارير اليومية والأسبوعية التي ولّدها النظام — النص نفسه الذي يحمله البريد وأمر ‎/rapport‎.",
+  "settings.sttOrder": "ترتيب محركات التفريغ الصوتي",
+  "settings.sttOrderHint": "تُجرَّب من الأعلى إلى الأسفل؛ أول محرك يستجيب يفوز. للمدير فقط.",
+  "settings.sttUsage": "اليوم {today} · {period}",
+  "settings.sttMoveUp": "رفع {engine}",
+  "settings.sttMoveDown": "خفض {engine}",
+  "settings.sttLocalDown": "المحرك المحلي غير متاح — تنتقل السلسلة إلى التالي.",
+  "settings.sttLocalUnset": "المحرك المحلي غير مُهيأ (STT_LOCAL_URL)."
 }

@@ -485,5 +485,12 @@
   "reports.noMatchTitle": "No results",
   "reports.noMatchBody": "No archived report matches this filter or this search.",
   "reports.noMatch": "No report matches this filter.",
-  "reports.intro": "The daily and weekly reports the system generated — the same text the e-mail and the /rapport command carry."
+  "reports.intro": "The daily and weekly reports the system generated — the same text the e-mail and the /rapport command carry.",
+  "settings.sttOrder": "STT engine order",
+  "settings.sttOrderHint": "Tried top to bottom; first to answer wins. Director only.",
+  "settings.sttUsage": "today {today} · {period}",
+  "settings.sttMoveUp": "Move {engine} up",
+  "settings.sttMoveDown": "Move {engine} down",
+  "settings.sttLocalDown": "Local engine unreachable — the chain falls through.",
+  "settings.sttLocalUnset": "Local engine not configured (STT_LOCAL_URL)."
 }
