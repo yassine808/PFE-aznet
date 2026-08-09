@@ -1,0 +1,34 @@
+# Dependencies for the LOCAL GPU work — kept out of api/requirements.txt on
+# purpose. The API ships as a python:3.11-slim image with hash-pinned deps and
+# no GPU; adding torch there would grow it ~8 GB and still run on CPU.
+#
+# Install into an isolated venv, never api/.venv (which is Python 3.9 and runs
+# the production tests):
+#
+#   "C:/Users/<you>/AppData/Local/Programs/Python/Python311/python.exe" -m venv .venv-local
+#   .venv-local/Scripts/python.exe -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
+#   .venv-local/Scripts/python.exe -m pip install -r requirements-local.txt
+#
+# torch is deliberately absent from this file: it needs the CUDA index URL
+# above, and pinning it here would pull the CPU build.
+
+# model loading + inference
+transformers
+accelerate
+safetensors
+peft                 # merges LoRA adapters (anaszil) into their base
+
+# audio decode. librosa falls back to audioread for Ogg/Opus, which is why
+# ffmpeg on PATH is the backstop in run_local.load_audio.
+librosa
+soundfile
+numpy
+
+# fetching checkpoints (gated repos need HF_TOKEN)
+huggingface_hub
+
+# the sidecar in stt_server.py
+fastapi
+uvicorn
+python-multipart     # NOT optional: FastAPI's UploadFile cannot parse a
+                     # multipart body without it, so /transcribe 500s

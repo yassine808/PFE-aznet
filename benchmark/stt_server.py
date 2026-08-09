@@ -63,13 +63,29 @@ def build_app(device: str, dtype):
             # use_prompt=False: the chantier vocabulary prompt makes local Whisper
             # collapse into a repetition loop. Measured 2026-08-07, see
             # STT-BENCHMARK-STATUS.md §5b -- audio decode and fp16 were ruled out first.
-            _runner = WhisperRunner(MODEL_DIR, device, dtype, use_prompt=False)
+            # Assigned to _runner only after the warm-up below, so /health does
+            # not report "ok" while the first request would still pay 46 s.
+            runner = WhisperRunner(MODEL_DIR, device, dtype, use_prompt=False)
         except Exception as exc:  # noqa: BLE001 — a dead model is a state to report
             _load_error = f"{type(exc).__name__}: {exc}"
             print(f"[stt] ERROR loading model: {_load_error}", flush=True)
             return
+        # Warm the CUDA kernels. Measured: the first real request took 46.1 s
+        # and every one after it 5.9 s, because the first generate() pays the
+        # kernel autotune/JIT cost. Without this the first technician after each
+        # restart waits 46 s on the reply path -- so we spend it here, on
+        # silence, before anyone is waiting.
+        try:
+            import numpy as np
+
+            runner.transcribe(np.zeros(SR, dtype="float32"))
+        except Exception as exc:  # noqa: BLE001 — a failed warm-up is not fatal
+            print(f"[stt] warm-up skipped: {type(exc).__name__}: {exc}", flush=True)
+
+        _runner = runner
         _loaded_at = time.perf_counter() - start
-        print(f"[stt] {MODEL_DIR.name} ready on {device} in {_loaded_at:.1f}s", flush=True)
+        print(f"[stt] {MODEL_DIR.name} ready on {device} in {_loaded_at:.1f}s "
+              f"(warm)", flush=True)
 
     @app.on_event("startup")
     def _load() -> None:
