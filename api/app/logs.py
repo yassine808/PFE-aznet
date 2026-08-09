@@ -2091,3 +2091,38 @@ def stamp_task_notified(task_id: int, next_due: Optional[datetime]) -> None:
                 "updated_at = now() WHERE id = %s",
                 (next_due, task_id),
             )
+
+
+def stt_usage(days: int = 7) -> Dict[str, Any]:
+    """How often each STT engine actually served, today and over `days`.
+
+    Read from pipeline_logs, where /process already records
+    payload->>'engine' on the `transcribed` stage. That is the engine that
+    WON the chain, not the configured order — a spike in `local` means the
+    two free tiers were failing, which is the operational fact worth seeing.
+
+    Rows whose payload has no engine (text and photo reports never touch STT)
+    are excluded by the NOT NULL, so the counts are audio only.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT payload->>'engine' AS engine,
+                   COUNT(*) FILTER (WHERE ts >= date_trunc('day', now())) AS today,
+                   COUNT(*) AS period
+              FROM pipeline_logs
+             WHERE stage = 'transcribed'
+               AND payload->>'engine' IS NOT NULL
+               AND ts >= now() - make_interval(days => %s)
+             GROUP BY 1
+             ORDER BY 3 DESC
+            """,
+            (days,),
+        )
+        rows = cur.fetchall()
+    return {
+        "days": days,
+        "engines": [
+            {"engine": r[0], "today": int(r[1]), "period": int(r[2])} for r in rows
+        ],
+    }

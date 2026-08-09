@@ -439,6 +439,22 @@ export interface AppSettings {
   weekly_day?: number
   weekly_time?: string
   emails?: string[]
+  /** Ordre des moteurs STT, ex. `groq,gemini,local`. Écriture directeur
+   *  uniquement — l'API renvoie 403 sinon, et 422 sur un moteur inconnu. */
+  stt_chain?: string
+}
+
+/** GET /stt/status — moteurs, ordre en vigueur, et usage réel. */
+export interface SttStatus {
+  available: string[]
+  chain: string[]
+  usage: {
+    days: number
+    error: string | null
+    engines: { engine: string; today: number; period: number }[]
+  }
+  local: { url_set: boolean; status: string }
+  quota_reporting: Record<string, string>
 }
 
 /** This account's dashboard preferences, stored per person in the database.
@@ -693,6 +709,7 @@ export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
   settings: (s?: AbortSignal) => get<{ settings: AppSettings }>('/settings', s),
+  sttStatus: (s?: AbortSignal) => get<SttStatus>('/stt/status', s),
   users: listUsers,
   history,
   samples: (s?: AbortSignal) => get<{ samples: ServiceSample[] }>('/service-samples?hours=2', s),

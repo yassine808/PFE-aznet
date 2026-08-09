@@ -5,6 +5,7 @@ import { REFRESH_CHOICES, useSettings, type Density, type TimeFormat } from '@/l
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
+import { SttOrder } from '@/components/stt-order'
 
 function Segmented<T extends string | number>({
   value,
@@ -163,6 +164,11 @@ export function SettingsPanel() {
                   <p className="text-ink-faint text-xs">{t('settings.confidenceHint')}</p>
                 </div>
               )}
+
+              {/* Ordre STT: visible par tous (savoir quel moteur a transcrit est
+                  une information d'exploitation), modifiable par le directeur
+                  seul — la règle est appliquée par l'API, pas ici. */}
+              <SttOrder />
 
               <button
                 type="button"

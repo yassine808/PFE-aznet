@@ -1749,6 +1749,49 @@ class SettingsIn(BaseModel):
     values: Dict[str, Any]
 
 
+@app.get("/stt/status")
+def stt_status(days: int = 7, caller: dict = Depends(auth.require_human)) -> dict:
+    """Engines, the live order, and how often each one actually served.
+
+    Readable by any account — seeing which engine transcribed is operational
+    information. Only *changing* the order is director-only (PUT /settings).
+
+    `usage` counts wins, not attempts: an engine that failed and fell through
+    contributes nothing, so a rising `local` count means the free tiers were
+    unavailable. Quota is deliberately asymmetric and labelled as such — Groq
+    returns rate-limit headers, Gemini exposes no quota at all, and reporting
+    our own call count in a slot labelled "quota" would invent a limit that
+    does not exist.
+    """
+    chain = [p.strip() for p in _stt_chain().split(",") if p.strip()]
+    usage: dict = {"engines": [], "days": days, "error": None}
+    try:
+        usage = logs.stt_usage(days)
+        usage["error"] = None
+    except Exception as exc:  # noqa: BLE001 — the panel must render without Postgres
+        usage = {"engines": [], "days": days, "error": str(exc)}
+
+    local_state = "not_configured" if not settings.stt_local_url else "unknown"
+    if settings.stt_local_url:
+        try:
+            import httpx
+
+            r = httpx.get(settings.stt_local_url.rstrip("/") + "/health", timeout=3)
+            local_state = r.json().get("status", "unknown") if r.status_code == 200 else "down"
+        except Exception:  # noqa: BLE001 — unreachable is a state, not an error
+            local_state = "down"
+
+    return {
+        "available": available_providers(),
+        "chain": chain,
+        "usage": usage,
+        "local": {"url_set": bool(settings.stt_local_url), "status": local_state},
+        # What the dashboard may show as a real remaining quota, versus a plain
+        # count of our own calls. Keeps the UI from implying Gemini has a gauge.
+        "quota_reporting": {"groq": "headers", "gemini": "none", "local": "unlimited"},
+    }
+
+
 @app.get("/settings", responses={502: {"description": "Log store unreachable"}})
 def read_settings(caller: dict = Depends(auth.require_human)) -> dict:
     try:
