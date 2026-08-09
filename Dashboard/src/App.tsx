@@ -24,6 +24,9 @@ const ReportsPage = lazy(() => import('@/pages/reports').then((m) => ({ default:
 const DailyReportPage = lazy(() => import('@/pages/daily-report').then((m) => ({ default: m.DailyReportPage })))
 const WeeklyReportPage = lazy(() => import('@/pages/weekly-report').then((m) => ({ default: m.WeeklyReportPage })))
 const EquipePage = lazy(() => import('@/pages/equipe').then((m) => ({ default: m.EquipePage })))
+// Not lazy: it is tiny, and a wrong address should not also mean a loading
+// spinner while a chunk downloads.
+import { NotFoundPage } from '@/pages/notfound'
 const AutomationPage = lazy(() => import('@/pages/automation').then((m) => ({ default: m.AutomationPage })))
 const TasksPage = lazy(() => import('@/pages/tasks').then((m) => ({ default: m.TasksPage })))
 const LogsPage = lazy(() => import('@/pages/logs').then((m) => ({ default: m.LogsPage })))
@@ -117,6 +120,8 @@ function RouteView({
       return <QueuePage />
     case 'equipe':
       return <EquipePage />
+    case 'notfound':
+      return <NotFoundPage />
     default:
       return (
         <section className="py-16">

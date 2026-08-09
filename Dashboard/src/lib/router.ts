@@ -11,6 +11,11 @@ export const ROUTES = [
   'logs',
   'queue',
   'equipe',
+  // Not a navigable destination: nothing links here and it is absent from the
+  // sidebar. `read()` returns it for a path that matches no route and no alias,
+  // so a mistyped or retired link says so instead of landing on Overview and
+  // pretending it worked.
+  'notfound',
 ] as const
 export type Route = (typeof ROUTES)[number]
 
@@ -31,9 +36,13 @@ export interface Location {
 function read(): Location {
   const raw = window.location.hash.replace(/^#\/?/, '')
   const [path, query = ''] = raw.split('?')
-  const route = (ROUTES as readonly string[]).includes(path)
-    ? (path as Route)
-    : (ALIASES[path] ?? 'overview')
+  // An empty hash is the app root, not a wrong address — only a path that was
+  // actually typed and matches nothing becomes 'notfound'.
+  const route: Route = !path
+    ? 'overview'
+    : (ROUTES as readonly string[]).includes(path)
+      ? (path as Route)
+      : (ALIASES[path] ?? 'notfound')
   const params: Record<string, string> = {}
   for (const [k, v] of new URLSearchParams(query)) params[k] = v
   return { route, params }

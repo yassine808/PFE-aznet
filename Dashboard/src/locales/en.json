@@ -492,5 +492,9 @@
   "settings.sttMoveUp": "Move {engine} up",
   "settings.sttMoveDown": "Move {engine} down",
   "settings.sttLocalDown": "Local engine unreachable — the chain falls through.",
-  "settings.sttLocalUnset": "Local engine not configured (STT_LOCAL_URL)."
+  "settings.sttLocalUnset": "Local engine not configured (STT_LOCAL_URL).",
+  "notfound.title": "This page does not exist",
+  "notfound.body": "The link may be outdated or mistyped. Nothing was lost — head back to the dashboard.",
+  "notfound.back": "Back to overview",
+  "settings.sttReset": "Reset ({order})"
 }

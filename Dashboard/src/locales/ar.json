@@ -492,5 +492,9 @@
   "settings.sttMoveUp": "رفع {engine}",
   "settings.sttMoveDown": "خفض {engine}",
   "settings.sttLocalDown": "المحرك المحلي غير متاح — تنتقل السلسلة إلى التالي.",
-  "settings.sttLocalUnset": "المحرك المحلي غير مُهيأ (STT_LOCAL_URL)."
+  "settings.sttLocalUnset": "المحرك المحلي غير مُهيأ (STT_LOCAL_URL).",
+  "notfound.title": "هذه الصفحة غير موجودة",
+  "notfound.body": "قد يكون الرابط قديمًا أو مكتوبًا بشكل خاطئ. لم يُفقد شيء — عُد إلى لوحة التحكم.",
+  "notfound.back": "العودة إلى النظرة العامة",
+  "settings.sttReset": "إعادة الضبط ({order})"
 }
