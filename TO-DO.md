@@ -20,3 +20,4 @@ Full-read audit of the backend + the dashboard's data spine. 11 findings, each w
 - [] adds 404 page.
 - [] remove image card generating in reports pages (make it auto when generating reports)
 - [] Add charging animation in the website, if things are getting charged from the database
+- [] Add more columns inspired from the given data
