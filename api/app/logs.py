@@ -13,6 +13,7 @@ psycopg2 is imported lazily inside functions so the test suite keeps running
 with no database and no API keys (see CLAUDE.md).
 """
 import json
+import os
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
@@ -38,6 +39,17 @@ STAGES = (
 LEVELS = ("info", "warn", "error")
 
 RETENTION_DAYS = 30
+
+# The archive tables age out on their own clocks, deliberately NOT on
+# `RETENTION_DAYS`: the raw media blobs are the cheapest thing to drop (every
+# audio row already has a durable Drive link, so the blob is a cache), chat
+# holds the conversation history, and notifications prune *read* rows only —
+# an unread alert must never be deleted under the operator. `manager_reports`
+# and `report_versions` have no clock: the digest history is the one record of
+# what each manager was sent, and the edit history is append-only evidence.
+ARCHIVE_RETENTION_DAYS = int(os.getenv("MEDIA_RETENTION_DAYS", "30"))
+CHAT_RETENTION_DAYS = int(os.getenv("CHAT_RETENTION_DAYS", "90"))
+NOTIF_RETENTION_DAYS = int(os.getenv("NOTIF_RETENTION_DAYS", "30"))
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS pipeline_logs (
@@ -1561,7 +1573,9 @@ def prune_samples(days: int = RETENTION_DAYS) -> int:
 
 def prune_meta(days: int = RETENTION_DAYS) -> dict:
     """Retention sweep for the tables that would otherwise grow forever: expired
-    sessions, idempotency claims, the audit trail and page visits.
+    sessions, idempotency claims, the audit trail and page visits — plus the
+    archive tables on their own clocks (see the constants at module top):
+    `media_files` blobs, `chat_messages` and read `notifications`.
 
     Sessions prune on expiry (they are dead the moment `expires_at` passes)
     rather than on age: an account that logs in every six days keeps a live
@@ -1587,11 +1601,30 @@ def prune_meta(days: int = RETENTION_DAYS) -> dict:
             (days,),
         )
         visits = cur.rowcount
+        cur.execute(
+            "DELETE FROM media_files WHERE created_at < now() - (%s * interval '1 day')",
+            (ARCHIVE_RETENTION_DAYS,),
+        )
+        media = cur.rowcount
+        cur.execute(
+            "DELETE FROM chat_messages WHERE created_at < now() - (%s * interval '1 day')",
+            (CHAT_RETENTION_DAYS,),
+        )
+        chat = cur.rowcount
+        cur.execute(
+            "DELETE FROM notifications "
+            "WHERE read_at IS NOT NULL AND read_at < now() - (%s * interval '1 day')",
+            (NOTIF_RETENTION_DAYS,),
+        )
+        notifs = cur.rowcount
     return {
         "sessions_deleted": sessions,
         "claims_deleted": claims,
         "actions_deleted": actions,
         "visits_deleted": visits,
+        "media_files_deleted": media,
+        "chat_messages_deleted": chat,
+        "notifications_deleted": notifs,
     }
 
 

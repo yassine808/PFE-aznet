@@ -1,7 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowUUpLeftIcon, FileTextIcon } from '@phosphor-icons/react'
-import { api, generateDailyReport, useApi, type DailyReportContent } from '@/lib/api'
+import {
+  api,
+  generateDailyReport,
+  generateImage,
+  useApi,
+  type DailyReportContent,
+  type GeneratedImage,
+} from '@/lib/api'
 import { isFlagged, num, parseISODay, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useHeaderAction } from '@/lib/page-header'
@@ -25,7 +32,9 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
   // The illustrated card, once generated below. Held here rather than inside
   // the card component because the editor embeds it in the exported .docx and
   // saves it with the version.
-  const [image, setImage] = useState<string | null>(null)
+  const [card, setCard] = useState<GeneratedImage | null>(null)
+  const [imageBusy, setImageBusy] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -103,12 +112,41 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
     setContent(null)
     try {
       setContent(await generateDailyReport(date, rows))
+      // The card rides along with the report — one gesture, not two buttons
+      // (the old second button was the 2026-08-10 change). It is fired after
+      // the text so the editor is not blocked waiting on the image model, and
+      // it fails alone: a card error never costs the report.
+      void generateCard()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
   }
+
+  // A separate busy/error pair from `generate`: the card finishes on its own
+  // clock while the editor is already usable, and its failure is shown in its
+  // own section rather than as a page-level error.
+  const generateCard = async () => {
+    setImageBusy(true)
+    setImageError(null)
+    setCard(null)
+    try {
+      const made = await generateImage(rows, t('image.dayTitle', { date }))
+      setCard(made)
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setImageBusy(false)
+    }
+  }
+
+  // A different day means a different report: the previous day's card must not
+  // sit under the new one waiting to be mistaken for it.
+  useEffect(() => {
+    setCard(null)
+    setImageError(null)
+  }, [date])
 
   // Generate sits beside the page title in the shared header, not on a second
   // line of its own — the title is already the widest thing on the page and the
@@ -222,10 +260,11 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
           </section>
 
           <ReportImageCard
-            rows={rows}
             title={t('image.dayTitle', { date })}
-            disabled={rows.length === 0}
-            onImage={setImage}
+            image={card}
+            busy={imageBusy}
+            error={imageError}
+            onRetry={() => void generateCard()}
           />
         </>
       )}
@@ -236,7 +275,7 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
           period={date}
           objet={content.objet}
           corps={content.corps}
-          image={image}
+          image={card?.data_uri ?? null}
           generatedBy={content.generated_by}
           figures={{
             rapports: rows.length,

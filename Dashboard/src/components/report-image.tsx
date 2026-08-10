@@ -1,48 +1,33 @@
-import { useState } from 'react'
-import { DownloadSimpleIcon, SparkleIcon } from '@phosphor-icons/react'
-import { generateImage, type GeneratedImage, type ReportRow } from '@/lib/api'
+import { DownloadSimpleIcon } from '@phosphor-icons/react'
+import type { GeneratedImage } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { ErrorState } from '@/components/states'
 
 /**
- * "Generate an image if needed from all the infos collected" — one button on
- * the daily and weekly pages. The card is the one output that invents
- * anything, so it is only ever fired by an explicit click, and the result is
- * shown here and downloaded from here: it never touches the Sheet, so a
- * generated picture can never be mistaken for a technician's own photo.
+ * The illustrated summary card, shown and downloadable here — but never
+ * generated here. The card is the one output that invents anything, so it is
+ * only ever produced by an explicit gesture: the report's "Générer" click,
+ * which now fires the image alongside the text (2026-08-10, replacing the old
+ * second button). The page owns the call, the busy/error states and the
+ * retry; this component renders the result and the failure, and the data URI
+ * never touches the Sheet, so a generated picture can never be mistaken for a
+ * technician's own photo.
  */
 export function ReportImageCard({
-  rows,
   title,
-  disabled,
-  onImage,
+  image,
+  busy,
+  error,
+  onRetry,
 }: {
-  readonly rows: ReportRow[]
   readonly title: string
-  readonly disabled: boolean
-  /** Hands the card up so the editor can embed it in the exported .docx. */
-  readonly onImage?: (dataUri: string | null) => void
+  readonly image: GeneratedImage | null
+  readonly busy: boolean
+  readonly error: string | null
+  /** Re-run the generation the page fired with the report. */
+  readonly onRetry?: () => void
 }) {
   const { t } = useI18n()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [image, setImage] = useState<GeneratedImage | null>(null)
-
-  const generate = async () => {
-    setBusy(true)
-    setError(null)
-    setImage(null)
-    onImage?.(null)
-    try {
-      const made = await generateImage(rows, title)
-      setImage(made)
-      onImage?.(made.data_uri)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <section className="border-line rounded-xl border p-6">
@@ -53,24 +38,15 @@ export function ReportImageCard({
           </h2>
           <p className="text-ink-faint mt-1 max-w-[60ch] text-xs">{t('image.intro')}</p>
         </div>
-        <button
-          type="button"
-          onClick={generate}
-          disabled={busy || disabled}
-          className={
-            busy || disabled
-              ? 'border-line text-ink-faint cursor-not-allowed rounded-md border px-4 py-2 text-sm'
-              : 'bg-accent breathe-glow rounded-md px-4 py-2 text-sm text-white transition-transform active:translate-y-px'
-          }
-        >
-          <span className="flex items-center gap-2">
-            <SparkleIcon size={14} weight="fill" />
-            {busy ? t('image.generating') : t('image.generate')}
+        {busy && (
+          <span className="text-ink-faint flex items-center gap-2 text-xs" role="status">
+            <span className="bg-accent size-2 animate-pulse rounded-full" />
+            {t('image.generating')}
           </span>
-        </button>
+        )}
       </div>
 
-      {error && <ErrorState message={error} onRetry={generate} />}
+      {error && <ErrorState message={error} onRetry={onRetry} />}
 
       {image && (
         <div className="mt-5 flex flex-col items-start gap-3">
@@ -91,6 +67,10 @@ export function ReportImageCard({
             <span className="text-ink-faint text-xs">{t('image.byModel', { model: image.model })}</span>
           </div>
         </div>
+      )}
+
+      {!busy && !error && !image && (
+        <p className="text-ink-faint mt-4 text-xs">{t('image.autoHint')}</p>
       )}
     </section>
   )

@@ -231,7 +231,8 @@ export interface GeneratedImage {
 
 /**
  * Renders the summary card for a period. A real image-model call against a
- * metered free tier: only ever fired by an explicit click, never by a poll.
+ * metered free tier: fired alongside the report's own "Générer" gesture
+ * (daily/weekly pages), never by a poll.
  */
 export async function generateImage(rows: ReportRow[], title: string): Promise<GeneratedImage> {
   const res = await fetch(`${BASE}/generate-image`, {
@@ -753,6 +754,21 @@ export interface Async<T> {
  */
 const cache = new Map<string, unknown>()
 const listeners = new Map<string, Set<() => void>>()
+// One promise per key while a request is in flight. Without it, two components
+// mounting the same endpoint each fire their own fetch and their own interval —
+// the cache dedupes the paint but not the request (audit 2026-08-04 #10's
+// related note). The shared promise is deliberately not abortable: it outlives
+// any one hook, so an unmount cannot cancel a request another mount is waiting
+// on. The per-hook controller still gates the local setState afterwards.
+const inflight = new Map<string, Promise<unknown>>()
+
+function runDedupe<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  const existing = inflight.get(key)
+  if (existing) return existing as Promise<T>
+  const p = fetcher().finally(() => inflight.delete(key))
+  inflight.set(key, p)
+  return p
+}
 
 function setCache<T>(key: string, value: T): void {
   cache.set(key, value)
@@ -799,7 +815,7 @@ export function useApi<T>(
     const run = async (first: boolean) => {
       if (first && cache.get(key) === undefined) setLoading(true)
       try {
-        const next = await fetcherRef.current(controller.signal)
+        const next = await runDedupe(key, () => fetcherRef.current(undefined))
         setCache(key, next)
         setData(next)
         setError(null)
