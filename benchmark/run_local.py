@@ -87,7 +87,8 @@ def vocabulary_prompt() -> Optional[str]:
         from app import prompt_loader
 
         return prompt_loader.load(prompt_loader.STT_VOCABULARY, with_soul=False) or None
-    except Exception as exc:  # noqa: BLE001 — no prompt is a valid run, a wrong one is not
+    # No prompt is a valid run; a wrong one is not.
+    except Exception as exc:  # noqa: BLE001
         print(f"[warn] vocabulary prompt unavailable ({exc}); running without it")
         return None
 
@@ -98,6 +99,21 @@ def _confidence(scores_mean_logprob: Optional[float]) -> Optional[float]:
     if scores_mean_logprob is None:
         return None
     return max(0.0, min(1.0, math.exp(scores_mean_logprob)))
+
+
+def _avg_logprobs(node):
+    """Every `avg_logprob` in a segments structure, however it is nested.
+
+    Shape varies by transformers version (list of lists per batch item, or a
+    flat list), so this flattens defensively instead of assuming.
+    """
+    if isinstance(node, dict):
+        v = node.get("avg_logprob")
+        if v is not None:
+            yield float(v)
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            yield from _avg_logprobs(child)
 
 
 class WhisperRunner:
@@ -156,23 +172,8 @@ class WhisperRunner:
         prompt = vocabulary_prompt() if use_prompt else None
         # A prompt longer than half the 448-token context starves the decoder of
         # room for the actual transcript, so it is truncated rather than dropped.
-        self.prompt_ids = None
+        self.prompt_ids = self._prompt_tokens(prompt, device) if prompt else None
         if prompt:
-            try:
-                ids = self.processor.get_prompt_ids(prompt, return_tensors="pt")
-                # Whisper's decoder window is DECODER_CONTEXT tokens for prompt +
-                # special tokens + transcript combined. Whisper reads only the TAIL
-                # of a prompt anyway (it is treated as preceding transcript), so
-                # trimming from the left keeps the domain vocabulary closest to the
-                # audio and drops the oldest words instead of the newest.
-                if ids.numel() > PROMPT_TOKEN_BUDGET:
-                    ids = ids[-PROMPT_TOKEN_BUDGET:]
-                # An empty tensor is not "no prompt" to transformers: whisper's
-                # _prepare_segments does prompt_ids[0] unguarded and raises
-                # IndexError on every clip. Treat empty as absent here instead.
-                self.prompt_ids = ids.to(device) if ids.numel() else None
-            except Exception:  # noqa: BLE001 — some fine-tunes ship no prompt tokens
-                self.prompt_ids = None
             if self.prompt_ids is None:
                 print("  [warn] no usable prompt tokens — running without vocabulary bias")
             else:
@@ -181,6 +182,29 @@ class WhisperRunner:
         # 8 tokens for the prompt and made large-v3 raise ValueError on every clip.
         used = self.prompt_ids.numel() if self.prompt_ids is not None else 0
         self.max_new_tokens = DECODER_CONTEXT - used - SPECIAL_TOKEN_SLACK
+
+    def _prompt_tokens(self, prompt: str, device: str):
+        """The vocabulary prompt as decoder tokens, or None if unusable.
+
+        A prompt longer than half the 448-token context starves the decoder of
+        room for the actual transcript, so it is truncated rather than dropped.
+        """
+        try:
+            ids = self.processor.get_prompt_ids(prompt, return_tensors="pt")
+            # Whisper's decoder window is DECODER_CONTEXT tokens for prompt +
+            # special tokens + transcript combined. Whisper reads only the TAIL
+            # of a prompt anyway (it is treated as preceding transcript), so
+            # trimming from the left keeps the domain vocabulary closest to the
+            # audio and drops the oldest words instead of the newest.
+            if ids.numel() > PROMPT_TOKEN_BUDGET:
+                ids = ids[-PROMPT_TOKEN_BUDGET:]
+            # An empty tensor is not "no prompt" to transformers: whisper's
+            # _prepare_segments does prompt_ids[0] unguarded and raises
+            # IndexError on every clip. Treat empty as absent here instead.
+            return ids.to(device) if ids.numel() else None
+        # Some fine-tunes ship no prompt tokens at all.
+        except Exception:  # noqa: BLE001
+            return None
 
     def transcribe(self, audio) -> Tuple[str, Optional[float]]:
         torch = self.torch
@@ -198,30 +222,7 @@ class WhisperRunner:
         )
         long_form = inputs.input_features.shape[-1] > ENCODER_FRAMES
         feats = inputs.input_features.to(self.device, self.dtype)
-        kwargs = dict(
-            # Darija has no Whisper language tag; 'ar' beats autodetect, same
-            # choice as the Groq adapter.
-            language="ar",
-            task="transcribe",
-            # Without this the model loops: gemini produced 222k characters for
-            # one 84 KB clip in the API run. no_repeat_ngram_size is the guard a
-            # generateContent call does not have.
-            no_repeat_ngram_size=4,
-            return_dict_in_generate=True,
-            output_scores=True,
-        )
-        if long_form:
-            # Long-form owns the token budget per 30 s chunk itself; passing
-            # max_new_tokens caps the WHOLE transcript and re-truncates it.
-            kwargs["attention_mask"] = inputs.attention_mask.to(self.device)
-            # Required, not optional: transformers refuses long-form without it
-            # ("...requires the model to predict timestamp tokens"). The
-            # timestamps are how it stitches consecutive 30 s chunks together.
-            kwargs["return_timestamps"] = True
-        else:
-            kwargs["max_new_tokens"] = self.max_new_tokens
-        if self.prompt_ids is not None:
-            kwargs["prompt_ids"] = self.prompt_ids
+        kwargs = self._gen_kwargs(inputs, long_form)
         with torch.no_grad():
             out = self.model.generate(feats, **kwargs)
         # Long-form returns a plain dict (with a "segments" key), short-form a
@@ -238,38 +239,57 @@ class WhisperRunner:
             seq, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )[0].strip()
 
-        mean_lp = None
         segments = out.get("segments") if as_dict else None
-        if segments:
-            # Long-form: Whisper computes its own avg_logprob per 30 s segment.
-            # That is the SAME quantity groq_whisper._confidence_from_segments
-            # averages, so using it keeps the column comparable to Groq's rather
-            # than substituting a lookalike number computed a different way.
-            # Shape varies by transformers version (list of lists per batch item,
-            # or a flat list), so flatten defensively instead of assuming.
-            def _walk(node):
-                if isinstance(node, dict):
-                    v = node.get("avg_logprob")
-                    if v is not None:
-                        yield float(v)
-                elif isinstance(node, (list, tuple)):
-                    for child in node:
-                        yield from _walk(child)
+        return text, _confidence(self._mean_logprob(out, seq, segments))
 
-            lps = list(_walk(segments))
-            if lps:
-                mean_lp = sum(lps) / len(lps)
+    def _gen_kwargs(self, inputs, long_form: bool) -> dict:
+        """What generate() is asked for, which differs by clip length."""
+        kwargs = {
+            # Darija has no Whisper language tag; 'ar' beats autodetect, same
+            # choice as the Groq adapter.
+            "language": "ar",
+            "task": "transcribe",
+            # Without this the model loops: gemini produced 222k characters for
+            # one 84 KB clip in the API run. no_repeat_ngram_size is the guard a
+            # generateContent call does not have.
+            "no_repeat_ngram_size": 4,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
+        if long_form:
+            # Long-form owns the token budget per 30 s chunk itself; passing
+            # max_new_tokens caps the WHOLE transcript and re-truncates it.
+            kwargs["attention_mask"] = inputs.attention_mask.to(self.device)
+            # Required, not optional: transformers refuses long-form without it
+            # ("...requires the model to predict timestamp tokens"). The
+            # timestamps are how it stitches consecutive 30 s chunks together.
+            kwargs["return_timestamps"] = True
         else:
-            try:
-                trans = self.model.compute_transition_scores(
-                    seq, out.scores, normalize_logits=True
-                )[0]
-                valid = trans[torch.isfinite(trans)]
-                if len(valid):
-                    mean_lp = float(valid.mean())
-            except Exception:  # noqa: BLE001 — no scores is None, never a fake number
-                mean_lp = None
-        return text, _confidence(mean_lp)
+            kwargs["max_new_tokens"] = self.max_new_tokens
+        if self.prompt_ids is not None:
+            kwargs["prompt_ids"] = self.prompt_ids
+        return kwargs
+
+    def _mean_logprob(self, out, seq, segments) -> Optional[float]:
+        """The clip's mean token log-prob, or None — never a fake number.
+
+        Long-form: Whisper computes its own avg_logprob per 30 s segment. That
+        is the SAME quantity groq_whisper._confidence_from_segments averages, so
+        using it keeps the column comparable to Groq's rather than substituting
+        a lookalike computed a different way. Short-form has no segments, so the
+        transition scores are averaged instead.
+        """
+        if segments:
+            lps = list(_avg_logprobs(segments))
+            return sum(lps) / len(lps) if lps else None
+        try:
+            trans = self.model.compute_transition_scores(
+                seq, out.scores, normalize_logits=True
+            )[0]
+            valid = trans[self.torch.isfinite(trans)]
+            return float(valid.mean()) if len(valid) else None
+        except Exception:  # noqa: BLE001
+            return None
 
 
 class Wav2Vec2Runner:
@@ -403,6 +423,51 @@ def discover() -> List[Tuple[Path, Optional[str]]]:
                   key=lambda t: t[0].name)
 
 
+def _clip_row(runner, path: Path, clip: Path, audio) -> dict:
+    """One model on one clip. A failure is a cell, never the end of the run."""
+    record = dict.fromkeys(COLUMNS)
+    record.update({"file": clip.name, "provider": path.name})
+    try:
+        start = time.perf_counter()
+        text, conf = runner.transcribe(audio)
+        record["latency_s"] = round(time.perf_counter() - start, 2)
+        record["transcript"] = text
+        record["chars"] = len(text)
+        record["confidence"] = round(conf, 4) if conf is not None else None
+    except Exception as exc:  # noqa: BLE001
+        record["error"] = f"{type(exc).__name__}: {exc}"
+    return record
+
+
+def run_model(path: Path, family: str, clips, decoded: dict,
+              device: str, dtype, use_prompt: bool) -> List[dict]:
+    """Every clip through one checkpoint, as result rows.
+
+    A model that will not load is a result too: it fills a row per clip with the
+    load error rather than vanishing from the comparison table.
+    """
+    try:
+        runner = RUNNERS[family](path, device, dtype, use_prompt=use_prompt)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  !! load failed: {type(exc).__name__}: {exc}")
+        return [{"file": clip.name, "provider": path.name,
+                 "error": f"load: {type(exc).__name__}: {exc}",
+                 "latency_s": None, "confidence": None,
+                 "chars": None, "transcript": None} for clip in clips]
+
+    rows = []
+    for clip in clips:
+        record = _clip_row(runner, path, clip, decoded[clip.name])
+        rows.append(record)
+        if record["error"]:
+            print(f"  {clip.name[:34]:<36} !! {record['error'][:80]}")
+        else:
+            c = "—" if record["confidence"] is None else f"{record['confidence']:.3f}"
+            print(f"  {clip.name[:34]:<36} {record['latency_s']:>6.2f}s  conf {c:>6}  "
+                  f"{(record['transcript'] or '')[:50]}")
+    return rows
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="show downloaded models, run nothing")
@@ -444,36 +509,7 @@ def main() -> None:
             print(f"-- {path.name}: unsupported (no config.json / unknown model_type), skipped")
             continue
         print(f"\n=== {path.name}  [{family}] ===")
-        try:
-            runner = RUNNERS[family](path, device, dtype, use_prompt=args.prompt)
-        except Exception as exc:  # a model that will not load is a result  # noqa: BLE001
-            print(f"  !! load failed: {type(exc).__name__}: {exc}")
-            for clip in clips:
-                results.append({"file": clip.name, "provider": path.name,
-                                "error": f"load: {type(exc).__name__}: {exc}",
-                                "latency_s": None, "confidence": None,
-                                "chars": None, "transcript": None})
-            continue
-        for clip in clips:
-            record = dict.fromkeys(COLUMNS)
-            record.update({"file": clip.name, "provider": path.name})
-            try:
-                start = time.perf_counter()
-                text, conf = runner.transcribe(decoded[clip.name])
-                record["latency_s"] = round(time.perf_counter() - start, 2)
-                record["transcript"] = text
-                record["chars"] = len(text)
-                record["confidence"] = round(conf, 4) if conf is not None else None
-            except Exception as exc:  # noqa: BLE001
-                record["error"] = f"{type(exc).__name__}: {exc}"
-            results.append(record)
-            if record["error"]:
-                print(f"  {clip.name[:34]:<36} !! {record['error'][:80]}")
-            else:
-                c = "—" if record["confidence"] is None else f"{record['confidence']:.3f}"
-                print(f"  {clip.name[:34]:<36} {record['latency_s']:>6.2f}s  conf {c:>6}  "
-                      f"{(record['transcript'] or '')[:50]}")
-        del runner
+        results += run_model(path, family, clips, decoded, device, dtype, args.prompt)
         if device == "cuda":
             torch.cuda.empty_cache()  # 8 GB card: free before the next checkpoint loads
 

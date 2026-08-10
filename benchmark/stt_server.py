@@ -24,6 +24,7 @@ import io
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 BENCH_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BENCH_DIR))
@@ -44,48 +45,78 @@ _loaded_at = None
 _load_error = None
 
 
+def _warm(runner) -> None:
+    """Warm the CUDA kernels on silence, before anyone is waiting.
+
+    Measured: the first real request took 46.1 s and every one after it 5.9 s,
+    because the first generate() pays the kernel autotune/JIT cost. A failed
+    warm-up is not fatal — it only costs the first technician those seconds.
+    """
+    try:
+        import numpy as np
+
+        runner.transcribe(np.zeros(SR, dtype="float32"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[stt] warm-up skipped: {type(exc).__name__}: {exc}", flush=True)
+
+
+def load_blocking(device: str, dtype) -> None:
+    """Load the checkpoint and publish it, or record why it could not be loaded."""
+    global _runner, _loaded_at, _load_error
+    if not MODEL_DIR.exists():
+        _load_error = (
+            f"{MODEL_DIR} missing — run download_models.py (the repo is gated: "
+            "accept its licence on huggingface.co and set HF_TOKEN)"
+        )
+        print(f"[stt] ERROR {_load_error}")
+        return
+    start = time.perf_counter()
+    try:
+        # use_prompt=False: the chantier vocabulary prompt makes local Whisper
+        # collapse into a repetition loop. Measured 2026-08-07, see
+        # STT-BENCHMARK-STATUS.md §5b -- audio decode and fp16 were ruled out first.
+        # Assigned to _runner only after the warm-up below, so /health does
+        # not report "ok" while the first request would still pay 46 s.
+        runner = WhisperRunner(MODEL_DIR, device, dtype, use_prompt=False)
+    except Exception as exc:  # noqa: BLE001 — a dead model is a state to report
+        _load_error = f"{type(exc).__name__}: {exc}"
+        print(f"[stt] ERROR loading model: {_load_error}", flush=True)
+        return
+    _warm(runner)
+    _runner = runner
+    _loaded_at = time.perf_counter() - start
+    print(f"[stt] {MODEL_DIR.name} ready on {device} in {_loaded_at:.1f}s "
+          f"(warm)", flush=True)
+
+
+def _health_status() -> str:
+    """Three states, not two: a model that failed to load is neither ready nor
+    still coming, and reporting it as "loading" forever would hide the reason
+    from the dashboard."""
+    if _runner is not None:
+        return "ok"
+    return "error" if _load_error else "loading"
+
+
+def _spool(blob: bytes, filename: Optional[str]) -> Path:
+    """The upload on disk: load_audio takes a path, librosa and ffmpeg both do."""
+    import tempfile
+
+    suffix = Path(filename or "note.ogg").suffix or ".ogg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(blob)
+        return Path(tmp.name)
+
+
 def build_app(device: str, dtype):
+    from typing import Annotated
+
     from fastapi import FastAPI, File, HTTPException, UploadFile
 
     app = FastAPI(title="aznet local STT", version="1.0")
 
     def _load_blocking() -> None:
-        global _runner, _loaded_at, _load_error
-        if not MODEL_DIR.exists():
-            _load_error = (
-                f"{MODEL_DIR} missing — run download_models.py (the repo is gated: "
-                "accept its licence on huggingface.co and set HF_TOKEN)"
-            )
-            print(f"[stt] ERROR {_load_error}")
-            return
-        start = time.perf_counter()
-        try:
-            # use_prompt=False: the chantier vocabulary prompt makes local Whisper
-            # collapse into a repetition loop. Measured 2026-08-07, see
-            # STT-BENCHMARK-STATUS.md §5b -- audio decode and fp16 were ruled out first.
-            # Assigned to _runner only after the warm-up below, so /health does
-            # not report "ok" while the first request would still pay 46 s.
-            runner = WhisperRunner(MODEL_DIR, device, dtype, use_prompt=False)
-        except Exception as exc:  # noqa: BLE001 — a dead model is a state to report
-            _load_error = f"{type(exc).__name__}: {exc}"
-            print(f"[stt] ERROR loading model: {_load_error}", flush=True)
-            return
-        # Warm the CUDA kernels. Measured: the first real request took 46.1 s
-        # and every one after it 5.9 s, because the first generate() pays the
-        # kernel autotune/JIT cost. Without this the first technician after each
-        # restart waits 46 s on the reply path -- so we spend it here, on
-        # silence, before anyone is waiting.
-        try:
-            import numpy as np
-
-            runner.transcribe(np.zeros(SR, dtype="float32"))
-        except Exception as exc:  # noqa: BLE001 — a failed warm-up is not fatal
-            print(f"[stt] warm-up skipped: {type(exc).__name__}: {exc}", flush=True)
-
-        _runner = runner
-        _loaded_at = time.perf_counter() - start
-        print(f"[stt] {MODEL_DIR.name} ready on {device} in {_loaded_at:.1f}s "
-              f"(warm)", flush=True)
+        load_blocking(device, dtype)
 
     @app.on_event("startup")
     def _load() -> None:
@@ -103,33 +134,33 @@ def build_app(device: str, dtype):
 
     @app.get("/health")
     def health() -> dict:
-        # Three states, not two: a model that failed to load is neither ready
-        # nor still coming, and reporting it as "loading" forever would hide
-        # the reason from the dashboard.
-        status = "ok" if _runner is not None else ("error" if _load_error else "loading")
         return {
-            "status": status,
+            "status": _health_status(),
             "model": MODEL_DIR.name,
             "device": device,
             "load_seconds": round(_loaded_at, 1) if _loaded_at else None,
             "error": _load_error,
         }
 
-    @app.post("/transcribe")
-    async def transcribe(audio: UploadFile = File(...)) -> dict:
+    @app.post(
+        "/transcribe",
+        responses={
+            422: {"description": "Empty audio"},
+            502: {"description": "Transcription failed"},
+            503: {"description": "Model still loading"},
+        },
+    )
+    # A sync endpoint on purpose: FastAPI runs it in the threadpool, so the
+    # blocking parts — spooling the upload and the GPU generate() itself —
+    # never sit on the event loop. As `async def` a single 6 s transcription
+    # froze /health for every other caller.
+    def transcribe(audio: Annotated[UploadFile, File()]) -> dict:
         if _runner is None:
             raise HTTPException(503, "model still loading")
-        blob = await audio.read()
+        blob = audio.file.read()
         if not blob:
             raise HTTPException(422, "empty audio")
-        # load_audio takes a path (librosa/ffmpeg both want one), so the upload
-        # is spooled to a temp file rather than decoded from memory.
-        import tempfile
-
-        suffix = Path(audio.filename or "note.ogg").suffix or ".ogg"
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp.write(blob)
-            tmp_path = Path(tmp.name)
+        tmp_path = _spool(blob, audio.filename)
         try:
             start = time.perf_counter()
             text, confidence = _runner.transcribe(load_audio(tmp_path))

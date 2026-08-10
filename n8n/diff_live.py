@@ -67,6 +67,66 @@ def strip(params: dict) -> dict:
     return out
 
 
+def safe_out_path(raw: str) -> Path:
+    """`--save` resolved, refused if it points outside the repo.
+
+    The path comes off the command line and is written to, so it is checked
+    rather than trusted: a `../..` in it would drop a workflow dump — API key
+    URLs and all — somewhere nobody thinks to look.
+    """
+    root = Path(__file__).resolve().parent.parent
+    target = (root / raw).resolve() if not Path(raw).is_absolute() else Path(raw).resolve()
+    if root not in target.parents:
+        raise SystemExit(f"--save must stay inside {root}, got {target}")
+    return target
+
+
+def pick_live(workflows: list, local_names: set):
+    """The live workflow sharing the most node names with the repo file.
+
+    Matched on overlap rather than on name: the workflow gets renamed in the UI
+    far more often than its node set changes.
+    """
+    best, best_score = None, -1
+    for w in workflows:
+        names = {n["name"] for n in (w.get("nodes") or [])}
+        score = len(names & local_names)
+        if score > best_score:
+            best, best_score = w, score
+    return best, best_score
+
+
+def report_nodes(rn: dict, ln: dict) -> None:
+    """The three node-set differences, printed."""
+    only_live = sorted(set(rn) - set(ln))
+    only_file = sorted(set(ln) - set(rn))
+    both = sorted(set(rn) & set(ln))
+
+    print(f"\n=== ONLY LIVE ({len(only_live)}) — in n8n, missing from the repo file ===")
+    for n in only_live:
+        print(f"  + {n}   [{rn[n]['type'].split('.')[-1]}]")
+    print(f"\n=== ONLY IN FILE ({len(only_file)}) — pushing would ADD these ===")
+    for n in only_file:
+        print(f"  - {n}   [{ln[n]['type'].split('.')[-1]}]")
+
+    changed = [n for n in both if strip(rn[n].get("parameters")) != strip(ln[n].get("parameters"))]
+    print(f"\n=== PARAMETERS DIFFER ({len(changed)}) ===")
+    for n in changed:
+        print(f"  ~ {n}   [{rn[n]['type'].split('.')[-1]}]")
+
+
+def writes_sheet(nodes) -> list:
+    """The question that started this: who writes the Sheet?"""
+    hits = []
+    for n in nodes:
+        blob = json.dumps(n.get("parameters", {}), ensure_ascii=False)
+        if "googleSheets" in n.get("type", ""):
+            hits.append(f"{n['name']} [googleSheets node]")
+        if "/journal" in blob:
+            hits.append(f"{n['name']} [POST /journal]")
+    return hits
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--save", default=None, help="write the live workflow JSON here")
@@ -91,53 +151,18 @@ def main() -> None:
     local = json.loads(FILE.read_text(encoding="utf-8"))
     ln = {n["name"]: n for n in local["nodes"]}
 
-    # Match on node count/name overlap rather than name, which may differ.
-    best, best_score = None, -1
-    for w in workflows:
-        names = {n["name"] for n in (w.get("nodes") or [])}
-        score = len(names & set(ln))
-        if score > best_score:
-            best, best_score = w, score
+    best, best_score = pick_live(workflows, set(ln))
     if not best:
         raise SystemExit("no workflow to compare against")
 
     print(f"\ncomparing against live id={best.get('id')} {best.get('name')!r} "
           f"(shares {best_score} node names)")
     if args.save:
-        Path(args.save).write_text(json.dumps(best, ensure_ascii=False, indent=2),
-                                   encoding="utf-8")
-        print(f"saved live workflow -> {args.save}")
+        out = safe_out_path(args.save)
+        out.write_text(json.dumps(best, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"saved live workflow -> {out}")
 
-    rn = {n["name"]: n for n in best.get("nodes") or []}
-    only_live = sorted(set(rn) - set(ln))
-    only_file = sorted(set(ln) - set(rn))
-    both = sorted(set(rn) & set(ln))
-
-    print(f"\n=== ONLY LIVE ({len(only_live)}) — in n8n, missing from the repo file ===")
-    for n in only_live:
-        print(f"  + {n}   [{rn[n]['type'].split('.')[-1]}]")
-    print(f"\n=== ONLY IN FILE ({len(only_file)}) — pushing would ADD these ===")
-    for n in only_file:
-        print(f"  - {n}   [{ln[n]['type'].split('.')[-1]}]")
-
-    changed = []
-    for n in both:
-        if strip(rn[n].get("parameters")) != strip(ln[n].get("parameters")):
-            changed.append(n)
-    print(f"\n=== PARAMETERS DIFFER ({len(changed)}) ===")
-    for n in changed:
-        print(f"  ~ {n}   [{rn[n]['type'].split('.')[-1]}]")
-
-    # The question that started this: who writes the Sheet?
-    def writes_sheet(nodes) -> list:
-        hits = []
-        for n in nodes:
-            blob = json.dumps(n.get("parameters", {}), ensure_ascii=False)
-            if "googleSheets" in n.get("type", ""):
-                hits.append(f"{n['name']} [googleSheets node]")
-            if "/journal" in blob:
-                hits.append(f"{n['name']} [POST /journal]")
-        return hits
+    report_nodes({n["name"]: n for n in best.get("nodes") or []}, ln)
 
     print("\n=== WHO WRITES THE SHEET ===")
     print("  live:", writes_sheet(best.get("nodes") or []) or "nothing found")

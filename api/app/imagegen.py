@@ -140,7 +140,7 @@ def _font(size: int, bold: bool = False):
             return ImageFont.truetype(bold_name if bold else regular_name, size)
         except OSError:
             continue
-    return ImageFont.load_default(size)
+    return ImageFont.load_default(size=size)
 
 
 def _draw_card(title: str, rows: List[Dict[str, Any]]) -> Tuple[bytes, str]:

@@ -38,11 +38,10 @@ function read(): Location {
   const [path, query = ''] = raw.split('?')
   // An empty hash is the app root, not a wrong address — only a path that was
   // actually typed and matches nothing becomes 'notfound'.
-  const route: Route = !path
-    ? 'overview'
-    : (ROUTES as readonly string[]).includes(path)
-      ? (path as Route)
-      : (ALIASES[path] ?? 'notfound')
+  let route: Route
+  if (!path) route = 'overview'
+  else if ((ROUTES as readonly string[]).includes(path)) route = path as Route
+  else route = ALIASES[path] ?? 'notfound'
   const params: Record<string, string> = {}
   for (const [k, v] of new URLSearchParams(query)) params[k] = v
   return { route, params }

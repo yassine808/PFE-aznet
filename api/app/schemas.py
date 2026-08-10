@@ -154,25 +154,34 @@ class ExtractedReport(BaseModel):
     def _valid_locaux(cls, v):
         return cls._canon(v, {}, LOCAUX_TECHNIQUES, "local technique")
 
+    @staticmethod
+    def _match(key, aliases, allowed):
+        """One squashed value's canonical form, or None if nothing matched.
+
+        Three passes in order of confidence: an exact alias, the allowed list
+        itself ignoring case and spacing, then an alias used as a prefix — so
+        "1er étage" and "e1" land on the same floor without "étage" alone
+        matching anything.
+        """
+        hit = aliases.get(key)
+        if hit is not None:
+            return hit
+        squashed = key.replace(" ", "")
+        for candidate in allowed:
+            if _squash(candidate).replace(" ", "") == squashed:
+                return candidate
+        for prefix, mapped in aliases.items():
+            if key.startswith(prefix):
+                return mapped
+        return None
+
     @classmethod
     def _canon(cls, values, aliases, allowed, label):
         if values is None:
             return None
         out = []
         for raw in values:
-            key = _squash(raw)
-            hit = aliases.get(key)
-            if hit is None:
-                squashed = key.replace(" ", "")
-                for candidate in allowed:
-                    if _squash(candidate).replace(" ", "") == squashed:
-                        hit = candidate
-                        break
-            if hit is None:
-                for prefix, mapped in aliases.items():
-                    if key.startswith(prefix):
-                        hit = mapped
-                        break
+            hit = cls._match(_squash(raw), aliases, allowed)
             if hit is None:
                 # Loud, not dropped: an invented location is a wrong row, and
                 # the extraction chain treats it as a model failure and retries.

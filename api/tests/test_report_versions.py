@@ -61,7 +61,8 @@ def test_version_number_is_computed_in_the_insert(sql):
     statement, params = sql[0]
     assert statement.startswith("INSERT INTO report_versions")
     assert "COALESCE(MAX(version), 0) + 1" in statement
-    assert "UPDATE" not in statement and "DELETE" not in statement
+    assert "UPDATE" not in statement
+    assert "DELETE" not in statement
     assert "Yassine" in params
 
 
@@ -70,7 +71,8 @@ def test_index_listing_leaves_out_the_bodies(sql):
     logs.list_report_versions("daily", "2026-08-04", with_body=False)
 
     statement, _ = sql[0]
-    assert "corps" not in statement and "image" not in statement
+    assert "corps" not in statement
+    assert "image" not in statement
     assert "version DESC" in statement
 
 

@@ -440,7 +440,9 @@ def test_send_reminders_fires_bell_and_mail(monkeypatch):
     # The mail carries a rendered alternative, not the plain body with <br> in
     # it: the plain text stays the fallback, and the inbox gets the document.
     html = sent[0][2].get("html_body") or ""
-    assert "<table" in html and "Devis" in html and "client Atlas" in html
+    assert "<table" in html
+    assert "Devis" in html
+    assert "client Atlas" in html
 
 
 def test_send_reminders_advances_recurring_task(monkeypatch):

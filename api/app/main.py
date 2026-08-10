@@ -739,7 +739,13 @@ def list_generated_reports(caller: dict = Depends(auth.require_human)) -> dict:
 KINDS = ("daily", "weekly")
 
 
-@app.get("/report-versions", responses={502: {"description": "Log store unreachable"}})
+@app.get(
+    "/report-versions",
+    responses={
+        422: {"description": "Unknown kind"},
+        502: {"description": "Log store unreachable"},
+    },
+)
 def list_report_versions(
     kind: str = Query(..., description="daily | weekly"),
     period: str = Query(..., description="La date, ou le premier jour de la semaine"),
@@ -768,7 +774,14 @@ class ReportVersionIn(BaseModel):
     note: Optional[str] = None
 
 
-@app.post("/report-versions", status_code=201, responses={502: {"description": "Log store unreachable"}})
+@app.post(
+    "/report-versions",
+    status_code=201,
+    responses={
+        422: {"description": "Unknown kind, or an empty objet or corps"},
+        502: {"description": "Log store unreachable"},
+    },
+)
 def save_report_version(payload: ReportVersionIn, caller: dict = Depends(auth.require_human)) -> dict:
     """Append one saved version. Never overwrites: history is the feature."""
     if payload.kind not in KINDS:
@@ -1787,7 +1800,8 @@ def stt_status(days: int = 7, caller: dict = Depends(auth.require_human)) -> dic
 
             r = httpx.get(settings.stt_local_url.rstrip("/") + "/health", timeout=3)
             local_state = r.json().get("status", "unknown") if r.status_code == 200 else "down"
-        except Exception:  # noqa: BLE001 — unreachable is a state, not an error
+        # Unreachable is a state, not an error: the sidecar being off is normal.
+        except Exception:  # noqa: BLE001
             local_state = "down"
 
     return {
@@ -1813,7 +1827,14 @@ def read_settings(caller: dict = Depends(auth.require_human)) -> dict:
         raise HTTPException(502, str(exc)) from exc
 
 
-@app.put("/settings", responses={502: {"description": "Log store unreachable"}})
+@app.put(
+    "/settings",
+    responses={
+        403: {"description": "Only the director may reorder the STT chain"},
+        422: {"description": "Unknown STT provider name"},
+        502: {"description": "Log store unreachable"},
+    },
+)
 def write_settings(payload: SettingsIn, caller: dict = Depends(auth.require_human)) -> dict:
     # The STT order decides which engine hears every voice note, so it is
     # director-only — narrower than the rest of this endpoint, which any account

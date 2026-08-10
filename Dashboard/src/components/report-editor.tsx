@@ -108,6 +108,10 @@ export function ReportEditor({
     }
   }
 
+  let saveLabelKey = 'editor.save'
+  if (busy) saveLabelKey = 'editor.saving'
+  else if (saved && !dirty) saveLabelKey = 'editor.saved'
+
   return (
     <motion.article
       initial={{ opacity: 0, y: 8 }}
@@ -162,7 +166,7 @@ export function ReportEditor({
             )}
           >
             {saved && !dirty ? <CheckIcon size={13} /> : <FloppyDiskIcon size={13} />}
-            {busy ? t('editor.saving') : saved && !dirty ? t('editor.saved') : t('editor.save')}
+            {t(saveLabelKey)}
           </button>
 
           <button
@@ -261,6 +265,15 @@ export function ReportEditor({
  * for pipeline state — and a change you can only see by hue is a change a
  * colour-blind operator cannot see at all.
  */
+type DiffKind = ReturnType<typeof diffLines>[number]['kind']
+
+const DIFF_SIGN: Record<DiffKind, string> = { added: '+', removed: '−', same: '' }
+const DIFF_LABEL: Record<DiffKind, string> = {
+  added: 'editor.lineAdded',
+  removed: 'editor.lineRemoved',
+  same: 'editor.lineSame',
+}
+
 function DiffView({ lines }: { readonly lines: ReturnType<typeof diffLines> }) {
   const { t } = useI18n()
   const changed = lines.some((l) => l.kind !== 'same')
@@ -291,15 +304,9 @@ function DiffView({ lines }: { readonly lines: ReturnType<typeof diffLines> }) {
                   l.kind === 'added' && 'text-accent',
                   l.kind === 'removed' && 'text-ink-faint',
                 )}
-                aria-label={t(
-                  l.kind === 'added'
-                    ? 'editor.lineAdded'
-                    : l.kind === 'removed'
-                      ? 'editor.lineRemoved'
-                      : 'editor.lineSame',
-                )}
+                aria-label={t(DIFF_LABEL[l.kind])}
               >
-                {l.kind === 'added' ? '+' : l.kind === 'removed' ? '−' : ''}
+                {DIFF_SIGN[l.kind]}
               </td>
               <td
                 className={cn(
@@ -334,10 +341,13 @@ function Prose({ text }: { readonly text: string }) {
   return (
     <div className="flex max-w-[70ch] flex-col gap-1">
       {blocks.map((line, i) => {
+        // Two identical lines are legal prose, so the index has to stay in the
+        // key — pairing it with the text keeps it stable when a line is edited.
+        const key = `${i}-${line.slice(0, 24)}`
         if (line.startsWith('## ')) {
           return (
             <h3
-              key={i}
+              key={key}
               className="text-ink-faint border-line mt-4 border-b pb-1.5 text-[0.6875rem] font-medium tracking-wide uppercase first:mt-0"
             >
               {line.slice(3)}
@@ -346,14 +356,14 @@ function Prose({ text }: { readonly text: string }) {
         }
         if (line.startsWith('- ')) {
           return (
-            <p key={i} className="text-ink flex gap-2 text-sm leading-relaxed">
+            <p key={key} className="text-ink flex gap-2 text-sm leading-relaxed">
               <span className="bg-accent mt-2 size-1 shrink-0 rounded-full" aria-hidden="true" />
               <span>{line.slice(2)}</span>
             </p>
           )
         }
         return (
-          <p key={i} className="text-ink text-sm leading-relaxed">
+          <p key={key} className="text-ink text-sm leading-relaxed">
             {line}
           </p>
         )

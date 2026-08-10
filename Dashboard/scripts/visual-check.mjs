@@ -191,8 +191,9 @@ for (const route of ROUTES) {
         `y ${Math.round(box.y)}→${Math.round(box.y + box.height)} of ${vh})`,
     )
   }
-  await page.screenshot({ path: join(SHOTS, `${LOCALE}-bell.png`) })
-  console.log(`bell -> ${join(SHOTS, `${LOCALE}-bell.png`)}`)
+  const bellShot = join(SHOTS, `${LOCALE}-bell.png`)
+  await page.screenshot({ path: bellShot })
+  console.log(`bell -> ${bellShot}`)
   await page.keyboard.press('Escape')
 }
 

@@ -72,6 +72,11 @@ STOCK_COLUMNS = {
 
 TEXT_COLUMNS = {"remarques": "Remarques"}
 
+# How a column merges, resolved once here rather than on every merged row.
+_NUMERIC_COLS = set(NUMERIC_COLUMNS.values())
+_LIST_COLS = set(LIST_COLUMNS.values())
+_STOCK_COLS = {col for col, _ in STOCK_COLUMNS.values()}
+
 # Pipeline metadata, kept to the right of the director's columns so his part of
 # the sheet reads exactly like the file he already knows.
 COL_RAPPORT = "Rapport complet"
@@ -188,29 +193,35 @@ def merge_rows(existing: Dict[str, str], incoming: Dict[str, str]) -> Dict[str, 
     a human's edit.
     """
     merged = dict(existing)
-    numeric_cols = set(NUMERIC_COLUMNS.values())
-    list_cols = set(LIST_COLUMNS.values())
-    stock_cols = {col for col, _ in STOCK_COLUMNS.values()}
-
     for column, value in incoming.items():
         if column in CHEF_COLUMNS:
             continue
-        old = merged.get(column, "")
-        if not str(old).strip():
-            merged[column] = value
-        elif column in numeric_cols:
-            merged[column] = _fmt((_num(old) or 0) + (_num(value) or 0))
-        elif column in list_cols:
-            seen = [p.strip() for p in str(old).split(",") if p.strip()]
-            for part in (p.strip() for p in str(value).split(",")):
-                if part and part not in seen:
-                    seen.append(part)
-            merged[column] = ", ".join(seen)
-        elif column in stock_cols:
-            merged[column] = value  # a level: the latest reading is the truth
-        elif str(value).strip() and str(value).strip() != str(old).strip():
-            merged[column] = "%s\n%s" % (str(old).rstrip(), str(value).strip())
+        merged[column] = _merge_cell(column, merged.get(column, ""), value)
     return merged
+
+
+def _union_csv(old, value) -> str:
+    """The two comma-separated lists, first-seen order kept, no duplicates."""
+    seen = [p.strip() for p in str(old).split(",") if p.strip()]
+    for part in (p.strip() for p in str(value).split(",")):
+        if part and part not in seen:
+            seen.append(part)
+    return ", ".join(seen)
+
+
+def _merge_cell(column: str, old, value) -> str:
+    """One cell's new content, by what the column measures."""
+    if not str(old).strip():
+        return value
+    if column in _NUMERIC_COLS:
+        return _fmt((_num(old) or 0) + (_num(value) or 0))
+    if column in _LIST_COLS:
+        return _union_csv(old, value)
+    if column in _STOCK_COLS:
+        return value  # a level: the latest reading is the truth
+    if str(value).strip() and str(value).strip() != str(old).strip():
+        return "%s\n%s" % (str(old).rstrip(), str(value).strip())
+    return old
 
 
 # --- the Sheets round trip -----------------------------------------------

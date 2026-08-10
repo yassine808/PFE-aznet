@@ -338,14 +338,17 @@ def sample_report(to: str = "") -> Tuple[str, str]:
     import random
     from datetime import date
 
-    techs = random.sample(
+    # SystemRandom rather than the Mersenne default: these figures are cosmetic,
+    # but a CSPRNG costs nothing here and keeps the security scanners quiet.
+    rng = random.SystemRandom()
+    techs = rng.sample(
         ["Yassine", "Karim", "Rachid", "Mehdi", "Anas", "Hicham", "Youssef"], 3
     )
-    sites = random.sample(["Sidi Maarouf", "Aïn Sebaâ", "Anfa", "Nouaceur"], 3)
-    goulottes = random.randrange(60, 260, 10)
-    cables = random.randrange(120, 700, 10)
-    prises = random.randrange(2, 20)
-    reports = random.randint(4, 12)
+    sites = rng.sample(["Sidi Maarouf", "Aïn Sebaâ", "Anfa", "Nouaceur"], 3)
+    goulottes = rng.randrange(60, 260, 10)
+    cables = rng.randrange(120, 700, 10)
+    prises = rng.randrange(2, 20)
+    reports = rng.randint(4, 12)
     corps = f"""## Synthèse
 Journée de démonstration : {reports} interventions menées par {len(techs)} techniciens \
 sur {len(sites)} chantiers, pour {goulottes} m de goulottes posées, {cables} m de \

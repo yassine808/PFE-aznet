@@ -119,11 +119,10 @@ function ToastStack({
 }) {
   const { t } = useI18n()
   return (
-    <div
+    <section
       // `end-4` rather than `right-4`: top-right in French and English, top-left
       // in Arabic, which is the same corner to the reader.
       className="pointer-events-none fixed top-4 end-4 z-[70] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2"
-      role="region"
       aria-live="polite"
       aria-label={t('toast.region')}
     >
@@ -132,7 +131,7 @@ function ToastStack({
           <ToastCard key={item.id} toast={item} onDismiss={onDismiss} />
         ))}
       </AnimatePresence>
-    </div>
+    </section>
   )
 }
 

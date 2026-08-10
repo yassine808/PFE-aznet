@@ -1,6 +1,6 @@
 /**
  * ponytail: one runnable check for the diff, no framework.
- * Run with `npx tsx src/lib/diff.test.ts` (or import it once from a page while
+ * Run with `npx tsx src/lib/diff.selfcheck.ts` (or import it once from a page while
  * debugging). It throws on the first wrong answer.
  */
 import { diffCounts, diffLines } from './diff'

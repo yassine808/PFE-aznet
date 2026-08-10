@@ -150,7 +150,7 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {all.length === 0 ? (
+      {all.length === 0 && (
         <EmptyState
           icon={ArchiveIcon}
           title={t('reports.emptyTitle')}
@@ -165,13 +165,17 @@ export function ReportsPage() {
             </a>
           }
         />
-      ) : shown.length === 0 ? (
+      )}
+
+      {all.length > 0 && shown.length === 0 && (
         <EmptyState
           icon={MagnifyingGlassIcon}
           title={t('reports.noMatchTitle')}
           body={t('reports.noMatchBody')}
         />
-      ) : (
+      )}
+
+      {all.length > 0 && shown.length > 0 && (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <ul className="flex max-h-[36rem] flex-col gap-1 overflow-y-auto pe-1">
             {shown.map((g) => (
@@ -210,7 +214,9 @@ function ReportBody({ corps }: { readonly corps: string }) {
         const line = raw.trimEnd()
         const key = `${i}-${line.slice(0, 24)}`
         if (!line.trim()) return <span key={key} className="h-2" />
-        const heading = /^#{1,6}\s+(.*)$/.exec(line)
+        // `[ \t]` rather than `\s`: the lines are already split on newlines, and
+        // a `\s` that can match one makes the engine backtrack for nothing.
+        const heading = /^#{1,6}[ \t]+(.*)$/.exec(line)
         if (heading) {
           return (
             <h3
@@ -221,7 +227,7 @@ function ReportBody({ corps }: { readonly corps: string }) {
             </h3>
           )
         }
-        const bullet = /^\s*[-*•]\s+(.*)$/.exec(line)
+        const bullet = /^[ \t]*[-*•][ \t]+(.*)$/.exec(line)
         if (bullet) {
           return (
             <p key={key} className="text-ink flex gap-2.5 text-sm leading-relaxed">

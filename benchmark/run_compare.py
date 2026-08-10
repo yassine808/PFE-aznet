@@ -38,7 +38,8 @@ RESULTS_DIR = BENCH_DIR / "results"
 
 # Same table as run_benchmark.py; kept local rather than imported because that
 # module refuses to load without a populated references.csv.
-MIME_TYPES = {".ogg": "audio/ogg", ".opus": "audio/ogg", ".oga": "audio/ogg",
+OGG = "audio/ogg"
+MIME_TYPES = {".ogg": OGG, ".opus": OGG, ".oga": OGG,
               ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4"}
 
 COLUMNS = ["file", "provider", "latency_s", "confidence", "chars", "transcript", "error"]
@@ -55,29 +56,39 @@ def find_clips() -> List[Path]:
     return clips
 
 
-def run(clips: List[Path], providers: List[str]) -> List[dict]:
+def transcribe_one(name: str, clip: Path, blob: bytes, mime: str) -> dict:
+    """One engine on one clip, as a result row. Never raises.
+
+    One bad engine must not kill the run: a failure becomes an `error` cell so
+    the comparison still shows what the other twelve heard.
+    """
     from app.providers import get_provider
 
+    record = dict.fromkeys(COLUMNS)
+    record.update({"file": clip.name, "provider": name})
+    try:
+        info = get_provider(name).transcribe(blob, mime)
+        record["transcript"] = info.text
+        record["chars"] = len(info.text)
+        record["latency_s"] = round(info.latency_s, 2)
+        # None means "this engine exposes no usable signal" -- never 0,
+        # never a made-up number. gemini is always None by design.
+        record["confidence"] = (
+            round(info.confidence, 4) if info.confidence is not None else None
+        )
+    except Exception as exc:  # noqa: BLE001
+        record["error"] = f"{type(exc).__name__}: {exc}"
+    return record
+
+
+def run(clips: List[Path], providers: List[str]) -> List[dict]:
     results = []
     for clip in clips:
         blob = clip.read_bytes()
         mime = MIME_TYPES[clip.suffix.lower()]
         print(f"\n{clip.name}  ({len(blob) / 1024:.0f} KB)")
         for name in providers:
-            record = dict.fromkeys(COLUMNS)
-            record.update({"file": clip.name, "provider": name})
-            try:
-                info = get_provider(name).transcribe(blob, mime)
-                record["transcript"] = info.text
-                record["chars"] = len(info.text)
-                record["latency_s"] = round(info.latency_s, 2)
-                # None means "this engine exposes no usable signal" -- never 0,
-                # never a made-up number. gemini is always None by design.
-                record["confidence"] = (
-                    round(info.confidence, 4) if info.confidence is not None else None
-                )
-            except Exception as exc:  # one bad engine must not kill the run  # noqa: BLE001
-                record["error"] = f"{type(exc).__name__}: {exc}"
+            record = transcribe_one(name, clip, blob, mime)
             results.append(record)
             if record["error"]:
                 print(f"  {name:<12} !! {record['error']}")

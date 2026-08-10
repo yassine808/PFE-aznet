@@ -683,25 +683,7 @@ function Box({
           in the title text too, so the split never rests on hue.
         */}
           {stat && stat.count > 0 && (
-            <span
-              className="mt-0.5 flex w-full items-center gap-2"
-              title={loadLabel(t, person.name, stat, crew)}
-            >
-              <span className="bg-line relative h-1 flex-1 overflow-hidden rounded-full">
-                <span
-                  className="bg-accent absolute inset-y-0 start-0 rounded-full"
-                  style={{ inlineSize: `${Math.max(4, (stat.count / peak) * 100)}%` }}
-                />
-                {stat.flagged > 0 && (
-                  <span
-                    className="bg-status-warn absolute inset-y-0 start-0 rounded-full"
-                    style={{ inlineSize: `${Math.max(2, (stat.flagged / peak) * 100)}%` }}
-                  />
-                )}
-              </span>
-              <span className="tabular text-ink-muted text-[0.625rem]">{stat.count}</span>
-              <span className="sr-only">{loadLabel(t, person.name, stat, crew)}</span>
-            </span>
+            <LoadBar name={person.name} stat={stat} peak={peak} crew={crew} />
           )}
 
           {crew !== undefined && crew > 0 && (
@@ -718,24 +700,86 @@ function Box({
             every technician — a row that floated with content length would be
             read as a fourth, meaningless variable.
           */}
-          {isCrewCard && (
-            <span className="text-ink-faint mt-auto flex w-full items-center gap-2 text-[0.625rem]">
-              <span className="truncate">
-                {stat?.last ? t('equipe.lastOn', { date: stat.last }) : t('equipe.neverSent')}
-              </span>
-              {stat && stat.flagged > 0 && (
-                <span className="text-status-warn tabular ms-auto shrink-0">⚑ {stat.flagged}</span>
-              )}
-              {stat?.pctArabic !== null && stat?.pctArabic !== undefined && (
-                <span className={cn('tabular shrink-0', !stat.flagged && 'ms-auto')}>
-                  {stat.pctArabic}% {t('equipe.langAr')}
-                </span>
-              )}
-            </span>
-          )}
+          {isCrewCard && <BoxFooter stat={stat} />}
         </button>
       </div>
     </motion.div>
+  )
+}
+
+interface BoxStat {
+  count: number
+  flagged: number
+  last?: string | null
+  sites?: number
+  pctArabic?: number | null
+}
+
+/**
+ * Load. A bar plus its own number, never the bar alone: the chart is read at a
+ * glance for shape and then squinted at for the actual figure, and a bar with
+ * no value is a shape you cannot act on.
+ *
+ * Flagged reports are drawn as a second segment in the warning colour — the
+ * Reserved Band Rule's exact sanctioned meaning — and the count is in the title
+ * text too, so the split never rests on hue.
+ */
+function LoadBar({
+  name,
+  stat,
+  peak,
+  crew,
+}: {
+  readonly name: string
+  readonly stat: BoxStat
+  readonly peak: number
+  readonly crew?: number
+}) {
+  const { t } = useI18n()
+  const label = loadLabel(t, name, stat, crew)
+  return (
+    <span className="mt-0.5 flex w-full items-center gap-2" title={label}>
+      <span className="bg-line relative h-1 flex-1 overflow-hidden rounded-full">
+        <span
+          className="bg-accent absolute inset-y-0 start-0 rounded-full"
+          style={{ inlineSize: `${Math.max(4, (stat.count / peak) * 100)}%` }}
+        />
+        {stat.flagged > 0 && (
+          <span
+            className="bg-status-warn absolute inset-y-0 start-0 rounded-full"
+            style={{ inlineSize: `${Math.max(2, (stat.flagged / peak) * 100)}%` }}
+          />
+        )}
+      </span>
+      <span className="tabular text-ink-muted text-[0.625rem]">{stat.count}</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  )
+}
+
+/**
+ * The three questions a manager opens this chart with, under the bar: when did
+ * I last hear from them, how much of it needs checking, and which language do
+ * they dictate in. `mt-auto` pins the row to the bottom of the fixed-height
+ * card, so the line is in the same place on every technician — a row that
+ * floated with content length would be read as a fourth, meaningless variable.
+ */
+function BoxFooter({ stat }: { readonly stat?: BoxStat }) {
+  const { t } = useI18n()
+  const flagged = stat?.flagged ?? 0
+  const pctArabic = stat?.pctArabic
+  return (
+    <span className="text-ink-faint mt-auto flex w-full items-center gap-2 text-[0.625rem]">
+      <span className="truncate">
+        {stat?.last ? t('equipe.lastOn', { date: stat.last }) : t('equipe.neverSent')}
+      </span>
+      {flagged > 0 && <span className="text-status-warn tabular ms-auto shrink-0">⚑ {flagged}</span>}
+      {pctArabic !== null && pctArabic !== undefined && (
+        <span className={cn('tabular shrink-0', !flagged && 'ms-auto')}>
+          {pctArabic}% {t('equipe.langAr')}
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -1330,7 +1374,9 @@ function LangDonut({ pct }: { readonly pct: number | null }) {
   return (
     <div className="flex items-center gap-4">
       {/* -90deg so the arc starts at twelve o'clock rather than at three. */}
-      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} role="presentation">
+      {/* aria-hidden, not role="presentation": the list beside it already states
+          both percentages, so the ring is decoration to a screen reader. */}
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden="true">
         <g transform={`rotate(-90 ${C} ${C})`} fill="none" strokeWidth={STROKE}>
           {/* French is the full ring under the darija arc — a second tint of the
               accent rather than a second hue, because the status band is

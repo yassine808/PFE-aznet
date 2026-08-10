@@ -193,7 +193,10 @@ function DayPlan({ jobs }: { readonly jobs: JobStatus[] }) {
 
         {timed.map(([at, group]) => {
           const label = group
-            .map((job) => `${t(`automation.job.${job.name}`)} — ${job.schedule}`)
+            .map((job) => {
+              const name = t(`automation.job.${job.name}`)
+              return `${name} — ${job.schedule}`
+            })
             .join(' · ')
           const isNext = at === next
           return (
@@ -496,7 +499,7 @@ function Panel({
   )
 }
 
-const MAIL_JOBS = ['daily_report', 'weekly_report']
+const MAIL_JOBS = new Set(['daily_report', 'weekly_report'])
 
 function JobsBand({
   jobs,
@@ -511,8 +514,8 @@ function JobsBand({
   if (jobs.error) return <ErrorState message={jobs.error} onRetry={jobs.reload} />
   if (!ordered.length) return <Skeleton className="h-64" />
 
-  const mails = ordered.filter((j) => MAIL_JOBS.includes(j.name))
-  const upkeep = ordered.filter((j) => !MAIL_JOBS.includes(j.name))
+  const mails = ordered.filter((j) => MAIL_JOBS.has(j.name))
+  const upkeep = ordered.filter((j) => !MAIL_JOBS.has(j.name))
 
   // Rows inside each panel, never a grid of bordered cards: identical rounded
   // boxes are the "endless card grid" DESIGN.md names as an anti-pattern, and

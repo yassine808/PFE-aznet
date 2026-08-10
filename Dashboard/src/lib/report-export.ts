@@ -28,7 +28,8 @@ function bytesOf(dataUri: string): Uint8Array | null {
   if (!dataUri.startsWith('data:') || comma === -1) return null
   const binary = atob(dataUri.slice(comma + 1))
   const out = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i)
+  // atob yields one latin-1 char per byte, so code point === byte value.
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.codePointAt(i) ?? 0
   return out
 }
 
