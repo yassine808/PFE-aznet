@@ -8,7 +8,7 @@
 # The full default set reports ~255 style findings on this codebase. Widening
 # it is a separate, deliberate cleanup — a lint gate that is red on arrival
 # gets ignored, which is worse than a narrow one that is trusted.
-target-version = "py39"
+target-version = "py311"
 line-length = 120
 
 [lint]

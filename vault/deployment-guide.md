@@ -13,7 +13,7 @@ Three compose services defined in `docker-compose.yml` at repo root:
 
 | Service | Image/Config | Port | Persistence |
 |---|---|---|---|
-| `api` | `api/Dockerfile` (Python 3.9-slim) | 8000:8000 | stateless (env+credentials via compose) |
+| `api` | `api/Dockerfile` (Python 3.11-slim) | 8000:8000 | stateless (env+credentials via compose) |
 | `n8n` | `n8nio/n8n:latest` | 5678:5678 | `n8n_data` named volume (SQLite DB, files) |
 | `postgres` | `postgres:15-alpine` | 5432:5432 | `pgdata` named volume |
 
@@ -22,7 +22,7 @@ All three `restart: unless-stopped` — the pipeline comes back on its own after
 ### API Image (`api/Dockerfile`)
 
 ```dockerfile
-FROM python:3.9-slim
+FROM python:3.11-slim
 WORKDIR /app
 COPY . .
 RUN pip install --no-cache-dir -r requirements.txt

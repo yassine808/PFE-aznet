@@ -9,7 +9,7 @@ status: current
 
 ## Prerequisites
 
-- Python 3.9 (not 3.10+)
+- Python 3.11
 - Node.js 18+
 - Docker Desktop (optional — for n8n + Postgres)
 - A `.env` file at repo root (see `.env.example` for template)
@@ -20,8 +20,8 @@ status: current
 # Navigate to the api directory
 cd api
 
-# Create virtual environment (Python 3.9)
-py -3.9 -m venv .venv
+# Create virtual environment (Python 3.11)
+py -3.11 -m venv .venv
 
 # Activate
 .venv\Scripts\activate

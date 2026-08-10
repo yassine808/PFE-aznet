@@ -1,0 +1,19 @@
+bcrypt
+fastapi
+google-api-python-client
+google-genai
+groq
+httpx
+pillow
+psycopg2-binary
+pydantic
+pydantic-settings
+python-multipart
+uvicorn[standard]
+# uvloop has no Windows wheels; uvicorn falls back to asyncio's loop
+# gracefully without it, so the lock must not force a source build
+uvloop; sys_platform != "win32"
+# click (via uvicorn) needs colorama on Windows; pip-compile on Linux
+# drops win32-only packages entirely, so declare it unconditionally —
+# a tiny pure-python wheel, harmless on Linux
+colorama

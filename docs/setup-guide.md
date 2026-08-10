@@ -29,7 +29,7 @@ WhatsApp (webhook) ─┘
 | Tool | Why | Get it |
 |------|-----|--------|
 | **Docker Desktop** | Runs n8n, Postgres, the API and the web proxy | <https://docs.docker.com/desktop/> |
-| **Python 3.9** | Runs the AI microservice locally (dev mode with hot reload) | <https://www.python.org/downloads/release/python-3913/> |
+| **Python 3.11** | Runs the AI microservice locally (dev mode with hot reload) | <https://www.python.org/downloads/release/python-3119/> |
 | **Node.js 18+** | Runs the dashboard dev server | <https://nodejs.org/> |
 | **Git** | Clone the repo | <https://git-scm.com/> |
 | **Tailscale** | Public HTTPS tunnel for WhatsApp webhooks (Tailscale Funnel) | <https://tailscale.com/download> |
@@ -38,7 +38,7 @@ Check that everything is installed:
 
 ```bash
 docker --version
-python --version        # must be 3.9.x
+python --version        # must be 3.11.x
 node --version          # >= 18
 git --version
 ```

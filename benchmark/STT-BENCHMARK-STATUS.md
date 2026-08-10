@@ -32,7 +32,7 @@ cd benchmark
 .venv-local/Scripts/python.exe -c "import torch; print(torch.cuda.is_available())"   # must print True
 ```
 
-`api/.venv` (Python 3.9) is untouched and must stay that way — torch there would
+`api/.venv` (Python 3.11) is untouched and must stay that way — torch there would
 let pip upgrade shared pins (`numpy`, `typing-extensions`, `huggingface-hub`)
 under the running API. The Docker image is unaffected either way: `api/Dockerfile`
 installs from a hash-pinned `requirements.txt`, never from the venv.

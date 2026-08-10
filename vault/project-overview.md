@@ -36,7 +36,7 @@ A pipeline that takes voice notes in Moroccan Darija from cabling technicians (v
 
 ## Tech Stack
 
-- **Backend API**: Python 3.9, FastAPI, pydantic-settings, uvicorn
+- **Backend API**: Python 3.11, FastAPI, pydantic-settings, uvicorn
 - **STT**: Groq Whisper-large-v3 (default), Gemini (flash-lite native audio), HF Darija fine-tune (benchmark pending)
 - **LLM**: ranked chains (`extraction_text_chain` / `extraction_image_chain` in `config.py`) — text: Groq gpt-oss-120b → Gemini flash-lite → Gemini 3.6-flash; image: Google-only 3.6-flash chain
 - **Image generation**: Google `gemini-3.1-flash-image` → `nano-banana-pro` → `3-pro-image` (click-only, never a cron)

@@ -14,11 +14,11 @@ Zero-budget constraint: free tiers only (Groq, Gemini AI Studio, HF Inference, T
 
 ## Commands
 
-All Python work happens in `api/` with its venv (Python 3.9 — use `Optional[X]`, never `X | None`):
+All Python work happens in `api/` with its venv (Python 3.11, matching the API image and CI — no need for `Optional[X]`, `X | None` is fine):
 
 ```bash
 cd api
-.venv/Scripts/python.exe -m pytest              # run all tests (53, no API keys and no database needed)
+.venv/Scripts/python.exe -m pytest              # run all tests (266, no API keys and no database needed)
 .venv/Scripts/python.exe -m pytest tests/test_process_endpoint.py -k test_voice_mode   # single test
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload   # dev server on :8000
 ```

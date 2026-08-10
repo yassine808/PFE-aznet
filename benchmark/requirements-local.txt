@@ -2,7 +2,7 @@
 # purpose. The API ships as a python:3.11-slim image with hash-pinned deps and
 # no GPU; adding torch there would grow it ~8 GB and still run on CPU.
 #
-# Install into an isolated venv, never api/.venv (which is Python 3.9 and runs
+# Install into an isolated venv, never api/.venv (which is Python 3.11 and runs
 # the production tests):
 #
 #   "C:/Users/<you>/AppData/Local/Programs/Python/Python311/python.exe" -m venv .venv-local
