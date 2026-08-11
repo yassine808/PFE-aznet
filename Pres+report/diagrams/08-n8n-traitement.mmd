@@ -1,0 +1,28 @@
+flowchart TB
+    START(["depuis l accuse de reception<br/>figure 3.10"]) --> CMD{"Commande ?"}
+    CMD -- "/rapport" --> LAST["Get last report"] --> RC["Reponse"]
+    CMD -- "/modifier ou /supprimer" --> MOD["Modify command"] --> RM["Reponse"]
+    CMD -- non --> MED{"Media ou texte ?"}
+
+    MED -- texte --> P3["POST /process (text)"]
+    MED -- media --> AI{"Audio ou image ?"}
+    AI -- audio --> DL["Telecharger l audio"] --> P1["POST /process (audio)"]
+    AI -- image --> P2["POST /process (image)"]
+
+    P1 --> OUT
+    P2 --> OUT
+    P3 --> OUT["Process output"]
+    OUT -- echec --> FAIL["Log process failed<br/>+ reponse d erreur"]
+    OUT -- succes --> REPLY["Reponse du resume<br/>AU TECHNICIEN"]
+
+    REPLY --> EXPL{"Rapport exploitable ?"}
+    EXPL -- non --> STOP["Fin - aucune ecriture"]
+    EXPL -- oui --> JRN["POST /journal<br/>sans retry : l API se gare seule"]
+    JRN -- echec --> JFAIL["Log journal failed"]
+
+    ERRT["Error Trigger<br/>defaillances de n8n lui-meme"] --> EROW["Format error row"] --> ELOG["POST /logs"]
+
+    classDef hot fill:#e6f4ea,stroke:#2f855a,stroke-width:3px
+    classDef ko fill:#fde8e8,stroke:#c53030
+    class REPLY hot
+    class FAIL,JFAIL ko

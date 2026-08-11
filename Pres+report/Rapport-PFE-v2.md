@@ -1,27 +1,35 @@
----
-title: "Automatisation des rapports journaliers de chantier par intelligence artificielle : transcription de notes vocales en darija et extraction structurée"
-lang: fr
----
-
-![](assets/logo-emsi.png)
++-------------------------------+-------------------------------+
+| ![](assets/logo-emsi.png){ width=8.5cm } | ![](assets/logo-aznet.png){ width=3cm } |
++-------------------------------+-------------------------------+
 
 **ÉCOLE MAROCAINE DES SCIENCES DE L'INGÉNIEUR**
 
+*Membre de Honoris United Universities*
+
 Filière : [À COMPLÉTER — ex. Ingénierie Informatique et Réseaux]
 
-Rapport de Projet de Fin d'Études pour l'obtention du diplôme d'Ingénieur d'État
+---
 
-# AUTOMATISATION DES RAPPORTS JOURNALIERS DE CHANTIER PAR INTELLIGENCE ARTIFICIELLE : TRANSCRIPTION DE NOTES VOCALES EN DARIJA ET EXTRACTION STRUCTURÉE
+**Rapport de Projet de Fin d'Études**
 
-Réalisé par : Yassine [À COMPLÉTER — NOM]
+*pour l'obtention du diplôme d'Ingénieur d'État*
 
-Encadrant académique : [À COMPLÉTER — NOM ENCADRANT ACADÉMIQUE]
+# AUTOMATISATION DES RAPPORTS JOURNALIERS DE CHANTIER PAR INTELLIGENCE ARTIFICIELLE
 
-Encadrant industriel : [À COMPLÉTER — NOM ENCADRANT INDUSTRIEL]
+## Transcription de notes vocales en darija et extraction structurée
 
-Entreprise d'accueil : AZNET — Casablanca
+---
 
-Année universitaire : 2025 / 2026
+|  |  |
+|---|---|
+| **Réalisé par** | Yassine [À COMPLÉTER — NOM] |
+| **Encadrant académique** | [À COMPLÉTER — NOM] |
+| **Encadrant industriel** | [À COMPLÉTER — NOM] |
+| **Entreprise d'accueil** | AZNET — Casablanca |
+| **Année universitaire** | 2025 / 2026 |
+| **Soutenu le** | [À COMPLÉTER — DATE] |
+
+*Membres du jury : [À COMPLÉTER]*
 
 \newpage
 
@@ -77,20 +85,31 @@ Ouvrir dans Word puis appuyer sur F9 pour générer la table des matières.
 
 | N° | Titre |
 |---|---|
-| 3.1 | Architecture générale de la solution |
-| 3.2 | Cycle de vie complet d'une note vocale (diagramme de séquence) |
-| 3.3 | Diagramme de cas d'utilisation |
-| 3.4 | Cycle de vie d'un rapport (machine à états) |
-| 3.5 | Modèle relationnel PostgreSQL |
-| 3.6 | Chaîne de transcription et repli |
-| 3.7 | Chaînes de repli d'extraction |
-| 3.8 | Tenue du journal : accumulation et réconciliation de stock |
-| 3.9 | Ordonnanceur : six tâches planifiées |
-| 3.10 | Workflow d'orchestration n8n (65 nœuds) |
-| 3.11 | Contrôle d'accès |
-| 3.12 | Tableau de bord — vue d'ensemble et organigramme *(captures à insérer)* |
+| 3.1 | Architecture générale : les cinq responsabilités et leurs échanges |
+| 3.2 | Diagramme de cas d'utilisation |
+| 3.3 | Cycle de vie complet d'une note vocale, de l'émission à la ligne du journal, y compris la |
+| 3.4 | Cycle de vie d'un rapport, vu comme une machine à états |
+| 3.5 | Modèle relationnel |
+| 3.6 | Tables d'audit |
+| 3.7 | Chaîne de transcription |
+| 3.8 | Les quatre chaînes de repli d'extraction |
+| 3.9 | Tenue du journal : accumulation intra-journalière et réconciliation de stock |
+| 3.10 | Ordonnanceur : six tâches, un fil unique, et une réclamation atomique du droit d'enregistr |
+| 3.11 | Workflow d'orchestration : les 65 nœuds regroupés par fonction |
+| 3.12 | Workflow, seconde moitié : aiguillage, traitement, réponse au technicien puis journal |
+| 3.13 | Contrôle d'accès |
 | 4.1 | Topologie de déploiement |
-| 4.2 | Démarche du banc d'essai |
+| 4.2 | Démarche du banc d'essai, y compris ses détours |
+| 4.3 | Vue d'ensemble — Les repères du jour, le rythme horaire des messages, l'état des sept serv |
+| 4.4 | Réception — Le flux des messages entrants, canal par canal, avec le média d'origine et le |
+| 4.5 | Rapports — Le miroir plat du journal, filtrable et corrigeable |
+| 4.6 | Rapport du jour — Le condensé quotidien tel qu'il part par courriel, avec la possibilité d |
+| 4.7 | Rapport hebdomadaire — Le même moteur que le rapport quotidien, appelé sur une plage de da |
+| 4.8 | Automatisation — Les six tâches planifiées, leur dernier résultat et leur horaire |
+| 4.9 | Équipe — organigramme — Les trois bandes fixes directeur, chefs, techniciens |
+| 4.10 | Journaux — La chronologie du pipeline reconstituée par identifiant de corrélation : les ét |
+| 4.11 | File d'attente — Les écritures en échec en attente de reprise, avec leur nombre de tentati |
+| 4.12 | Notifications — Le centre de notifications, ouvert depuis la barre latérale |
 
 # Liste des tableaux
 
@@ -408,7 +427,7 @@ Deux approches extrêmes étaient possibles : tout construire dans n8n — fidè
 - **PostgreSQL** : journal d'événements, idempotence, sessions, file de reprise, organigramme, chantiers.
 - **Google Sheets** : le registre métier permanent — le fichier que le directeur lit déjà.
 
-![](diagrams/01-architecture.png)
+![](diagrams/01-architecture.png){ width=14.7cm }
 
 **Figure 3.1 :** Architecture générale : les cinq responsabilités et leurs échanges. Les deux arêtes numérotées vers le technicien et vers le journal matérialisent l'invariant réponse-d'abord (§3.5.2).
 
@@ -433,14 +452,14 @@ L'ordre des étapes 5 et 6 est un invariant de conception, développé en §3.5.
 
 ### 3.2.4 Diagrammes UML
 
-![](diagrams/07-usecase.png)
+![](diagrams/07-usecase.png){ width=9.4cm }
 
-**Figure 3.3 :** Diagramme de cas d'utilisation. Le système figure comme acteur à part entière : quatre cas d'usage n'ont aucun déclencheur humain.
+**Figure 3.2 :** Diagramme de cas d'utilisation. Le système figure comme acteur à part entière : quatre cas d'usage n'ont aucun déclencheur humain.
 
 
-![](diagrams/02-lifecycle-voice.png)
+![](diagrams/02-lifecycle-voice.png){ width=16.0cm }
 
-**Figure 3.2 :** Cycle de vie complet d'une note vocale, de l'émission à la ligne du journal, y compris la déduplication en amont et la mise en file de reprise en aval. Le cadre vert isole l'étape que rien ne doit précéder.
+**Figure 3.3 :** Cycle de vie complet d'une note vocale, de l'émission à la ligne du journal, y compris la déduplication en amont et la mise en file de reprise en aval. Le cadre vert isole l'étape que rien ne doit précéder.
 
 
 ## 3.3 Modèle de données
@@ -480,7 +499,7 @@ Trois décisions de modélisation méritent d'être justifiées.
 **Les colonnes de pilotage sont exclues.** Équipe, heures, jours-homme, ordre du jour et taux de réalisation sont planifiés avant la journée ou jugés après elle. Un technicien ne les dicte pas ; le chef les saisit dans le tableau de bord, et une fusion ne les touche jamais.
 
 
-![](diagrams/11-report-states.png)
+![](diagrams/11-report-states.png){ width=16.0cm }
 
 **Figure 3.4 :** Cycle de vie d'un rapport, vu comme une machine à états. Les états terminaux sont volontairement nombreux : un doublon, un expéditeur non autorisé et un message sans contenu exploitable sont trois issues normales, pas trois pannes.
 
@@ -505,9 +524,43 @@ Conséquence directe : **`password_hash IS NOT NULL` constitue à lui seul la d�
 
 Les autres tables sont `pipeline_logs` (journal d'étapes), `processed_messages` (idempotence), `failed_writes` (file de reprise), `sessions`, `user_actions`, `page_visits`, `service_samples` (historique de disponibilité), `app_settings`, `chantiers` et `articles`.
 
-![](diagrams/06-er-model.png)
+![](diagrams/06-er-identity.png){ width=16.0cm }
 
 **Figure 3.5 :** Modèle relationnel. `persons` est au centre et se référence elle-même par `manager_id` : c'est l'organigramme. `password_hash IS NOT NULL` y tient lieu, à lui seul, de définition d'un compte.
+
+![](diagrams/06-er-operations.png){ width=16.0cm }
+
+**Figure 3.6 :** Tables d'audit. Les quatre tables restantes — `pipeline_logs`, `processed_messages`, `failed_writes`, `service_samples` et `app_settings` — n'ont délibérément aucune clé étrangère : ce sont des journaux et des files, décrits en §3.3.4.
+
+
+
+### 3.3.4 Les onze tables en détail
+
+Quatre tables portent le métier et l'organigramme ; trois tracent l'usage humain ; quatre servent la mécanique du pipeline et n'ont **délibérément aucune clé étrangère** — ce sont des journaux et des files, pas des entités liées.
+
+**`persons` — l'humain.** Une ligne par personne, quel que soit son rôle. `role` vaut `directeur`, `chef` ou `tech` et pilote l'affichage de l'organigramme ; `manager_id` pointe un technicien vers son chef ; `chantier_id` porte l'affectation, qui n'est renseignée que sur les chefs, les techniciens en héritant. `profile` reçoit le paragraphe réécrit chaque nuit. `password_hash` est la seule chose qui distingue un compte d'une simple fiche : sa non-nullité **est** la définition d'un compte, ce qui explique que `login()` la teste explicitement, que la liste des comptes filtre dessus, et que la suppression d'un compte efface l'empreinte sans supprimer la ligne.
+
+**`technicians` — les identités de canal.** Une ligne par couple (personne, canal). `channel` vaut `telegram` ou `whatsapp`, `external_id` est l'identifiant que la plateforme attribue, `active` permet de révoquer un accès sans effacer l'historique — la recherche d'expéditeur filtre dessus, sans quoi l'interrupteur du tableau de bord ne révoquerait rien.
+
+**`chantiers` — les sites.** `nom` et `onglet`, ce dernier désignant l'onglet du classeur où le journal de ce site est tenu.
+
+**`articles` — le bordereau.** Les quantités contractuelles d'un chantier. `champ` fait le lien avec un champ du schéma d'extraction ; il vaut `null` pour un article que le journal ne suit pas — un onduleur, un commutateur — et cette valeur nulle signifie « non suivi ici », jamais « rien d'installé ».
+
+**`sessions` — les connexions.** Jetons **opaques** stockés en base, et non des jetons auto-portants : supprimer la ligne déconnecte ce navigateur à sa requête suivante, ce qu'un jeton signé ne permettrait pas sans liste de révocation.
+
+**`user_actions` et `page_visits` — la piste d'audit.** Qui a fait quoi, et quel temps a été passé sur quelle page. Le minuteur de page vit au-dessus du routeur et transmet ses mesures à la fermeture de l'onglet.
+
+**`pipeline_logs` — le journal d'étapes.** La colonne décisive est `correlation_id` : n8n publie une ligne par étape et le service journalise ses propres erreurs avec le même identifiant, de sorte que deux processus distincts se recomposent en une seule chronologie dans le panneau **Journaux**. Ce journal est en PostgreSQL et non dans le Sheet pour une raison précise : l'événement le plus important à consigner est « l'écriture dans le Sheet a échoué », et un journal adossé au Sheet devient aveugle pendant exactement cette panne.
+
+**`processed_messages` — l'idempotence.** WhatsApp relivre un webhook non acquitté ; sans cette table, un message relivré produirait une seconde réponse et une seconde ligne. Le workflow « réclame » l'identifiant avant tout traitement.
+
+**`failed_writes` — la file de reprise.** Charge utile complète et statut. Rejouée toutes les cinq minutes par le même chemin que le flux vivant, et résolue seulement lorsque Google a accepté la ligne. Une charge utile que le schéma ne sait plus lire est résolue en échec plutôt que de bloquer indéfiniment la file derrière elle.
+
+**`service_samples` — l'historique de disponibilité.** Un échantillon par service et par intervalle, alimenté par l'échantillonneur du tableau de bord.
+
+**`app_settings` — les réglages vivants.** Horaires des tâches, ordre des chaînes. Relus **à chaque battement** de l'ordonnanceur, de sorte qu'une heure modifiée depuis le tableau de bord prend effet sans redémarrage.
+
+Toutes les migrations sont idempotentes et rejouées à chaque démarrage. Celle qui a fusionné les comptes est encapsulée dans un bloc conditionnel dynamique : elle lit une colonne qu'elle supprime elle-même, et PostgreSQL planifie une instruction entière avant de l'exécuter.
 
 
 ## 3.4 Conception du service applicatif
@@ -524,9 +577,9 @@ Le choix du moteur étant arbitré par un banc d'essai, la conception rend les m
 
 Trois moteurs sont implémentés : `groq` (Whisper large-v3 par API), `gemini` (modèle multimodal natif) et `local` (client HTTP vers un service GPU dédié).
 
-![](diagrams/03-stt-chain.png)
+![](diagrams/03-stt-chain.png){ width=11.0cm }
 
-**Figure 3.6 :** Chaîne de transcription. L'ordre est celui de l'exactitude mesurée, non de la latence : `groq` occupe la dernière place en tant que socle rapide et toujours disponible. Aucune branche ne mène à un repli silencieux.
+**Figure 3.7 :** Chaîne de transcription. L'ordre est celui de l'exactitude mesurée, non de la latence : `groq` occupe la dernière place en tant que socle rapide et toujours disponible. Aucune branche ne mène à un repli silencieux.
 
 
 ### 3.4.3 Chaînes de repli
@@ -536,9 +589,9 @@ Le service exploite **quatre** chaînes ordonnées `fournisseur:modèle`, une pa
 La chaîne texte **alterne délibérément les fournisseurs**, Gemini et Groq mesurant leurs quotas gratuits séparément ; la chaîne image est exclusivement Google, le catalogue gratuit de Groq ne comportant aucun modèle de vision.
 
 
-![](diagrams/04-extraction-chains.png)
+![](diagrams/04-extraction-chains.png){ width=10.1cm }
 
-**Figure 3.7 :** Les quatre chaînes de repli d'extraction. Une localisation non reconnue ne provoque pas un abandon mais une nouvelle tentative : c'est la traduction en flux de contrôle de la politique « aucune donnée inventée ».
+**Figure 3.8 :** Les quatre chaînes de repli d'extraction. Une localisation non reconnue ne provoque pas un abandon mais une nouvelle tentative : c'est la traduction en flux de contrôle de la politique « aucune donnée inventée ».
 
 ### 3.4.4 Contrat d'erreurs
 
@@ -579,9 +632,9 @@ Trois décisions le rendent sûr. Il n'existe **aucune table de faits mémorisé
 Les dates sont normalisées, le même jour arrivant tantôt au format ISO, tantôt en `05/08/2026`, tantôt sous forme de numéro de série `46174` ; une date illisible provoque un **ajout** (visible) plutôt qu'une fusion dans la mauvaise ligne (invisible).
 
 
-![](diagrams/05-journal-merge.png)
+![](diagrams/05-journal-merge.png){ width=13.3cm }
 
-**Figure 3.8 :** Tenue du journal : accumulation intra-journalière et réconciliation de stock. Les deux encadrés orangés sont les cas où le système préfère un signal visible à une décision silencieuse.
+**Figure 3.9 :** Tenue du journal : accumulation intra-journalière et réconciliation de stock. Les deux encadrés orangés sont les cas où le système préfère un signal visible à une décision silencieuse.
 
 ### 3.4.8 Les tâches planifiées
 
@@ -592,9 +645,9 @@ Ces tâches étaient des nœuds *cron* n8n ; elles ont migré dans le service pa
 Un invariant : **une tâche ne remonte jamais d'exception dans la boucle**. Les échecs sont enregistrés comme résultats, car un fil qui meurt à 03:00 emporte les quatre autres et personne ne s'en aperçoit avant de trouver le Sheet vide.
 
 
-![](diagrams/09-scheduler.png)
+![](diagrams/09-scheduler.png){ width=16.0cm }
 
-**Figure 3.9 :** Ordonnanceur : six tâches, un fil unique, et une réclamation atomique du droit d'enregistrer le résultat — sans laquelle une tâche terminée juste au seuil du délai inscrivait deux issues contradictoires pour une même exécution.
+**Figure 3.10 :** Ordonnanceur : six tâches, un fil unique, et une réclamation atomique du droit d'enregistrer le résultat — sans laquelle une tâche terminée juste au seuil du délai inscrivait deux issues contradictoires pour une même exécution.
 
 ## 3.5 Conception du workflow d'orchestration
 
@@ -602,9 +655,13 @@ Un invariant : **une tâche ne remonte jamais d'exception dans la boucle**. Les 
 
 Le workflow unique compte **65 nœuds** couvrant : le déclencheur périodique Telegram et son *offset* persistant ; le webhook WhatsApp et sa poignée de main de vérification ; la corrélation et la déduplication ; l'identification de l'expéditeur et le contrôle d'autorisation ; l'accusé de réception ; l'aiguillage média/texte puis audio/image ; les appels `/process` ; les réponses de résumé, d'erreur et de refus ; les commandes `/rapport`, `/modifier` et `/supprimer` ; l'appel `/journal` ; la journalisation de chaque étape ; et un déclencheur d'erreur.
 
-![](diagrams/08-n8n-workflow.png)
+![](diagrams/08-n8n-reception.png){ width=10.5cm }
 
-**Figure 3.10 :** Workflow d'orchestration : les 65 nœuds regroupés par fonction. Les deux déclencheurs de gauche correspondent aux deux modes de réception opposés — interrogation sortante pour Telegram, webhook entrant pour WhatsApp.
+**Figure 3.11 :** Workflow d'orchestration : les 65 nœuds regroupés par fonction. Les deux déclencheurs de gauche correspondent aux deux modes de réception opposés — interrogation sortante pour Telegram, webhook entrant pour WhatsApp.
+
+![](diagrams/08-n8n-traitement.png){ width=11.5cm }
+
+**Figure 3.12 :** Workflow, seconde moitié : aiguillage, traitement, réponse au technicien puis journal. Le nœud encadré en vert est celui que rien ne doit précéder.
 
 
 Le gestionnaire d'erreurs est resté dans n8n alors que les tâches planifiées en sont sorties, pour une raison précise : il intercepte les défaillances **du workflow lui-même**, que le service ne peut pas observer.
@@ -614,6 +671,26 @@ Le gestionnaire d'erreurs est resté dans n8n alors que les tâches planifiées 
 Dans le workflow, la réponse au technicien précède l'appel `/journal`. Ce n'est pas un détail d'agencement mais un invariant : une écriture Sheets en échec se gare dans la file de reprise, est rejouée toutes les 5 minutes par le même chemin que le flux vivant, et n'est résolue que lorsque Google a effectivement accepté la ligne. **Elle ne coûte jamais au technicien son résumé.**
 
 Le nœud qui vérifie qu'un message est exploitable est placé **après** le nœud de réponse, pour la même raison : un « salam » mérite une réponse, mais pas une ligne de blancs dans le journal.
+
+
+### 3.5.3 Les 65 nœuds, groupe par groupe
+
+Le workflow se lit en sept bandes. Le détail ci-dessous explique ce que chacune fait et, lorsque c'est le cas, pourquoi elle existe sous cette forme plutôt qu'une autre.
+
+**Bande 1 — Réception (9 nœuds).** `Every 15s` déclenche la boucle Telegram ; `Offset + token` lit le dernier identifiant traité dans les données statiques du workflow et le transmet à `getUpdates`, ce qui garantit qu'un message n'est jamais retraité. Côté WhatsApp, `WA Webhook verify (GET)` et `WA Echo challenge` répondent à la poignée de main de Meta — un nœud manuel, parce que le déclencheur WhatsApp natif de n8n échoue à cette vérification — et `WA Webhook messages (POST)` reçoit les messages. `Extract TG msgs` et `Extract WA msgs` normalisent deux formats d'enveloppe très différents vers une seule forme interne, ce qui est précisément ce qui rend la suite indépendante du canal.
+
+**Bande 2 — Déduplication (4 nœuds).** `Correlate` attribue un identifiant de corrélation qui suivra le message dans tous les journaux. `Claim message (dedup)` appelle le service, qui tente d'insérer l'identifiant dans `processed_messages` ; `Fresh ?` bifurque sur le résultat et `Log duplicate` termine silencieusement les relivraisons. C'est le seul endroit où le silence est la bonne réponse : le technicien a déjà reçu son résumé.
+
+**Bande 3 — Identité et autorisation (4 nœuds).** `Sender` extrait l'expéditeur, `Lookup technicien` interroge l'organigramme et récupère la personne **et son chantier**, `Filtrer accès` et `Authorized ?` décident. Un expéditeur inconnu reçoit un refus explicite et `Log denied` en garde trace : un message ignoré sans réponse serait indiscernable d'une panne.
+
+**Bande 4 — Accusé de réception (6 nœuds).** `TG ack` / `WA ack` puis leurs variantes `done` et `fail` accusent réception avant tout traitement long. Sans cela, le technicien attend jusqu'à une minute sans aucun signe que son message est arrivé.
+
+**Bande 5 — Aiguillage et traitement (10 nœuds).** `Is /rapport?`, `Is /modify?` interceptent d'abord les commandes. Sinon `Media or text?` puis `Audio or image?` orientent vers l'un des trois appels `POST /process`. L'aiguillage est ici et non dans le service : c'est n8n qui connaît la forme du message reçu, le service se contentant d'exiger exactement une entrée sur les trois. Le téléchargement du média emprunte un nœud HTTP simple côté WhatsApp, l'opération native renvoyant une requête invalide.
+
+**Bande 6 — Réponse, puis journal (12 nœuds).** `Process output` met en forme le résultat. Les nœuds `TG reply summary` / `WA reply summary` renvoient le résumé **au technicien**. Ce n'est qu'ensuite que `Rapport exploitable ?` décide d'appeler `POST /journal`. Cet ordre est un invariant : une écriture qui échoue se gare dans la file de reprise, sans jamais coûter au technicien sa réponse. L'appel au journal est configuré **sans réessai**, le service se garant lui-même — un réessai créerait un doublon dans la file.
+
+**Bande 7 — Journalisation et erreurs (17 nœuds).** `Log received`, `Log replied`, `Log denied`, `Log duplicate`, `Log process failed`, `Log journal failed` publient une ligne par étape avec l'identifiant de corrélation. `Error Trigger`, `Format error row` et `POST /logs` forment le gestionnaire d'erreurs : il capture les défaillances **de n8n lui-même**, que le service ne peut pas observer. C'est la raison pour laquelle cette bande est restée dans n8n quand les tâches planifiées en sont sorties. Elle exige une manipulation manuelle après import — désigner ce workflow comme son propre *Error Workflow* — faute de quoi le déclencheur ne se déclenche jamais.
+
 
 ## 3.6 Conception du tableau de bord
 
@@ -625,7 +702,7 @@ Le tableau de bord (11 590 lignes de TypeScript) est une application React 19 se
 
 **La lecture des données** passe par un cache au niveau du module, afin qu'une navigation aller-retour se repeigne instantanément puis se revalide en arrière-plan. Le sondage d'état et l'échantillonneur de disponibilité vivent **au-dessus** du routeur : les placer dans une page les arrêterait à la navigation et creuserait de faux trous dans l'historique de disponibilité.
 
-**Figure 3.12 :** Tableau de bord — vue d'ensemble et organigramme. *[FIGURE À INSÉRER — captures d'écran de l'application en fonctionnement.]*
+Les captures du tableau de bord en fonctionnement sont rassemblées au §4.7, afin d'être lues à côté des résultats plutôt qu'au milieu de la conception.
 
 
 ## 3.7 Sécurité
@@ -644,9 +721,9 @@ Décisions complémentaires :
 - **Moindre privilège** : le compte de service Google n'accède qu'au classeur concerné ; les empreintes de mots de passe ne quittent jamais la base, les requêtes de lecture nommant leurs colonnes plutôt que de tout sélectionner.
 
 
-![](diagrams/10-auth.png)
+![](diagrams/10-auth.png){ width=16.0cm }
 
-**Figure 3.11 :** Contrôle d'accès. Les deux voies — cookie humain et clé machine — convergent vers trois niveaux d'exigence. Une clé machine non configurée **désactive** l'accès machine ; elle ne l'ouvre jamais.
+**Figure 3.13 :** Contrôle d'accès. Les deux voies — cookie humain et clé machine — convergent vers trois niveaux d'exigence. Une clé machine non configurée **désactive** l'accès machine ; elle ne l'ouvre jamais.
 
 ## 3.8 Conclusion du chapitre
 
@@ -688,7 +765,7 @@ Deux pièges de déploiement, rencontrés le 30 juillet 2026, méritent d'être 
 2. n8n conserve **sa propre copie** du workflow dans son volume. Modifier le fichier JSON versionné ne change rien tant qu'il n'est pas réimporté ou poussé par l'API de n8n.
 
 
-![](diagrams/12-deployment.png)
+![](diagrams/12-deployment.png){ width=16.0cm }
 
 **Figure 4.1 :** Topologie de déploiement. Un seul service publie un port ; tout le reste n'existe que sur le réseau interne de la pile. C'est cette forme unique — identique en local, derrière le tunnel et sur le serveur — qui rend les questions d'origines croisées sans objet.
 
@@ -715,7 +792,7 @@ Onze notes vocales réelles, issues des échanges des techniciens, ont servi de 
 Ce critère a été appliqué par lecture des transcriptions clip par clip, puis **confirmé à l'oreille par un locuteur natif du darija le 8 août 2026**. Cette confirmation humaine est ce qui a fixé l'ordre définitif de la chaîne.
 
 
-![](diagrams/13-benchmark.png)
+![](diagrams/13-benchmark.png){ width=16.0cm }
 
 **Figure 4.2 :** Démarche du banc d'essai, y compris ses détours. Les deux encadrés rouges signalent le bogue silencieux : il flattait un modèle au lieu de le pénaliser, ce qui est le mode de défaillance le plus dangereux pour une comparaison.
 
@@ -905,7 +982,52 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 
 *[À COMPLÉTER — déploiement pilote, nombre de rapports traités, retours des techniciens et de l'encadrement, incidents observés.]*
 
-## 4.7 Conclusion du chapitre
+
+## 4.7 Le tableau de bord en fonctionnement
+
+Les captures ci-dessous proviennent de l'application réelle, connectée à la pile complète, en thème sombre — celui qu'utilisent effectivement les responsables. Elles ont été produites par le script de contrôle visuel du dépôt, qui ouvre une session, parcourt les neuf routes et capture chaque page ; le même passage vérifie l'absence d'erreurs de console, de requêtes en échec et de débordement horizontal, et il était **propre** lors de cette capture.
+
+![](screens/fr-overview.png){ width=16.0cm }
+
+**Figure 4.3 :** Vue d'ensemble — Les repères du jour, le rythme horaire des messages, l'état des sept services et l'activité de l'année. La disponibilité provient des échantillons enregistrés, non d'une sonde instantanée.
+
+![](screens/fr-inbox.png){ width=16.0cm }
+
+**Figure 4.4 :** Réception — Le flux des messages entrants, canal par canal, avec le média d'origine et le texte transcrit. C'est l'écran qui permet de remonter d'une ligne douteuse à l'audio qui l'a produite.
+
+![](screens/fr-reports.png){ width=16.0cm }
+
+**Figure 4.5 :** Rapports — Le miroir plat du journal, filtrable et corrigeable. Une correction faite ici est écrite dans le classeur, pas seulement affichée.
+
+![](screens/fr-daily.png){ width=16.0cm }
+
+**Figure 4.6 :** Rapport du jour — Le condensé quotidien tel qu'il part par courriel, avec la possibilité de le régénérer et de le télécharger.
+
+![](screens/fr-weekly.png){ width=16.0cm }
+
+**Figure 4.7 :** Rapport hebdomadaire — Le même moteur que le rapport quotidien, appelé sur une plage de dates : une seule instruction de modèle sert les deux.
+
+![](screens/fr-automation.png){ width=16.0cm }
+
+**Figure 4.8 :** Automatisation — Les six tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
+
+![](screens/fr-equipe.png){ width=16.0cm }
+
+**Figure 4.9 :** Équipe — organigramme — Les trois bandes fixes directeur, chefs, techniciens. La réaffectation se fait par glisser-déposer ; la liste déroulante du panneau de détail est le chemin réel au clavier et au toucher.
+
+![](screens/fr-logs.png){ width=13.2cm }
+
+**Figure 4.10 :** Journaux — La chronologie du pipeline reconstituée par identifiant de corrélation : les étapes publiées par n8n et les erreurs journalisées par le service apparaissent dans une seule suite.
+
+![](screens/fr-queue.png){ width=16.0cm }
+
+**Figure 4.11 :** File d'attente — Les écritures en échec en attente de reprise, avec leur nombre de tentatives.
+
+![](screens/fr-bell.png){ width=16.0cm }
+
+**Figure 4.12 :** Notifications — Le centre de notifications, ouvert depuis la barre latérale.
+
+## 4.8 Conclusion du chapitre
 
 La réalisation a concrétisé la conception et l'a confrontée au réel. Le banc d'essai, mené sur treize moteurs, a produit un résultat qu'aucune revue de littérature n'aurait donné : le moteur le plus exact pour ce cas d'usage n'est pas le service commercial de référence mais un affinage open-source du darija, et ce constat n'a pu émerger que parce que des contrôles non affinés avaient été inclus et parce que trois bogues de harnais — dont un silencieux et flatteur — ont été débusqués. Six défauts d'intégration invisibles hors ligne ont par ailleurs été diagnostiqués et corrigés. La chaîne complète fonctionne de bout en bout depuis la semaine 0, repli compris.
 

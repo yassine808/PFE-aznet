@@ -1,0 +1,34 @@
+erDiagram
+    PERSONS ||--o{ TECHNICIANS : "identites de canal"
+    PERSONS ||--o{ PERSONS : "manager_id - organigramme"
+    PERSONS }o--|| CHANTIERS : "affecte a"
+    CHANTIERS ||--o{ ARTICLES : "bordereau"
+
+    PERSONS {
+        int id PK
+        string name
+        string role "directeur | chef | tech"
+        int manager_id FK
+        int chantier_id FK
+        text profile "reecrit chaque nuit"
+        string password_hash "NOT NULL = c est un compte"
+    }
+    TECHNICIANS {
+        int id PK
+        int person_id FK
+        string channel "telegram | whatsapp"
+        string external_id
+        bool active "revoque l acces"
+    }
+    CHANTIERS {
+        int id PK
+        string nom
+        string onglet "onglet du journal"
+    }
+    ARTICLES {
+        int id PK
+        int chantier_id FK
+        string designation
+        string champ "null = non suivi ici"
+        float qte_contrat
+    }

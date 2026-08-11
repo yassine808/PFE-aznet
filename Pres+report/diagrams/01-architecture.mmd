@@ -1,19 +1,21 @@
-flowchart LR
+flowchart TB
     subgraph terrain["Terrain"]
-        T["Technicien<br/>note vocale en darija"]
+        T["Technicien<br/>note vocale en darija, photo ou texte"]
     end
 
     subgraph canaux["Canaux de reception"]
+        direction LR
         TG["Telegram Bot API<br/>polling getUpdates"]
         WA["WhatsApp Cloud API<br/>webhook HTTPS"]
     end
 
     subgraph orch["Orchestration"]
-        N8N["n8n<br/>65 noeuds"]
+        N8N["n8n - 65 noeuds<br/>reception, dedup, autorisation, reponses"]
     end
 
-    subgraph coeur["Service applicatif - FastAPI"]
-        PROC["POST /process"]
+    subgraph coeur["Service applicatif - FastAPI - 66 routes"]
+        direction LR
+        PROC["POST /process<br/>audio | image | texte"]
         STT["Chaine STT<br/>gemini - local - groq"]
         EXT["Chaine d extraction<br/>Gemini / Groq"]
         JRN["POST /journal<br/>fusion + stock"]
@@ -22,27 +24,30 @@ flowchart LR
     end
 
     subgraph gpu["Sidecar GPU"]
-        LOC["Morocco-Darija-STT-large<br/>RTX 3070, chargement paresseux"]
+        LOC["Morocco-Darija-STT-large<br/>RTX 3070 - chargement paresseux"]
     end
 
     subgraph stock["Persistance"]
+        direction LR
         PG[("PostgreSQL<br/>11 tables")]
-        GS[("Google Sheets<br/>journal par chantier")]
+        GS[("Google Sheets<br/>un onglet par chantier")]
     end
 
     subgraph consult["Consultation"]
+        direction LR
         DASH["Tableau de bord React<br/>FR / EN / AR"]
         MAIL["Rapports e-mail"]
     end
 
-    T --> TG & WA --> N8N
-    N8N --> PROC
-    PROC --> STT --> EXT
+    T --> canaux --> N8N
+    N8N --> PROC --> STT --> EXT
     STT -.-> LOC
-    N8N -- "1. reponse au technicien" --> T
-    N8N -- "2. ensuite seulement" --> JRN
+    N8N == "1. reponse au technicien" ==> T
+    N8N == "2. ensuite seulement" ==> JRN
     JRN --> GS
-    PROC & JRN & AUTH --> PG
-    JOBS --> GS & MAIL & PG
+    PROC --> PG
+    AUTH --> PG
+    JOBS --> GS
+    JOBS --> MAIL
     DASH --> AUTH
-    DASH --> PG & GS
+    DASH --> PG

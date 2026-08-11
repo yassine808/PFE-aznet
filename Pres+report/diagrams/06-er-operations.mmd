@@ -1,0 +1,27 @@
+erDiagram
+    PERSONS ||--o{ SESSIONS : "ouvre"
+    PERSONS ||--o{ USER_ACTIONS : "trace"
+    PERSONS ||--o{ PAGE_VISITS : "consulte"
+
+    PERSONS {
+        int id PK
+        string name
+        string role
+    }
+    SESSIONS {
+        string token PK "opaque, pas un JWT"
+        int person_id FK
+        timestamp expires_at
+    }
+    USER_ACTIONS {
+        int id PK
+        int person_id FK
+        string action
+        timestamp at
+    }
+    PAGE_VISITS {
+        int id PK
+        int person_id FK
+        string page
+        int seconds
+    }

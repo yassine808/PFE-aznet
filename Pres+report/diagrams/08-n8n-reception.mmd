@@ -1,0 +1,18 @@
+flowchart TB
+    TRIG1["Every 15s<br/>scheduleTrigger"] --> OFF["Offset + token"]
+    OFF --> GU["getUpdates"] --> XTG["Extract TG msgs"]
+    TRIG2["WA Webhook GET"] --> ECHO["Echo challenge<br/>verification Meta"]
+    TRIG3["WA Webhook POST"] --> COR["Correlate"] --> XWA["Extract WA msgs"]
+
+    XTG --> CLAIM
+    XWA --> CLAIM["Claim message<br/>POST /logs/claim"]
+    CLAIM --> FRESH{"Fresh ?"}
+    FRESH -- non --> DUP["Log duplicate<br/>fin silencieuse"]
+    FRESH -- oui --> LOOK["Lookup technicien<br/>identite + chantier"]
+    LOOK --> AUTH{"Authorized ?"}
+    AUTH -- non --> DENY["Log denied<br/>+ reponse de refus"]
+    AUTH -- oui --> ACK["Accuse de reception"]
+    ACK --> NEXT(["suite : figure 3.11"])
+
+    classDef ko fill:#fde8e8,stroke:#c53030
+    class DUP,DENY ko

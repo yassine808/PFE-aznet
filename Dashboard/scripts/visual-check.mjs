@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BASE = process.env.DASHBOARD_URL ?? 'http://127.0.0.1:8080'
-const SHOTS = join(tmpdir(), 'dashboard-shots')
+const SHOTS = process.env.SHOTS_DIR ?? join(tmpdir(), 'dashboard-shots')
 mkdirSync(SHOTS, { recursive: true })
 
 function readEnv(path) {
@@ -48,13 +48,21 @@ if (!EMAIL || !PASSWORD) {
 
 const ROUTES = ['overview', 'inbox', 'reports', 'daily', 'weekly', 'automation', 'equipe', 'logs', 'queue']
 const LOCALE = process.env.LOCALE ?? 'fr'
+// 'dark' | 'light' | unset. Also accepts SHOTS_DIR so a caller can collect the
+// captures somewhere durable instead of the temp directory.
+const THEME = process.env.THEME ?? ''
 const PROBLEMS = []
 
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
-await page.addInitScript((locale) => {
+// Seeded before any script runs, so the very first paint is already in the
+// right locale and theme — a toggle after load would be captured mid-transition
+// by the screenshot below. THEME is honoured mainly so the report can show the
+// dashboard as it is actually used; unset, the browser default (light) wins.
+await page.addInitScript(([locale, theme]) => {
   localStorage.setItem('aznet.locale', locale)
-}, LOCALE)
+  if (theme) localStorage.setItem('aznet.theme', theme)
+}, [LOCALE, THEME])
 
 page.on('console', (msg) => {
   if (msg.type() === 'error') PROBLEMS.push(`console: ${msg.text().slice(0, 300)}`)
