@@ -580,10 +580,16 @@ export function AutomationPage() {
     message?: string
   } | null>(null)
 
-  // Server values win on load; local edits win afterwards until saved.
+  // Server values win on load; local edits win afterwards until saved. Keyed on
+  // the data alone — not on `dirty` — so the `dirty: false` transition right
+  // after a successful save cannot re-apply the *stale* copy the reload is
+  // still replacing: the form would snap back to the old time for a moment,
+  // mid-typing if the operator had already started the next edit. `dirty` is
+  // still checked at arrival time — an edit in flight always keeps the form.
   useEffect(() => {
     if (stored.data && !dirty) setValues({ ...DEFAULTS, ...stored.data.settings })
-  }, [stored.data, dirty])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stored.data])
 
   const set = <K extends keyof EditableSettings>(key: K, value: EditableSettings[K]) => {
     setValues((v) => ({ ...v, [key]: value }))
