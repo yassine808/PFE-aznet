@@ -1,37 +1,58 @@
-+-------------------------------+-------------------------------+
-| ![](assets/logo-emsi.png){ width=8.5cm } | ![](assets/logo-aznet.png){ width=3cm } |
-+-------------------------------+-------------------------------+
+::: {custom-style="CoverLogos"}
+![](assets/logo-emsi.png){ width=9cm } ![](assets/logo-aznet.png){ width=1.9cm }
+:::
 
-**ÉCOLE MAROCAINE DES SCIENCES DE L'INGÉNIEUR**
+::: {custom-style="CoverSchool"}
+ÉCOLE MAROCAINE DES SCIENCES DE L'INGÉNIEUR
+:::
 
-*Membre de Honoris United Universities*
+::: {custom-style="CoverSub"}
+Membre de Honoris United Universities — Rabat
+:::
 
-Filière : [À COMPLÉTER — ex. Ingénierie Informatique et Réseaux]
+::: {custom-style="CoverKind"}
+Rapport de Projet de Fin d'Études
+:::
 
----
+::: {custom-style="CoverKindSub"}
+présenté pour l'obtention du diplôme d'Ingénieur d'État
+:::
 
-**Rapport de Projet de Fin d'Études**
+::: {custom-style="CoverTitle"}
+AUTOMATISATION DES RAPPORTS JOURNALIERS DE CHANTIER PAR INTELLIGENCE ARTIFICIELLE
+:::
 
-*pour l'obtention du diplôme d'Ingénieur d'État*
+::: {custom-style="CoverSubtitle"}
+Transcription de notes vocales en darija et extraction structurée
+:::
 
-# AUTOMATISATION DES RAPPORTS JOURNALIERS DE CHANTIER PAR INTELLIGENCE ARTIFICIELLE
+::: {custom-style="CoverMeta"}
+**Filière :** [À COMPLÉTER — ex. Ingénierie Informatique et Réseaux]
+:::
 
-## Transcription de notes vocales en darija et extraction structurée
+::: {custom-style="CoverMeta"}
+**Réalisé par :** Yassine [À COMPLÉTER — NOM]
+:::
 
----
+::: {custom-style="CoverMeta"}
+**Encadrant académique :** [À COMPLÉTER]  ·  **Encadrant industriel :** [À COMPLÉTER]
+:::
 
-|  |  |
-|---|---|
-| **Réalisé par** | Yassine [À COMPLÉTER — NOM] |
-| **Encadrant académique** | [À COMPLÉTER — NOM] |
-| **Encadrant industriel** | [À COMPLÉTER — NOM] |
-| **Entreprise d'accueil** | AZNET — Casablanca |
-| **Année universitaire** | 2025 / 2026 |
-| **Soutenu le** | [À COMPLÉTER — DATE] |
+::: {custom-style="CoverMeta"}
+**Entreprise d'accueil :** AZNET — Casablanca
+:::
 
-*Membres du jury : [À COMPLÉTER]*
+::: {custom-style="CoverFoot"}
+Soutenu le [À COMPLÉTER] devant le jury : [À COMPLÉTER]
+:::
 
-\newpage
+::: {custom-style="CoverFoot"}
+Année universitaire 2025 / 2026
+:::
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Remerciements
 
@@ -43,7 +64,9 @@ Mes remerciements vont aussi au corps professoral de l'EMSI, dont les enseigneme
 
 Enfin, je remercie ma famille et mes proches pour leur soutien constant durant l'ensemble de mon cursus.
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Résumé
 
@@ -75,11 +98,20 @@ A comparative benchmark of **thirteen** Darija speech-to-text engines — three 
 
 **الكلمات المفاتيح:** التعرف على الكلام، الدارجة، النماذج اللغوية الكبيرة، استخراج المعلومات، أتمتة سير العمل، لغة قليلة الموارد.
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-# Table des matières
-
-Ouvrir dans Word puis appuyer sur F9 pour générer la table des matières.
+```{=openxml}
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Table des matières</w:t></w:r></w:p>
+<w:p>
+  <w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> TOC \o "1-3" \h \z \u </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+  <w:r><w:t>Table des matières — appuyer sur F9 pour la générer.</w:t></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+</w:p>
+```
 
 # Liste des figures
 
@@ -131,6 +163,10 @@ Ouvrir dans Word puis appuyer sur F9 pour générer la table des matières.
 | 4.6 | État du périmètre livré |
 | 4.7 | Métriques du projet |
 
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
 # Liste des abréviations et acronymes
 
 | Acronyme | Signification |
@@ -162,7 +198,9 @@ Ouvrir dans Word puis appuyer sur F9 pour générer la table des matières.
 | WABA | WhatsApp Business Account |
 | WER | Word Error Rate (taux d'erreur mot) |
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Introduction générale
 
@@ -176,7 +214,9 @@ Ouvrir dans Word puis appuyer sur F9 pour générer la table des matières.
 
 **Organisation du rapport.** Ce rapport s'articule en quatre chapitres. Le chapitre 1 présente l'organisme d'accueil, l'étude de l'existant, la problématique, l'analyse des besoins et la démarche de conduite du projet. Le chapitre 2 dresse un état de l'art de la reconnaissance vocale de l'arabe dialectal et de l'extraction structurée par grands modèles de langage, puis justifie les choix technologiques. Le chapitre 3 détaille la conception de la solution : architecture générale, modèle de données, conception du service d'intelligence artificielle, du workflow d'orchestration et du tableau de bord. Le chapitre 4 décrit la réalisation, le banc d'essai, les tests et les résultats obtenus. Une conclusion générale synthétise les contributions et ouvre les perspectives d'évolution.
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Chapitre 1 : Contexte général du projet
 
@@ -293,7 +333,9 @@ Le dépôt Git compte **207 commits** entre le 15 juillet 2026 (`feat: week 0 sc
 
 Ce chapitre a établi le cadre du projet : un besoin métier réel — fiabiliser la remontée d'information des chantiers — contraint par l'usage (l'oral en darija), par le budget (offres gratuites uniquement) et par le calendrier. Le chapitre suivant examine l'état de l'art des deux verrous scientifiques du projet, la transcription du darija et l'extraction structurée par grands modèles de langage, et en déduit les choix technologiques.
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Chapitre 2 : État de l'art et étude technique
 
@@ -407,7 +449,9 @@ Cette asymétrie a une conséquence de diagnostic qu'il faut garder à l'esprit 
 
 L'état de l'art confirme la faisabilité du projet sous ses contraintes : Whisper fournit une base de transcription multilingue robuste dont les limites sur le darija sont compensées en aval par l'extraction LLM ; les sorties structurées contraintes et la validation stricte contiennent le risque d'hallucination ; et l'écosystème gratuit couvre l'intégralité de la chaîne. Il a également posé deux points de méthode que le chapitre 4 exploitera : la nécessité de contrôles non affinés dans tout banc d'essai de *fine-tunes*, et l'inadéquation du WER à un système dont la valeur tient aux nombres. Le chapitre suivant traduit ces choix en une conception détaillée.
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Chapitre 3 : Conception de la solution
 
@@ -729,7 +773,9 @@ Décisions complémentaires :
 
 La conception traduit les contraintes du projet en structures : une architecture hybride dont la frontière est fonctionnelle et a été déplacée par l'expérience, un contrat de données reconstruit sur le fichier réel du client, un patron Stratégie qui a permis au banc d'essai de décider, quatre chaînes de repli explicites, un contrat d'erreurs qui refuse les échecs silencieux, un journal dont les règles d'accumulation et de réconciliation protègent le seul chiffre qui compte, et un modèle relationnel qui fait d'un humain une seule ligne. Le chapitre suivant décrit la mise en œuvre, le banc d'essai et les résultats.
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Chapitre 4 : Réalisation, banc d'essai, tests et résultats
 
@@ -1031,7 +1077,9 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 
 La réalisation a concrétisé la conception et l'a confrontée au réel. Le banc d'essai, mené sur treize moteurs, a produit un résultat qu'aucune revue de littérature n'aurait donné : le moteur le plus exact pour ce cas d'usage n'est pas le service commercial de référence mais un affinage open-source du darija, et ce constat n'a pu émerger que parce que des contrôles non affinés avaient été inclus et parce que trois bogues de harnais — dont un silencieux et flatteur — ont été débusqués. Six défauts d'intégration invisibles hors ligne ont par ailleurs été diagnostiqués et corrigés. La chaîne complète fonctionne de bout en bout depuis la semaine 0, repli compris.
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Conclusion générale et perspectives
 
@@ -1053,7 +1101,9 @@ La réalisation a concrétisé la conception et l'a confrontée au réel. Le ban
 
 Au-delà du système livré, ce projet illustre une conviction d'ingénierie : dans les applications des grands modèles de langage, la valeur ne réside pas dans le choix des modèles, mais dans l'architecture qui les entoure — contrats de données stricts, chaînes de repli explicites, refus des échecs silencieux, et bancs d'essai assez sceptiques pour se surprendre eux-mêmes. Le banc d'essai de ce projet a renversé son hypothèse de départ deux fois, et démasqué un bogue qui lui faisait couronner un vainqueur sur une transcription jamais générée. C'est cette discipline, plus que le modèle finalement retenu, qui constitue le résultat le plus transférable de ce travail.
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Références bibliographiques
 
@@ -1087,7 +1137,9 @@ Au-delà du système livré, ce projet illustre une conviction d'ingénierie : d
 
 *[À COMPLÉTER : références académiques additionnelles sur l'ASR de l'arabe dialectal, à ajouter selon les exigences de la filière.]*
 
-\newpage
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 # Annexes
 
