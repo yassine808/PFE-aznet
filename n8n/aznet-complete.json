@@ -930,7 +930,7 @@
     {
       "parameters": {
         "respondWith": "text",
-        "responseBody": "={{ $json.query['hub.verify_token'] === 'pfe-aznet-verify' ? $json.query['hub.challenge'] : 'forbidden' }}",
+        "responseBody": "={{ $json.query['hub.verify_token'] === $env.WHATSAPP_VERIFY_TOKEN ? $json.query['hub.challenge'] : 'forbidden' }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-000000000030",
