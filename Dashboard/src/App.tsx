@@ -21,13 +21,19 @@ function PageAction() {
 // fallback mirrors the auth-loading blank, so navigation never flashes chrome.
 const InboxPage = lazy(() => import('@/pages/inbox').then((m) => ({ default: m.InboxPage })))
 const ReportsPage = lazy(() => import('@/pages/reports').then((m) => ({ default: m.ReportsPage })))
-const DailyReportPage = lazy(() => import('@/pages/daily-report').then((m) => ({ default: m.DailyReportPage })))
-const WeeklyReportPage = lazy(() => import('@/pages/weekly-report').then((m) => ({ default: m.WeeklyReportPage })))
+const DailyReportPage = lazy(() =>
+  import('@/pages/daily-report').then((m) => ({ default: m.DailyReportPage })),
+)
+const WeeklyReportPage = lazy(() =>
+  import('@/pages/weekly-report').then((m) => ({ default: m.WeeklyReportPage })),
+)
 const EquipePage = lazy(() => import('@/pages/equipe').then((m) => ({ default: m.EquipePage })))
 // Not lazy: it is tiny, and a wrong address should not also mean a loading
 // spinner while a chunk downloads.
 import { NotFoundPage } from '@/pages/notfound'
-const AutomationPage = lazy(() => import('@/pages/automation').then((m) => ({ default: m.AutomationPage })))
+const AutomationPage = lazy(() =>
+  import('@/pages/automation').then((m) => ({ default: m.AutomationPage })),
+)
 const TasksPage = lazy(() => import('@/pages/tasks').then((m) => ({ default: m.TasksPage })))
 const LogsPage = lazy(() => import('@/pages/logs').then((m) => ({ default: m.LogsPage })))
 const QueuePage = lazy(() => import('@/pages/queue').then((m) => ({ default: m.QueuePage })))
@@ -152,37 +158,40 @@ function Dashboard() {
     // Above the router: the uptime sampler must keep writing regardless of
     // which panel is open.
     <OpsProvider>
-     <PageHeaderProvider>
-      <AppShell route={route} onNavigate={navigate}>
-        {/* Keyed on route so each navigation replays the entrance. */}
-        <motion.div
-          key={route}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-        >
-          {/* Overview has no h1: the masthead is the page header, and two would compete. */}
-          {route !== 'overview' && (
-            <header className="border-line flex flex-wrap items-center justify-between gap-4 border-b pb-6">
-              <h1 className="text-ink text-3xl font-semibold tracking-tighter">
-                {t(TITLE_KEY[route])}
-              </h1>
-              {/* Whatever the current page published — the Generate button on
+      <PageHeaderProvider>
+        <AppShell route={route} onNavigate={navigate}>
+          {/* Keyed on route so each navigation replays the entrance — and on the
+            date/week params, or a param-only hash change (browser back between
+            two `#/daily?date=…` links) would keep the old page alive and its
+            `useState(initialDate)` would never re-seed. In-page picker changes
+            never touch the URL, so this only remounts on real navigation. */}
+          <motion.div
+            key={`${route}:${params.date ?? ''}:${params.week ?? ''}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+          >
+            {/* Overview has no h1: the masthead is the page header, and two would compete. */}
+            {route !== 'overview' && (
+              <header className="border-line flex flex-wrap items-center justify-between gap-4 border-b pb-6">
+                <h1 className="text-ink text-3xl font-semibold tracking-tighter">
+                  {t(TITLE_KEY[route])}
+                </h1>
+                {/* Whatever the current page published — the Generate button on
                   Daily and Weekly. Empty on every other route. */}
-              <PageAction />
-            </header>
-          )}
+                <PageAction />
+              </header>
+            )}
 
-          {/* Suspense here, not inside RouteView: the shell, title and
+            {/* Suspense here, not inside RouteView: the shell, title and
               entrance animation paint while a lazily-loaded page chunk
               streams in; only the content area waits. */}
-          <Suspense fallback={<div className="min-h-[70vh]" />}>
-            <RouteView route={route} params={params} navigate={navigate} />
-          </Suspense>
-        </motion.div>
-      </AppShell>
-     </PageHeaderProvider>
+            <Suspense fallback={<div className="min-h-[70vh]" />}>
+              <RouteView route={route} params={params} navigate={navigate} />
+            </Suspense>
+          </motion.div>
+        </AppShell>
+      </PageHeaderProvider>
     </OpsProvider>
   )
 }
-

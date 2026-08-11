@@ -8,7 +8,14 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { login as apiLogin, logout as apiLogout, trackVisit, whoami, type Account } from '@/lib/api'
+import {
+  clearCache,
+  login as apiLogin,
+  logout as apiLogout,
+  trackVisit,
+  whoami,
+  type Account,
+} from '@/lib/api'
 
 /**
  * Who is signed in, for the whole app.
@@ -47,13 +54,20 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   // fail() (every authenticated request funnels through it); clearing the user
   // flips the Gate to the login screen and unmounts the polling panels.
   useEffect(() => {
-    const onUnauthorized = () => setUser(null)
+    const onUnauthorized = () => {
+      clearCache()
+      setUser(null)
+    }
     window.addEventListener('aznet:unauthorized', onUnauthorized)
     return () => window.removeEventListener('aznet:unauthorized', onUnauthorized)
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
     const r = await apiLogin(email, password)
+    // The cache holds the previous account's `/me/settings`, `/notifications`
+    // and `/history`; the dashboard remounts right after this and would paint
+    // them stale-while-revalidate style. Clear before the user flips.
+    clearCache()
     setUser(r.user)
   }, [])
 
@@ -64,11 +78,15 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       // Cleared even if the request failed: the user asked to leave, and a
       // dashboard still showing their name after "log out" is worse than a
       // session row that expires on its own in seven days.
+      clearCache()
       setUser(null)
     }
   }, [])
 
-  const value = useMemo(() => ({ user, loading, signIn, signOut }), [user, loading, signIn, signOut])
+  const value = useMemo(
+    () => ({ user, loading, signIn, signOut }),
+    [user, loading, signIn, signOut],
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

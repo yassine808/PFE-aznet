@@ -29,6 +29,12 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
   // stale link cannot fight the operator for control of it.
   const [date, setDate] = useState(initialDate || todayISO())
   const [content, setContent] = useState<DailyReportContent | null>(null)
+  // The day the report was generated for, frozen at generate time. The editor
+  // is keyed to this rather than to `date`: a draft deliberately survives a
+  // picker switch (see the comment in report-editor.tsx), and labelling a
+  // surviving Monday text with a Tuesday `period` would file it under the
+  // wrong `report_versions` key on Save and diff it against the wrong history.
+  const [contentPeriod, setContentPeriod] = useState<string | null>(null)
   // The illustrated card, once generated below. Held here rather than inside
   // the card component because the editor embeds it in the exported .docx and
   // saves it with the version.
@@ -110,8 +116,10 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
     setBusy(true)
     setError(null)
     setContent(null)
+    setContentPeriod(null)
     try {
       setContent(await generateDailyReport(date, rows))
+      setContentPeriod(date)
       // The card rides along with the report — one gesture, not two buttons
       // (the old second button was the 2026-08-10 change). It is fired after
       // the text so the editor is not blocked waiting on the image model, and
@@ -142,19 +150,25 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
   }
 
   // A different day means a different report: the previous day's card must not
-  // sit under the new one waiting to be mistaken for it.
+  // sit under the new one waiting to be mistaken for it. The report text is
+  // deliberately left alone — the draft survives the switch (report-editor's
+  // documented intent) — but the snapshot means it keeps the day it was
+  // generated for. A failed generate for the old day must not either.
   useEffect(() => {
     setCard(null)
     setImageError(null)
+    setError(null)
   }, [date])
 
   // Generate sits beside the page title in the shared header, not on a second
   // line of its own — the title is already the widest thing on the page and the
   // one action belongs on it.
-  useHeaderAction(
-    <GenerateButton busy={busy} disabled={rows.length === 0} onClick={generate} />,
-    [busy, rows.length, date, locale],
-  )
+  useHeaderAction(<GenerateButton busy={busy} disabled={rows.length === 0} onClick={generate} />, [
+    busy,
+    rows.length,
+    date,
+    locale,
+  ])
 
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
   if (reports.loading) return <Skeleton className="mt-8 h-64 rounded-xl" />
@@ -272,7 +286,7 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
       {content && (
         <ReportEditor
           kind="daily"
-          period={date}
+          period={contentPeriod ?? date}
           objet={content.objet}
           corps={content.corps}
           image={card?.data_uri ?? null}
@@ -290,7 +304,6 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
           byTech={stats.byTech.map(([name, v]) => ({ name, ...v }))}
         />
       )}
-
     </motion.div>
   )
 }

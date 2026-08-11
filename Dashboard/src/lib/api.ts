@@ -499,7 +499,7 @@ export async function sendTestMail(to: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ to }),
   })
-  if (!res.ok) await fail(res)  // the API names the missing env vars on a 422
+  if (!res.ok) await fail(res) // the API names the missing env vars on a 422
 }
 
 // ── Accounts, sessions and history ────────────────────────────────────────
@@ -547,7 +547,10 @@ async function fail(res: Response): Promise<never> {
     const parsed = JSON.parse(text) as { detail?: string | Array<{ msg?: string }> }
     if (typeof parsed.detail === 'string') detail = parsed.detail
     else if (Array.isArray(parsed.detail)) {
-      detail = parsed.detail.map((d) => d.msg).filter(Boolean).join(' ; ')
+      detail = parsed.detail
+        .map((d) => d.msg)
+        .filter(Boolean)
+        .join(' ; ')
     }
   } catch {
     /* not JSON — use the raw body */
@@ -686,10 +689,14 @@ export type TaskInput = {
 }
 
 export const createTask = (input: TaskInput) =>
-  post<{ id: number; title: string; notes?: string | null; due_at?: string | null; repeat: string; done: boolean }>(
-    '/tasks',
-    input,
-  )
+  post<{
+    id: number
+    title: string
+    notes?: string | null
+    due_at?: string | null
+    repeat: string
+    done: boolean
+  }>('/tasks', input)
 
 export async function updateTask(
   id: number,
@@ -719,7 +726,8 @@ export const api = {
   n8n: n8nStatus,
   n8nExecutions,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
-  generatedReports: (s?: AbortSignal) => get<{ reports: GeneratedReport[] }>('/reports/generated', s),
+  generatedReports: (s?: AbortSignal) =>
+    get<{ reports: GeneratedReport[] }>('/reports/generated', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),
   queue: (s?: AbortSignal) => get<{ pending: PendingWrite[] }>('/sheet-queue', s),
   jobs: (s?: AbortSignal) => get<{ jobs: JobStatus[] }>('/jobs', s),
@@ -761,6 +769,11 @@ const listeners = new Map<string, Set<() => void>>()
 // any one hook, so an unmount cannot cancel a request another mount is waiting
 // on. The per-hook controller still gates the local setState afterwards.
 const inflight = new Map<string, Promise<unknown>>()
+// Bumped by `clearCache`. A fetch started before an account change must not
+// write its response into the cache afterwards — without it, a slow request
+// from the previous session's poll can land the old account's rows under the
+// new one's key after the clear, and the next mount repaints them.
+let generation = 0
 
 function runDedupe<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
   const existing = inflight.get(key)
@@ -768,6 +781,18 @@ function runDedupe<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
   const p = fetcher().finally(() => inflight.delete(key))
   inflight.set(key, p)
   return p
+}
+
+/**
+ * Drop every cached response. Called when the signed-in account changes
+ * (`signIn`/`signOut` in `lib/auth.tsx`): the cache holds per-account data
+ * (`/me/settings`, `/notifications`, the user-filtered `/history`), and
+ * stale-while-revalidate must never serve one account's rows to another.
+ */
+export function clearCache(): void {
+  generation += 1
+  cache.clear()
+  inflight.clear()
 }
 
 function setCache<T>(key: string, value: T): void {
@@ -814,8 +839,14 @@ export function useApi<T>(
 
     const run = async (first: boolean) => {
       if (first && cache.get(key) === undefined) setLoading(true)
+      const gen = generation
       try {
         const next = await runDedupe(key, () => fetcherRef.current(undefined))
+        // A clearCache() happened while the request was in flight: the response
+        // belongs to the previous account, so it must not repaint this hook or
+        // the shared cache. The next poll/mount fetches fresh under the new
+        // generation.
+        if (gen !== generation) return
         setCache(key, next)
         setData(next)
         setError(null)

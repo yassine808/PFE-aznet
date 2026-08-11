@@ -29,10 +29,17 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
   // Selected week as its Monday — `#/weekly?week=2026-08-03` from the report
   // mail, otherwise the current week. Initial value only, as on the Daily page.
   const [selected, setSelected] = useState(() => initialWeek || iso(weekStart(new Date())))
-  const [year, setYear] = useState(() =>
-    Number(initialWeek?.slice(0, 4)) || new Date().getFullYear(),
+  const [year, setYear] = useState(
+    () => Number(initialWeek?.slice(0, 4)) || new Date().getFullYear(),
   )
   const [content, setContent] = useState<DailyReportContent | null>(null)
+  // The week the report was generated for, frozen at generate time. `label`
+  // recomputes with `selected`, and the editor is keyed on this snapshot
+  // instead: a surviving draft must keep its own period, or a Save after
+  // switching weeks would write the old text under the new week's key and —
+  // since `manager_reports` is keyed `(manager_id, period)` — silently
+  // overwrite the new week's real report (see the `label` comment below).
+  const [contentLabel, setContentLabel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
   // The illustrated card, held here so the editor can embed it in the .docx.
@@ -141,8 +148,11 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
   const generate = async () => {
     setBusy(true)
     setGenError(null)
+    setContent(null)
+    setContentLabel(null)
     try {
       setContent(await generateDailyReport(label, week.rows))
+      setContentLabel(label)
       // The card rides along with the report — one gesture, not two buttons.
       // Fired after the text, failing alone: a card error never costs the
       // report.
@@ -159,7 +169,10 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
     setImageError(null)
     setCard(null)
     try {
-      const made = await generateImage(week.rows, t('image.weekTitle', { start: iso(days[0]), end: iso(days[6]) }))
+      const made = await generateImage(
+        week.rows,
+        t('image.weekTitle', { start: iso(days[0]), end: iso(days[6]) }),
+      )
       setCard(made)
     } catch (err) {
       setImageError(err instanceof Error ? err.message : String(err))
@@ -169,10 +182,13 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
   }
 
   // A different week means a different report: the previous week's card must
-  // not sit under the new one waiting to be mistaken for it.
+  // not sit under the new one waiting to be mistaken for it. The text survives
+  // the switch, but it keeps the week it was generated for, and a failed
+  // generate for the old week must not either.
   useEffect(() => {
     setCard(null)
     setImageError(null)
+    setGenError(null)
   }, [selected])
 
   // Beside the page title, same as the Daily page.
@@ -243,7 +259,7 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
       {content && (
         <ReportEditor
           kind="weekly"
-          period={label}
+          period={contentLabel ?? label}
           objet={content.objet}
           corps={content.corps}
           image={card?.data_uri ?? null}
