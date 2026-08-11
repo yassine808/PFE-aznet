@@ -26,7 +26,7 @@ export function AppShell({
   children,
 }: {
   readonly route: Route
-  readonly onNavigate: (r: Route) => void
+  readonly onNavigate: (r: Route, params?: Record<string, string>) => void
   readonly children: ReactNode
 }) {
   const { t, locale, setLocale } = useI18n()
@@ -321,9 +321,7 @@ function SystemStrip({
             title={t(item.labelKey)}
             className={cn(
               'border-line focus-visible:ring-accent flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors outline-none active:translate-y-px focus-visible:ring-2',
-              active
-                ? 'bg-slate-100 text-ink dark:bg-slate-850'
-                : 'text-ink-faint hover:text-ink',
+              active ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-faint hover:text-ink',
             )}
           >
             <Icon size={14} weight={active ? 'fill' : 'regular'} className="shrink-0" />

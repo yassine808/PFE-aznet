@@ -91,7 +91,7 @@ export function CommandPalette({
 }: {
   readonly open: boolean
   readonly onClose: () => void
-  readonly onNavigate: (r: Route) => void
+  readonly onNavigate: (r: Route, params?: Record<string, string>) => void
   readonly route: Route
 }) {
   const { t } = useI18n()
@@ -148,7 +148,9 @@ export function CommandPalette({
     // Nothing fuzzy matched: offer the closest strings as suggestions.
     const near = pool
       .map((h) => {
-        const hay = fold(`${h.label ?? t(h.labelKey ?? '')} ${h.keywordsKey ? t(h.keywordsKey) : ''}`)
+        const hay = fold(
+          `${h.label ?? t(h.labelKey ?? '')} ${h.keywordsKey ? t(h.keywordsKey) : ''}`,
+        )
         return { h, d: editDistance(q, hay) }
       })
       .sort((a, b) => a.d - b.d)
@@ -172,13 +174,11 @@ export function CommandPalette({
 
   // Keep the highlighted row on screen when arrowing past the fold.
   useEffect(() => {
-    listRef.current
-      ?.querySelector('[data-active="true"]')
-      ?.scrollIntoView({ block: 'nearest' })
+    listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [cursor, hits.length])
 
-  const go = (r: Route) => {
-    onNavigate(r)
+  const go = (r: Route, params?: Record<string, string>) => {
+    onNavigate(r, params)
     onClose()
   }
 
@@ -195,7 +195,8 @@ export function CommandPalette({
     } else if (e.key === 'Enter') {
       e.preventDefault()
       const hit = hits[cursor]
-      if (hit) go(hit.route)
+      if (hit)
+        go(hit.route, hit.personId !== undefined ? { person: String(hit.personId) } : undefined)
     }
   }
 
@@ -243,7 +244,9 @@ export function CommandPalette({
                 aria-expanded="true"
                 aria-controls="cmd-list"
                 aria-activedescendant={
-                  hits[cursor] ? `cmd-opt-${hits[cursor].personId ?? hits[cursor].route}` : undefined
+                  hits[cursor]
+                    ? `cmd-opt-${hits[cursor].personId ?? hits[cursor].route}`
+                    : undefined
                 }
                 className="text-ink placeholder:text-ink-faint h-14 min-w-0 flex-1 bg-transparent text-sm outline-none"
               />
@@ -278,7 +281,14 @@ export function CommandPalette({
                         aria-selected={active}
                         data-active={active}
                         onMouseMove={() => setCursor(i)}
-                        onClick={() => go(hit.route)}
+                        onClick={() =>
+                          go(
+                            hit.route,
+                            hit.personId !== undefined
+                              ? { person: String(hit.personId) }
+                              : undefined,
+                          )
+                        }
                         className={cn(
                           'flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-start text-sm transition-colors',
                           active ? 'bg-slate-100 text-ink dark:bg-slate-850' : 'text-ink-muted',
@@ -289,10 +299,14 @@ export function CommandPalette({
                           weight={active ? 'fill' : 'regular'}
                           className={active ? 'text-accent shrink-0' : 'shrink-0'}
                         />
-                        <span className="min-w-0 flex-1 truncate">{hit.label ?? t(hit.labelKey ?? '')}</span>
+                        <span className="min-w-0 flex-1 truncate">
+                          {hit.label ?? t(hit.labelKey ?? '')}
+                        </span>
                         <span className="text-ink-faint truncate text-xs">{t(hit.section)}</span>
                         {hit.route === route && (
-                          <span className="text-ink-faint text-[0.6875rem]">{t('cmd.current')}</span>
+                          <span className="text-ink-faint text-[0.6875rem]">
+                            {t('cmd.current')}
+                          </span>
                         )}
                       </button>
                     )

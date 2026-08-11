@@ -128,7 +128,7 @@ function RouteView({
     case 'queue':
       return <QueuePage />
     case 'equipe':
-      return <EquipePage />
+      return <EquipePage initialPerson={params.person ? Number(params.person) : undefined} />
     case 'notfound':
       return <NotFoundPage />
     default:
@@ -161,12 +161,13 @@ function Dashboard() {
       <PageHeaderProvider>
         <AppShell route={route} onNavigate={navigate}>
           {/* Keyed on route so each navigation replays the entrance — and on the
-            date/week params, or a param-only hash change (browser back between
-            two `#/daily?date=…` links) would keep the old page alive and its
+            date/week/person params, or a param-only hash change (browser back
+            between two `#/daily?date=…` links, or a palette jump from one
+            colleague to another) would keep the old page alive and its
             `useState(initialDate)` would never re-seed. In-page picker changes
             never touch the URL, so this only remounts on real navigation. */}
           <motion.div
-            key={`${route}:${params.date ?? ''}:${params.week ?? ''}`}
+            key={`${route}:${params.date ?? ''}:${params.week ?? ''}:${params.person ?? ''}`}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: 'spring', stiffness: 100, damping: 20 }}

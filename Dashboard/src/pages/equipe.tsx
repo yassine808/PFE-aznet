@@ -132,7 +132,7 @@ function statsOf(rows: ReportRow[]): PersonStats {
 /** Reports per person, keyed by lower-cased name (the Sheet's own join key). */
 type Load = Map<string, PersonStats>
 
-export function EquipePage() {
+export function EquipePage({ initialPerson }: { readonly initialPerson?: number }) {
   const { t } = useI18n()
   const { user } = useAuth()
   const list = useApi('technicians', api.technicians)
@@ -140,7 +140,10 @@ export function EquipePage() {
   // the operator has already been there — and one otherwise.
   const reports = useApi('reports', api.reports)
 
-  const [selected, setSelected] = useState<number | null>(null)
+  // A palette hit for a colleague lands here with the drawer open on them:
+  // `initialPerson` seeds `selected` once per mount (see App.tsx's page key,
+  // which remounts on a param-only change so a second jump re-seeds).
+  const [selected, setSelected] = useState<number | null>(initialPerson ?? null)
   const [adding, setAdding] = useState<'chef' | 'tech' | null>(null)
   const [error, setError] = useState<string | null>(null)
   // personId -> the manager we have asked for but not yet seen confirmed.
@@ -773,7 +776,9 @@ function BoxFooter({ stat }: { readonly stat?: BoxStat }) {
       <span className="truncate">
         {stat?.last ? t('equipe.lastOn', { date: stat.last }) : t('equipe.neverSent')}
       </span>
-      {flagged > 0 && <span className="text-status-warn tabular ms-auto shrink-0">⚑ {flagged}</span>}
+      {flagged > 0 && (
+        <span className="text-status-warn tabular ms-auto shrink-0">⚑ {flagged}</span>
+      )}
       {pctArabic !== null && pctArabic !== undefined && (
         <span className={cn('tabular shrink-0', !flagged && 'ms-auto')}>
           {pctArabic}% {t('equipe.langAr')}
@@ -1360,7 +1365,8 @@ function Row({
 function LangDonut({ pct }: { readonly pct: number | null }) {
   const { t } = useI18n()
   const still = useReducedMotion()
-  if (pct === null) return <p className="text-ink-faint text-xs italic">{t('equipe.langUnknown')}</p>
+  if (pct === null)
+    return <p className="text-ink-faint text-xs italic">{t('equipe.langUnknown')}</p>
 
   // `pathLength={100}` re-scales the dash units, so the dasharray reads literally
   // as "percent, rest" whatever the geometry is. The radius therefore only has
