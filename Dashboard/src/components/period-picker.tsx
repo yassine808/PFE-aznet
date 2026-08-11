@@ -4,8 +4,6 @@ import { parseISODay } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-const DAY_MS = 86_400_000
-
 // `2026-08-05` → local `Date`, invalid values fall back to today. Never
 // `new Date(iso)`, which parses as UTC and shifts the day.
 const parse = parseISODay
@@ -19,6 +17,14 @@ function monday(d: Date): Date {
   const out = new Date(d)
   out.setDate(out.getDate() - ((out.getDay() + 6) % 7))
   out.setHours(0, 0, 0, 0)
+  return out
+}
+
+/** Calendar arithmetic — DST-safe, where `getTime() + days * DAY_MS` is not
+ *  (on a fall-back day it lands at 23:00 on the same date). */
+function addDays(d: Date, days: number): Date {
+  const out = new Date(d)
+  out.setDate(out.getDate() + days)
   return out
 }
 
@@ -59,7 +65,7 @@ export function PeriodPicker({
   const snap = (d: Date) => (mode === 'week' ? monday(d) : d)
 
   const shift = (days: number) => {
-    onChange(iso(snap(new Date(current.getTime() + days * DAY_MS))))
+    onChange(iso(snap(addDays(current, days))))
   }
 
   const intl = intlLocaleOf(locale)
@@ -68,7 +74,7 @@ export function PeriodPicker({
 
   const label =
     mode === 'week'
-      ? `${short.format(current)} – ${short.format(new Date(current.getTime() + 6 * DAY_MS))}`
+      ? `${short.format(current)} – ${short.format(addDays(current, 6))}`
       : long.format(current)
 
   const now = snap(new Date())
