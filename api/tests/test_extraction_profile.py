@@ -41,7 +41,15 @@ def groq_recorder(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "groq", types.SimpleNamespace(Groq=FakeGroq))
     monkeypatch.setattr(extraction.settings, "groq_api_key", "test-key")
-    return rec
+    # `extraction._groq_client` is @lru_cache'd — one SDK client per process, so
+    # that a report does not pay a fresh TLS handshake. That cache outlives a
+    # monkeypatched `sys.modules["groq"]`: without clearing it, the second test
+    # in this file would keep talking to the FIRST test's recorder and see
+    # `rec.messages is None`. Cleared on the way in AND on the way out, so this
+    # fixture neither inherits a stale client nor leaks its fake to other tests.
+    extraction._groq_client.cache_clear()
+    yield rec
+    extraction._groq_client.cache_clear()
 
 
 def _system_message(rec) -> str:

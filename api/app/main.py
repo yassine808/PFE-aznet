@@ -454,12 +454,13 @@ async def _extract_from_image(
     # Archive the photo in Postgres while the channel's ticket is still live —
     # a webhook media URL dies within minutes, the DB copy does not.
     try:
-        logs.save_media(ctx.get("channel"), None, message_id, "image",
-                        image.content_type, blob)
+        await run_in_threadpool(logs.save_media, ctx.get("channel"), None, message_id,
+                                "image", image.content_type, blob)
     except logs.LogStoreError as exc:
         await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
     if report.has_data():
-        _notify_report_event(ctx.get("technicien"), rapport_complet, warnings, ctx)
+        await run_in_threadpool(_notify_report_event, ctx.get("technicien"),
+                                rapport_complet, warnings, ctx)
     return ProcessResponse(
         rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
     )
@@ -485,8 +486,8 @@ async def _audio_input(
     # cost the technician their summary — the fallback is the previous
     # behavior where n8n stored the channel's own file ticket.
     try:
-        logs.save_media(ctx.get("channel"), None, message_id, "audio",
-                        audio.content_type, blob)
+        await run_in_threadpool(logs.save_media, ctx.get("channel"), None, message_id,
+                                "audio", audio.content_type, blob)
     except logs.LogStoreError as exc:
         await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
     lien_audio = None
@@ -516,7 +517,8 @@ async def _text_input(
     # Text messages are archived too, so the conversation is recoverable
     # even though the Sheet only keeps extracted reports.
     try:
-        logs.save_message(ctx.get("channel"), None, message_id, rapport_complet)
+        await run_in_threadpool(logs.save_message, ctx.get("channel"), None,
+                                message_id, rapport_complet)
     except logs.LogStoreError as exc:
         await _log("api", "warn", message=f"chat archive failed: {exc}", **ctx)
     return rapport_complet
@@ -542,7 +544,7 @@ async def process(
     # Best effort on purpose: an unknown sender or a log store outage must
     # degrade to plain extraction, not fail a report someone is waiting for.
     try:
-        sender_profile = logs.profile_for(technicien)
+        sender_profile = await run_in_threadpool(logs.profile_for, technicien)
     except logs.LogStoreError:
         sender_profile = None
 
@@ -587,7 +589,11 @@ async def process(
     if not report.has_data():
         warnings.append("no_report_content")
     else:
-        _notify_report_event(technicien, rapport_complet, warnings, ctx)
+        # psycopg2 is synchronous, like every other DB call on this path: run it
+        # off the event loop so one technician's notification does not stall
+        # every other request in flight. Same reason as _log() above.
+        await run_in_threadpool(_notify_report_event, technicien,
+                                rapport_complet, warnings, ctx)
 
     await _log(
         "extracted", "info", message="ok",

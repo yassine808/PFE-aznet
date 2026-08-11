@@ -16,11 +16,34 @@ Model choice is not taste: see `benchmark/run_model_benchmark.py` and the
 results table in `benchmark/README.md`.
 """
 import json
+from functools import lru_cache
 from typing import List, Optional, Tuple
 
 from app import prompt_loader
 from app.config import settings
 from app.schemas import ExtractedReport
+
+
+# One SDK client per process, the same rule the three STT providers already
+# follow (see providers/groq_whisper.py, gemini_audio.py, local_darija.py).
+# Each client owns a keep-alive connection pool, so constructing one per call
+# threw that pool away and paid a fresh TCP+TLS handshake to Google or Groq on
+# every single report — and unlike transcription, extraction runs on *every*
+# /process request, text and audio alike. The API-key checks stay per-call in
+# _call_gemini/_call_groq, so a missing key still fails loudly and never
+# reaches the cache.
+@lru_cache(maxsize=1)
+def _gemini_client():
+    from google import genai  # lazy: keeps the test suite dependency-free
+
+    return genai.Client(api_key=settings.gemini_api_key)
+
+
+@lru_cache(maxsize=1)
+def _groq_client():
+    from groq import Groq  # lazy: keeps the test suite dependency-free
+
+    return Groq(api_key=settings.groq_api_key)
 
 
 class ExtractionError(RuntimeError):
@@ -97,10 +120,9 @@ def _call_gemini(
 ) -> ExtractedReport:
     if not settings.gemini_api_key:
         raise ExtractionError("GEMINI_API_KEY not configured")
-    from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=settings.gemini_api_key)
+    client = _gemini_client()
     if image is not None:
         contents = [types.Part.from_bytes(data=image, mime_type=mime_type),
                     _IMAGE_INSTRUCTIONS + _caption_block(caption) + _profile_block(profile)]
@@ -134,9 +156,7 @@ def _call_groq(
         raise ExtractionError(f"groq/{model}: no vision model in the free catalogue")
     if not settings.groq_api_key:
         raise ExtractionError("GROQ_API_KEY not configured")
-    from groq import Groq
-
-    client = Groq(api_key=settings.groq_api_key)
+    client = _groq_client()
     schema_hint = json.dumps(
         {k: v.get("type", "string") for k, v in ExtractedReport.model_json_schema()["properties"].items()},
         ensure_ascii=False,
