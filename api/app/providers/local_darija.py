@@ -16,9 +16,18 @@ knowing:
 - **The sidecar being down is a normal outcome, not a crash.** It raises
   TranscriptionError like any other engine, so `_transcribe_engine` moves to the
   next entry in the chain. That is the whole point of the chain.
-- **Placed last by default.** At ~19 s on a 3070 it is far slower than Groq
-  (1.9 s) or Gemini (4.8 s), so it earns its place as the engine that answers
-  when both free tiers are exhausted or down — where slow beats nothing.
+- **Position 2 of `gemini,local,groq`, not last.** It was last while the chain
+  was ordered by latency; the 2026-08-08 accuracy review (a native Darija
+  speaker judging output against the audio) reordered it, and groq took the
+  final slot as the fast always-available floor. So this engine answers
+  whenever Gemini alone fails — its evening 503s included — not only when both
+  free tiers are exhausted. At ~19 s on a 3070 that is the deliberate price of
+  accuracy. Source of truth for the order is `config.stt_chain`, overridden
+  live from `app_settings`.
+- **Loaded lazily.** The sidecar holds no VRAM until its first call
+  (`stt_server._ensure_loaded`), so the first request after a container start
+  pays ~235 s of model load on top of transcription — which is why the timeout
+  below is 300 s and not merely generous.
 """
 import time
 from functools import lru_cache

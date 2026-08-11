@@ -48,6 +48,13 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
       # WhatsApp Cloud API (second reception channel, see n8n/README.md §8)
       - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID:-}
+      # Meta's webhook challenge string, echoed back by the manual GET webhook
+      # (n8n's own WhatsApp Trigger fails Meta's verification, hence the manual
+      # node). It was a literal inside the workflow JSON until 2026-08-11 —
+      # harmless-looking, but a workflow file is meant to be reviewable and a
+      # shared secret in it is one copy-paste from being published. No default:
+      # an unset value must fail the challenge loudly, never match "".
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
       # Telegram polling (unified reception workflow reads $env.TELEGRAM_BOT_TOKEN)
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       # Sheet target and the HR address the workflow gives to outsiders. Kept
@@ -94,12 +101,62 @@ services:
       # Path(__file__).parents[2], which is the repo root on the host but "/" in
       # this image (api/app → /app/app). Absolute skips that resolution.
       - GOOGLE_SERVICE_ACCOUNT_JSON=/app/credentials/service-account.json
+      # The `local` engine of stt_chain. Set here rather than in .env because
+      # the hostname is compose-internal: a host-run uvicorn needs
+      # 127.0.0.1:8100 instead, and `environment` wins over `env_file` so both
+      # run modes work without editing .env — same trick as DATABASE_URL above.
+      # Unset would mean the chain silently skips its most accurate engine.
+      - STT_LOCAL_URL=http://stt-local:8100
       - TZ=Africa/Casablanca
     depends_on:
       postgres:
         condition: service_healthy
+      # No condition: the sidecar is one engine of a fallback chain, so the API
+      # must come up and serve even when it is unhealthy or absent. Requiring it
+      # would let a GPU problem take down the whole pipeline — the opposite of
+      # what a chain is for.
+      stt-local:
+        condition: service_started
     volumes:
       - ./credentials:/app/credentials:ro
+
+  # Local Darija STT — the GPU sidecar behind `api/app/providers/local_darija.py`,
+  # winner of the 2026-08-07 benchmark. It sits at position 2 of the
+  # `gemini,local,groq` chain (config.py, ordered by accuracy since 2026-08-08),
+  # so it answers when Gemini fails rather than on every note.
+  #
+  # It starts with the stack but holds no VRAM until it is called: the model
+  # loads on the first /transcribe (see stt_server._ensure_loaded), so a quiet
+  # day costs nothing instead of pinning ~4 GB of an 8 GB card around the clock.
+  # The first caller pays the ~235 s load inside its own request, which the
+  # 300 s client timeout in local_darija._http() covers.
+  #
+  # No published port and no auth of its own — same posture as `api`, reachable
+  # only as `stt-local:8100` inside this network.
+  stt-local:
+    build: ./benchmark
+    container_name: pfe-stt-local
+    restart: unless-stopped
+    environment:
+      - TZ=Africa/Casablanca
+    # The weights are NOT in the image and NOT in git: 5.8 GB total, largest
+    # shard 4.7 GB, which is over GitHub's 2 GB Git-LFS per-file ceiling. They
+    # are produced by `python download_models.py` and mounted read-only —
+    # the container must never be able to corrupt a 5.8 GB download.
+    volumes:
+      - ./benchmark/models:/app/models:ro
+    # Verified working on this machine: `docker run --rm --gpus all
+    # nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi -L` reports the RTX 3070
+    # through Docker Desktop's WSL2 backend. Without this block the container
+    # starts fine and silently runs on CPU at 60-180 s per note, so a missing
+    # GPU shows up as "mysteriously slow", not as an error.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # The only service with a published port: one origin serving the dashboard,
   # the API under /api, and n8n's webhooks under /webhook. That is what keeps the

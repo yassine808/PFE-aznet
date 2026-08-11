@@ -9,19 +9,34 @@ the machine that has the card; `api/app/providers/local_darija.py` is a thin
 HTTP client. If this process is down the API's STT chain simply falls through
 to the next engine — that is what the chain is for.
 
-The model is loaded ONCE at startup, not per request: ~4 GB into VRAM and
-several seconds of load time that must not be paid per voice note.
+The model is loaded ONCE — ~4 GB into VRAM and ~235 s of load time that must
+not be paid per voice note — but LAZILY, on the first /transcribe rather than
+at startup. The chain is `gemini,local,groq` (config.py, accuracy order), so
+this engine answers when Gemini fails, not on every note: an eager load pinned
+half an 8 GB card around the clock for a path that may go a whole day without
+firing. The first caller pays the load inside its own request — ~235 s load
+plus ~19 s transcribe, inside the 300 s timeout local_darija._http() sets for
+exactly this kind of last-resort wait — and every caller after it pays nothing.
 
 Run it with the isolated venv, from benchmark/:
 
     .venv-local/Scripts/python.exe stt_server.py
     .venv-local/Scripts/python.exe stt_server.py --port 8100 --cpu
 
+Or as a container, which is what `docker compose up -d` starts (see the
+`stt-local` service and benchmark/Dockerfile). Weights are bind-mounted from
+benchmark/models/ rather than baked in: the checkpoint is 5.8 GB, one shard of
+it 4.7 GB, which exceeds GitHub's 2 GB Git-LFS per-file ceiling — so the
+catalogue that reproduces them (download_models.py) is versioned and the
+weights themselves stay on the machine that has the card.
+
 Then point the API at it:  STT_LOCAL_URL=http://127.0.0.1:8100
+(inside compose: http://stt-local:8100)
 """
 import argparse
 import io
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -43,6 +58,10 @@ MODEL_DIR = MODELS_DIR / "BounharAbdelaziz__Morocco-Darija-STT-large"
 _runner = None
 _loaded_at = None
 _load_error = None
+_load_started = False
+# Serialises the lazy load. Two voice notes arriving together would otherwise
+# both start a ~4 GB load and OOM an 8 GB card.
+_load_lock = threading.Lock()
 
 
 def _warm(runner) -> None:
@@ -90,12 +109,17 @@ def load_blocking(device: str, dtype) -> None:
 
 
 def _health_status() -> str:
-    """Three states, not two: a model that failed to load is neither ready nor
+    """Four states, not two. A model that failed to load is neither ready nor
     still coming, and reporting it as "loading" forever would hide the reason
-    from the dashboard."""
+    from the dashboard. Since the load became lazy there is also a fourth,
+    normal-and-healthy state: nothing loaded because nothing has asked yet.
+    Calling that "loading" would show a permanent false alarm on a container
+    that is behaving exactly as designed."""
     if _runner is not None:
         return "ok"
-    return "error" if _load_error else "loading"
+    if _load_error:
+        return "error"
+    return "loading" if _load_started else "idle"
 
 
 def _spool(blob: bytes, filename: Optional[str]) -> Path:
@@ -115,22 +139,32 @@ def build_app(device: str, dtype):
 
     app = FastAPI(title="aznet local STT", version="1.0")
 
-    def _load_blocking() -> None:
-        load_blocking(device, dtype)
+    def _ensure_loaded() -> None:
+        """Load on the first /transcribe, not at startup.
 
-    @app.on_event("startup")
-    def _load() -> None:
-        # Loading takes ~4 minutes for this checkpoint (measured 235.6 s), and
-        # uvicorn binds the socket BEFORE running startup — so doing it inline
-        # left the port accepting connections while answering nothing, with no
-        # way to tell "still loading" from "hung". On a thread, /health answers
-        # "loading" from the first second and the API's reachability probe gets
-        # a truthful state instead of a timeout.
-        import threading
+        This engine sits at position 2 of the `gemini,local,groq` chain, so it
+        answers only when Gemini fails — which can be a whole quiet day.
+        Loading at startup held ~4 GB of an 8 GB card permanently to serve that.
+        Lazy, the container costs nothing until it is actually called.
 
-        print(f"[stt] loading {MODEL_DIR.name} on {device} — this takes minutes",
-              flush=True)
-        threading.Thread(target=_load_blocking, name="model-load", daemon=True).start()
+        The first caller pays the load (measured 235.6 s) inside its own
+        request. That is affordable because `local_darija._http()` allows 300 s
+        precisely for this engine, and because it is paid once per container
+        lifetime, not once per note. Callers after it pay nothing.
+
+        The lock — not a bare `if` — because two voice notes arriving together
+        would otherwise both start a 4 GB load and OOM the card.
+        """
+        global _load_started
+        if _runner is not None or _load_error:
+            return
+        with _load_lock:
+            if _runner is not None or _load_error:
+                return
+            _load_started = True
+            print(f"[stt] first call — loading {MODEL_DIR.name} on {device}, "
+                  "this takes minutes", flush=True)
+            load_blocking(device, dtype)
 
     @app.get("/health")
     def health() -> dict:
@@ -155,8 +189,12 @@ def build_app(device: str, dtype):
     # never sit on the event loop. As `async def` a single 6 s transcription
     # froze /health for every other caller.
     def transcribe(audio: Annotated[UploadFile, File()]) -> dict:
+        _ensure_loaded()
         if _runner is None:
-            raise HTTPException(503, "model still loading")
+            # Only reachable when the load itself failed (weights missing, no
+            # VRAM). 503 keeps the API's chain semantics: this engine is down,
+            # not this request malformed.
+            raise HTTPException(503, _load_error or "model unavailable")
         blob = audio.file.read()
         if not blob:
             raise HTTPException(422, "empty audio")
