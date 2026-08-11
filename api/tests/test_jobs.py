@@ -391,3 +391,32 @@ def test_report_mail_carries_banner_and_button():
     assert "https://" not in html.split("<h1")[0]  # nothing remote above the fold
     assert "Ouvrir le rapport" in html
     assert "<table" in html
+
+
+def test_a_run_outcome_can_be_claimed_only_once():
+    """One run, one recorded outcome — even under a stampede.
+
+    The timed path has two writers racing for one slot: the worker that just
+    finished, and the caller whose join() timed out. Before this was atomic,
+    a job completing inside that window recorded a success and then had a
+    timeout recorded over it, so a single run produced two contradictory
+    entries in the Automation panel and in pipeline_logs.
+    """
+    import threading as _t
+
+    claim = jobs._make_claim()
+    winners = []
+    barrier = _t.Barrier(8)
+
+    def race():
+        barrier.wait()          # release all eight at once
+        if claim():
+            winners.append(1)
+
+    threads = [_t.Thread(target=race) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(winners) == 1

@@ -494,19 +494,24 @@ def run(name: str) -> dict:
     if timeout is None:
         return _execute(job, name, started)
     result: Dict[str, dict] = {}
-    timed_out = threading.Event()
+    claim = _make_claim()
     worker = threading.Thread(
-        target=_execute, args=(job, name, started, result, timed_out), name=f"job-{name}", daemon=True
+        target=_execute, args=(job, name, started, result, claim), name=f"job-{name}", daemon=True
     )
     worker.start()
     worker.join(timeout)
-    if worker.is_alive():
+    if worker.is_alive() and claim():
         # The thread is a daemon: once it finishes (or the process exits) it
         # dies, so an overrun cannot accumulate. Its status would have arrived
         # too late to matter; the timeout record is the one the operator sees.
-        # `timed_out` stops the worker from later overwriting that record with
-        # a success that arrived after the deadline.
-        timed_out.set()
+        #
+        # `claim()` — not a plain Event — because `worker.is_alive()` and the
+        # worker's own check are two unsynchronised reads. A job finishing in
+        # the window between them used to record its success and then have this
+        # line record a timeout over it: one run, two contradictory entries in
+        # the panel and in pipeline_logs, which is exactly the kind of lie this
+        # module exists to prevent. Whoever claims first writes; the loser
+        # stays silent.
         return _record(name, {"ok": False, "error": f"timed out after {timeout}s"}, started)
     # .get, not [...]: a worker that died before writing its status would make
     # this raise KeyError straight into _loop, and the rule this module opens
@@ -517,10 +522,32 @@ def run(name: str) -> dict:
     return status
 
 
+def _make_claim():
+    """Hand out a one-shot right to record this run's outcome.
+
+    Returns a callable that answers True to exactly one caller, ever. The timed
+    path has two writers racing for one slot — the worker that finished and the
+    caller whose join() timed out — and `threading.Event` cannot express
+    "test and set as one step". A lock can, in four lines.
+    """
+    lock = threading.Lock()
+    taken = False
+
+    def claim() -> bool:
+        nonlocal taken
+        with lock:
+            if taken:
+                return False
+            taken = True
+            return True
+
+    return claim
+
+
 def _execute(
     job, name: str, started: float,
     result: Optional[Dict[str, dict]] = None,
-    timed_out: Optional[threading.Event] = None,
+    claim=None,
 ) -> dict:
     """Body shared by the direct and the timed path. Never raises."""
     try:
@@ -530,9 +557,9 @@ def _execute(
         status = {"job": name, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
     if result is not None:
         result["status"] = status
-    if timed_out is not None and timed_out.is_set():
-        # The caller already recorded a timeout; a result arriving after the
-        # deadline is not a run the panel should show as a success.
+    if claim is not None and not claim():
+        # The caller already recorded a timeout for this run; a result arriving
+        # after the deadline is not a run the panel should show as a success.
         return status
     return _record(name, status, started)
 
