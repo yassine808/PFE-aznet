@@ -156,7 +156,10 @@ def _call_groq(
                 {"role": "user", "content": text or ""},
             ],
         )
-        return ExtractedReport.model_validate_json(resp.choices[0].message.content)
+        raw = resp.choices[0].message.content
+        if not raw:
+            raise ValueError("empty completion")
+        return ExtractedReport.model_validate_json(raw)
     except Exception as exc:  # noqa: BLE001
         raise ExtractionError(f"groq/{model}: {exc}") from exc
 

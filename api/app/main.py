@@ -647,9 +647,9 @@ def list_messages(
 
 class LinkIn(BaseModel):
     message_id: str
-    row: Optional[int] = Field(None, description="1-based Sheet row; None clears the link")
+    row: Optional[int] = Field(default=None, description="1-based Sheet row; None clears the link")
     tab: Optional[str] = Field(
-        None, description="Tab the row lives in; None means Rapports (legacy links)"
+        default=None, description="Tab the row lives in; None means Rapports (legacy links)"
     )
 
 
@@ -669,7 +669,7 @@ class ModifyIn(BaseModel):
     message_id: str
     action: Literal["modify", "supprimer"]
     fields: Optional[Dict[str, Optional[str]]] = Field(
-        None, description="Column → value map; required for modify, ignored for supprimer"
+        default=None, description="Column → value map; required for modify, ignored for supprimer"
     )
 
 
@@ -770,7 +770,7 @@ class ReportVersionIn(BaseModel):
     period: str = Field(..., description="La date, ou le premier jour de la semaine")
     objet: str
     corps: str
-    image: Optional[str] = Field(None, description="Carte illustrée, en data: URI")
+    image: Optional[str] = Field(default=None, description="Carte illustrée, en data: URI")
     note: Optional[str] = None
 
 
@@ -978,7 +978,7 @@ class ImageCardRequest(BaseModel):
 
     title: str = Field(..., description="Titre affiché sur la carte (ex: 'Semaine 30')")
     rows: List[dict] = Field(..., description="Lignes du Sheet pour la période")
-    extra: Optional[str] = Field(None, description="Consigne libre de l'utilisateur")
+    extra: Optional[str] = Field(default=None, description="Consigne libre de l'utilisateur")
 
 
 @app.post("/generate-image", responses={422: {"description": "No rows to illustrate"}, 502: {"description": "Image generation failed"}})
@@ -1113,7 +1113,7 @@ class JournalEntry(BaseModel):
     message_id: Optional[str] = None
     warnings: List[str] = Field(default_factory=list)
     stt_engine: Optional[str] = Field(
-        None,
+        default=None,
         description=(
             "Moteur STT qui a effectivement transcrit (transcription.provider de "
             "/process). Absent pour un rapport texte ou photo. Le moteur réel, pas "
@@ -1205,7 +1205,7 @@ def list_queue(
 
 class NotificationReadIn(BaseModel):
     ids: Optional[List[int]] = Field(
-        None, description="Which notifications to mark read; omit for all"
+        default=None, description="Which notifications to mark read; omit for all"
     )
 
 
@@ -1246,6 +1246,7 @@ def _lead_period_error(remind_value, remind_unit, repeat, repeat_every, repeat_u
     if repeat_unit:
         period_days = repeat_every * _UNIT_DAYS[repeat_unit]
     else:
+        assert repeat not in (None, "none")
         period_days = _REPEAT_DAYS[repeat]
     if _UNIT_DAYS[remind_unit] * remind_value >= period_days:
         return "le rappel avant doit être plus court que la période de répétition"
@@ -1257,9 +1258,9 @@ class TaskIn(BaseModel):
     notes: Optional[str] = None
     due_at: Optional[datetime] = None
     repeat: Literal["none", "daily", "weekly", "monthly"] = "none"
-    remind_before_value: Optional[int] = Field(None, ge=0)
+    remind_before_value: Optional[int] = Field(default=None, ge=0)
     remind_before_unit: Optional[Literal["day", "week", "month"]] = None
-    repeat_every: Optional[int] = Field(None, ge=1)
+    repeat_every: Optional[int] = Field(default=None, ge=1)
     repeat_unit: Optional[Literal["day", "week", "month"]] = None
 
     @model_validator(mode="after")
@@ -1280,9 +1281,9 @@ class TaskPatchIn(BaseModel):
     notes: Optional[str] = None
     due_at: Optional[datetime] = None
     repeat: Optional[Literal["none", "daily", "weekly", "monthly"]] = None
-    remind_before_value: Optional[int] = Field(None, ge=0)
+    remind_before_value: Optional[int] = Field(default=None, ge=0)
     remind_before_unit: Optional[Literal["day", "week", "month"]] = None
-    repeat_every: Optional[int] = Field(None, ge=1)
+    repeat_every: Optional[int] = Field(default=None, ge=1)
     repeat_unit: Optional[Literal["day", "week", "month"]] = None
     done: Optional[bool] = None
 

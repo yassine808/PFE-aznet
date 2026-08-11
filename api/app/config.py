@@ -165,7 +165,7 @@ class Settings(BaseSettings):
     # The repo .env spells this SMTP_PASS while the field name implies
     # SMTP_PASSWORD; accept both rather than have the Test button 422 with
     # "SMTP is not configured" against a file that plainly configures it.
-    smtp_password: Optional[str] = Field(None, validation_alias=AliasChoices("SMTP_PASSWORD", "SMTP_PASS"))
+    smtp_password: Optional[str] = Field(default=None, validation_alias=AliasChoices("SMTP_PASSWORD", "SMTP_PASS"))
     smtp_from: Optional[str] = None
 
     # Outbound technician replies (POST /reply — the inbox's composer).

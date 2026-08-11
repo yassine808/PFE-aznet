@@ -108,6 +108,8 @@ def _generate_groq(date: str, rows_json: str) -> DailyReportContent:
             ],
         )
         raw = resp.choices[0].message.content
+        if not raw:
+            raise ValueError("empty completion")
         return DailyReportContent.model_validate_json(raw)
     except DailyReportError:
         raise

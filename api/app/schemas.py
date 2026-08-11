@@ -71,60 +71,60 @@ class ExtractedReport(BaseModel):
 
     # --- travaux cuivre ------------------------------------------------
     cables_prepares_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de câble cuivre préparés (tirés et mesurés)"
+        default=None, ge=0, description="Mètres de câble cuivre préparés (tirés et mesurés)"
     )
     cables_installes_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de câble cuivre installés et raccordés"
+        default=None, ge=0, description="Mètres de câble cuivre installés et raccordés"
     )
     goulotte_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de goulotte posés"
+        default=None, ge=0, description="Mètres de goulotte posés"
     )
     # The same physical port is counted three times in the director's file,
     # at three different stages, and a single day can report three different
     # numbers ("14 prises côté bureaux / 17 côté panneau / 15 testées").
     prises_connectees: Optional[int] = Field(
-        None, ge=0, description="Prises RJ45 raccordées côté bureau"
+        default=None, ge=0, description="Prises RJ45 raccordées côté bureau"
     )
     panneaux_prises_brassees: Optional[int] = Field(
-        None, ge=0, description="Prises raccordées côté panneau de brassage"
+        default=None, ge=0, description="Prises raccordées côté panneau de brassage"
     )
     prises_testees: Optional[int] = Field(
-        None, ge=0, description="Prises testées et étiquetées"
+        default=None, ge=0, description="Prises testées et étiquetées"
     )
 
     # --- travaux fibre -------------------------------------------------
     fibre_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de câble fibre optique posés"
+        default=None, ge=0, description="Mètres de câble fibre optique posés"
     )
     interconnexions: Optional[int] = Field(
-        None, ge=0, description="Nombre d'interconnexions installées entre locaux"
+        default=None, ge=0, description="Nombre d'interconnexions installées entre locaux"
     )
     connexions_optiques_brins: Optional[int] = Field(
-        None, ge=0, description="Brins de fibre optique fusionnés/connectés"
+        default=None, ge=0, description="Brins de fibre optique fusionnés/connectés"
     )
 
     # --- localisation --------------------------------------------------
     etages: Optional[List[str]] = Field(
-        None, description="Étages travaillés (RDC, E1..E4)"
+        default=None, description="Étages travaillés (RDC, E1..E4)"
     )
-    ailes: Optional[List[str]] = Field(None, description="Ailes (Droite, Gauche)")
+    ailes: Optional[List[str]] = Field(default=None, description="Ailes (Droite, Gauche)")
     locaux_techniques: Optional[List[str]] = Field(
-        None, description="Locaux techniques (RG, SR1..SR10)"
+        default=None, description="Locaux techniques (RG, SR1..SR10)"
     )
 
     # --- stock restant sur site ----------------------------------------
     stock_cable_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de câble restants en stock sur site"
+        default=None, ge=0, description="Mètres de câble restants en stock sur site"
     )
     stock_goulotte_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de goulotte restants en stock"
+        default=None, ge=0, description="Mètres de goulotte restants en stock"
     )
     stock_fibre_m: Optional[float] = Field(
-        None, ge=0, description="Mètres de fibre optique restants en stock"
+        default=None, ge=0, description="Mètres de fibre optique restants en stock"
     )
 
     remarques: Optional[str] = Field(
-        None, description="Problèmes, blocages, matériel manquant, remarques"
+        default=None, description="Problèmes, blocages, matériel manquant, remarques"
     )
     resume: str = Field(
         ..., description="Résumé professionnel en français (2-4 phrases)"
@@ -209,7 +209,7 @@ class TranscriptionInfo(BaseModel):
     provider: str
     latency_s: float = Field(..., ge=0)
     confidence: Optional[float] = Field(
-        None,
+        default=None,
         ge=0,
         le=1,
         description=(
@@ -228,14 +228,14 @@ class ProcessResponse(BaseModel):
     )
     report: ExtractedReport
     transcription: Optional[TranscriptionInfo] = Field(
-        None, description="Absent en mode texte (formulaire)"
+        default=None, description="Absent en mode texte (formulaire)"
     )
     warnings: List[str] = Field(
         default_factory=list,
         description="Signaux qualité (ex: transcription douteuse) pour le flagging n8n",
     )
     lien_audio: Optional[str] = Field(
-        None,
+        default=None,
         description=(
             "Lien durable (Google Drive) vers l'audio, quand l'upload a réussi. "
             "n8n le préfère au file_id de la chaîne, qui expire."

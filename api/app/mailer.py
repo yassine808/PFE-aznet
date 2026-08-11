@@ -357,9 +357,9 @@ fictifs et tirés au hasard.
 
 ## Détail par chantier
 - {sites[0]} — {techs[0]} : pose de {goulottes // 2} m de goulottes, \
-raccordement de {random.randint(2, 6)} panneaux, RDC et 1er étage.
+raccordement de {rng.randint(2, 6)} panneaux, RDC et 1er étage.
 - {sites[1]} — {techs[1]} : {cables // 3} m de câble tiré, \
-{random.randint(1, 4)} bureaux terminés, local technique SR{random.randint(1, 9)}.
+{rng.randint(1, 4)} bureaux terminés, local technique SR{rng.randint(1, 9)}.
 - {sites[2]} — {techs[2]} : reprise de brassage, aucun métrage déclaré.
 
 ## Problèmes et besoins

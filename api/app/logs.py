@@ -1345,7 +1345,7 @@ def create_chantier(nom: str, sheet_tab: Optional[str] = None,
             """,
             (nom, (client or None), (sheet_tab or nom).strip()),
         )
-        return _iso(dict(_one(cur)))
+        return _iso(dict(_one(cur) or {}))
 
 
 def delete_chantier(chantier_id: int) -> bool:
@@ -1424,7 +1424,7 @@ def upsert_article(chantier_id: int, designation: str, unite: str = "U",
             """,
             (chantier_id, numero, designation, unite.strip() or "U", qte_marche, champ),
         )
-        return _iso(dict(_one(cur)))
+        return _iso(dict(_one(cur) or {}))
 
 
 def delete_article(article_id: int) -> bool:
@@ -2024,6 +2024,8 @@ def create_task(title: str, notes: Optional[str] = None,
              remind_before_unit, repeat_every, repeat_unit),
         )
         row = _one(cur)
+        if row is None:
+            raise LogStoreError("create_task: no row returned")
     return int(row["id"])
 
 
@@ -2114,6 +2116,8 @@ def due_tasks(now: datetime) -> List[dict]:
     for row in rows:
         when = notify_time(row["due_at"], row["remind_before_value"],
                            row["remind_before_unit"])
+        if when is None:
+            continue
         last = row["last_notified_at"]
         if when <= now and (last is None or last < when):
             due.append(row)
