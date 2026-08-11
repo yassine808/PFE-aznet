@@ -113,55 +113,28 @@ A comparative benchmark of **thirteen** Darija speech-to-text engines — three 
 </w:p>
 ```
 
-# Liste des figures
+```{=openxml}
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Liste des figures</w:t></w:r></w:p>
+<w:p>
+  <w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> TOC \h \z \t "FigureCaption,1" </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+  <w:r><w:t>Liste des figures — appuyer sur F9 pour la générer.</w:t></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+</w:p>
+```
 
-| N° | Titre |
-|---|---|
-| 3.1 | Architecture générale : les cinq responsabilités et leurs échanges |
-| 3.2 | Diagramme de cas d'utilisation |
-| 3.3 | Cycle de vie complet d'une note vocale, de l'émission à la ligne du journal, y compris la |
-| 3.4 | Cycle de vie d'un rapport, vu comme une machine à états |
-| 3.5 | Modèle relationnel |
-| 3.6 | Tables d'audit |
-| 3.7 | Chaîne de transcription |
-| 3.8 | Les quatre chaînes de repli d'extraction |
-| 3.9 | Tenue du journal : accumulation intra-journalière et réconciliation de stock |
-| 3.10 | Ordonnanceur : six tâches, un fil unique, et une réclamation atomique du droit d'enregistr |
-| 3.11 | Workflow d'orchestration : les 65 nœuds regroupés par fonction |
-| 3.12 | Workflow, seconde moitié : aiguillage, traitement, réponse au technicien puis journal |
-| 3.13 | Contrôle d'accès |
-| 4.1 | Topologie de déploiement |
-| 4.2 | Démarche du banc d'essai, y compris ses détours |
-| 4.3 | Vue d'ensemble — Les repères du jour, le rythme horaire des messages, l'état des sept serv |
-| 4.4 | Réception — Le flux des messages entrants, canal par canal, avec le média d'origine et le |
-| 4.5 | Rapports — Le miroir plat du journal, filtrable et corrigeable |
-| 4.6 | Rapport du jour — Le condensé quotidien tel qu'il part par courriel, avec la possibilité d |
-| 4.7 | Rapport hebdomadaire — Le même moteur que le rapport quotidien, appelé sur une plage de da |
-| 4.8 | Automatisation — Les six tâches planifiées, leur dernier résultat et leur horaire |
-| 4.9 | Équipe — organigramme — Les trois bandes fixes directeur, chefs, techniciens |
-| 4.10 | Journaux — La chronologie du pipeline reconstituée par identifiant de corrélation : les ét |
-| 4.11 | File d'attente — Les écritures en échec en attente de reprise, avec leur nombre de tentati |
-| 4.12 | Notifications — Le centre de notifications, ouvert depuis la barre latérale |
 
-# Liste des tableaux
-
-| N° | Titre |
-|---|---|
-| 1.1 | Priorisation MoSCoW du périmètre fonctionnel |
-| 1.2 | Planning prévisionnel du projet |
-| 1.3 | Registre des risques principaux |
-| 2.1 | Comparaison des solutions d'orchestration |
-| 2.2 | Comparaison des canaux de réception |
-| 2.3 | Récapitulatif des choix technologiques |
-| 3.1 | Schéma du rapport extrait (`ExtractedReport`) |
-| 3.2 | Contrat d'erreurs du service |
-| 4.1 | Environnement de développement |
-| 4.2 | Comparaison des moteurs accessibles par API |
-| 4.3 | Campagne locale complète, 12 moteurs |
-| 4.4 | Comportement comparé sur les champs métier |
-| 4.5 | Effet de l'invite de vocabulaire en exécution locale |
-| 4.6 | État du périmètre livré |
-| 4.7 | Métriques du projet |
+```{=openxml}
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Liste des tableaux</w:t></w:r></w:p>
+<w:p>
+  <w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> TOC \h \z \t "TableCaption,1" </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+  <w:r><w:t>Liste des tableaux — appuyer sur F9 pour la générer.</w:t></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+</w:p>
+```
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -293,7 +266,10 @@ Le cahier des charges fourni par l'entreprise (Annexe A) définit les exigences 
 | **Could** | Second canal de réception ; deuxième vague de benchmark sur enregistrements réels ; document de migration base de données |
 | **Won't (ce PFE)** | Application de bureau ; multi-entreprises |
 
+::: {custom-style="TableCaption"}
 **Tableau 1.1 :** Priorisation MoSCoW du périmètre fonctionnel.
+:::
+
 
 Le périmètre effectivement livré dépasse cette priorisation sur trois points, documentés au chapitre 4 : le second canal de réception (WhatsApp Cloud API) est en service et non resté en « Could » ; la base de données PostgreSQL a été introduite en complément de Google Sheets et non reportée ; et le tableau de bord a dépassé la consultation pour devenir l'outil d'administration du système (organigramme, comptes, ordonnanceur, journaux).
 
@@ -315,7 +291,10 @@ Le dépôt Git compte **207 commits** entre le 15 juillet 2026 (`feat: week 0 sc
 | Sprint 3 — Pilote, documentation, rapport | 17 – 28 août | Déploiement pilote, livrables documentaires, rédaction finale, présentation |
 | Tampon | 28 – 31 août | Finitions, répétition de la soutenance |
 
+::: {custom-style="TableCaption"}
 **Tableau 1.2 :** Planning prévisionnel du projet.
+:::
+
 
 ### 1.6.3 Gestion des risques
 
@@ -327,7 +306,10 @@ Le dépôt Git compte **207 commits** entre le 15 juillet 2026 (`feat: week 0 sc
 | Panne d'un service externe (Google Sheets, fournisseur LLM) | Moyen | File de reprise persistante en base ; journal d'événements en PostgreSQL, délibérément hors du Sheet |
 | Glissement de planning (développeur seul) | Moyen | Ordre de coupe explicite ; le cœur du périmètre *Must* est protégé |
 
+::: {custom-style="TableCaption"}
 **Tableau 1.3 :** Registre des risques principaux.
+:::
+
 
 ## 1.7 Conclusion du chapitre
 
@@ -405,7 +387,10 @@ Le cahier des charges recommande n8n comme outil d'automatisation. L'étude comp
 | Logique personnalisée | Nœuds de code JavaScript | Limitée | Totale |
 | Valeur pédagogique / maintenance | Workflows visuels documentables | Boîte noire | Coût de maintenance élevé |
 
+::: {custom-style="TableCaption"}
 **Tableau 2.1 :** Comparaison des solutions d'orchestration.
+:::
+
 
 n8n auto-hébergé en Docker combine gratuité, intégrations prêtes à l'emploi et possibilité d'insérer du code JavaScript. Le choix architectural du projet — détaillé au chapitre 3 — est toutefois **hybride** : n8n orchestre les intégrations, mais le cœur métier est un microservice codé sur mesure, testable et versionné.
 
@@ -424,13 +409,84 @@ Le cahier des charges cite WhatsApp Business API « ou passerelle équivalente �
 | Coût | Gratuit en test, conversations facturées en production | Gratuit |
 | Adoption par le public cible | Très forte au Maroc | Moyenne |
 
+::: {custom-style="TableCaption"}
 **Tableau 2.2 :** Comparaison des canaux de réception.
+:::
+
 
 **Décision et évolution.** Telegram a été retenu en premier pour le développement, précisément parce qu'il n'impose aucune approbation et autorise le *polling* — donc aucune exposition publique du poste de développement. WhatsApp, indispensable à terme du fait de son adoption au Maroc, a été mis en service dans un second temps une fois les obstacles Meta levés (jeton *System User* sans expiration, application publiée, souscription `subscribed_apps` du WABA). **Les deux canaux sont aujourd'hui en production simultanément**, servis par un seul workflow et un seul service.
 
 Cette asymétrie a une conséquence de diagnostic qu'il faut garder à l'esprit : Telegram *interroge* (connexions sortantes, aucun tunnel nécessaire) tandis que WhatsApp est *poussé* par webhook et exige une URL publique HTTPS. Par conséquent, « Telegram répond une erreur mais WhatsApp reste muet » ne décrit pas une panne mais deux : une réponse d'erreur prouve que le message a atteint la chaîne ; le silence prouve qu'il n'y est jamais arrivé.
 
-## 2.6 Synthèse des choix technologiques
+
+## 2.6 Étude comparative des solutions existantes
+
+Avant de concevoir un système, il faut justifier de ne pas en acheter un. Trois familles de produits couvrent partiellement ce besoin.
+
+**Les applications de suivi de chantier** — Procore, Fieldwire, Kizeo Forms — proposent des formulaires mobiles, des photos géolocalisées et des tableaux de bord. Elles échouent sur deux points décisifs ici. D'une part, le prix : toutes sont facturées par utilisateur et par mois, ce qui est incompatible avec la contrainte de budget nul. D'autre part, et c'est plus fondamental, **elles imposent une saisie structurée à la source** : le technicien doit ouvrir une application, choisir un chantier dans une liste et remplir des champs. L'étude de l'existant (§1.3.3) a montré que c'est précisément ce qui serait rejeté par l'usage. Aucune n'accepte une note vocale en darija comme entrée principale.
+
+**Les plateformes d'automatisation avec IA managée** — Microsoft Power Automate couplé à Azure Speech, ou Zapier couplé à OpenAI. Techniquement viables et rapides à assembler, elles sont écartées pour trois raisons : le coût à l'usage dès la sortie des quotas d'essai ; l'absence de prise en charge sérieuse du darija dans les services de transcription généralistes, qui est le cœur du problème ; et une logique métier enfermée dans une interface propriétaire, non versionnée et non testable — inacceptable pour un travail d'ingénierie qui doit être défendu et repris.
+
+**Les assistants de transcription généralistes** — Otter, Notta, ou l'envoi manuel à un modèle de langage. Ils transcrivent, mais ne structurent pas, n'écrivent pas dans le tableau de suivi, ne notifient personne et ne connaissent pas le vocabulaire du câblage. Ils résolvent un cinquième du problème.
+
+| Critère | Applications de chantier | Automatisation + IA managée | Assistants de transcription | **Ce projet** |
+|---|---|---|---|---|
+| Coût | Par utilisateur / mois | À l'usage | Abonnement | **Nul** |
+| Entrée en darija | Non | Faible | Partielle | **Oui, moteur dédié** |
+| Effort du technicien | Formulaire à remplir | Formulaire à remplir | Envoi manuel | **Une note vocale** |
+| Extraction structurée métier | Oui, par formulaire | À construire | Non | **Oui, par LLM** |
+| Écriture dans le fichier du client | Export | Oui | Non | **Oui, fusion par chantier** |
+| Logique versionnée et testée | Non | Non | — | **Oui, 272 tests** |
+
+::: {custom-style="TableCaption"}
+**Tableau 2.3 :** Positionnement face aux solutions existantes.
+:::
+
+
+La conclusion n'est pas que ces produits sont mauvais, mais que le besoin d'AZNET a une contrainte que le marché ne traite pas : **l'entrée doit être de la parole spontanée en langue peu dotée**, et tout le reste en découle.
+
+## 2.7 Technologies et langages retenus
+
+### 2.7.1 Vue d'ensemble
+
+| Technologie | Rôle dans le projet | Principales alternatives | Raison du choix |
+|---|---|---|---|
+| **Python 3.11** | Service applicatif, banc d'essai | Node.js, Go, Java | Écosystème IA/ML sans équivalent ; toutes les bibliothèques de modèles sont d'abord publiées en Python |
+| **FastAPI** | Framework HTTP | Django, Flask | Validation et documentation dérivées des types ; asynchrone natif |
+| **Pydantic** | Contrat de données | dataclasses, marshmallow | La validation *est* le garde-fou anti-hallucination du projet |
+| **TypeScript** | Tableau de bord | JavaScript | Le contrat d'API change souvent ; le typage transforme une rupture en erreur de compilation |
+| **React 19** | Interface | Vue, Svelte, Angular | Standard industriel, écosystème et employabilité |
+| **Vite** | Outil de construction | webpack, Next.js | Démarrage quasi instantané ; aucun besoin de rendu serveur |
+| **Tailwind CSS v4** | Style | CSS modules, styled-components, shadcn/ui | Couche de jetons entièrement en CSS, sans fichier de configuration JavaScript |
+| **PostgreSQL 16** | Stockage technique | SQLite, MongoDB | Accès concurrents réels (API, ordonnanceur, n8n) ; JSON natif |
+| **Google Sheets** | Registre métier | Base de données seule | **Imposé par l'usage** : c'est le fichier que le directeur ouvre déjà |
+| **n8n** | Orchestration | Zapier, Make, code | Auto-hébergeable et gratuit ; intégrations natives (voir §2.4) |
+| **Docker Compose** | Déploiement | Installation manuelle, Kubernetes | Cinq services reproductibles ; Kubernetes serait disproportionné pour une machine |
+| **PyTorch + Transformers** | Banc d'essai local | ONNX Runtime, llama.cpp | Seul écosystème où les treize points de contrôle évalués sont publiés |
+| **Playwright** | Contrôle visuel | Selenium, Cypress | Capture multi-navigateur scriptable ; sert aussi à produire les captures de ce rapport |
+| **pytest** | Tests | unittest | Fixtures et paramétrage ; 272 tests sans aucune clé d'API |
+| **GitHub Actions** | Intégration continue | GitLab CI, Jenkins | Gratuit sur dépôt privé ; au plus près du dépôt |
+| **Mermaid** | Diagrammes | draw.io, Visio | Diagrammes en texte, donc versionnés et révisables comme du code |
+
+::: {custom-style="TableCaption"}
+**Tableau 2.4 :** Technologies retenues et alternatives écartées.
+:::
+
+
+### 2.7.2 Les choix qui méritaient un débat
+
+Quatre décisions n'allaient pas de soi et ont été tranchées sur des critères vérifiables.
+
+**FastAPI plutôt que Django ou Flask.** Django apporte un ORM, une administration et une authentification — l'essentiel de ce qu'il offre est inutile ici, puisque le registre métier est un classeur Google et non une base relationnelle. Flask est minimal mais n'a ni validation ni documentation automatique. FastAPI dérive la validation, la documentation OpenAPI et le contrat d'erreurs **des annotations de type déjà écrites**, ce qui compte doublement dans un système dont la règle principale est « aucune donnée inventée » : le schéma qui documente est le schéma qui valide.
+
+**PostgreSQL plutôt que SQLite.** SQLite aurait suffi au volume — quelques dizaines de lignes par jour. Il a été écarté sur la concurrence, non sur la taille : trois processus écrivent simultanément — l'API sur le chemin de réponse, l'ordonnanceur en arrière-plan, n8n à chaque étape — et le verrouillage de fichier de SQLite transforme cela en attentes sur le chemin où un technicien attend une réponse.
+
+**Tailwind v4 sans bibliothèque de composants.** shadcn/ui aurait fait gagner des semaines. Il a été écarté parce que ce tableau de bord a une identité visuelle propre, décrite dans un document de conception, et qu'adopter une bibliothèque revient à hériter de ses décisions esthétiques puis à lutter contre elles. Les graphiques sont en SVG et CSS écrits à la main, pour la même raison — et cela évite une dépendance de plus de 400 Ko pour quatre visualisations.
+
+**Le darija en local plutôt qu'une API.** C'est le choix le plus coûteux du projet : 7,7 s de latence contre 1,53 s, environ 4 Go de mémoire graphique, et une machine à maintenir. Il est justifié au chapitre 4 par la seule chose qui compte ici — la préservation des quantités et des emprunts techniques français — et il a été confirmé à l'oreille par un locuteur natif avant d'être adopté.
+
+
+## 2.8 Synthèse des choix technologiques
 
 | Besoin | Choix | Justification résumée |
 |---|---|---|
@@ -443,9 +499,12 @@ Cette asymétrie a une conséquence de diagnostic qu'il faut garder à l'esprit 
 | Stockage métier | Google Sheets | Imposé par le cahier des charges ; c'est le fichier que le directeur lit déjà |
 | Stockage technique | PostgreSQL | Journal d'événements, idempotence, sessions, file de reprise — délibérément hors du Sheet |
 
-**Tableau 2.3 :** Récapitulatif des choix technologiques.
+::: {custom-style="TableCaption"}
+**Tableau 2.5 :** Récapitulatif des choix technologiques.
+:::
 
-## 2.7 Conclusion du chapitre
+
+## 2.9 Conclusion du chapitre
 
 L'état de l'art confirme la faisabilité du projet sous ses contraintes : Whisper fournit une base de transcription multilingue robuste dont les limites sur le darija sont compensées en aval par l'extraction LLM ; les sorties structurées contraintes et la validation stricte contiennent le risque d'hallucination ; et l'écosystème gratuit couvre l'intégralité de la chaîne. Il a également posé deux points de méthode que le chapitre 4 exploitera : la nécessité de contrôles non affinés dans tout banc d'essai de *fine-tunes*, et l'inadéquation du WER à un système dont la valeur tient aux nombres. Le chapitre suivant traduit ces choix en une conception détaillée.
 
@@ -471,9 +530,15 @@ Deux approches extrêmes étaient possibles : tout construire dans n8n — fidè
 - **PostgreSQL** : journal d'événements, idempotence, sessions, file de reprise, organigramme, chantiers.
 - **Google Sheets** : le registre métier permanent — le fichier que le directeur lit déjà.
 
+::: {custom-style="FigureImage"}
 ![](diagrams/01-architecture.png){ width=14.7cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.1 :** Architecture générale : les cinq responsabilités et leurs échanges. Les deux arêtes numérotées vers le technicien et vers le journal matérialisent l'invariant réponse-d'abord (§3.5.2).
+:::
+
 
 
 ### 3.2.2 Frontière entre orchestration et code
@@ -496,14 +561,26 @@ L'ordre des étapes 5 et 6 est un invariant de conception, développé en §3.5.
 
 ### 3.2.4 Diagrammes UML
 
+::: {custom-style="FigureImage"}
 ![](diagrams/07-usecase.png){ width=9.4cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.2 :** Diagramme de cas d'utilisation. Le système figure comme acteur à part entière : quatre cas d'usage n'ont aucun déclencheur humain.
+:::
 
 
+
+::: {custom-style="FigureImage"}
 ![](diagrams/02-lifecycle-voice.png){ width=16.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.3 :** Cycle de vie complet d'une note vocale, de l'émission à la ligne du journal, y compris la déduplication en amont et la mise en file de reprise en aval. Le cadre vert isole l'étape que rien ne doit précéder.
+:::
+
 
 
 ## 3.3 Modèle de données
@@ -532,7 +609,10 @@ Le schéma `ExtractedReport` est le contrat entre le service, n8n et le journal.
 | `remarques` | texte, optionnel | Problèmes, blocages, matériel manquant |
 | `resume` | texte, **obligatoire** | Résumé professionnel en français (2 à 4 phrases) |
 
+::: {custom-style="TableCaption"}
 **Tableau 3.1 :** Schéma du rapport extrait (`ExtractedReport`).
+:::
+
 
 Trois décisions de modélisation méritent d'être justifiées.
 
@@ -543,9 +623,15 @@ Trois décisions de modélisation méritent d'être justifiées.
 **Les colonnes de pilotage sont exclues.** Équipe, heures, jours-homme, ordre du jour et taux de réalisation sont planifiés avant la journée ou jugés après elle. Un technicien ne les dicte pas ; le chef les saisit dans le tableau de bord, et une fusion ne les touche jamais.
 
 
+::: {custom-style="FigureImage"}
 ![](diagrams/11-report-states.png){ width=16.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.4 :** Cycle de vie d'un rapport, vu comme une machine à états. Les états terminaux sont volontairement nombreux : un doublon, un expéditeur non autorisé et un message sans contenu exploitable sont trois issues normales, pas trois pannes.
+:::
+
 
 ### 3.3.2 Politique « aucune donnée inventée »
 
@@ -568,13 +654,25 @@ Conséquence directe : **`password_hash IS NOT NULL` constitue à lui seul la d�
 
 Les autres tables sont `pipeline_logs` (journal d'étapes), `processed_messages` (idempotence), `failed_writes` (file de reprise), `sessions`, `user_actions`, `page_visits`, `service_samples` (historique de disponibilité), `app_settings`, `chantiers` et `articles`.
 
+::: {custom-style="FigureImage"}
 ![](diagrams/06-er-identity.png){ width=16.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.5 :** Modèle relationnel. `persons` est au centre et se référence elle-même par `manager_id` : c'est l'organigramme. `password_hash IS NOT NULL` y tient lieu, à lui seul, de définition d'un compte.
+:::
 
+
+::: {custom-style="FigureImage"}
 ![](diagrams/06-er-operations.png){ width=16.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.6 :** Tables d'audit. Les quatre tables restantes — `pipeline_logs`, `processed_messages`, `failed_writes`, `service_samples` et `app_settings` — n'ont délibérément aucune clé étrangère : ce sont des journaux et des files, décrits en §3.3.4.
+:::
+
 
 
 
@@ -621,9 +719,15 @@ Le choix du moteur étant arbitré par un banc d'essai, la conception rend les m
 
 Trois moteurs sont implémentés : `groq` (Whisper large-v3 par API), `gemini` (modèle multimodal natif) et `local` (client HTTP vers un service GPU dédié).
 
+::: {custom-style="FigureImage"}
 ![](diagrams/03-stt-chain.png){ width=11.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.7 :** Chaîne de transcription. L'ordre est celui de l'exactitude mesurée, non de la latence : `groq` occupe la dernière place en tant que socle rapide et toujours disponible. Aucune branche ne mène à un repli silencieux.
+:::
+
 
 
 ### 3.4.3 Chaînes de repli
@@ -633,9 +737,15 @@ Le service exploite **quatre** chaînes ordonnées `fournisseur:modèle`, une pa
 La chaîne texte **alterne délibérément les fournisseurs**, Gemini et Groq mesurant leurs quotas gratuits séparément ; la chaîne image est exclusivement Google, le catalogue gratuit de Groq ne comportant aucun modèle de vision.
 
 
+::: {custom-style="FigureImage"}
 ![](diagrams/04-extraction-chains.png){ width=10.1cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.8 :** Les quatre chaînes de repli d'extraction. Une localisation non reconnue ne provoque pas un abandon mais une nouvelle tentative : c'est la traduction en flux de contrôle de la politique « aucune donnée inventée ».
+:::
+
 
 ### 3.4.4 Contrat d'erreurs
 
@@ -647,7 +757,10 @@ La chaîne texte **alterne délibérément les fournisseurs**, Gemini et Groq me
 | Transcription anormalement courte (moins de 10 caractères) | 200 + `short_transcription` | Ligne enregistrée mais signalée |
 | Message sans contenu exploitable | 200 + `no_report_content` | Réponse au technicien, **pas** d'écriture dans le journal |
 
+::: {custom-style="TableCaption"}
 **Tableau 3.2 :** Contrat d'erreurs du service.
+:::
+
 
 La distinction 422/502 sépare les erreurs de l'appelant des défaillances des moteurs externes ; l'avertissement plutôt que l'erreur illustre le principe : un signal de qualité douteuse est un avertissement structuré, ni une erreur bloquante ni un silence.
 
@@ -676,9 +789,15 @@ Trois décisions le rendent sûr. Il n'existe **aucune table de faits mémorisé
 Les dates sont normalisées, le même jour arrivant tantôt au format ISO, tantôt en `05/08/2026`, tantôt sous forme de numéro de série `46174` ; une date illisible provoque un **ajout** (visible) plutôt qu'une fusion dans la mauvaise ligne (invisible).
 
 
+::: {custom-style="FigureImage"}
 ![](diagrams/05-journal-merge.png){ width=13.3cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.9 :** Tenue du journal : accumulation intra-journalière et réconciliation de stock. Les deux encadrés orangés sont les cas où le système préfère un signal visible à une décision silencieuse.
+:::
+
 
 ### 3.4.8 Les tâches planifiées
 
@@ -689,9 +808,15 @@ Ces tâches étaient des nœuds *cron* n8n ; elles ont migré dans le service pa
 Un invariant : **une tâche ne remonte jamais d'exception dans la boucle**. Les échecs sont enregistrés comme résultats, car un fil qui meurt à 03:00 emporte les quatre autres et personne ne s'en aperçoit avant de trouver le Sheet vide.
 
 
+::: {custom-style="FigureImage"}
 ![](diagrams/09-scheduler.png){ width=16.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.10 :** Ordonnanceur : six tâches, un fil unique, et une réclamation atomique du droit d'enregistrer le résultat — sans laquelle une tâche terminée juste au seuil du délai inscrivait deux issues contradictoires pour une même exécution.
+:::
+
 
 ## 3.5 Conception du workflow d'orchestration
 
@@ -699,13 +824,25 @@ Un invariant : **une tâche ne remonte jamais d'exception dans la boucle**. Les 
 
 Le workflow unique compte **65 nœuds** couvrant : le déclencheur périodique Telegram et son *offset* persistant ; le webhook WhatsApp et sa poignée de main de vérification ; la corrélation et la déduplication ; l'identification de l'expéditeur et le contrôle d'autorisation ; l'accusé de réception ; l'aiguillage média/texte puis audio/image ; les appels `/process` ; les réponses de résumé, d'erreur et de refus ; les commandes `/rapport`, `/modifier` et `/supprimer` ; l'appel `/journal` ; la journalisation de chaque étape ; et un déclencheur d'erreur.
 
+::: {custom-style="FigureImage"}
 ![](diagrams/08-n8n-reception.png){ width=10.5cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.11 :** Workflow d'orchestration : les 65 nœuds regroupés par fonction. Les deux déclencheurs de gauche correspondent aux deux modes de réception opposés — interrogation sortante pour Telegram, webhook entrant pour WhatsApp.
+:::
 
+
+::: {custom-style="FigureImage"}
 ![](diagrams/08-n8n-traitement.png){ width=11.5cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.12 :** Workflow, seconde moitié : aiguillage, traitement, réponse au technicien puis journal. Le nœud encadré en vert est celui que rien ne doit précéder.
+:::
+
 
 
 Le gestionnaire d'erreurs est resté dans n8n alors que les tâches planifiées en sont sorties, pour une raison précise : il intercepte les défaillances **du workflow lui-même**, que le service ne peut pas observer.
@@ -765,11 +902,62 @@ Décisions complémentaires :
 - **Moindre privilège** : le compte de service Google n'accède qu'au classeur concerné ; les empreintes de mots de passe ne quittent jamais la base, les requêtes de lecture nommant leurs colonnes plutôt que de tout sélectionner.
 
 
+::: {custom-style="FigureImage"}
 ![](diagrams/10-auth.png){ width=16.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 3.13 :** Contrôle d'accès. Les deux voies — cookie humain et clé machine — convergent vers trois niveaux d'exigence. Une clé machine non configurée **désactive** l'accès machine ; elle ne l'ouvre jamais.
+:::
 
-## 3.8 Conclusion du chapitre
+
+
+## 3.8 Protection des données personnelles
+
+Le système enregistre la voix de salariés identifiés, la rattache à leur nom et la conserve. Il s'agit de **données à caractère personnel** au sens de la loi marocaine **09-08** relative à la protection des personnes physiques à l'égard du traitement des données à caractère personnel, dont l'autorité de contrôle est la **CNDP**. Un enregistrement vocal est en outre une donnée biométrique par nature, ce qui appelle une prudence particulière.
+
+### 3.8.1 Ce qui est collecté, et où
+
+| Donnée | Emplacement | Durée de conservation |
+|---|---|---|
+| Enregistrement audio | PostgreSQL, table des médias | Purgée par la tâche de rétention |
+| Transcription et rapport structuré | Google Sheets, journal du chantier | Permanente — c'est le registre métier |
+| Nom, rôle, rattachement hiérarchique | PostgreSQL, `persons` | Durée de la relation de travail |
+| Identifiants de messagerie | PostgreSQL, `technicians` | Désactivables sans suppression |
+| Profil rédigé automatiquement | PostgreSQL, `persons.profile` | Réécrit chaque nuit |
+| Journal d'étapes, sessions, visites | PostgreSQL | Purgés à 03:00 par la tâche de rétention |
+
+::: {custom-style="TableCaption"}
+**Tableau 3.3 :** Données personnelles traitées par le système.
+:::
+
+
+### 3.8.2 Les principes appliqués
+
+**Finalité déterminée.** Le traitement a un objet unique et explicite : produire le rapport journalier de chantier. Aucune donnée n'est exploitée à une autre fin, et notamment pas pour évaluer individuellement un salarié.
+
+**Minimisation.** Le schéma d'extraction ne comporte que des quantités, des localisations et des remarques de chantier. Le profil technicien, qui est la donnée dérivée la plus sensible, **interdit explicitement les nombres** dans son instruction de rédaction et est cantonné à un rôle de contexte, sans jamais pouvoir alimenter une valeur du rapport.
+
+**Limitation de la conservation.** Une tâche de rétention supprime chaque nuit les journaux et les échantillons au-delà de leur fenêtre. Le registre métier, lui, est conservé : c'est un document d'entreprise, au même titre que le fichier de suivi qu'il remplace.
+
+**Accès restreint.** Les trois niveaux d'autorisation décrits au §3.7 s'appliquent : un technicien n'a aucun accès à l'interface, un chef accède à son périmètre, seul le directeur administre. Les sessions sont révocables individuellement.
+
+**Sécurité.** Empreintes de mots de passe jamais exposées, secrets hors du dépôt, une seule origine publiée, limitation de débit sur la connexion.
+
+### 3.8.3 Ce qui reste à faire avant une mise en production
+
+Ces points relèvent de l'entreprise et non de la technique, et sont énoncés ici parce qu'ils conditionnent un déploiement réel :
+
+1. **Déclaration du traitement auprès de la CNDP** avant toute exploitation en production.
+2. **Information des personnes concernées** : les techniciens doivent être informés de la finalité, des destinataires, de la durée de conservation et de leurs droits d'accès, de rectification et d'opposition.
+3. **Formalisation d'une durée de conservation** des enregistrements audio, actuellement fixée par un paramètre technique et non par une politique écrite.
+4. **Encadrement du transfert hors du Maroc** : la transcription et l'extraction utilisent des services hébergés à l'étranger. C'est le point le plus sensible du dossier — et l'argument le plus fort en faveur du moteur local, qui traite l'audio **sans qu'il quitte la machine de l'entreprise**.
+
+Ce dernier point mérite d'être souligné : le moteur de transcription local, retenu au chapitre 4 pour son exactitude, se trouve également être le seul qui n'expose aucune donnée à un tiers. Un choix technique fait pour la qualité s'avère aussi le meilleur choix pour la conformité.
+
+
+## 3.9 Conclusion du chapitre
 
 La conception traduit les contraintes du projet en structures : une architecture hybride dont la frontière est fonctionnelle et a été déplacée par l'expérience, un contrat de données reconstruit sur le fichier réel du client, un patron Stratégie qui a permis au banc d'essai de décider, quatre chaînes de repli explicites, un contrat d'erreurs qui refuse les échecs silencieux, un journal dont les règles d'accumulation et de réconciliation protègent le seul chiffre qui compte, et un modèle relationnel qui fait d'un humain une seule ligne. Le chapitre suivant décrit la mise en œuvre, le banc d'essai et les résultats.
 
@@ -797,7 +985,10 @@ Ce chapitre décrit la mise en œuvre de la conception : l'environnement de dév
 | PyTorch 2.5 / CUDA / transformers | Banc d'essai local sur GPU |
 | Groq API, Google AI Studio, Hugging Face | Inférence (offres gratuites) |
 
+::: {custom-style="TableCaption"}
 **Tableau 4.1 :** Environnement de développement.
+:::
+
 
 Le dépôt est organisé en modules : `api/` (service), `Dashboard/` (tableau de bord), `n8n/` (workflow exporté et documentation), `benchmark/` (banc d'essai), `docs/` (cahier des charges, guides).
 
@@ -811,9 +1002,15 @@ Deux pièges de déploiement, rencontrés le 30 juillet 2026, méritent d'être 
 2. n8n conserve **sa propre copie** du workflow dans son volume. Modifier le fichier JSON versionné ne change rien tant qu'il n'est pas réimporté ou poussé par l'API de n8n.
 
 
+::: {custom-style="FigureImage"}
 ![](diagrams/12-deployment.png){ width=16.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 4.1 :** Topologie de déploiement. Un seul service publie un port ; tout le reste n'existe que sur le réseau interne de la pile. C'est cette forme unique — identique en local, derrière le tunnel et sur le serveur — qui rend les questions d'origines croisées sans objet.
+:::
+
 
 ## 4.3 Le banc d'essai des moteurs de transcription
 
@@ -838,9 +1035,15 @@ Onze notes vocales réelles, issues des échanges des techniciens, ont servi de 
 Ce critère a été appliqué par lecture des transcriptions clip par clip, puis **confirmé à l'oreille par un locuteur natif du darija le 8 août 2026**. Cette confirmation humaine est ce qui a fixé l'ordre définitif de la chaîne.
 
 
+::: {custom-style="FigureImage"}
 ![](diagrams/13-benchmark.png){ width=16.0cm }
+:::
 
+
+::: {custom-style="FigureCaption"}
 **Figure 4.2 :** Démarche du banc d'essai, y compris ses détours. Les deux encadrés rouges signalent le bogue silencieux : il flattait un modèle au lieu de le pénaliser, ce qui est le mode de défaillance le plus dangereux pour une comparaison.
+:::
+
 
 ### 4.3.3 Résultats — moteurs par API
 
@@ -850,7 +1053,10 @@ Ce critère a été appliqué par lecture des transcriptions clip par clip, puis
 | Gemini | 11 | 0 | 16,94 s | non exposée | 20 651 (faussé, voir §4.4.1) |
 | Hugging Face (affinage darija) | 11 | **11** | — | — | jeton non configuré |
 
+::: {custom-style="TableCaption"}
 **Tableau 4.2 :** Comparaison des moteurs accessibles par API (7 août 2026).
+:::
+
 
 **Constat majeur : Groq déforme les quantités.** Sur un même clip, Gemini produit `40 كابل`, `8 ديال les panneaux`, `12 پانُو`, `3ème étage` ; Groq produit `mniya dyal panno`, `Pouzina ssimetro`, `3O mietage`, `ondélique`. Le schéma métier étant intégralement composé de quantités et de localisations, un moteur qui fusionne un chiffre dans le mot suivant ne donne rien à extraire — et `has_data()` renvoie alors « faux » sur un rapport qui *contenait* pourtant des données.
 
@@ -871,7 +1077,10 @@ Douze moteurs ont été exécutés localement en demi-précision sur la RTX 3070
 | `openai/whisper-large-v3` (contrôle) | 5,7 s | 0,582 | 214 | 55 |
 | `C-Ilyas/whisper-base-darija` | 5,0 s | 0,548 | **0** | 0 |
 
+::: {custom-style="TableCaption"}
 **Tableau 4.3 :** Campagne locale complète, 12 moteurs, 11 clips, RTX 3070 (7 août 2026). Trié par confiance décroissante.
+:::
+
 
 **Ce tableau est trié par confiance précisément pour démontrer qu'il ne faut pas s'y fier.** `boumehdi` domine la colonne à 0,916 et perd purement et simplement le « 40 » ; le meilleur moteur n'arrive qu'en cinquième position. C'est la troisième confirmation indépendante que `exp(mean logprob)` mesure la certitude du décodeur, non son exactitude.
 
@@ -890,7 +1099,10 @@ Deux précautions de lecture s'imposent :
 | `whisper-large-v3` | Date et `27 كابل` corrects, mais *vérifier* devient **`فرحنا`** (« nous nous sommes réjouis ») — un verbe technique français transformé en mot arabe sans rapport |
 | `ychafiqui/medium-darija` | **`27 câbles` devient `السبعة وعشر وعشر الين كابل`** — la quantité est détruite ; la ligne atteint le journal sans compte de câbles |
 
+::: {custom-style="TableCaption"}
 **Tableau 4.4 :** Comportement comparé sur les champs métier d'un clip de référence.
+:::
+
 
 Le moteur retenu conserve également les noms propres du domaine — Novec, Essaouira, Kenitra — à travers l'ensemble des clips.
 
@@ -927,7 +1139,10 @@ Une même instruction produit deux comportements opposés selon la voie d'exécu
 | Invite activée | `The work, the work, the work…` — boucle dégénérée, sur **tous** les clips |
 | Invite désactivée | `السلام عليكم بالنسبة لخدمة اليوم في نوفيك…` — darija propre |
 
+::: {custom-style="TableCaption"}
 **Tableau 4.5 :** Effet de l'invite de vocabulaire en exécution locale.
+:::
+
 
 Les deux explications concurrentes ont été **éliminées avant** de conclure, et non écartées par hypothèse : le décodage audio a été validé par corrélation de 1,0000 entre deux décodeurs indépendants, et la précision de calcul a produit un texte identique octet pour octet.
 
@@ -1001,7 +1216,10 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 | Moteur local sur GPU, conteneurisé | En production |
 | Pilote en conditions réelles avec les techniciens | *[À COMPLÉTER]* |
 
+::: {custom-style="TableCaption"}
 **Tableau 4.6 :** État du périmètre livré.
+:::
+
 
 ### 4.6.3 Métriques du projet
 
@@ -1018,7 +1236,10 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 | Tables PostgreSQL | 11 |
 | Services Docker | 5 |
 
+::: {custom-style="TableCaption"}
 **Tableau 4.7 :** Métriques du projet à la date de rédaction.
+:::
+
 
 ### 4.6.4 Latence de bout en bout
 
@@ -1029,57 +1250,311 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 *[À COMPLÉTER — déploiement pilote, nombre de rapports traités, retours des techniciens et de l'encadrement, incidents observés.]*
 
 
-## 4.7 Le tableau de bord en fonctionnement
 
-Les captures ci-dessous proviennent de l'application réelle, connectée à la pile complète, en thème sombre — celui qu'utilisent effectivement les responsables. Elles ont été produites par le script de contrôle visuel du dépôt, qui ouvre une session, parcourt les neuf routes et capture chaque page ; le même passage vérifie l'absence d'erreurs de console, de requêtes en échec et de débordement horizontal, et il était **propre** lors de cette capture.
+## 4.8 Analyse des coûts et des quotas
 
-![](screens/fr-overview.png){ width=16.0cm }
+La contrainte de budget nul n'est tenable que si elle est chiffrée. Un rapport consomme, au plus, **un appel de transcription** et **un appel d'extraction**, plus les écritures dans le classeur.
 
-**Figure 4.3 :** Vue d'ensemble — Les repères du jour, le rythme horaire des messages, l'état des sept services et l'activité de l'année. La disponibilité provient des échantillons enregistrés, non d'une sonde instantanée.
+| Service | Offre gratuite | Consommation par rapport | Marge à 10 rapports/jour |
+|---|---|---|---|
+| Groq (transcription et extraction) | Quotas par minute et par jour | 1 appel | Très large |
+| Google AI Studio (Gemini) | Quotas par minute et par jour | 1 à 2 appels | Très large |
+| Moteur local (GPU) | Aucun quota | Illimité | Sans objet |
+| Telegram Bot API | Gratuit | 2 à 3 appels | Sans objet |
+| WhatsApp Cloud API | Conversations de service gratuites | 2 appels | Large |
+| Google Sheets API | Quota par minute et par utilisateur | 3 à 5 appels | Large |
+| Gmail SMTP | Envois quotidiens | 1 à 2 par jour | Large |
+| PostgreSQL, n8n, Docker | Auto-hébergés | — | Sans objet |
 
-![](screens/fr-inbox.png){ width=16.0cm }
+::: {custom-style="TableCaption"}
+**Tableau 4.8 :** Consommation des offres gratuites.
+:::
 
-**Figure 4.4 :** Réception — Le flux des messages entrants, canal par canal, avec le média d'origine et le texte transcrit. C'est l'écran qui permet de remonter d'une ligne douteuse à l'audio qui l'a produite.
 
-![](screens/fr-reports.png){ width=16.0cm }
+Trois décisions d'architecture entretiennent directement cette marge. La **chaîne d'extraction alterne les fournisseurs**, Gemini et Groq mesurant leurs quotas séparément — l'alternance double la capacité effective. Le **moteur local n'a aucun quota**, ce qui en fait le filet de sécurité en cas d'épuisement simultané. Et la **file de reprise** absorbe un dépassement de quota du côté Google sans perdre une ligne : la reprise a lieu cinq minutes plus tard, quand la fenêtre s'est rouverte.
 
-**Figure 4.5 :** Rapports — Le miroir plat du journal, filtrable et corrigeable. Une correction faite ici est écrite dans le classeur, pas seulement affichée.
+Le facteur limitant n'est donc pas le nombre de rapports mais leur **simultanéité**. À la volumétrie visée — 5 à 10 rapports par jour, envoyés en fin de journée —, aucun quota gratuit n'est approché.
 
-![](screens/fr-daily.png){ width=16.0cm }
+## 4.9 Statistiques et qualité du projet
 
-**Figure 4.6 :** Rapport du jour — Le condensé quotidien tel qu'il part par courriel, avec la possibilité de le régénérer et de le télécharger.
+### 4.9.1 Répartition du code
 
-![](screens/fr-weekly.png){ width=16.0cm }
+Hors fichiers générés — verrous de dépendances, exports d'outils — le dépôt représente **33 274 lignes** réparties comme suit :
 
-**Figure 4.7 :** Rapport hebdomadaire — Le même moteur que le rapport quotidien, appelé sur une plage de dates : une seule instruction de modèle sert les deux.
+| Langage | Fichiers | Lignes | Part |
+|---|---|---|---|
+| Python | 59 | 15 040 | 45,2 % |
+| TypeScript | 54 | 11 642 | 35,0 % |
+| Markdown | 27 | 5 101 | 15,3 % |
+| YAML | 4 | 545 | 1,6 % |
+| JavaScript | 3 | 432 | 1,3 % |
+| CSS | 1 | 399 | 1,2 % |
+| HTML | 2 | 83 | 0,2 % |
+| PowerShell | 1 | 32 | 0,1 % |
 
-![](screens/fr-automation.png){ width=16.0cm }
+::: {custom-style="TableCaption"}
+**Tableau 4.9 :** Répartition du code par langage.
+:::
 
-**Figure 4.8 :** Automatisation — Les six tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
 
-![](screens/fr-equipe.png){ width=16.0cm }
+Deux lectures méritent d'être faites. La part de **Markdown à 15 %** n'est pas de la documentation d'accompagnement : elle contient les instructions versionnées des modèles (§3.4.5), qui sont du contenu exécutable au même titre que du code. Et l'équilibre Python/TypeScript reflète fidèlement l'architecture — un service métier substantiel et une interface d'administration complète, plutôt qu'une simple façade.
 
-**Figure 4.9 :** Équipe — organigramme — Les trois bandes fixes directeur, chefs, techniciens. La réaffectation se fait par glisser-déposer ; la liste déroulante du panneau de détail est le chemin réel au clavier et au toucher.
+### 4.9.2 Indicateurs de qualité mesurés
 
-![](screens/fr-logs.png){ width=13.2cm }
+| Indicateur | Valeur |
+|---|---|
+| Tests automatisés | 272, répartis en 22 fichiers |
+| Lignes de test | 3 782 |
+| Ratio test / code applicatif | ≈ 1 ligne de test pour 4 lignes de service |
+| Dépendances d'exécution requises pour les tests | **Aucune** — ni clé d'API, ni base de données |
+| Durée de la suite complète | ≈ 8 minutes |
+| Contrôles d'intégration continue | Tests, analyse statique, parité des trois fichiers de traduction, contrôle de secrets, validation du workflow |
+| Commits | 207, en convention *Conventional Commits* |
 
-**Figure 4.10 :** Journaux — La chronologie du pipeline reconstituée par identifiant de corrélation : les étapes publiées par n8n et les erreurs journalisées par le service apparaissent dans une seule suite.
+::: {custom-style="TableCaption"}
+**Tableau 4.10 :** Indicateurs de qualité mesurés.
+:::
 
-![](screens/fr-queue.png){ width=16.0cm }
 
-**Figure 4.11 :** File d'attente — Les écritures en échec en attente de reprise, avec leur nombre de tentatives.
+### 4.9.3 Analyse statique externe
 
-![](screens/fr-bell.png){ width=16.0cm }
+[ESPACE RÉSERVÉ — insérer ici la capture du tableau de bord SonarQube du projet : note de fiabilité, de sécurité et de maintenabilité, dette technique, taux de duplication et couverture de tests.]
 
-**Figure 4.12 :** Notifications — Le centre de notifications, ouvert depuis la barre latérale.
+*[FIGURE À INSÉRER — capture SonarQube.]*
 
-## 4.8 Conclusion du chapitre
+### 4.9.4 Chronologie réelle du développement
+
+L'historique Git fournit une mesure d'activité que le planning prévisionnel ne peut pas donner, puisqu'elle est constatée et non annoncée :
+
+| Semaine | Commits | Étape |
+|---|---|---|
+| S29 (15–19 juillet) | 11 | Cadrage, neutralisation du risque d'intégration |
+| S30 (20–26 juillet) | 42 | Service FastAPI, adaptateurs STT, extraction |
+| S31 (27 juillet – 2 août) | 92 | Chaîne complète, observabilité, tableau de bord |
+| S32 (3–9 août) | 49 | Journal par chantier, banc d'essai, organigramme |
+| S33 (10–16 août) | 23 | Conteneurisation du moteur local, corrections, rapport |
+
+::: {custom-style="TableCaption"}
+**Tableau 4.11 :** Activité de développement par semaine.
+:::
+
+
+Le pic de la semaine 31 correspond à la construction simultanée du tableau de bord et de la couche d'observabilité ; la décroissance ensuite traduit le passage de la construction à la consolidation — corrections, tests et documentation — ce qui est le profil attendu d'un projet qui converge.
+
+
+
+## 4.10 Le tableau de bord en fonctionnement
+
+Les captures ci-dessous proviennent de l'application réelle, connectée à la pile complète, en thème sombre et en anglais — l'interface étant trilingue, la langue d'affichage est un choix de l'utilisateur. Elles ont été produites par un script Playwright versionné dans le dépôt, qui ouvre une session, attend la disparition des squelettes de chargement avant chaque capture, et cadre chaque écran en 16:9.
+
+### 4.10.1 Écrans principaux
+::: {custom-style="FigureImage"}
+![](screens/en-login.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.3 :** L'écran de connexion. Le contrôle d'accès est appliqué par le service, non par ce formulaire : le tableau de bord étant un paquet statique, un écran de connexion seul serait contournable.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-overview.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.4 :** Vue d'ensemble. Les repères du jour, le rythme horaire des messages, l'état des sept services et l'activité de l'année. La disponibilité provient d'échantillons enregistrés, non d'une sonde instantanée.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-overview-2.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.5 :** Vue d'ensemble, partie basse : qualité des extractions, répartition par chantier et derniers rapports reçus.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-inbox.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.6 :** Réception. Le flux des messages entrants, canal par canal, avec le média d'origine et le texte transcrit — l'écran qui permet de remonter d'une ligne douteuse à l'audio qui l'a produite.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-reports.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.7 :** Rapports. Le miroir plat du journal, filtrable et corrigeable ; une correction faite ici est écrite dans le classeur, pas seulement affichée.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-daily.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.8 :** Rapport du jour, tel qu'il part par courriel, avec régénération et téléchargement.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-weekly.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.9 :** Rapport hebdomadaire : le même moteur que le rapport quotidien, appelé sur une plage de dates.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-automation.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.10 :** Automatisation. Les six tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-tasks.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.11 :** Tâches et rappels, avec leur périodicité.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-logs.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.12 :** Journaux. La chronologie du pipeline reconstituée par identifiant de corrélation : les étapes publiées par n8n et les erreurs journalisées par le service apparaissent dans une seule suite.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-queue.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.13 :** File de reprise : les écritures en échec en attente de rejeu, avec leur nombre de tentatives.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-equipe.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.14 :** Organigramme. Trois bandes fixes — directeur, chefs, techniciens — et non une récursion, ce qui est la raison pour laquelle aucun garde-fou anti-cycle n'est nécessaire.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-equipe-2.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.15 :** Organigramme, panneau de détail : canaux, profil et accès d'un technicien. Le panneau change de contenu selon le rôle, un technicien n'ayant pas de compte.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-palette.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.16 :** La palette de commandes (Ctrl+K) : navigation, collègues et actions, sans quitter le clavier.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-palette-fuzzy.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.17 :** Recherche approximative : « rapprt » est mal orthographié et trouve malgré tout les entrées pertinentes.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-palette-noresult.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.18 :** Aucune correspondance : plutôt qu'une liste vide, la palette propose les entrées les plus proches. Un cul-de-sac est une impasse ; une suggestion est une issue.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-notfound.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.19 :** Une adresse qui ne correspond à aucune route. L'application le dit explicitement au lieu de rediriger silencieusement vers l'accueil, où l'utilisateur croirait que son lien a fonctionné.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/en-overview-light.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.20 :** Le même écran en thème clair : le thème est un choix persistant de l'utilisateur, pas une préférence système imposée.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/ar-overview.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.21 :** La même page en arabe. L'arabe impose l'écriture de droite à gauche, ce qui a dicté l'emploi de propriétés CSS logiques dans toute l'interface plutôt que de marges directionnelles.
+:::
+
+
+### 4.10.2 Usage mobile
+
+L'interface est utilisable depuis un téléphone, ce qui compte pour un chef de chantier qui consulte l'avancement sans revenir au bureau.
+
+::: {custom-style="FigureImage"}
+![](screens/mobile-overview.jpg){ width=11.2cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.22 :** Vue d'ensemble sur téléphone : la barre latérale se replie et les indicateurs passent sur une colonne.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/mobile-reports.jpg){ width=11.2cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.23 :** Rapports sur téléphone : le tableau défile horizontalement dans son propre conteneur, la page elle-même ne défilant jamais latéralement.
+:::
+
+::: {custom-style="FigureImage"}
+![](screens/mobile-equipe.jpg){ width=11.2cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure 4.24 :** Organigramme sur téléphone. Le glisser-déposer natif ne fonctionnant ni au toucher ni au clavier, la liste déroulante du panneau de détail est ici le chemin réel de réaffectation.
+:::
+
+
+## 4.11 Conclusion du chapitre
 
 La réalisation a concrétisé la conception et l'a confrontée au réel. Le banc d'essai, mené sur treize moteurs, a produit un résultat qu'aucune revue de littérature n'aurait donné : le moteur le plus exact pour ce cas d'usage n'est pas le service commercial de référence mais un affinage open-source du darija, et ce constat n'a pu émerger que parce que des contrôles non affinés avaient été inclus et parce que trois bogues de harnais — dont un silencieux et flatteur — ont été débusqués. Six défauts d'intégration invisibles hors ligne ont par ailleurs été diagnostiqués et corrigés. La chaîne complète fonctionne de bout en bout depuis la semaine 0, repli compris.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
 ```
+
+
+# Bilan et compétences acquises
+
+**Compétences techniques.** Ce projet a imposé d'aller au bout de plusieurs domaines plutôt que d'en effleurer beaucoup : la conception d'une API en Python avec un contrat de données strict ; l'intégration de grands modèles de langage avec sortie contrainte et chaînes de repli ; l'évaluation empirique de treize modèles de reconnaissance vocale, avec la mise au point du harnais que cela suppose ; la conception d'un schéma relationnel et la migration de données réelles ; le développement d'une interface React trilingue avec prise en charge de l'écriture de droite à gauche ; et la mise en production conteneurisée d'une pile de cinq services, dont un service GPU.
+
+**Compétences méthodologiques.** Trois habitudes ont plus compté que n'importe quelle bibliothèque.
+
+*Neutraliser le risque le plus élevé en premier.* La chaîne complète a été validée de bout en bout dès la semaine 0, alors que le planning la prévoyait au sprint 2. C'est ce qui a permis de découvrir tôt les défauts d'intégration qu'aucun test hors ligne ne pouvait révéler.
+
+*Se méfier de ses propres mesures.* Le banc d'essai comportait un bogue silencieux qui aurait couronné un modèle sur une transcription qu'il n'avait jamais produite. Il n'a été détecté que parce que deux indicateurs secondaires étaient incohérents. La leçon retenue est qu'un résultat flatteur mérite plus de vérification qu'un résultat décevant.
+
+*Écrire pourquoi, pas seulement quoi.* Les décisions non évidentes de ce système sont documentées à l'endroit du code qu'elles concernent. Plusieurs fois au cours du projet, une correction a été évitée parce qu'un commentaire expliquait qu'un comportement surprenant était voulu.
+
+**Ce que je referais autrement.** Trois choses. D'abord, **constituer la vérité terrain dès le premier jour** : son absence est la principale limite du banc d'essai, et enregistrer quelques transcriptions de référence en semaine 0 aurait coûté une heure. Ensuite, **écrire les tests d'intégration réels plus tôt** : la suite hors ligne est excellente contre les régressions de logique, mais tous les défauts sérieux rencontrés venaient de contrats externes qu'elle ne touche pas. Enfin, **traiter la documentation comme du code dès le départ** : plusieurs affirmations du fichier d'architecture étaient devenues fausses sans que rien ne le signale, et elles n'ont été corrigées que lorsqu'un travail ultérieur les a confrontées à la réalité.
+
+**Compétences humaines.** Le dialogue avec l'encadrant industriel a été déterminant sur un point précis : le schéma de données a été reconstruit à partir de son fichier de suivi réel, et non de ce qu'un développeur imaginait utile. Les trois compteurs de prises distincts, incompréhensibles hors contexte, sont la trace directe de cette conversation. C'est probablement l'enseignement le plus transférable de ce projet : la qualité d'un modèle de données dépend moins de la technique que de la précision avec laquelle on a écouté celui qui s'en servira.
+
 
 # Conclusion générale et perspectives
 
@@ -1149,11 +1624,634 @@ Au-delà du système livré, ce projet illustre une conviction d'ingénierie : d
 
 ## Annexe B : Schéma de données et contrat d'API
 
-*[À INSÉRER — schéma JSON complet de la réponse `/process` et exemple de réponse réelle anonymisée. Source : documentation OpenAPI générée automatiquement par FastAPI.]*
+Ce schéma n'est pas recopié : il est extrait du document OpenAPI que le service
+publie lui-même, et il est donc par construction identique à ce que le code
+valide à l'exécution.
+
+### B.1 `ExtractedReport` — le rapport extrait
+
+```json
+{
+  "properties": {
+    "cables_prepares_m": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Cables Prepares M",
+      "description": "Mètres de câble cuivre préparés (tirés et mesurés)"
+    },
+    "cables_installes_m": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Cables Installes M",
+      "description": "Mètres de câble cuivre installés et raccordés"
+    },
+    "goulotte_m": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Goulotte M",
+      "description": "Mètres de goulotte posés"
+    },
+    "prises_connectees": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Prises Connectees",
+      "description": "Prises RJ45 raccordées côté bureau"
+    },
+    "panneaux_prises_brassees": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Panneaux Prises Brassees",
+      "description": "Prises raccordées côté panneau de brassage"
+    },
+    "prises_testees": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Prises Testees",
+      "description": "Prises testées et étiquetées"
+    },
+    "fibre_m": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Fibre M",
+      "description": "Mètres de câble fibre optique posés"
+    },
+    "interconnexions": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Interconnexions",
+      "description": "Nombre d'interconnexions installées entre locaux"
+    },
+    "connexions_optiques_brins": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Connexions Optiques Brins",
+      "description": "Brins de fibre optique fusionnés/connectés"
+    },
+    "etages": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Etages",
+      "description": "Étages travaillés (RDC, E1..E4)"
+    },
+    "ailes": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Ailes",
+      "description": "Ailes (Droite, Gauche)"
+    },
+    "locaux_techniques": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Locaux Techniques",
+      "description": "Locaux techniques (RG, SR1..SR10)"
+    },
+    "stock_cable_m": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Stock Cable M",
+      "description": "Mètres de câble restants en stock sur site"
+    },
+    "stock_goulotte_m": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Stock Goulotte M",
+      "description": "Mètres de goulotte restants en stock"
+    },
+    "stock_fibre_m": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Stock Fibre M",
+      "description": "Mètres de fibre optique restants en stock"
+    },
+    "remarques": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Remarques",
+      "description": "Problèmes, blocages, matériel manquant, remarques"
+    },
+    "resume": {
+      "type": "string",
+      "title": "Resume",
+      "description": "Résumé professionnel en français (2-4 phrases)"
+    }
+  },
+  "type": "object",
+  "required": [
+    "resume"
+  ],
+  "title": "ExtractedReport",
+  "description": "Structured facts extracted from one daily report."
+}
+```
+
+### B.2 `ProcessResponse` — la réponse de `POST /process`
+
+```json
+{
+  "properties": {
+    "rapport_complet": {
+      "type": "string",
+      "title": "Rapport Complet",
+      "description": "Texte intégral (transcription brute ou texte du formulaire)"
+    },
+    "report": {
+      "$ref": "#/components/schemas/ExtractedReport"
+    },
+    "transcription": {
+      "anyOf": [
+        {
+          "$ref": "#/components/schemas/TranscriptionInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Absent en mode texte (formulaire)"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "title": "Warnings",
+      "description": "Signaux qualité (ex: transcription douteuse) pour le flagging n8n"
+    },
+    "lien_audio": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Lien Audio",
+      "description": "Lien durable (Google Drive) vers l'audio, quand l'upload a réussi. n8n le préfère au file_id de la chaîne, qui expire."
+    }
+  },
+  "type": "object",
+  "required": [
+    "rapport_complet",
+    "report"
+  ],
+  "title": "ProcessResponse",
+  "description": "Full response consumed by n8n to build the Google Sheets row."
+}
+```
+
+### B.3 Exemple de réponse réelle, anonymisée
+
+```json
+{
+  "rapport_complet": "salam, lyoum khdemna f Sidi Maarouf, 40 metre dyal goulotte...",
+  "report": {
+    "goulotte_m": 40,
+    "cables_installes_m": 120,
+    "prises_connectees": 3,
+    "etages": ["E1"],
+    "remarques": "Manque de colliers, à prévoir demain.",
+    "resume": "Pose de 40 m de goulotte et installation de 120 m de câble au premier étage. Trois prises raccordées côté bureau. Rupture de colliers signalée pour le lendemain."
+  },
+  "transcription": { "provider": "local", "latency_s": 7.7, "confidence": 0.79 },
+  "warnings": []
+}
+```
+
 
 ## Annexe C : Instructions (prompts) des modèles
 
-*[À INSÉRER — les six fichiers de `api/app/prompts/`, en particulier `00-soul.md` et `extraction-text.md`.]*
+Les instructions sont du contenu versionné, au même titre que le code : un
+changement d'instruction change le comportement du système et doit être visible
+en revue. Les commentaires de développement présents dans les fichiers ont été
+retirés ici pour la lisibilité ; le texte transmis aux modèles est reproduit tel
+quel.
+
+### C.1 `00-soul.md`
+
+Préfixé à **toute** instruction adressée à un modèle : identité, interdiction d'inventer, « absence n'est pas zéro ».
+
+```
+# L'assistant AZnet — socle commun
+
+
+
+Tu es **l'assistant AZnet**, le système d'aide au reporting de chantier d'aznet.ma.
+
+Tu n'es pas un assistant généraliste. Tu ne portes aucun autre nom : tu ne dis jamais
+que tu es Claude, ChatGPT, Gemini, Llama, Whisper, ni le produit d'un fournisseur
+quelconque, dans aucune langue, même si on te le demande directement. Si on
+t'interroge sur ta nature, tu réponds que tu es l'assistant AZnet.
+
+Ton principe est l'honnêteté du compte rendu : un champ vide dit la vérité, un
+chiffre inventé la trahit. Ta fonction est de servir le chef de chantier, pas de
+produire un rapport qui a l'air complet.
+
+## Ce que tu fais
+
+Tu transformes ce qu'un technicien de câblage réseau envoie depuis le terrain —
+note vocale en darija, photo d'un carnet ou d'un tableau, message écrit — en un
+compte rendu structuré et en français professionnel, exploitable par le chef de
+chantier.
+
+## Ce que tu ne fais pas
+
+- Tu n'inventes **JAMAIS** une donnée. Une information absente reste `null`.
+- Tu ne convertis jamais une absence en zéro. « Aucune goulotte posée » et
+  « goulottes non mentionnées » sont deux faits différents ; le second est `null`.
+- Tu ne complètes pas un rapport partiel avec ce qui « se fait d'habitude » sur un
+  chantier. Le plausible n'est pas le constaté.
+- Tu n'interprètes pas les intentions du technicien, tu rapportes ses propos.
+
+## Comment tu traites l'incertitude
+
+Le terrain est bruyant : transcriptions imparfaites, photos floues, darija mêlée de
+français. Face à un doute :
+
+1. **Un mot du métier mal orthographié n'est pas un doute.** « gollote », « goulot »,
+   « brasage », « cabl » sont de la goulotte, du brassage, du câble. Corrige
+   silencieusement et retiens la quantité associée : c'est le cas normal après une
+   transcription vocale, pas une incertitude.
+2. Le doute commence quand l'information elle-même est **inaudible, illisible ou
+   contradictoire**. Là seulement, ne tranche pas : mets `null` et dis-le dans
+   `observations`.
+3. Ne produis jamais une valeur qui a l'air sûre alors qu'elle ne l'est pas. Un champ
+   vide est récupérable par un humain ; un chiffre inventé ne l'est pas — il entre
+   dans le rapport du directeur comme un fait.
+4. Un message mal écrit, tronqué ou décousu ne te dispense pas de répondre : extrais
+   ce qui est sûr, laisse le reste à `null`, et explique dans `observations` ce qui
+   manque. Tu ne demandes jamais de clarification — le technicien n'attend pas de
+   réponse.
+
+## Ton et forme
+
+Français professionnel, 3e personne, style compte rendu. Pas de formules de
+politesse, pas d'emoji, pas de mise en forme décorative. Tu écris pour un chef de
+chantier qui lit vingt rapports d'affilée.
+
+Ni mots de remplissage (« bien sûr », « certainement », « bien entendu », « veuillez »),
+ni formules d'ouverture ou de clôture, ni commentaire sur la forme du message
+d'origine (orthographe, accent, qualité audio ou photo) : tu rapportes le contenu,
+jamais le contenant.
+```
+
+### C.2 `extraction-text.md`
+
+L'instruction principale : elle porte le vocabulaire du câblage et la règle du champ nul.
+
+```
+# Extraction — texte
+
+
+
+Tu analyses le rapport journalier d'un technicien de câblage réseau au Maroc.
+
+Le texte peut être en darija (arabe marocain, en lettres arabes ou latines), en
+français, ou mélangé. Il provient souvent d'une transcription vocale imparfaite :
+corrige mentalement les erreurs évidentes grâce au vocabulaire métier — goulotte,
+câble cuivre CAT.6A, fibre optique, brin, panneau de brassage, prise RJ45,
+tiroir optique, local technique, SR, RG, baie, bureau, étage, aile.
+
+## Champs de quantité
+
+Chaque champ correspond à une colonne du tableau de suivi. Ne verse jamais une
+quantité dans un champ voisin « qui lui ressemble ».
+
+- `cables_prepares_m` — mètres de câble **préparés** (tirés, mesurés, pas encore
+  raccordés). « J'ai préparé 4 câbles : 49m, 48m, 41m, 33m » = 171.
+- `cables_installes_m` — mètres de câble **installés et raccordés**.
+- `goulotte_m` — mètres de goulotte posés.
+- `prises_connectees` — prises RJ45 raccordées **côté bureau**.
+- `panneaux_prises_brassees` — prises raccordées **côté panneau de brassage**.
+- `prises_testees` — prises **testées et étiquetées**.
+- `fibre_m` — mètres de câble fibre optique posés.
+- `interconnexions` — interconnexions installées entre locaux techniques.
+- `connexions_optiques_brins` — **brins** de fibre fusionnés ou connectés
+  (« 12 brins », « 48 brins »). Un brin n'est pas un mètre et n'est pas un câble.
+
+Une même prise est comptée à trois étapes différentes : la poser côté bureau, la
+brasser côté panneau, la tester. Le technicien peut annoncer trois nombres
+différents le même jour — ce sont trois champs, jamais une moyenne.
+
+## Localisation
+
+- `etages` — liste parmi : `RDC`, `E1`, `E2`, `E3`, `E4`.
+- `ailes` — liste parmi : `Droite`, `Gauche`.
+- `locaux_techniques` — liste parmi : `RG`, `SR1` … `SR10`.
+
+Plusieurs valeurs par journée sont normales (« on a fait le RDC et le premier
+étage, les deux ailes »). N'invente **jamais** un étage ou un local qui n'existe
+pas dans ces listes : si tu entends autre chose, laisse le champ `null` et
+mentionne-le dans `remarques`.
+
+## Stock restant sur site
+
+- `stock_cable_m`, `stock_goulotte_m`, `stock_fibre_m` — ce qu'il **reste**, pas
+  ce qui a été posé. Uniquement si le technicien l'énonce. Ne le déduis jamais
+  d'une soustraction : une livraison a pu arriver, du câble a pu être coupé.
+
+## Règles d'extraction
+
+1. **Nombres en lettres** — convertis en chiffres, que ce soit en arabe
+   (« miya w khamsin » = 150) ou en français (« cent cinquante » = 150).
+2. **Unités** — goulotte, câble et fibre sont en mètres ; prises, brins,
+   interconnexions sont des compteurs entiers.
+3. **Additions énoncées** — si le technicien détaille des longueurs
+   (« 1=52m / 2=53m / 3=64m »), additionne-les dans le champ correspondant.
+4. **Absence** — une information non mentionnée vaut `null`. Jamais 0, jamais une
+   estimation, jamais une valeur « typique ».
+5. **Autocorrection** — si le technicien se reprend (« 300… non, 350 »), retiens la
+   **dernière** valeur énoncée.
+6. **Nombres qui ne sont pas des quantités** — un numéro de bureau, un effectif,
+   une date, une heure ne remplissent aucun champ de quantité. « On était 4
+   techniciens au bureau 12 » ne donne aucune quantité.
+7. **Négation explicite ≠ absence.** « Pas de goulotte aujourd'hui » **énonce une
+   valeur** : le champ vaut `0`. Si le champ n'est jamais évoqué, il vaut `null`.
+   `0` veut dire « rien fait », `null` veut dire « on ne sait pas ».
+8. **`remarques`** — problèmes, blocages, bureaux fermés, matériel manquant,
+   accès refusé, arrêt de chantier, incidents. Une journée sans un seul mètre
+   posé mais avec un blocage **est** un rapport : c'est celui qui compte le plus.
+9. **`resume`** — 2 à 4 phrases, français professionnel, 3e personne, destiné au chef
+   de chantier. Toujours rempli, même si tout le reste est `null` : dans ce cas il
+   explique pourquoi la journée n'a produit aucun chiffre. Sans mot de remplissage
+   ni hésitation (« probablement », « il semble que », « je pense ») : soit le fait
+   est établi, soit c'est une incertitude à porter dans `remarques`.
+
+## Rappel
+
+Le champ le plus important de ce schéma n'est pas celui que tu remplis, c'est celui
+que tu laisses vide quand tu ne sais pas.
+
+Rapport du technicien :
+```
+
+### C.3 `extraction-image.md`
+
+Variante pour la voie photo : le modèle de vision lit le relevé et remplit le même schéma en un seul appel.
+
+```
+# Extraction — image
+
+
+
+L'image est une photo prise par un technicien de câblage : page de carnet, tableau
+blanc, bon de livraison, écran, ou vue du chantier lui-même.
+
+## Procédure
+
+1. **Lis d'abord tout le texte visible**, quelle que soit la langue ou l'écriture :
+   français, darija en lettres latines, arabe. Chiffres manuscrits compris.
+2. **Puis observe ce que montre la photo** si elle documente un travail réalisé
+   (goulottes posées, baie câblée, panneau raccordé).
+3. **Enfin, remplis le schéma** à partir de ce que tu as lu et vu.
+
+## Règles propres à l'image
+
+- **Un chiffre illisible reste `null`.** Ne devine pas un « 3 » qui pourrait être un
+  « 8 ». Sur une photo, une hésitation de lecture devient une donnée fausse
+  définitive : personne en aval n'a la transcription pour la contredire.
+- **Ne déduis pas une quantité d'un comptage visuel.** Compter des goulottes sur une
+  photo pour en estimer les mètres est une invention, pas une mesure. Seul un nombre
+  **écrit** est une quantité.
+- **Ce que tu vois sans le lire va dans `remarques`**, pas dans les champs
+  chiffrés. « Baie ouverte, câblage apparent non peigné » est une remarque utile ;
+  ce n'est pas un `cables_installes_m`.
+- **Photo inexploitable** — floue, hors sujet, sans information : tous les champs à
+  `null`, et `resume` explique en une phrase ce que montre l'image et pourquoi elle
+  ne permet pas d'établir un rapport.
+- **Photo partielle** — lisible mais incomplète : tu extrais ce qui est lisible et tu
+  laisses le reste à `null`. Tu ne commentes jamais la qualité du document (écriture,
+  orientation, photo de travers) et tu ne demandes pas de meilleure photo.
+
+- **Localisation** — `etages` (`RDC`, `E1`..`E4`), `ailes` (`Droite`, `Gauche`) et
+  `locaux_techniques` (`RG`, `SR1`..`SR10`) uniquement si l'étiquette est **écrite**
+  sur la photo. Reconnaître un couloir n'est pas lire un étage.
+
+Les règles générales d'extraction (nombres en lettres, unités en mètres, absence =
+`null`, nombres qui ne sont pas des quantités, distinction préparé / installé /
+brassé / testé, stock jamais déduit) s'appliquent à l'identique.
+```
+
+### C.4 `profile.md`
+
+Rédaction du profil nocturne. Les nombres y sont explicitement interdits.
+
+```
+# Profil technicien — mémoire de long terme
+
+
+
+Tu écris le **profil** d'un technicien, à partir de ses propres comptes rendus passés.
+
+Ce profil sera relu par le système avant de traiter ses prochains messages. Il sert
+à mieux comprendre **comment cette personne s'exprime et travaille** — jamais à
+deviner le contenu d'un rapport à venir.
+
+## Ce que tu écris
+
+Un seul paragraphe, **60 mots maximum**, en français, à la 3e personne.
+
+Retiens uniquement ce qui est **stable et récurrent** :
+
+- les chantiers où la personne intervient habituellement
+- son type d'intervention dominant (pose, brassage, maintenance, tirage…)
+- sa manière de rapporter : détaillée ou brève, vocale ou écrite, moment de la journée
+- ses tournures et son vocabulaire propres, y compris les mots de métier qu'elle
+  déforme régulièrement (« gollote » pour goulotte)
+
+## Ce que tu n'écris jamais
+
+- **Aucun chiffre.** Ni quantité, ni moyenne, ni total, ni durée. Ce texte est lu
+  pendant l'extraction d'un rapport : un nombre écrit ici peut se retrouver dans un
+  rapport qui ne l'a jamais mentionné.
+- Aucune prédiction, aucune projection : tu décris ce qui a été observé, pas ce qui
+  va arriver.
+- Aucun jugement sur la personne — ni performance, ni sérieux, ni comparaison avec
+  d'autres techniciens. Ce n'est pas une évaluation.
+- Rien qui n'apparaisse dans les rapports fournis.
+
+## Si les rapports sont trop peu nombreux
+
+Si tu ne vois pas de régularité — un seul rapport, ou des rapports sans rien de
+commun — écris exactement :
+
+`Trop peu de rapports pour dégager des habitudes.`
+
+Un profil vague inventé pour remplir le champ est pire que pas de profil : il sera
+relu comme un fait à chaque extraction.
+```
+
+### C.5 `stt-vocabulary.md`
+
+**Seul fichier sans le socle commun** : Whisper lit son paramètre `prompt` comme la transcription précédant le clip, et non comme des consignes — le socle y serait recopié dans la transcription.
+
+```
+# STT — amorce de vocabulaire
+
+
+
+Rapport de chantier, aznet, câblage réseau. Salam, lyoum f chantier Marina Center,
+client OCP. Rakebna miya w khamsin metre dyal goulotte f couloir, w jerrina tmn miya
+metre dyal câble réseau. Kmmalna khamsa dyal bureaux f l'étage l'lewel, w raccordina
+juj panneaux de brassage. Prise RJ45, baie de brassage, chemin de câbles, goulotte,
+gaine, fibre optique, tableau électrique, faux plafond. Kayn chi problème f
+l'ascenseur, ma qdrnach ntl3o l'étage tmnya. Khass matériel ghedda : goulottes w
+colliers. Chantier Anfa Place, Technopark, Casa Finance City, Zenith Millenium,
+Bouskoura, Sidi Maarouf. Client Attijari, Maroc Telecom, CNSS, Renault.
+```
+
+### C.6 `image-generation.md`
+
+Génération de la carte illustrée de synthèse.
+
+```
+# Génération d'image — carte de synthèse
+
+
+
+Tu produis une **carte de synthèse illustrée** résumant l'activité d'une journée ou
+d'une semaine de chantier, à partir des chiffres qui te sont fournis.
+
+## Contraintes absolues
+
+- **Style illustration, jamais photographie.** Rendu graphique plat, vectoriel,
+  éditorial. Aucune image photoréaliste de chantier, de personne ou de matériel :
+  elle serait indiscernable d'une vraie photo de terrain une fois insérée dans un
+  rapport.
+- **Aucun chiffre inventé.** Seuls les nombres fournis dans le contexte peuvent
+  apparaître. Si un chiffre manque, il n'apparaît pas — tu ne le remplaces ni par une
+  estimation ni par un exemple.
+- **Aucun visage identifiable**, aucun nom de technicien, aucun logo de client réel.
+- **Texte lisible et minimal** : les libellés en français, courts, sans faute.
+
+## Composition
+
+Palette sobre et professionnelle — gris ardoise, blanc cassé, un seul bleu d'accent.
+Mise en page claire : un titre, les quantités mises en avant comme des chiffres clés,
+des pictogrammes simples pour les catégories (goulotte, câble, bureaux, panneaux).
+Format paysage, marges généreuses, pas de dégradé chargé ni de décor superflu.
+
+## Contexte fourni
+
+Les données réelles de la période suivent. Utilise-les telles quelles.
+```
+
 
 ## Annexe D : Workflow n8n documenté
 
@@ -1161,7 +2259,61 @@ Au-delà du système livré, ce projet illustre une conviction d'ingénierie : d
 
 ## Annexe E : Documentation d'installation
 
-*[À INSÉRER — prérequis, Docker Compose, variables d'environnement, activation du workflow. Source : `docs/setup-guide.md` et `n8n/README.md`.]*
+### E.1 Prérequis
+
+Docker et Docker Compose ; Python 3.11 et Node.js pour le développement hors
+conteneur ; une carte NVIDIA avec pilote à jour **uniquement** si le moteur de
+transcription local est utilisé ; un compte de service Google disposant d'un
+accès en écriture au seul classeur de suivi.
+
+### E.2 Configuration
+
+Toute la configuration est portée par un fichier `.env` non versionné, dont un
+modèle documenté (`.env.example`) accompagne le dépôt. Les clés d'API sont
+optionnelles au démarrage et vérifiées à l'appel : le service démarre sans
+secret — ce qui est nécessaire aux tests automatisés — mais échoue avec un
+message explicite si un appel en requiert un. Le mot de passe de la base n'a
+délibérément aucune valeur par défaut, afin qu'un déploiement mal configuré
+échoue bruyamment plutôt que de démarrer avec un mot de passe connu.
+
+### E.3 Démarrage de la pile
+
+```bash
+docker compose up -d
+```
+
+Cinq services démarrent : `postgres`, `n8n`, `api`, `stt-local` et `web`. Un
+seul port est publié, celui du proxy, qui sert le tableau de bord, l'API sous
+`/api/` et les webhooks sous `/webhook/`. Les trois services centraux sont en
+redémarrage automatique, de sorte que la chaîne se rétablit seule après un
+redémarrage de la machine.
+
+### E.4 Développement du service
+
+```bash
+cd api
+.venv/Scripts/python.exe -m pytest              # 272 tests, sans aucune clé d'API
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload
+```
+
+### E.5 Deux pièges de déploiement
+
+Ces deux points ont réellement coûté du temps et méritent d'être connus, car
+dans les deux cas **une modification peut sembler appliquée sans être exécutée** :
+
+1. Le service est une **image construite**, code source inclus. Un simple
+   redémarrage du conteneur réexécute l'ancien code ; il faut reconstruire
+   l'image.
+2. n8n conserve **sa propre copie** du workflow dans son volume. Modifier le
+   fichier JSON versionné ne change rien tant qu'il n'a pas été réimporté ou
+   poussé par l'API de n8n.
+
+### E.6 Étape manuelle après l'import du workflow
+
+Le gestionnaire d'erreurs n'est actif que si le workflow est désigné comme son
+propre *Error Workflow* dans ses paramètres. Sans cette manipulation, le
+déclencheur d'erreur ne se déclenche jamais.
+
 
 ## Annexe F : Guide utilisateur
 
@@ -1169,4 +2321,63 @@ Au-delà du système livré, ce projet illustre une conviction d'ingénierie : d
 
 ## Annexe G : Protocole et données du banc d'essai
 
-*[À INSÉRER — catalogue des treize moteurs, transcriptions brutes par moteur et par clip, et fiches de résultats. Source : `benchmark/STT-BENCHMARK-STATUS.md` et `benchmark/results/`.]*
+### G.1 Protocole
+
+**Corpus.** Onze notes vocales réelles issues des échanges des techniciens,
+en darija spontanée avec code-switching français, de durées et de conditions
+d'enregistrement variées.
+
+**Campagnes.** Trois passes successives : trois moteurs accessibles par API ;
+neuf moteurs exécutés localement ; puis douze moteurs, une fois obtenus les
+accès aux deux dépôts sous licence.
+
+**Matériel.** NVIDIA RTX 3070 (8 Go), demi-précision, PyTorch avec CUDA.
+
+**Mesures relevées.** Transcription intégrale, latence, mesure de confiance
+propre au moteur, longueur du texte, et nombre de chiffres émis.
+
+**Critère de décision.** Ni WER ni CER — voir §4.3.2 pour la justification —
+mais la préservation des quantités et des emprunts techniques français,
+vérifiée clip par clip, puis **confirmée à l'oreille par un locuteur natif du
+darija**.
+
+### G.2 Catalogue des moteurs évalués
+
+| Moteur | Famille | Voie |
+|---|---|---|
+| `whisper-large-v3` via Groq | Whisper | API |
+| Gemini (audio natif) | Multimodal | API |
+| Affinage darija via Hugging Face | Whisper | API (jamais fonctionnel, voir §4.3.6) |
+| `BounharAbdelaziz/Morocco-Darija-STT-large` | Whisper affiné | Local |
+| `openai/whisper-large-v3` | Whisper (contrôle) | Local |
+| `openai/whisper-large-v3-turbo` | Whisper (contrôle) | Local |
+| `ychafiqui/whisper-medium-darija` | Whisper affiné | Local |
+| `ychafiqui/whisper-small-darija` | Whisper affiné | Local |
+| `KandirResearch/Whisper-Small-Darija` | Whisper affiné | Local (échec de chargement) |
+| `TaloCreations/whisper-darija-finetuned` | Whisper affiné | Local |
+| `C-Ilyas/whisper-base-darija` | Whisper affiné | Local |
+| `boumehdi/wav2vec2-large-xlsr-moroccan-darija` | wav2vec2 | Local |
+| `amineouaki/wav2vec2-darija-combined` | wav2vec2 | Local |
+| `amineouaki/wav2vec2-large-xlsr-53-darija-combined` | wav2vec2 | Local |
+| `anaszil/whisper-large-v3-turbo-darija` | Adaptateur LoRA | Local (non fusionné) |
+| `Qwen/Qwen3-ASR-1.7B` | Autre | Local (sans exécuteur) |
+
+**Tableau G.1 :** Catalogue des moteurs téléchargés et évalués.
+
+### G.3 Reproductibilité
+
+Le catalogue des points de contrôle et le harnais d'exécution sont versionnés
+dans le dépôt ; les poids eux-mêmes ne le sont pas — 5,8 Go, dont un fragment de
+4,7 Go, ce qui dépasse la limite par fichier de Git LFS. Le script de
+téléchargement les reconstitue à l'identique, deux d'entre eux exigeant
+l'acceptation préalable d'une licence sur la plateforme.
+
+### G.4 Limite assumée
+
+Le fichier de transcriptions de référence est resté vide : le WER et le CER
+n'ont donc **pas** été calculés. Le classement final repose sur une lecture
+experte et une validation par un locuteur natif, ce qui est rigoureux mais non
+reproductible par un tiers sans ce même locuteur. Constituer cette vérité
+terrain à partir des rapports réels accumulés est la première des perspectives
+énoncées en conclusion.
+
