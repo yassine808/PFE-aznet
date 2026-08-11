@@ -1158,7 +1158,9 @@ async def file_journal_entry(
         except logs.LogStoreError:
             pass  # best-effort: the row is written, the link is a convenience
     logs.write_safe(
-        "sheet", "info", message=f"journal row {result.get('row')} ({result.get('tab')})",
+        "sheet", "info",
+        message=f"journal row {result.get('row')} ({result.get('tab')})"
+                + (" [duplicate]" if result.get("duplicate") else ""),
         correlation_id=entry.correlation_id,
     )
     return result

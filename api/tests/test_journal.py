@@ -403,6 +403,76 @@ def test_mirror_failure_never_costs_the_journal_row(fake, monkeypatch):
     assert result["rapports_row"] is None  # nothing to clear later
 
 
+# --- retry idempotency -----------------------------------------------------
+# A Sheets failure that Google actually committed (5xx after write, lost
+# response) leaves the parked payload re-filing onto the row that exists. The
+# correlation cell records every message that touched the row, so membership
+# means "already filed" and the merge is skipped instead of double-counting.
+
+
+def test_refiling_the_same_message_merges_nothing(fake):
+    """The drain re-files a parked payload with its original correlation_id —
+    the row already has it, so the retry must not add the numbers twice."""
+    from app.journal import file_report
+
+    first = file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "correlation_id": "corr-abc",
+        "report": {"cables_installes_m": 120, "resume": "Résumé."},
+    })
+    retry = file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "correlation_id": "corr-abc",
+        "report": {"cables_installes_m": 120, "resume": "Résumé."},
+    })
+    assert retry["row"] == first["row"]
+    assert retry["duplicate"] is True
+    assert retry["rapports_row"] is not None  # mirror re-appended for the feed
+    assert len(fake.mirrored) == 2  # exactly one Rapports row per file_report
+    assert len(fake.appended) == 1  # journal row appended once, never twice
+    assert fake.written == []  # no merge write, so the total stays 120
+
+
+def test_refiling_a_different_message_still_merges(fake):
+    """A second report from the same technician the same day has its own
+    correlation: it is a real message, so it merges and the cell logs both."""
+    from app.journal import file_report
+
+    file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "correlation_id": "corr-abc",
+        "report": {"cables_installes_m": 120, "resume": "Résumé."},
+    })
+    retry = file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "correlation_id": "corr-def",
+        "report": {"cables_installes_m": 160, "resume": "Suite."},
+    })
+    assert retry["duplicate"] is False
+    assert fake.written[-1][1] == retry["row"]
+    assert "corr-abc" in fake.written[-1][2]["Correlation id"]
+    assert "corr-def" in fake.written[-1][2]["Correlation id"]
+    assert fake.written[-1][2]["Câble installé"] == "280"
+
+
+def test_refile_without_correlation_merges_unchecked(fake):
+    """No correlation_id (e.g. a dashboard submission) cannot be proven a
+    duplicate, so it still merges — the pre-journal behavior."""
+    from app.journal import file_report
+
+    first = file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "report": {"cables_installes_m": 120, "resume": "Résumé."},
+    })
+    retry = file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "report": {"cables_installes_m": 160, "resume": "Suite."},
+    })
+    assert retry["duplicate"] is False
+    assert fake.written[-1][1] == first["row"]
+    assert fake.written[-1][2]["Câble installé"] == "280"
+
+
 def test_excel_serial_date_matches_the_same_day(fake):
     """The director's own file stores 46174, not a date string."""
     from app.journal import write_report

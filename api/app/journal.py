@@ -272,15 +272,22 @@ def write_report(
     chantier: str,
     report: ExtractedReport,
     metadata: Optional[Dict[str, str]] = None,
+    known: Optional[Tuple[Optional[int], Dict[str, str]]] = None,
 ) -> Tuple[Optional[int], List[str]]:
     """Put one report on the journal tab, merging if the day already has a row.
 
     Returns the row number and any warnings raised while reconciling stock.
     The tab is created on demand, so a chantier added in the dashboard works on
     its first message rather than after someone opens Google Sheets.
+    `known` is find_row's (row, cells) when the caller already read the tab —
+    the retry idempotency check in file_report needs the same row, so it reads
+    once and hands it down instead of reading twice.
     """
     sheets.ensure_tab(tab, list(HEADERS))
-    existing_row, existing = find_row(tab, date, technicien)
+    if known is None:
+        existing_row, existing = find_row(tab, date, technicien)
+    else:
+        existing_row, existing = known
 
     # Stock draws down from the last known level on this chantier — the
     # technician's own previous row if there is one, else the last row anyone
@@ -426,6 +433,31 @@ def file_report(payload: Dict) -> Dict:
     chantier, tab, routing_warnings = resolve_tab(technicien, payload.get("chantier"))
     warnings.extend(routing_warnings)
 
+    # One read serves both checks: the retry idempotency test below and the
+    # merge lookup inside write_report.
+    known = find_row(tab, str(payload.get("date") or ""), technicien)
+    existing_row, existing = known
+    correlation = str(payload.get("correlation_id") or "").strip()
+    if existing_row is not None and correlation:
+        # The row's Correlation cell accumulates every message that touched it
+        # (the merge appends with a newline), so membership means "this exact
+        # message already landed here" — a retry after a Sheets failure that
+        # Google actually committed. Merging again would add the same numbers
+        # twice to the totals line, the one number the director reads.
+        filed = str(existing.get(COL_CORRELATION, "")).split("\n")
+        if correlation in filed:
+            # The mirror is the one thing the failed first write lost, so it
+            # still runs: exactly one Rapports row per message.
+            mirror_row = _mirror_rapports(payload, chantier, warnings)
+            return {
+                "row": existing_row,
+                "tab": tab,
+                "chantier": chantier,
+                "warnings": warnings,
+                "rapports_row": mirror_row,
+                "duplicate": True,
+            }
+
     metadata = {
         COL_RESUME: report.resume,
         COL_RAPPORT: payload.get("rapport_complet"),
@@ -438,6 +470,7 @@ def file_report(payload: Dict) -> Dict:
     row, stock_warnings = write_report(
         tab, payload.get("date") or "", technicien, chantier, report,
         {k: v for k, v in metadata.items() if v not in (None, "")},
+        known,
     )
     warnings = warnings + stock_warnings
     # After the journal write succeeded, so a mirror failure cannot cost the
@@ -449,6 +482,7 @@ def file_report(payload: Dict) -> Dict:
         "chantier": chantier,
         "warnings": warnings,
         "rapports_row": mirror_row,
+        "duplicate": False,
     }
 
 
