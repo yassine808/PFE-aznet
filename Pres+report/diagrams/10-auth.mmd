@@ -1,0 +1,34 @@
+flowchart TD
+    REQ["Requete entrante"] --> H{"En-tete X-API-Key ?"}
+    H -- oui --> K{"INTERNAL_API_KEY definie ?"}
+    K -- non --> D1["401 - acces machine DESACTIVE<br/>jamais 'tout le monde est une machine'"]
+    K -- oui --> KM{"cle correcte ?"}
+    KM -- non --> D1
+    KM -- oui --> MACHINE["Appelant = machine (n8n)"]
+
+    H -- non --> C{"Cookie de session ?"}
+    C -- non --> D2["401"]
+    C -- oui --> S{"session en base ?"}
+    S -- non --> D2
+    S -- oui --> HUMAN["Appelant = humain"]
+
+    MACHINE --> G{"Niveau exige"}
+    HUMAN --> G
+    G -- require_user --> OK["Autorise"]
+    G -- require_human --> RH{"machine ?"}
+    RH -- oui --> D3["403 - reglages, corrections,<br/>comptes : humains seulement"]
+    RH -- non --> OK
+    G -- require_director --> RD{"role = directeur ?"}
+    RD -- non --> D3
+    RD -- oui --> OK
+
+    LOGIN["POST /auth/login"] --> TH{"8 echecs / 5 min<br/>pour cette adresse ?"}
+    TH -- oui --> D4["429"]
+    TH -- non --> PW{"password_hash IS NOT NULL ?"}
+    PW -- non --> D5["401 - cette ligne n est pas un compte"]
+    PW -- oui --> VER{"mot de passe correct ?"}
+    VER -- non --> D5
+    VER -- oui --> TOK["Jeton opaque en base<br/>supprimer la ligne = deconnexion"]
+
+    classDef ko fill:#fde8e8,stroke:#c53030
+    class D1,D2,D3,D4,D5 ko

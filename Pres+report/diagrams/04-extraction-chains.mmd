@@ -1,0 +1,29 @@
+flowchart TD
+    IN{"Forme de l entree"}
+    IN -- texte --> TC["extraction_text_chain<br/>alterne Gemini et Groq"]
+    IN -- image --> IC["extraction_image_chain<br/>Google uniquement"]
+
+    TC --> M1{"modele 1"}
+    M1 -- ok --> V["Validation Pydantic"]
+    M1 -- echec --> M2{"modele 2"}
+    M2 -- ok --> V
+    M2 -- echec --> M3{"modele n"}
+    M3 -- ok --> V
+    M3 -- echec --> ERR["ExtractionError combinee<br/>toutes les causes detaillees<br/>HTTP 502"]
+
+    IC --> M1
+
+    V --> N1{"chaine 'null' ?"}
+    N1 -- oui --> NN["normalisee en valeur nulle"] --> N2
+    N1 -- non --> N2{"localisation reconnue ?"}
+    N2 -- "non" --> RAISE["Leve une erreur<br/>la chaine reessaie"]
+    N2 -- oui --> HD{"has_data() ?"}
+    RAISE --> M2
+
+    HD -- non --> WARN["200 + no_report_content<br/>reponse mais pas d ecriture"]
+    HD -- oui --> DONE["Rapport structure"]
+
+    classDef ko fill:#fde8e8,stroke:#c53030
+    classDef ok fill:#e6f4ea,stroke:#2f855a
+    class ERR ko
+    class DONE ok

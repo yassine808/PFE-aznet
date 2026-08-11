@@ -1,0 +1,48 @@
+flowchart LR
+    subgraph terrain["Terrain"]
+        T["Technicien<br/>note vocale en darija"]
+    end
+
+    subgraph canaux["Canaux de reception"]
+        TG["Telegram Bot API<br/>polling getUpdates"]
+        WA["WhatsApp Cloud API<br/>webhook HTTPS"]
+    end
+
+    subgraph orch["Orchestration"]
+        N8N["n8n<br/>65 noeuds"]
+    end
+
+    subgraph coeur["Service applicatif - FastAPI"]
+        PROC["POST /process"]
+        STT["Chaine STT<br/>gemini - local - groq"]
+        EXT["Chaine d extraction<br/>Gemini / Groq"]
+        JRN["POST /journal<br/>fusion + stock"]
+        JOBS["Ordonnanceur<br/>6 taches"]
+        AUTH["Authentification"]
+    end
+
+    subgraph gpu["Sidecar GPU"]
+        LOC["Morocco-Darija-STT-large<br/>RTX 3070, chargement paresseux"]
+    end
+
+    subgraph stock["Persistance"]
+        PG[("PostgreSQL<br/>11 tables")]
+        GS[("Google Sheets<br/>journal par chantier")]
+    end
+
+    subgraph consult["Consultation"]
+        DASH["Tableau de bord React<br/>FR / EN / AR"]
+        MAIL["Rapports e-mail"]
+    end
+
+    T --> TG & WA --> N8N
+    N8N --> PROC
+    PROC --> STT --> EXT
+    STT -.-> LOC
+    N8N -- "1. reponse au technicien" --> T
+    N8N -- "2. ensuite seulement" --> JRN
+    JRN --> GS
+    PROC & JRN & AUTH --> PG
+    JOBS --> GS & MAIL & PG
+    DASH --> AUTH
+    DASH --> PG & GS

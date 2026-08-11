@@ -1,0 +1,29 @@
+flowchart TD
+    START["Demarrage du service"] --> CHK{"PostgreSQL joignable ?"}
+    CHK -- non --> OFF["Ordonnanceur non demarre<br/>le service sert quand meme"]
+    CHK -- oui --> TH["Fil unique, battement 30 s"]
+
+    TH --> READ["Lire les horaires dans app_settings<br/>a chaque tick - pas de redemarrage"]
+    READ --> DUE{"Tache due ?"}
+    DUE -- non --> TH
+    DUE -- oui --> RUN["Executer avec budget de temps"]
+
+    RUN --> J1["sheet_queue - 5 min - 120 s"]
+    RUN --> J2["prune_logs - 03:00 - 120 s"]
+    RUN --> J3["profiles - 03:00 - 300 s"]
+    RUN --> J4["reminders - 60 s"]
+    RUN --> J5["daily_report - lun-sam - 600 s"]
+    RUN --> J6["weekly_report - 600 s"]
+
+    J1 & J2 & J3 & J4 & J5 & J6 --> CLAIM{"Reclamer le droit<br/>d enregistrer - atomique"}
+    CLAIM -- "obtenu" --> REC["Enregistrer le resultat<br/>_STATUS + pipeline_logs"]
+    CLAIM -- "deja pris" --> SILENT["Silence<br/>l autre ecrivain a gagne"]
+
+    REC --> TH
+    SILENT --> TH
+
+    NOTE["Invariant : une tache ne remonte<br/>jamais d exception dans la boucle.<br/>Un echec est une donnee."]
+    RUN -.-> NOTE
+
+    classDef warn fill:#fffaf0,stroke:#c05621
+    class NOTE,OFF warn

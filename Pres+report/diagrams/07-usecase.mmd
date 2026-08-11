@@ -1,0 +1,33 @@
+flowchart LR
+    subgraph acteurs[" "]
+        direction TB
+        TECH(("Technicien"))
+        CHEF(("Chef de chantier"))
+        DIR(("Directeur"))
+        SYS(("Systeme"))
+    end
+
+    subgraph systeme["Systeme de rapports de chantier"]
+        U1["Envoyer une note vocale"]
+        U2["Envoyer une photo de releve"]
+        U3["Recevoir le resume de confirmation"]
+        U4["Consulter son dernier rapport - /rapport"]
+        U5["Corriger un rapport - /modifier"]
+        U6["Supprimer un rapport - /supprimer"]
+        U7["Completer les colonnes de pilotage"]
+        U8["Consulter le tableau de bord"]
+        U9["Gerer l organigramme"]
+        U10["Gerer les comptes et les acces"]
+        U11["Gerer chantiers et bordereau"]
+        U12["Superviser l ordonnanceur"]
+        U13["Consulter les journaux"]
+        U14["Produire le rapport quotidien"]
+        U15["Produire le rapport hebdomadaire"]
+        U16["Reconstruire les profils"]
+        U17["Rejouer les ecritures en echec"]
+    end
+
+    TECH --> U1 & U2 & U3 & U4 & U5 & U6
+    CHEF --> U7 & U8
+    DIR --> U8 & U9 & U10 & U11 & U12 & U13
+    SYS --> U14 & U15 & U16 & U17

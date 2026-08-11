@@ -75,11 +75,42 @@ Ouvrir dans Word puis appuyer sur F9 pour générer la table des matières.
 
 # Liste des figures
 
-[À GÉNÉRER dans Word : Références → Insérer une table des illustrations, après avoir appliqué des légendes « Figure ».]
+| N° | Titre |
+|---|---|
+| 3.1 | Architecture générale de la solution |
+| 3.2 | Cycle de vie complet d'une note vocale (diagramme de séquence) |
+| 3.3 | Diagramme de cas d'utilisation |
+| 3.4 | Cycle de vie d'un rapport (machine à états) |
+| 3.5 | Modèle relationnel PostgreSQL |
+| 3.6 | Chaîne de transcription et repli |
+| 3.7 | Chaînes de repli d'extraction |
+| 3.8 | Tenue du journal : accumulation et réconciliation de stock |
+| 3.9 | Ordonnanceur : six tâches planifiées |
+| 3.10 | Workflow d'orchestration n8n (65 nœuds) |
+| 3.11 | Contrôle d'accès |
+| 3.12 | Tableau de bord — vue d'ensemble et organigramme *(captures à insérer)* |
+| 4.1 | Topologie de déploiement |
+| 4.2 | Démarche du banc d'essai |
 
 # Liste des tableaux
 
-[À GÉNÉRER dans Word : Références → Insérer une table des illustrations, catégorie « Tableau ».]
+| N° | Titre |
+|---|---|
+| 1.1 | Priorisation MoSCoW du périmètre fonctionnel |
+| 1.2 | Planning prévisionnel du projet |
+| 1.3 | Registre des risques principaux |
+| 2.1 | Comparaison des solutions d'orchestration |
+| 2.2 | Comparaison des canaux de réception |
+| 2.3 | Récapitulatif des choix technologiques |
+| 3.1 | Schéma du rapport extrait (`ExtractedReport`) |
+| 3.2 | Contrat d'erreurs du service |
+| 4.1 | Environnement de développement |
+| 4.2 | Comparaison des moteurs accessibles par API |
+| 4.3 | Campagne locale complète, 12 moteurs |
+| 4.4 | Comportement comparé sur les champs métier |
+| 4.5 | Effet de l'invite de vocabulaire en exécution locale |
+| 4.6 | État du périmètre livré |
+| 4.7 | Métriques du projet |
 
 # Liste des abréviations et acronymes
 
@@ -377,7 +408,10 @@ Deux approches extrêmes étaient possibles : tout construire dans n8n — fidè
 - **PostgreSQL** : journal d'événements, idempotence, sessions, file de reprise, organigramme, chantiers.
 - **Google Sheets** : le registre métier permanent — le fichier que le directeur lit déjà.
 
-**Figure 3.1 :** Architecture générale de la solution. *[FIGURE À INSÉRER — schéma : Technicien → Telegram / WhatsApp → n8n → Service FastAPI → (Google Sheets + PostgreSQL) → notifications ; tableau de bord → Service.]*
+![](diagrams/01-architecture.png)
+
+**Figure 3.1 :** Architecture générale : les cinq responsabilités et leurs échanges. Les deux arêtes numérotées vers le technicien et vers le journal matérialisent l'invariant réponse-d'abord (§3.5.2).
+
 
 ### 3.2.2 Frontière entre orchestration et code
 
@@ -399,9 +433,15 @@ L'ordre des étapes 5 et 6 est un invariant de conception, développé en §3.5.
 
 ### 3.2.4 Diagrammes UML
 
-**Figure 3.2 :** Diagramme de cas d'utilisation. *[FIGURE À INSÉRER — acteurs : Technicien (envoyer note vocale ou photo, recevoir confirmation, commandes /rapport, /modifier, /supprimer) ; Chef de chantier (compléter les colonnes de pilotage, consulter) ; Directeur (organigramme, comptes, chantiers, bordereau, ordonnanceur) ; Système (tâches planifiées).]*
+![](diagrams/07-usecase.png)
 
-**Figure 3.3 :** Diagramme de séquence du traitement d'une note vocale. *[FIGURE À INSÉRER — Technicien → canal → n8n → /process → moteur STT → chaîne d'extraction → réponse → technicien, puis /journal → Sheets, avec la branche d'échec vers la file de reprise.]*
+**Figure 3.3 :** Diagramme de cas d'utilisation. Le système figure comme acteur à part entière : quatre cas d'usage n'ont aucun déclencheur humain.
+
+
+![](diagrams/02-lifecycle-voice.png)
+
+**Figure 3.2 :** Cycle de vie complet d'une note vocale, de l'émission à la ligne du journal, y compris la déduplication en amont et la mise en file de reprise en aval. Le cadre vert isole l'étape que rien ne doit précéder.
+
 
 ## 3.3 Modèle de données
 
@@ -439,6 +479,11 @@ Trois décisions de modélisation méritent d'être justifiées.
 
 **Les colonnes de pilotage sont exclues.** Équipe, heures, jours-homme, ordre du jour et taux de réalisation sont planifiés avant la journée ou jugés après elle. Un technicien ne les dicte pas ; le chef les saisit dans le tableau de bord, et une fusion ne les touche jamais.
 
+
+![](diagrams/11-report-states.png)
+
+**Figure 3.4 :** Cycle de vie d'un rapport, vu comme une machine à états. Les états terminaux sont volontairement nombreux : un doublon, un expéditeur non autorisé et un message sans contenu exploitable sont trois issues normales, pas trois pannes.
+
 ### 3.3.2 Politique « aucune donnée inventée »
 
 Tous les champs métier sont optionnels et valent nul par défaut. L'instruction impose explicitement la valeur nulle pour toute information absente ; la validation Pydantic rejette les valeurs hors bornes. Trois mécanismes complètent cette politique :
@@ -460,7 +505,10 @@ Conséquence directe : **`password_hash IS NOT NULL` constitue à lui seul la d�
 
 Les autres tables sont `pipeline_logs` (journal d'étapes), `processed_messages` (idempotence), `failed_writes` (file de reprise), `sessions`, `user_actions`, `page_visits`, `service_samples` (historique de disponibilité), `app_settings`, `chantiers` et `articles`.
 
-**Figure 3.4 :** Modèle relationnel PostgreSQL. *[FIGURE À INSÉRER — schéma entité-association, `persons` au centre.]*
+![](diagrams/06-er-model.png)
+
+**Figure 3.5 :** Modèle relationnel. `persons` est au centre et se référence elle-même par `manager_id` : c'est l'organigramme. `password_hash IS NOT NULL` y tient lieu, à lui seul, de définition d'un compte.
+
 
 ## 3.4 Conception du service applicatif
 
@@ -476,13 +524,21 @@ Le choix du moteur étant arbitré par un banc d'essai, la conception rend les m
 
 Trois moteurs sont implémentés : `groq` (Whisper large-v3 par API), `gemini` (modèle multimodal natif) et `local` (client HTTP vers un service GPU dédié).
 
-**Figure 3.5 :** Diagramme de classes du service. *[FIGURE À INSÉRER — `TranscriptionProvider` (abstraite) et ses trois adaptateurs concrets ; registre ; `ExtractedReport` ; `ProcessResponse`.]*
+![](diagrams/03-stt-chain.png)
+
+**Figure 3.6 :** Chaîne de transcription. L'ordre est celui de l'exactitude mesurée, non de la latence : `groq` occupe la dernière place en tant que socle rapide et toujours disponible. Aucune branche ne mène à un repli silencieux.
+
 
 ### 3.4.3 Chaînes de repli
 
 Le service exploite **quatre** chaînes ordonnées `fournisseur:modèle`, une par forme d'entrée : `extraction_text_chain`, `extraction_image_chain`, `image_generation_chain` et `profile_chain`, auxquelles s'ajoute la chaîne STT. Chaque chaîne est essayée de gauche à droite, retourne quel modèle a répondu, et l'échec de toutes lève une `ExtractionError` combinée détaillant chaque cause — **jamais de repli silencieux**.
 
 La chaîne texte **alterne délibérément les fournisseurs**, Gemini et Groq mesurant leurs quotas gratuits séparément ; la chaîne image est exclusivement Google, le catalogue gratuit de Groq ne comportant aucun modèle de vision.
+
+
+![](diagrams/04-extraction-chains.png)
+
+**Figure 3.7 :** Les quatre chaînes de repli d'extraction. Une localisation non reconnue ne provoque pas un abandon mais une nouvelle tentative : c'est la traduction en flux de contrôle de la politique « aucune donnée inventée ».
 
 ### 3.4.4 Contrat d'erreurs
 
@@ -522,13 +578,23 @@ Trois décisions le rendent sûr. Il n'existe **aucune table de faits mémorisé
 
 Les dates sont normalisées, le même jour arrivant tantôt au format ISO, tantôt en `05/08/2026`, tantôt sous forme de numéro de série `46174` ; une date illisible provoque un **ajout** (visible) plutôt qu'une fusion dans la mauvaise ligne (invisible).
 
+
+![](diagrams/05-journal-merge.png)
+
+**Figure 3.8 :** Tenue du journal : accumulation intra-journalière et réconciliation de stock. Les deux encadrés orangés sont les cas où le système préfère un signal visible à une décision silencieuse.
+
 ### 3.4.8 Les tâches planifiées
 
-`jobs.py` implémente un ordonnanceur : un fil d'exécution, un battement de 30 s, cinq tâches — vidange de la file de reprise (5 min), purge des journaux (03:00), reconstruction des profils (03:00), rapport quotidien par e-mail (lundi-samedi) et rapport hebdomadaire.
+`jobs.py` implémente un ordonnanceur : un fil d'exécution, un battement de 30 s, **six tâches** — vidange de la file de reprise (5 min), purge des journaux (03:00), reconstruction des profils (03:00), rappels, rapport quotidien par e-mail (lundi-samedi) et rapport hebdomadaire. Chacune dispose d'un budget de temps propre, dimensionné sur son coût réel : 600 s pour les rapports, qui enchaînent une lecture du Sheet, un envoi SMTP et un appel de modèle **par chef de chantier**.
 
 Ces tâches étaient des nœuds *cron* n8n ; elles ont migré dans le service parce qu'un nœud cron ne peut ni montrer à un opérateur ce qu'il a produit, ni lui permettre de forcer une réexécution — ce que la page **Automatisation** du tableau de bord fait.
 
 Un invariant : **une tâche ne remonte jamais d'exception dans la boucle**. Les échecs sont enregistrés comme résultats, car un fil qui meurt à 03:00 emporte les quatre autres et personne ne s'en aperçoit avant de trouver le Sheet vide.
+
+
+![](diagrams/09-scheduler.png)
+
+**Figure 3.9 :** Ordonnanceur : six tâches, un fil unique, et une réclamation atomique du droit d'enregistrer le résultat — sans laquelle une tâche terminée juste au seuil du délai inscrivait deux issues contradictoires pour une même exécution.
 
 ## 3.5 Conception du workflow d'orchestration
 
@@ -536,7 +602,10 @@ Un invariant : **une tâche ne remonte jamais d'exception dans la boucle**. Les 
 
 Le workflow unique compte **65 nœuds** couvrant : le déclencheur périodique Telegram et son *offset* persistant ; le webhook WhatsApp et sa poignée de main de vérification ; la corrélation et la déduplication ; l'identification de l'expéditeur et le contrôle d'autorisation ; l'accusé de réception ; l'aiguillage média/texte puis audio/image ; les appels `/process` ; les réponses de résumé, d'erreur et de refus ; les commandes `/rapport`, `/modifier` et `/supprimer` ; l'appel `/journal` ; la journalisation de chaque étape ; et un déclencheur d'erreur.
 
-**Figure 3.6 :** Workflow n8n complet. *[FIGURE À INSÉRER — capture du canvas n8n.]*
+![](diagrams/08-n8n-workflow.png)
+
+**Figure 3.10 :** Workflow d'orchestration : les 65 nœuds regroupés par fonction. Les deux déclencheurs de gauche correspondent aux deux modes de réception opposés — interrogation sortante pour Telegram, webhook entrant pour WhatsApp.
+
 
 Le gestionnaire d'erreurs est resté dans n8n alors que les tâches planifiées en sont sorties, pour une raison précise : il intercepte les défaillances **du workflow lui-même**, que le service ne peut pas observer.
 
@@ -556,7 +625,8 @@ Le tableau de bord (11 590 lignes de TypeScript) est une application React 19 se
 
 **La lecture des données** passe par un cache au niveau du module, afin qu'une navigation aller-retour se repeigne instantanément puis se revalide en arrière-plan. Le sondage d'état et l'échantillonneur de disponibilité vivent **au-dessus** du routeur : les placer dans une page les arrêterait à la navigation et creuserait de faux trous dans l'historique de disponibilité.
 
-**Figure 3.7 :** Tableau de bord — vue d'ensemble et organigramme. *[FIGURE À INSÉRER — captures d'écran.]*
+**Figure 3.12 :** Tableau de bord — vue d'ensemble et organigramme. *[FIGURE À INSÉRER — captures d'écran de l'application en fonctionnement.]*
+
 
 ## 3.7 Sécurité
 
@@ -572,6 +642,11 @@ Décisions complémentaires :
 - **Limitation de débit sur la connexion** : 8 échecs par 5 minutes et par adresse cliente, l'adresse étant résolue à travers un nombre configuré de relais de confiance. Une valeur erronée laisse soit un script faire tourner l'en-tête, soit enferme tous les visiteurs derrière une même clé.
 - **Secrets hors du dépôt** ; le mot de passe PostgreSQL n'a délibérément **aucune valeur par défaut**, afin qu'un clone sans configuration échoue bruyamment plutôt que de démarrer avec un mot de passe connu.
 - **Moindre privilège** : le compte de service Google n'accède qu'au classeur concerné ; les empreintes de mots de passe ne quittent jamais la base, les requêtes de lecture nommant leurs colonnes plutôt que de tout sélectionner.
+
+
+![](diagrams/10-auth.png)
+
+**Figure 3.11 :** Contrôle d'accès. Les deux voies — cookie humain et clé machine — convergent vers trois niveaux d'exigence. Une clé machine non configurée **désactive** l'accès machine ; elle ne l'ouvre jamais.
 
 ## 3.8 Conclusion du chapitre
 
@@ -612,6 +687,11 @@ Deux pièges de déploiement, rencontrés le 30 juillet 2026, méritent d'être 
 1. Le service est une **image construite**, code source inclus. Un simple redémarrage réexécute l'*ancien* code ; il faut reconstruire.
 2. n8n conserve **sa propre copie** du workflow dans son volume. Modifier le fichier JSON versionné ne change rien tant qu'il n'est pas réimporté ou poussé par l'API de n8n.
 
+
+![](diagrams/12-deployment.png)
+
+**Figure 4.1 :** Topologie de déploiement. Un seul service publie un port ; tout le reste n'existe que sur le réseau interne de la pile. C'est cette forme unique — identique en local, derrière le tunnel et sur le serveur — qui rend les questions d'origines croisées sans objet.
+
 ## 4.3 Le banc d'essai des moteurs de transcription
 
 C'est le volet scientifique du projet. Il a été mené sur **treize moteurs** — trois par API et douze exécutés localement sur une carte NVIDIA RTX 3070 (8 Go) — et il a **renversé l'hypothèse initiale** du cahier des charges.
@@ -633,6 +713,11 @@ Onze notes vocales réelles, issues des échanges des techniciens, ont servi de 
 - **Le critère retenu est donc applicatif** : *quel moteur préserve les chiffres et les emprunts techniques français* — « 6 mètres », « 3ème étage », « panneau de brassage », « la fibre », « vérifier ». C'est tout ce que le journal consomme.
 
 Ce critère a été appliqué par lecture des transcriptions clip par clip, puis **confirmé à l'oreille par un locuteur natif du darija le 8 août 2026**. Cette confirmation humaine est ce qui a fixé l'ordre définitif de la chaîne.
+
+
+![](diagrams/13-benchmark.png)
+
+**Figure 4.2 :** Démarche du banc d'essai, y compris ses détours. Les deux encadrés rouges signalent le bogue silencieux : il flattait un modèle au lieu de le pénaliser, ce qui est le mode de défaillance le plus dangereux pour une comparaison.
 
 ### 4.3.3 Résultats — moteurs par API
 

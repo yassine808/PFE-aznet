@@ -1,0 +1,31 @@
+flowchart TD
+    A["POST /journal"] --> B["Normaliser la date<br/>ISO / JJ-MM-AAAA / numero de serie"]
+    B --> C{"date lisible ?"}
+    C -- non --> APP["AJOUT d une ligne<br/>visible, plutot qu une fusion<br/>dans la mauvaise ligne"]
+    C -- oui --> D{"ligne (date, technicien)<br/>deja presente ?"}
+
+    D -- non --> NEW["Creer la ligne"]
+    D -- oui --> MERGE["FUSION"]
+
+    MERGE --> M1["Quantites : addition"]
+    MERGE --> M2["Localisations : union"]
+    MERGE --> M3["Prose : concatenation"]
+    MERGE --> M4["Stock : remplacement"]
+    MERGE --> M5["Colonnes de pilotage :<br/>JAMAIS touchees"]
+
+    NEW --> S["Reconciliation du stock"]
+    M4 --> S
+
+    S --> S1["Attendu = dernier stock connu<br/>moins quantite installee"]
+    S1 --> S2{"chiffre rapporte ?"}
+    S2 -- non --> S3["Attendu devient la reference"]
+    S2 -- oui --> S4{"ecart avec l attendu ?"}
+    S4 -- non --> S3
+    S4 -- oui --> S5["Le chiffre rapporte l emporte<br/>+ avertissement stock_ecart chiffre"]
+
+    S3 --> W["Ecriture onglet du chantier"]
+    S5 --> W
+    W --> MIR["Miroir plat - onglet Rapports<br/>best effort, n empeche jamais le journal"]
+
+    classDef warn fill:#fffaf0,stroke:#c05621
+    class S5,APP warn

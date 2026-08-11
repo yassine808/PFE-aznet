@@ -1,0 +1,40 @@
+stateDiagram-v2
+    [*] --> Recu : message sur un canal
+    Recu --> Duplique : deja dans processed_messages
+    Duplique --> [*]
+
+    Recu --> Refuse : expediteur non autorise
+    Refuse --> [*]
+
+    Recu --> Transcrit : chaine STT
+    Recu --> EchecSTT : tous les moteurs ont echoue
+    EchecSTT --> [*] : 502, ligne marquee
+
+    Transcrit --> Extrait : chaine d extraction
+    Transcrit --> EchecExtraction : toutes les chaines ont echoue
+    EchecExtraction --> [*] : 502, ligne marquee
+
+    Extrait --> Repondu : resume envoye au technicien
+    note right of Repondu
+        Invariant reponse-d-abord :
+        le technicien a son resume
+        avant toute ecriture
+    end note
+
+    Repondu --> SansContenu : has_data() faux
+    SansContenu --> [*] : aucune ecriture
+
+    Repondu --> Journalise : fusion dans l onglet du chantier
+    Repondu --> EnAttente : Google Sheets indisponible
+    EnAttente --> Journalise : rejeu, toutes les 5 min
+    EnAttente --> Abandonne : charge utile illisible
+    Abandonne --> [*] : resolue en echec, ne bloque pas la file
+
+    Journalise --> Miroir : onglet Rapports
+    Miroir --> [*]
+    Journalise --> [*] : miroir en echec, best effort
+
+    Journalise --> Corrige : /modifier
+    Journalise --> Supprime : /supprimer
+    Corrige --> [*]
+    Supprime --> [*]

@@ -1,0 +1,30 @@
+flowchart TD
+    A["11 notes vocales reelles"] --> B["Campagne 1 : 3 moteurs par API"]
+    A --> C["Campagne 2 : 9 moteurs locaux GPU"]
+    A --> D["Campagne 3 : 12 moteurs<br/>apres deblocage des depots sous licence"]
+
+    B --> B1["Constat : Groq deforme les quantites<br/>Gemini boucle - 222 797 caracteres"]
+    C --> C1["Conclusion provisoire :<br/>les controles NON affines<br/>battent tous les affinages darija"]
+    C1 --> C2{"Pourquoi cette conclusion<br/>etait-elle possible ?"}
+    C2 --> C3["Parce que des controles<br/>avaient ete telecharges.<br/>Sans eux, medium-darija<br/>aurait ete couronne."]
+
+    D --> D1["Conclusion inversee :<br/>l affinage fonctionne,<br/>si le modele est assez grand"]
+
+    subgraph harness["Trois bogues de harnais"]
+        H1["1. Tenseur d invite vide - BRUYANT"]
+        H2["2. Budget de generation - BRUYANT"]
+        H3["3. Invite relue comme transcription<br/>SILENCIEUX"]
+    end
+    C --> harness
+    H3 --> H4["Aurait couronne large-v3 sur<br/>une transcription jamais generee.<br/>Detecte par : sortie identique sur<br/>audios differents + effondrement<br/>de la confiance"]
+
+    D1 --> E{"Critere de jugement"}
+    E --> E1["PAS le WER :<br/>darija sans orthographe fixee,<br/>et le journal consomme des<br/>nombres, pas des mots"]
+    E --> E2["Preservation des chiffres et<br/>des emprunts techniques francais"]
+    E2 --> F["Confirmation a l oreille<br/>par un locuteur natif - 2026-08-08"]
+    F --> G["Morocco-Darija-STT-large<br/>retenu - 7,7 s, ~4 Go VRAM"]
+
+    classDef ko fill:#fde8e8,stroke:#c53030
+    classDef ok fill:#e6f4ea,stroke:#2f855a
+    class H3,H4 ko
+    class G,F ok

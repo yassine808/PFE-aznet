@@ -1,0 +1,61 @@
+erDiagram
+    PERSONS ||--o{ TECHNICIANS : "identites de canal"
+    PERSONS ||--o{ PERSONS : "manager_id"
+    PERSONS }o--|| CHANTIERS : "affecte a"
+    CHANTIERS ||--o{ ARTICLES : "bordereau"
+    PERSONS ||--o{ SESSIONS : "ouvre"
+    PERSONS ||--o{ USER_ACTIONS : "trace"
+    PERSONS ||--o{ PAGE_VISITS : "consulte"
+
+    PERSONS {
+        int id PK
+        string name
+        string role "directeur, chef, tech"
+        int manager_id FK
+        int chantier_id FK
+        text profile "ecrit chaque nuit"
+        string password_hash "NOT NULL = c est un compte"
+    }
+    TECHNICIANS {
+        int id PK
+        int person_id FK
+        string channel "telegram, whatsapp"
+        string external_id
+        bool active "revoque l acces"
+    }
+    CHANTIERS {
+        int id PK
+        string nom
+        string onglet "onglet du journal"
+    }
+    ARTICLES {
+        int id PK
+        int chantier_id FK
+        string designation
+        string champ "null = non suivi ici"
+        float qte_contrat
+    }
+    PIPELINE_LOGS {
+        int id PK
+        string correlation_id
+        string stage
+        string level
+    }
+    PROCESSED_MESSAGES {
+        string message_id PK
+        string channel
+    }
+    FAILED_WRITES {
+        int id PK
+        json payload
+        string status
+    }
+    APP_SETTINGS {
+        string key PK
+        string value
+    }
+    SERVICE_SAMPLES {
+        int id PK
+        string service
+        bool up
+    }

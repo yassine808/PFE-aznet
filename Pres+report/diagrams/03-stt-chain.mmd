@@ -1,0 +1,20 @@
+flowchart TD
+    A["Audio recu"] --> B{"gemini"}
+    B -- succes --> OK["Transcription<br/>+ confiance + latence"]
+    B -- "echec / 503 / boucle" --> C{"local"}
+    C -- succes --> OK
+    C -- "sidecar absent<br/>ou STT_LOCAL_URL vide" --> E{"groq"}
+    C -- echec --> E
+    E -- succes --> OK
+    E -- echec --> F["TranscriptionError combinee<br/>HTTP 502"]
+
+    OK --> G{"moins de 10 caracteres ?"}
+    G -- oui --> H["200 + avertissement<br/>short_transcription"]
+    G -- non --> I["Extraction"]
+
+    F --> J["n8n marque la ligne<br/>et notifie"]
+
+    classDef ko fill:#fde8e8,stroke:#c53030
+    classDef ok fill:#e6f4ea,stroke:#2f855a
+    class F,J ko
+    class OK,I ok

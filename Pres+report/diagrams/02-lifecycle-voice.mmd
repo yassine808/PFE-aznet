@@ -1,0 +1,48 @@
+sequenceDiagram
+    autonumber
+    actor Tech as Technicien
+    participant Canal as Telegram / WhatsApp
+    participant N8N as n8n
+    participant API as Service FastAPI
+    participant STT as Moteur STT
+    participant LLM as Chaine d extraction
+    participant PG as PostgreSQL
+    participant GS as Google Sheets
+
+    Tech->>Canal: note vocale en darija
+    Canal->>N8N: message
+    N8N->>API: POST /logs/claim (idempotence)
+    API->>PG: INSERT processed_messages
+    alt message deja traite
+        API-->>N8N: duplicate
+        N8N-->>Tech: (silence, deja repondu)
+    else message neuf
+        N8N->>API: GET /technicians/lookup
+        API-->>N8N: personne + chantier + autorisation
+        N8N->>Canal: accuse de reception
+        N8N->>Canal: telechargement du media
+        N8N->>API: POST /process (multipart)
+        API->>PG: profile_for(technicien)
+        API->>STT: transcribe(audio)
+        STT-->>API: texte + confiance
+        API->>LLM: extraction contrainte par schema
+        LLM-->>API: ExtractedReport + resume FR
+        API-->>N8N: 200 + avertissements
+
+        rect rgb(230, 245, 233)
+        note over N8N,Tech: Ordre reponse-d abord - invariant
+        N8N-->>Tech: resume en francais
+        end
+
+        alt rapport exploitable
+            N8N->>API: POST /journal
+            API->>GS: fusion ligne (date, technicien)
+            alt Sheets indisponible
+                API->>PG: INSERT failed_writes
+                API-->>N8N: 502
+                note over PG: rejoue toutes les 5 min
+            end
+        else "salam" - has_data() faux
+            note over N8N: aucune ecriture
+        end
+    end

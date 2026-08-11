@@ -1,0 +1,38 @@
+flowchart TB
+    subgraph internet["Internet"]
+        META["Meta / WhatsApp"]
+        TGA["Telegram"]
+        NAV["Navigateur"]
+    end
+
+    FUNNEL["Tailscale Funnel<br/>nom d hote stable HTTPS"]
+    META --> FUNNEL
+    NAV --> FUNNEL
+
+    subgraph host["Machine hote - Docker Compose"]
+        WEB["web - nginx<br/>SEUL port publie 8080"]
+        API["api - FastAPI<br/>aucun port publie"]
+        N8N["n8n<br/>5678"]
+        PG[("postgres<br/>127.0.0.1:5432")]
+        STT["stt-local<br/>sidecar GPU"]
+    end
+
+    GPU["RTX 3070 - 8 Go<br/>chargement au premier appel"]
+    SHEETS[("Google Sheets")]
+
+    FUNNEL --> WEB
+    WEB -- "/" --> WEB
+    WEB -- "/api/" --> API
+    WEB -- "/webhook/" --> N8N
+    N8N -- polling sortant --> TGA
+    N8N --> API
+    API --> PG
+    API --> STT --> GPU
+    API --> SHEETS
+    N8N --> PG
+
+    NOTE["Une seule origine :<br/>cookie SameSite=Lax,<br/>CORS sans objet.<br/>Meme forme en local,<br/>derriere le tunnel et<br/>sur le serveur."]
+    WEB -.-> NOTE
+
+    classDef ok fill:#e6f4ea,stroke:#2f855a
+    class WEB,NOTE ok
