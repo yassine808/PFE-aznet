@@ -389,16 +389,17 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
     return cells
 
 
-def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str]) -> None:
+def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str]) -> Optional[int]:
     """Append the flat Rapports row for this message; never raises.
 
     The journal row is the record; the mirror is for the dashboard. When
     Google refuses it, the report itself is not lost — the journal write
     already succeeded — so this logs and moves on instead of failing the
-    whole /journal call.
+    whole /journal call. Returns the appended row number, or None on
+    failure, so /supprimer can clear the mirror row too.
     """
     try:
-        sheets.append_report(_rapports_cells(payload, chantier, warnings))
+        return sheets.append_report(_rapports_cells(payload, chantier, warnings))
     except Exception as exc:  # noqa: BLE001 - best-effort by design
         try:
             from app import logs
@@ -410,6 +411,7 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str]) -> None:
             )
         except Exception:  # noqa: BLE001 - the mirror must never take the row down
             pass
+        return None
 
 
 def file_report(payload: Dict) -> Dict:
@@ -440,12 +442,13 @@ def file_report(payload: Dict) -> Dict:
     warnings = warnings + stock_warnings
     # After the journal write succeeded, so a mirror failure cannot cost the
     # row — but before the reply, because the dashboard shows it.
-    _mirror_rapports(payload, chantier, warnings)
+    mirror_row = _mirror_rapports(payload, chantier, warnings)
     return {
         "row": row,
         "tab": tab,
         "chantier": chantier,
         "warnings": warnings,
+        "rapports_row": mirror_row,
     }
 
 

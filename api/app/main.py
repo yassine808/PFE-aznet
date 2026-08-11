@@ -682,7 +682,9 @@ def modify_command(payload: ModifyIn, caller: dict = Depends(auth.require_user))
     the journal write created (processed_messages.sheet_row + sheet_tab), never
     from anything the technician typed — same reason /rapport never parses the
     text. The link's tab is honored, so the edit lands on the journal row the
-    technician just reported, not the flat Rapports feed.
+    technician just reported, not the flat Rapports feed. A supprimer also
+    clears the Rapports mirror row, or the deleted report would keep
+    rendering on the dashboard feed.
     """
     try:
         location = logs.message_row(payload.message_id)
@@ -690,19 +692,22 @@ def modify_command(payload: ModifyIn, caller: dict = Depends(auth.require_user))
         raise HTTPException(502, str(exc)) from exc
     if location is None:
         raise HTTPException(404, "aucun rapport lié à ce message")
-    tab, row = location
+    tab, row, rapports_row = location
     tab = tab or sheets.RAPPORTS_TAB  # pre-journal links always meant Rapports
 
     if payload.action == "supprimer":
         try:
             sheets.clear_row(row, tab=tab)
+            if rapports_row:
+                sheets.clear_row(rapports_row, tab=sheets.RAPPORTS_TAB)
         except sheets.SheetsError as exc:
             raise HTTPException(502, f"sheets clear failed: {exc}") from exc
         try:
             logs.link_message_row(payload.message_id, None)  # unlink: nothing left to edit
         except logs.LogStoreError:
             pass  # the Sheet is the source of truth; the link is best-effort
-        return {"action": "supprimer", "row": row, "tab": tab}
+        return {"action": "supprimer", "row": row, "tab": tab,
+                "rapports_row": rapports_row}
 
     if not payload.fields:
         raise HTTPException(422, "des champs sont requis pour /modify")
@@ -1146,7 +1151,10 @@ async def file_journal_entry(
 
     if entry.message_id and result.get("row"):
         try:
-            logs.link_message_row(entry.message_id, result["row"], result.get("tab"))
+            logs.link_message_row(
+                entry.message_id, result["row"], result.get("tab"),
+                result.get("rapports_row"),
+            )
         except logs.LogStoreError:
             pass  # best-effort: the row is written, the link is a convenience
     logs.write_safe(

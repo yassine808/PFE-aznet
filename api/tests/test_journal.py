@@ -382,6 +382,7 @@ def test_file_report_mirrors_to_the_flat_tab(fake):
     assert fake.mirrored[-1]["goulottes_m"] == 150  # Rapports row
     assert fake.mirrored[-1]["chantier"] == "DGH"
     assert fake.mirrored[-1]["flag_review"] is True
+    assert result["rapports_row"] == 3  # the mirror's row number, for /supprimer
 
 
 def test_mirror_failure_never_costs_the_journal_row(fake, monkeypatch):
@@ -399,6 +400,7 @@ def test_mirror_failure_never_costs_the_journal_row(fake, monkeypatch):
     })
     assert result["row"] == 2
     assert fake.appended[0][1]["Câble installé"] == "120"
+    assert result["rapports_row"] is None  # nothing to clear later
 
 
 def test_excel_serial_date_matches_the_same_day(fake):

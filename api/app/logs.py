@@ -319,6 +319,10 @@ CREATE INDEX IF NOT EXISTS chat_messages_ts_idx ON chat_messages (created_at DES
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_row BIGINT;
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_tab TEXT;
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ;
+-- The journal write also mirrors a flat row to Rapports; its row number lives
+-- here so /supprimer can clear both rows instead of leaving the report visible
+-- in the dashboard feed. NULL for pre-journal links and mirror failures.
+ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS rapports_row BIGINT;
 
 -- Per-account in-app notifications (the dashboard bell). Every row is owned
 -- by exactly one person; pipeline events (a new report for the chef, a row
@@ -989,39 +993,44 @@ def list_messages(
 # — which since the journal is a chantier tab, not the Rapports flat feed.
 
 def link_message_row(message_id: str, row: Optional[int],
-                     tab: Optional[str] = None) -> bool:
+                     tab: Optional[str] = None,
+                     rapports_row: Optional[int] = None) -> bool:
     """Remember which Sheet row a processed message landed on; None clears it.
 
     Upsert-free by design: the row already exists (the claim inserted it), so
     this is an UPDATE — clearing with None is how /supprimer unlinks a row.
     `tab` defaults to None: older links predate the journal and always meant
     the Rapports tab, and `message_row` resolves None the same way.
+    `rapports_row` is the journal write's flat mirror row, cleared with the
+    link so a deleted report stops rendering on the dashboard feed too.
     """
     with _cursor() as cur:
         cur.execute(
             "UPDATE processed_messages SET sheet_row = %s, sheet_tab = %s, "
-            "linked_at = now() WHERE message_id = %s",
-            (row, tab, message_id),
+            "rapports_row = %s, linked_at = now() WHERE message_id = %s",
+            (row, tab, rapports_row, message_id),
         )
         return cur.rowcount > 0
 
 
-def message_row(message_id: str) -> Optional[Tuple[Optional[str], int]]:
-    """The (tab, row) a message landed on, if anyone linked it.
+def message_row(message_id: str) -> Optional[Tuple[Optional[str], int, Optional[int]]]:
+    """The (tab, row, rapports_row) a message landed on, if anyone linked it.
 
     None tab means Rapports — every link written before the journal existed
-    pointed there, and the dashboard editor still writes there.
+    pointed there, and the dashboard editor still writes there. The third
+    element is the flat mirror row the journal write also appended, so
+    /supprimer can clear it as well; None when there is no mirror.
     """
     with _cursor() as cur:
         cur.execute(
-            "SELECT sheet_row, sheet_tab FROM processed_messages "
+            "SELECT sheet_row, sheet_tab, rapports_row FROM processed_messages "
             "WHERE message_id = %s",
             (message_id,),
         )
         row = _one(cur)
     if row is None or row["sheet_row"] is None:
         return None
-    return row.get("sheet_tab"), int(row["sheet_row"])
+    return row.get("sheet_tab"), int(row["sheet_row"]), row.get("rapports_row")
 
 
 # ── sheet retry queue ──────────────────────────────────────────────────────

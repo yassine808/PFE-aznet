@@ -236,7 +236,7 @@ def test_link_unknown_message_404(monkeypatch):
 
 
 def test_modify_command_updates_row(monkeypatch):
-    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 42))
+    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 42, None))
     written = {}
 
     def fake_update(row, values, tab):
@@ -259,7 +259,7 @@ def test_modify_command_updates_row(monkeypatch):
 def test_modify_on_journal_tab_targets_that_tab(monkeypatch):
     """A /modify reply after a journal write must edit the journal row, not the
     flat Rapports feed — the tab from the link decides where the edit lands."""
-    monkeypatch.setattr(main.logs, "message_row", lambda mid: ("Siège Casablanca", 5))
+    monkeypatch.setattr(main.logs, "message_row", lambda mid: ("Siège Casablanca", 5, None))
     written = {}
 
     def fake_update(row, values, tab):
@@ -278,7 +278,7 @@ def test_modify_on_journal_tab_targets_that_tab(monkeypatch):
 
 
 def test_supprimer_clears_row_and_unlinks(monkeypatch):
-    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 7))
+    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 7, None))
     cleared = []
     unlinked = []
 
@@ -298,6 +298,31 @@ def test_supprimer_clears_row_and_unlinks(monkeypatch):
     assert unlinked == [("tg:1:2", None)]
 
 
+def test_supprimer_clears_journal_row_and_its_rapports_mirror(monkeypatch):
+    """A journal write mirrors a flat Rapports row; deleting the report must
+    clear both, or the dashboard feed keeps rendering a ghost report."""
+    monkeypatch.setattr(
+        main.logs, "message_row", lambda mid: ("Siège Casablanca", 5, 12)
+    )
+    cleared = []
+    unlinked = []
+
+    def fake_clear(row, tab):
+        cleared.append((row, tab))
+
+    def fake_unlink(mid, row, tab=None, rapports_row=None):
+        unlinked.append((mid, row))
+
+    monkeypatch.setattr(main.sheets, "clear_row", fake_clear)
+    monkeypatch.setattr(main.logs, "link_message_row", fake_unlink)
+    r = client.post(
+        "/modify-command", json={"message_id": "tg:1:2", "action": "supprimer"}
+    )
+    assert r.status_code == 200
+    assert cleared == [(5, "Siège Casablanca"), (12, "Rapports")]
+    assert unlinked == [("tg:1:2", None)]
+
+
 def test_modify_unknown_message_404(monkeypatch):
     monkeypatch.setattr(main.logs, "message_row", lambda mid: None)
     r = client.post(
@@ -308,7 +333,7 @@ def test_modify_unknown_message_404(monkeypatch):
 
 
 def test_modify_without_fields_422(monkeypatch):
-    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 1))
+    monkeypatch.setattr(main.logs, "message_row", lambda mid: (None, 1, None))
     r = client.post(
         "/modify-command", json={"message_id": "tg:1:2", "action": "modify"}
     )
