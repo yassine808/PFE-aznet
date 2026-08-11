@@ -5,6 +5,8 @@ mocked: the tests must never need a database or a bot token.
 """
 from fastapi.testclient import TestClient
 
+import pytest
+
 import app.main as main
 
 client = TestClient(main.app)
@@ -116,3 +118,35 @@ def test_reply_log_store_down_is_502(monkeypatch):
     monkeypatch.setattr(main.logs, "person_by_name", boom)
     r = client.post("/reply", json={"name": "Tech 1", "text": "Bonjour"})
     assert r.status_code == 502
+
+
+# ── transport failures are channel refusals, not 500s ──────────────────────
+# A dead network raises requests.Timeout/ConnectionError, which the senders
+# must translate into ReplyError — otherwise the composer surfaces a raw 500
+# instead of the documented 502 "channel refused".
+
+
+def test_telegram_timeout_is_a_reply_error(monkeypatch):
+    import requests
+
+    def boom(*a, **k):
+        raise requests.Timeout("slow network")
+
+    monkeypatch.setattr(main.reply.requests, "post", boom)
+    with pytest.raises(main.reply.ReplyError, match="injoignable"):
+        main.reply._telegram("123", "Bonjour")
+
+
+def test_whatsapp_connection_error_is_a_reply_error(monkeypatch):
+    import requests
+
+    monkeypatch.setattr(main.reply.settings, "whatsapp_access_token", "tok")
+    monkeypatch.setattr(main.reply.settings, "whatsapp_phone_number_id", "1001")
+    monkeypatch.setattr(main.logs, "normalize_external_id", lambda ch, x: x)
+
+    def boom(*a, **k):
+        raise requests.ConnectionError("dns failed")
+
+    monkeypatch.setattr(main.reply.requests, "post", boom)
+    with pytest.raises(main.reply.ReplyError, match="injoignable"):
+        main.reply._whatsapp("21261234567", "Bonjour")

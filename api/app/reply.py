@@ -26,11 +26,14 @@ def _telegram(external_id: str, text: str) -> None:
     token = settings.telegram_bot_token
     if not token:
         raise ReplyError("Réponse Telegram non configurée (TELEGRAM_BOT_TOKEN manquant)")
-    res = requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        json={"chat_id": external_id, "text": text},
-        timeout=15,
-    )
+    try:
+        res = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": external_id, "text": text},
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise ReplyError(f"Telegram injoignable: {exc}") from exc
     if not res.ok:
         raise ReplyError(f"Telegram a refusé ({res.status_code}): {res.text[:200]}")
 
@@ -43,17 +46,20 @@ def _whatsapp(external_id: str, text: str) -> None:
             "Réponse WhatsApp non configurée "
             "(WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID manquants)"
         )
-    res = requests.post(
-        f"https://graph.facebook.com/v23.0/{number_id}/messages",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "messaging_product": "whatsapp",
-            "to": logs.normalize_external_id("whatsapp", external_id),
-            "type": "text",
-            "text": {"body": text},
-        },
-        timeout=15,
-    )
+    try:
+        res = requests.post(
+            f"https://graph.facebook.com/v23.0/{number_id}/messages",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "messaging_product": "whatsapp",
+                "to": logs.normalize_external_id("whatsapp", external_id),
+                "type": "text",
+                "text": {"body": text},
+            },
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise ReplyError(f"WhatsApp injoignable: {exc}") from exc
     if not res.ok:
         raise ReplyError(f"WhatsApp a refusé ({res.status_code}): {res.text[:200]}")
 
