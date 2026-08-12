@@ -259,6 +259,8 @@ Le cahier des charges fourni par l'entreprise (Annexe A) définit les exigences 
 
 ### 1.5.3 Priorisation MoSCoW
 
+Le **Tableau 1.1** répartit ces exigences selon la méthode MoSCoW.
+
 ::: {custom-style="TableCaption"}
 **Tableau 1.1 :** Priorisation MoSCoW du périmètre fonctionnel.
 :::
@@ -283,6 +285,8 @@ Le dépôt Git compte **220 commits** entre le 15 juillet 2026 (`feat: week 0 sc
 
 ### 1.6.2 Planification
 
+Le **Tableau 1.2** présente le découpage en sprints retenu au démarrage.
+
 ::: {custom-style="TableCaption"}
 **Tableau 1.2 :** Planning prévisionnel du projet.
 :::
@@ -297,6 +301,8 @@ Le dépôt Git compte **220 commits** entre le 15 juillet 2026 (`feat: week 0 sc
 
 
 ### 1.6.3 Gestion des risques
+
+Le **Tableau 1.3** recense les risques identifiés au lancement, leur criticité et la parade retenue pour chacun.
 
 ::: {custom-style="TableCaption"}
 **Tableau 1.3 :** Registre des risques principaux.
@@ -377,7 +383,7 @@ Sous contrainte d'offre gratuite, deux fournisseurs se distinguent : **Gemini** 
 
 ## 2.4 Plateformes d'orchestration
 
-Le cahier des charges recommande n8n comme outil d'automatisation. L'étude comparative confirme ce choix :
+Le cahier des charges recommande n8n comme outil d'automatisation. L'étude comparative, résumée dans le **Tableau 2.1**, confirme ce choix :
 
 ::: {custom-style="TableCaption"}
 **Tableau 2.1 :** Comparaison des solutions d'orchestration.
@@ -398,7 +404,7 @@ Le chapitre 4 documente la limite pratique qui a fixé la frontière entre les d
 
 ## 2.5 Canal de réception : étude comparative
 
-Le cahier des charges cite WhatsApp Business API « ou passerelle équivalente ». L'étude pratique des deux principaux candidats a structuré le calendrier du projet :
+Le cahier des charges cite WhatsApp Business API « ou passerelle équivalente ». L'étude pratique des deux principaux candidats a structuré le calendrier du projet, comme le récapitule le **Tableau 2.2** :
 
 ::: {custom-style="TableCaption"}
 **Tableau 2.2 :** Comparaison des canaux de réception.
@@ -429,6 +435,8 @@ Avant de concevoir un système, il faut justifier de ne pas en acheter un. Trois
 
 **Les assistants de transcription généralistes** — Otter, Notta, ou l'envoi manuel à un modèle de langage. Ils transcrivent, mais ne structurent pas, n'écrivent pas dans le tableau de suivi, ne notifient personne et ne connaissent pas le vocabulaire du câblage. Ils résolvent un cinquième du problème.
 
+Le **Tableau 2.3** situe le besoin d'AZNET face aux catégories d'outils existantes.
+
 ::: {custom-style="TableCaption"}
 **Tableau 2.3 :** Positionnement face aux solutions existantes.
 :::
@@ -448,6 +456,8 @@ La conclusion n'est pas que ces produits sont mauvais, mais que le besoin d'AZNE
 ## 2.7 Technologies et langages retenus
 
 ### 2.7.1 Vue d'ensemble
+
+Le **Tableau 2.4** reprend les technologies retenues et, pour chacune, l'alternative écartée.
 
 ::: {custom-style="TableCaption"}
 **Tableau 2.4 :** Technologies retenues et alternatives écartées.
@@ -487,6 +497,8 @@ Quatre décisions n'allaient pas de soi et ont été tranchées sur des critère
 
 
 ## 2.8 Synthèse des choix technologiques
+
+Le **Tableau 2.5** rassemble ces décisions en une vue unique.
 
 ::: {custom-style="TableCaption"}
 **Tableau 2.5 :** Récapitulatif des choix technologiques.
@@ -530,6 +542,8 @@ Deux approches extrêmes étaient possibles : tout construire dans n8n — fidè
 - **PostgreSQL** : journal d'événements, idempotence, sessions, file de reprise, organigramme, chantiers.
 - **Google Sheets** : le registre métier permanent — le fichier que le directeur lit déjà.
 
+La **Figure 3.1** met ces cinq responsabilités en relation et fait apparaître les échanges qui les lient.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/01-architecture.png){ width=14.7cm }
 :::
@@ -561,6 +575,8 @@ L'ordre des étapes 5 et 6 est un invariant de conception, développé en §3.5.
 
 ### 3.2.4 Diagrammes UML
 
+La **Figure 3.2** recense les cas d'utilisation du système et leurs acteurs.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/07-usecase.png){ width=9.4cm }
 :::
@@ -571,6 +587,8 @@ L'ordre des étapes 5 et 6 est un invariant de conception, développé en §3.5.
 :::
 
 
+
+La **Figure 3.3** suit une note vocale sur l'ensemble de son parcours, de l'émission à la ligne du journal.
 
 ::: {custom-style="FigureImage"}
 ![](diagrams/02-lifecycle-voice.png){ width=16.0cm }
@@ -587,7 +605,7 @@ L'ordre des étapes 5 et 6 est un invariant de conception, développé en §3.5.
 
 ### 3.3.1 Le rapport structuré, contrat central
 
-Le schéma `ExtractedReport` est le contrat entre le service, n8n et le journal. Il a été **reconstruit le 5 août 2026 à partir du fichier de suivi réel du directeur**, en remplacement d'un schéma générique initial :
+Le schéma `ExtractedReport` est le contrat entre le service, n8n et le journal. Il a été **reconstruit le 5 août 2026 à partir du fichier de suivi réel du directeur**, en remplacement d'un schéma générique initial. Le **Tableau 3.1** en donne les champs :
 
 ::: {custom-style="TableCaption"}
 **Tableau 3.1 :** Schéma du rapport extrait (`ExtractedReport`).
@@ -623,6 +641,8 @@ Trois décisions de modélisation méritent d'être justifiées.
 **Les colonnes de pilotage sont exclues.** Équipe, heures, jours-homme, ordre du jour et taux de réalisation sont planifiés avant la journée ou jugés après elle. Un technicien ne les dicte pas ; le chef les saisit dans le tableau de bord, et une fusion ne les touche jamais.
 
 
+La **Figure 3.4** représente ce même parcours comme une machine à états, ce qui fait ressortir la variété des issues possibles.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/11-report-states.png){ width=16.0cm }
 :::
@@ -654,6 +674,8 @@ Conséquence directe : **`password_hash IS NOT NULL` constitue à lui seul la d�
 
 Les autres tables sont `pipeline_logs` (journal d'étapes), `processed_messages` (idempotence), `failed_writes` (file de reprise), `sessions`, `user_actions`, `page_visits`, `service_samples` (historique de disponibilité), `app_settings`, `chantiers` et `articles`.
 
+La **Figure 3.5** donne le modèle relationnel de la partie identité.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/06-er-identity.png){ width=16.0cm }
 :::
@@ -663,6 +685,8 @@ Les autres tables sont `pipeline_logs` (journal d'étapes), `processed_messages`
 **Figure 3.5 :** Modèle relationnel. `persons` est au centre et se référence elle-même par `manager_id` : c'est l'organigramme. `password_hash IS NOT NULL` y tient lieu, à lui seul, de définition d'un compte.
 :::
 
+
+La **Figure 3.6** complète le modèle avec les tables d'exploitation et d'audit.
 
 ::: {custom-style="FigureImage"}
 ![](diagrams/06-er-operations.png){ width=16.0cm }
@@ -719,6 +743,8 @@ Le choix du moteur étant arbitré par un banc d'essai, la conception rend les m
 
 Trois moteurs sont implémentés : `groq` (Whisper large-v3 par API), `gemini` (modèle multimodal natif) et `local` (client HTTP vers un service GPU dédié).
 
+La **Figure 3.7** montre l'ordre de la chaîne de transcription et la condition de passage d'un moteur au suivant.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/03-stt-chain.png){ width=11.0cm }
 :::
@@ -737,6 +763,8 @@ Le service exploite **quatre** chaînes ordonnées `fournisseur:modèle`, une pa
 La chaîne texte **alterne délibérément les fournisseurs**, Gemini et Groq mesurant leurs quotas gratuits séparément ; la chaîne image est exclusivement Google, le catalogue gratuit de Groq ne comportant aucun modèle de vision.
 
 
+La **Figure 3.8** réunit les quatre chaînes de repli et le traitement réservé à leurs erreurs.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/04-extraction-chains.png){ width=10.1cm }
 :::
@@ -748,6 +776,8 @@ La chaîne texte **alterne délibérément les fournisseurs**, Gemini et Groq me
 
 
 ### 3.4.4 Contrat d'erreurs
+
+Le **Tableau 3.2** fixe le contrat d'erreurs du service, code par code.
 
 ::: {custom-style="TableCaption"}
 **Tableau 3.2 :** Contrat d'erreurs du service.
@@ -789,6 +819,8 @@ Trois décisions le rendent sûr. Il n'existe **aucune table de faits mémorisé
 Les dates sont normalisées, le même jour arrivant tantôt au format ISO, tantôt en `05/08/2026`, tantôt sous forme de numéro de série `46174` ; une date illisible provoque un **ajout** (visible) plutôt qu'une fusion dans la mauvaise ligne (invisible).
 
 
+La **Figure 3.9** décrit la tenue du journal, de la normalisation de la date à la réconciliation du stock.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/05-journal-merge.png){ width=13.3cm }
 :::
@@ -808,6 +840,8 @@ Ces tâches étaient des nœuds *cron* n8n ; elles ont migré dans le service pa
 Un invariant : **une tâche ne remonte jamais d'exception dans la boucle**. Les échecs sont enregistrés comme résultats, car un fil qui meurt à 03:00 emporte les quatre autres et personne ne s'en aperçoit avant de trouver le Sheet vide.
 
 
+La **Figure 3.10** détaille l'ordonnanceur et la réclamation atomique qui garantit un résultat unique par exécution.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/09-scheduler.png){ width=16.0cm }
 :::
@@ -824,6 +858,8 @@ Un invariant : **une tâche ne remonte jamais d'exception dans la boucle**. Les 
 
 Le workflow unique compte **65 nœuds** couvrant : le déclencheur périodique Telegram et son *offset* persistant ; le webhook WhatsApp et sa poignée de main de vérification ; la corrélation et la déduplication ; l'identification de l'expéditeur et le contrôle d'autorisation ; l'accusé de réception ; l'aiguillage média/texte puis audio/image ; les appels `/process` ; les réponses de résumé, d'erreur et de refus ; les commandes `/rapport`, `/modifier` et `/supprimer` ; l'appel `/journal` ; la journalisation de chaque étape ; et un déclencheur d'erreur.
 
+La **Figure 3.11** présente la première moitié du workflow, consacrée à la réception et à l'identification de l'expéditeur.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/08-n8n-reception.png){ width=10.5cm }
 :::
@@ -833,6 +869,8 @@ Le workflow unique compte **65 nœuds** couvrant : le déclencheur périodique T
 **Figure 3.11 :** Workflow d'orchestration : les 65 nœuds regroupés par fonction. Les deux déclencheurs de gauche correspondent aux deux modes de réception opposés — interrogation sortante pour Telegram, webhook entrant pour WhatsApp.
 :::
 
+
+La **Figure 3.12** en donne la seconde moitié, du traitement jusqu'à l'écriture du journal.
 
 ::: {custom-style="FigureImage"}
 ![](diagrams/08-n8n-traitement.png){ width=11.5cm }
@@ -902,6 +940,8 @@ Décisions complémentaires :
 - **Moindre privilège** : le compte de service Google n'accède qu'au classeur concerné ; les empreintes de mots de passe ne quittent jamais la base, les requêtes de lecture nommant leurs colonnes plutôt que de tout sélectionner.
 
 
+La **Figure 3.13** résume le contrôle d'accès et les trois niveaux d'exigence qu'il applique.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/10-auth.png){ width=16.0cm }
 :::
@@ -918,6 +958,8 @@ Décisions complémentaires :
 Le système enregistre la voix de salariés identifiés, la rattache à leur nom et la conserve. Il s'agit de **données à caractère personnel** au sens de la loi marocaine **09-08** relative à la protection des personnes physiques à l'égard du traitement des données à caractère personnel, dont l'autorité de contrôle est la **CNDP**. Un enregistrement vocal est en outre une donnée biométrique par nature, ce qui appelle une prudence particulière.
 
 ### 3.8.1 Ce qui est collecté, et où
+
+Le **Tableau 3.3** recense les données personnelles traitées, leur finalité et leur lieu de conservation.
 
 ::: {custom-style="TableCaption"}
 **Tableau 3.3 :** Données personnelles traitées par le système.
@@ -973,6 +1015,8 @@ Ce chapitre décrit la mise en œuvre de la conception : l'environnement de dév
 
 ## 4.2 Environnement et outils de développement
 
+Le **Tableau 4.1** récapitule l'environnement de développement.
+
 ::: {custom-style="TableCaption"}
 **Tableau 4.1 :** Environnement de développement.
 :::
@@ -1001,6 +1045,8 @@ Deux pièges de déploiement, rencontrés le 30 juillet 2026, méritent d'être 
 1. Le service est une **image construite**, code source inclus. Un simple redémarrage réexécute l'*ancien* code ; il faut reconstruire.
 2. n8n conserve **sa propre copie** du workflow dans son volume. Modifier le fichier JSON versionné ne change rien tant qu'il n'est pas réimporté ou poussé par l'API de n8n.
 
+
+La **Figure 4.1** donne la topologie de déploiement retenue.
 
 ::: {custom-style="FigureImage"}
 ![](diagrams/12-deployment.png){ width=16.0cm }
@@ -1035,6 +1081,8 @@ Onze notes vocales réelles, issues des échanges des techniciens, ont servi de 
 Ce critère a été appliqué par lecture des transcriptions clip par clip, puis **confirmé à l'oreille par un locuteur natif du darija le 8 août 2026**. Cette confirmation humaine est ce qui a fixé l'ordre définitif de la chaîne.
 
 
+La **Figure 4.2** retrace la démarche du banc d'essai, détours compris.
+
 ::: {custom-style="FigureImage"}
 ![](diagrams/13-benchmark.png){ width=16.0cm }
 :::
@@ -1046,6 +1094,8 @@ Ce critère a été appliqué par lecture des transcriptions clip par clip, puis
 
 
 ### 4.3.3 Résultats — moteurs par API
+
+Le **Tableau 4.2** rassemble les résultats des trois moteurs accessibles par API.
 
 ::: {custom-style="TableCaption"}
 **Tableau 4.2 :** Comparaison des moteurs accessibles par API (7 août 2026).
@@ -1063,6 +1113,8 @@ Ce critère a été appliqué par lecture des transcriptions clip par clip, puis
 ### 4.3.4 Résultats — moteurs locaux sur GPU
 
 Douze moteurs ont été exécutés localement en demi-précision sur la RTX 3070.
+
+Le **Tableau 4.3** en donne le relevé complet.
 
 ::: {custom-style="TableCaption"}
 **Tableau 4.3 :** Campagne locale complète, 12 moteurs, 11 clips, RTX 3070 (7 août 2026). Trié par confiance décroissante.
@@ -1091,7 +1143,7 @@ Deux précautions de lecture s'imposent :
 
 ### 4.3.5 Le moteur retenu et sa justification
 
-`BounharAbdelaziz/Morocco-Darija-STT-large` (environ 2 milliards de paramètres, licence Apache 2.0) a été retenu. Sur un clip de référence dont le contenu est *« hier 20/07/2026, arrivés à Essaouira à 1 h, vérifié le chemin de 27 câbles, pris le métrage, coupés, vérifié le chemin de la fibre, sortis à 7 h »* :
+`BounharAbdelaziz/Morocco-Darija-STT-large` (environ 2 milliards de paramètres, licence Apache 2.0) a été retenu. Sur un clip de référence dont le contenu est *« hier 20/07/2026, arrivés à Essaouira à 1 h, vérifié le chemin de 27 câbles, pris le métrage, coupés, vérifié le chemin de la fibre, sortis à 7 h »*, le **Tableau 4.4** compare les transcriptions obtenues :
 
 ::: {custom-style="TableCaption"}
 **Tableau 4.4 :** Comportement comparé sur les champs métier d'un clip de référence.
@@ -1133,6 +1185,8 @@ Le troisième est le seul qui compte vraiment. Il produisait `Kmmalna khamsa dya
 ### 4.3.8 L'invite de vocabulaire : survivable par API, fatale en local
 
 Une même instruction produit deux comportements opposés selon la voie d'exécution.
+
+Le **Tableau 4.5** chiffre cet écart.
 
 ::: {custom-style="TableCaption"}
 **Tableau 4.5 :** Effet de l'invite de vocabulaire en exécution locale.
@@ -1198,6 +1252,8 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 
 ### 4.6.2 Périmètre livré
 
+Le **Tableau 4.6** dresse l'état du périmètre livré, composant par composant.
+
 ::: {custom-style="TableCaption"}
 **Tableau 4.6 :** État du périmètre livré.
 :::
@@ -1222,6 +1278,8 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 
 
 ### 4.6.3 Métriques du projet
+
+Le **Tableau 4.7** en donne les métriques.
 
 ::: {custom-style="TableCaption"}
 **Tableau 4.7 :** Métriques du projet à la date de rédaction.
@@ -1255,6 +1313,8 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 
 La contrainte de budget nul n'est tenable que si elle est chiffrée. Un rapport consomme, au plus, **un appel de transcription** et **un appel d'extraction**, plus les écritures dans le classeur.
 
+Le **Tableau 4.8** rapporte cette consommation aux plafonds des offres gratuites.
+
 ::: {custom-style="TableCaption"}
 **Tableau 4.8 :** Consommation des offres gratuites.
 :::
@@ -1279,7 +1339,7 @@ Le facteur limitant n'est donc pas le nombre de rapports mais leur **simultanéi
 
 ### 4.9.1 Répartition du code
 
-Hors fichiers générés — verrous de dépendances, exports d'outils — le dépôt représente **33 274 lignes** réparties comme suit :
+Hors fichiers générés — verrous de dépendances, exports d'outils — le dépôt représente **33 274 lignes** réparties comme l'indique le **Tableau 4.9** :
 
 ::: {custom-style="TableCaption"}
 **Tableau 4.9 :** Répartition du code par langage.
@@ -1301,6 +1361,8 @@ Deux lectures méritent d'être faites. La part de **Markdown à 15 %** n'est pa
 
 ### 4.9.2 Indicateurs de qualité mesurés
 
+Le **Tableau 4.10** rassemble les indicateurs de qualité mesurés.
+
 ::: {custom-style="TableCaption"}
 **Tableau 4.10 :** Indicateurs de qualité mesurés.
 :::
@@ -1321,6 +1383,8 @@ Deux lectures méritent d'être faites. La part de **Markdown à 15 %** n'est pa
 
 Chaque *push* sur la branche principale déclenche **dix-sept contrôles automatiques**, définis dans un unique fichier `.github/workflows/ci.yml`. Ils se répartissent en quatre familles, et cette répartition n'est pas décorative : elle correspond à quatre natures de défaut distinctes, qu'aucun outil unique ne détecte toutes.
 
+Le **Tableau 4.11** en donne le détail, famille par famille.
+
 ::: {custom-style="TableCaption"}
 **Tableau 4.11 :** Les dix-sept contrôles d'intégration continue, par famille.
 :::
@@ -1336,6 +1400,8 @@ Chaque *push* sur la branche principale déclenche **dix-sept contrôles automat
 Deux points méritent d'être soulignés. Le contrôle de secrets s'exécute sur **l'historique complet** (`fetch-depth: 0`) et non sur le seul dernier état : un jeton retiré dans le dernier commit reste public dans l'historique, et ne le vérifier qu'au sommet donnerait une fausse assurance. Et la **parité des clés de traduction** est un contrôle propre à ce projet : l'interface étant trilingue, une clé ajoutée en français mais oubliée en arabe ne casse aucun test et ne se voit qu'à l'usage, en production, par un utilisateur arabophone.
 
 **Dependabot** complète le dispositif : configuré sur **cinq écosystèmes** — `npm` pour le tableau de bord, `pip` pour le service, les deux images Docker et les actions GitHub elles-mêmes — il ouvre **quotidiennement** des demandes de mise à jour, groupées par niveau de version pour éviter une avalanche de demandes unitaires. **Trente-cinq** ont été ouvertes sur la durée du projet. Chacune franchit les dix-sept contrôles avant d'être fusionnée : la mise à jour automatique n'a d'intérêt que si elle est automatiquement vérifiée, sans quoi elle ne fait que déplacer le risque.
+
+La **Figure 4.3** représente la chaîne complète, des deux sources de changement jusqu'à la fusion.
 
 ::: {custom-style="FigureImage"}
 ![](diagrams/14-devops.png){ width=14.7cm }
@@ -1357,7 +1423,7 @@ Au-delà des contrôles exécutés dans le dépôt, le projet est analysé par *
 
 ### 4.9.5 Chronologie réelle du développement
 
-L'historique Git fournit une mesure d'activité que le planning prévisionnel ne peut pas donner, puisqu'elle est constatée et non annoncée :
+L'historique Git fournit une mesure d'activité que le planning prévisionnel ne peut pas donner, puisqu'elle est constatée et non annoncée. Le **Tableau 4.12** la restitue semaine par semaine :
 
 ::: {custom-style="TableCaption"}
 **Tableau 4.12 :** Activité de développement par semaine.
@@ -1378,190 +1444,7 @@ Le pic de la semaine 31 correspond à la construction simultanée du tableau de 
 
 ## 4.10 Le tableau de bord en fonctionnement
 
-Les captures ci-dessous proviennent de l'application réelle, connectée à la pile complète, en thème sombre et en anglais — l'interface étant trilingue, la langue d'affichage est un choix de l'utilisateur. Elles ont été produites par un script Playwright versionné dans le dépôt, qui ouvre une session, attend la disparition des squelettes de chargement avant chaque capture, et cadre chaque écran en 16:9.
-
-### 4.10.1 Écrans principaux
-::: {custom-style="FigureImage"}
-![](screens/en-login.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.4 :** L'écran de connexion. Le contrôle d'accès est appliqué par le service, non par ce formulaire : le tableau de bord étant un paquet statique, un écran de connexion seul serait contournable.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-overview.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.5 :** Vue d'ensemble. Les repères du jour, le rythme horaire des messages, l'état des sept services et l'activité de l'année. La disponibilité provient d'échantillons enregistrés, non d'une sonde instantanée.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-overview-2.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.6 :** Vue d'ensemble, partie basse : qualité des extractions, répartition par chantier et derniers rapports reçus.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-inbox.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.7 :** Réception. Le flux des messages entrants, canal par canal, avec le média d'origine et le texte transcrit — l'écran qui permet de remonter d'une ligne douteuse à l'audio qui l'a produite.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-reports.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.8 :** Rapports. Le miroir plat du journal, filtrable et corrigeable ; une correction faite ici est écrite dans le classeur, pas seulement affichée.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-daily.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.9 :** Rapport du jour, tel qu'il part par courriel, avec régénération et téléchargement.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-weekly.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.10 :** Rapport hebdomadaire : le même moteur que le rapport quotidien, appelé sur une plage de dates.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-automation.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.11 :** Automatisation. Les six tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-tasks.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.12 :** Tâches et rappels, avec leur périodicité.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-logs.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.13 :** Journaux. La chronologie du pipeline reconstituée par identifiant de corrélation : les étapes publiées par n8n et les erreurs journalisées par le service apparaissent dans une seule suite.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-queue.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.14 :** File de reprise : les écritures en échec en attente de rejeu, avec leur nombre de tentatives.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-equipe.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.15 :** Organigramme. Trois bandes fixes — directeur, chefs, techniciens — et non une récursion, ce qui est la raison pour laquelle aucun garde-fou anti-cycle n'est nécessaire.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-equipe-2.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.16 :** Organigramme, panneau de détail : canaux, profil et accès d'un technicien. Le panneau change de contenu selon le rôle, un technicien n'ayant pas de compte.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-palette.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.17 :** La palette de commandes (Ctrl+K) : navigation, collègues et actions, sans quitter le clavier.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-palette-fuzzy.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.18 :** Recherche approximative : « rapprt » est mal orthographié et trouve malgré tout les entrées pertinentes.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-palette-noresult.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.19 :** Aucune correspondance : plutôt qu'une liste vide, la palette propose les entrées les plus proches. Un cul-de-sac est une impasse ; une suggestion est une issue.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-notfound.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.20 :** Une adresse qui ne correspond à aucune route. L'application le dit explicitement au lieu de rediriger silencieusement vers l'accueil, où l'utilisateur croirait que son lien a fonctionné.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/en-overview-light.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.21 :** Le même écran en thème clair : le thème est un choix persistant de l'utilisateur, pas une préférence système imposée.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/ar-overview.jpg){ width=15.5cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.22 :** La même page en arabe. L'arabe impose l'écriture de droite à gauche, ce qui a dicté l'emploi de propriétés CSS logiques dans toute l'interface plutôt que de marges directionnelles.
-:::
-
-
-### 4.10.2 Usage mobile
-
-L'interface est utilisable depuis un téléphone, ce qui compte pour un chef de chantier qui consulte l'avancement sans revenir au bureau.
-
-::: {custom-style="FigureImage"}
-![](screens/mobile-overview.jpg){ width=11.2cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.23 :** Vue d'ensemble sur téléphone : la barre latérale se replie et les indicateurs passent sur une colonne.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/mobile-reports.jpg){ width=11.2cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.24 :** Rapports sur téléphone : le tableau défile horizontalement dans son propre conteneur, la page elle-même ne défilant jamais latéralement.
-:::
-
-::: {custom-style="FigureImage"}
-![](screens/mobile-equipe.jpg){ width=11.2cm }
-:::
-
-::: {custom-style="FigureCaption"}
-**Figure 4.25 :** Organigramme sur téléphone. Le glisser-déposer natif ne fonctionnant ni au toucher ni au clavier, la liste déroulante du panneau de détail est ici le chemin réel de réaffectation.
-:::
-
+Le tableau de bord est l'interface par laquelle le directeur et les chefs de chantier consultent les rapports, les corrigent, administrent l'organigramme et surveillent l'ordonnanceur. Sa conception est traitée au §3.6 ; son rendu réel — vingt-deux captures produites par un script Playwright versionné dans le dépôt, en thème sombre et en anglais, chacune cadrée en 16:9 — est reporté en **Annexe H**, où il peut être parcouru écran par écran sans interrompre le fil de ce chapitre.
 
 ## 4.11 Conclusion du chapitre
 
@@ -2413,4 +2296,240 @@ experte et une validation par un locuteur natif, ce qui est rigoureux mais non
 reproductible par un tiers sans ce même locuteur. Constituer cette vérité
 terrain à partir des rapports réels accumulés est la première des perspectives
 énoncées en conclusion.
+
+
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+## Annexe H : Le tableau de bord, écran par écran
+
+Les captures ci-dessous proviennent de l'application réelle, connectée à la pile complète, en thème sombre et en anglais — l'interface étant trilingue, la langue d'affichage est un choix de l'utilisateur. Elles ont été produites par un script Playwright versionné dans le dépôt, qui ouvre une session, attend la disparition des squelettes de chargement avant chaque capture, et cadre chaque écran en 16:9.
+
+### 4.10.1 Écrans principaux
+La **Figure H.1** montre l'écran de connexion, point d'entrée unique du tableau de bord.
+
+::: {custom-style="FigureImage"}
+![](screens/en-login.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.1 :** L'écran de connexion. Le contrôle d'accès est appliqué par le service, non par ce formulaire : le tableau de bord étant un paquet statique, un écran de connexion seul serait contournable.
+:::
+
+La **Figure H.2** présente la vue d'ensemble, première page affichée après authentification.
+
+::: {custom-style="FigureImage"}
+![](screens/en-overview.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.2 :** Vue d'ensemble. Les repères du jour, le rythme horaire des messages, l'état des sept services et l'activité de l'année. La disponibilité provient d'échantillons enregistrés, non d'une sonde instantanée.
+:::
+
+La **Figure H.3** en montre la partie basse.
+
+::: {custom-style="FigureImage"}
+![](screens/en-overview-2.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.3 :** Vue d'ensemble, partie basse : qualité des extractions, répartition par chantier et derniers rapports reçus.
+:::
+
+La **Figure H.4** donne la boîte de réception, où chaque message reste rattaché au média qui l'a produit.
+
+::: {custom-style="FigureImage"}
+![](screens/en-inbox.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.4 :** Réception. Le flux des messages entrants, canal par canal, avec le média d'origine et le texte transcrit — l'écran qui permet de remonter d'une ligne douteuse à l'audio qui l'a produite.
+:::
+
+La **Figure H.5** montre l'écran des rapports, sur lequel une correction est écrite dans le classeur et non seulement affichée.
+
+::: {custom-style="FigureImage"}
+![](screens/en-reports.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.5 :** Rapports. Le miroir plat du journal, filtrable et corrigeable ; une correction faite ici est écrite dans le classeur, pas seulement affichée.
+:::
+
+La **Figure H.6** présente le rapport quotidien tel qu'il part par courriel.
+
+::: {custom-style="FigureImage"}
+![](screens/en-daily.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.6 :** Rapport du jour, tel qu'il part par courriel, avec régénération et téléchargement.
+:::
+
+La **Figure H.7** en montre l'équivalent hebdomadaire.
+
+::: {custom-style="FigureImage"}
+![](screens/en-weekly.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.7 :** Rapport hebdomadaire : le même moteur que le rapport quotidien, appelé sur une plage de dates.
+:::
+
+La **Figure H.8** donne la page Automatisation et l'état des six tâches planifiées.
+
+::: {custom-style="FigureImage"}
+![](screens/en-automation.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.8 :** Automatisation. Les six tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
+:::
+
+La **Figure H.9** montre les tâches et les rappels avec leur périodicité.
+
+::: {custom-style="FigureImage"}
+![](screens/en-tasks.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.9 :** Tâches et rappels, avec leur périodicité.
+:::
+
+La **Figure H.10** présente les journaux, où les étapes publiées par n8n et les erreurs du service se rejoignent en une seule chronologie.
+
+::: {custom-style="FigureImage"}
+![](screens/en-logs.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.10 :** Journaux. La chronologie du pipeline reconstituée par identifiant de corrélation : les étapes publiées par n8n et les erreurs journalisées par le service apparaissent dans une seule suite.
+:::
+
+La **Figure H.11** montre la file de reprise et les écritures en attente de rejeu.
+
+::: {custom-style="FigureImage"}
+![](screens/en-queue.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.11 :** File de reprise : les écritures en échec en attente de rejeu, avec leur nombre de tentatives.
+:::
+
+La **Figure H.12** donne l'organigramme et ses trois bandes.
+
+::: {custom-style="FigureImage"}
+![](screens/en-equipe.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.12 :** Organigramme. Trois bandes fixes — directeur, chefs, techniciens — et non une récursion, ce qui est la raison pour laquelle aucun garde-fou anti-cycle n'est nécessaire.
+:::
+
+La **Figure H.13** en montre le panneau de détail.
+
+::: {custom-style="FigureImage"}
+![](screens/en-equipe-2.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.13 :** Organigramme, panneau de détail : canaux, profil et accès d'un technicien. Le panneau change de contenu selon le rôle, un technicien n'ayant pas de compte.
+:::
+
+La **Figure H.14** présente la palette de commandes.
+
+::: {custom-style="FigureImage"}
+![](screens/en-palette.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.14 :** La palette de commandes (Ctrl+K) : navigation, collègues et actions, sans quitter le clavier.
+:::
+
+La **Figure H.15** montre son comportement face à une saisie mal orthographiée.
+
+::: {custom-style="FigureImage"}
+![](screens/en-palette-fuzzy.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.15 :** Recherche approximative : « rapprt » est mal orthographié et trouve malgré tout les entrées pertinentes.
+:::
+
+La **Figure H.16** montre ce qu'elle propose lorsque aucune entrée ne correspond.
+
+::: {custom-style="FigureImage"}
+![](screens/en-palette-noresult.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.16 :** Aucune correspondance : plutôt qu'une liste vide, la palette propose les entrées les plus proches. Un cul-de-sac est une impasse ; une suggestion est une issue.
+:::
+
+La **Figure H.17** montre le traitement réservé à une adresse inconnue.
+
+::: {custom-style="FigureImage"}
+![](screens/en-notfound.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.17 :** Une adresse qui ne correspond à aucune route. L'application le dit explicitement au lieu de rediriger silencieusement vers l'accueil, où l'utilisateur croirait que son lien a fonctionné.
+:::
+
+La **Figure H.18** reprend le même écran en thème clair.
+
+::: {custom-style="FigureImage"}
+![](screens/en-overview-light.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.18 :** Le même écran en thème clair : le thème est un choix persistant de l'utilisateur, pas une préférence système imposée.
+:::
+
+La **Figure H.19** le donne en arabe, écriture de droite à gauche comprise.
+
+::: {custom-style="FigureImage"}
+![](screens/ar-overview.jpg){ width=15.5cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.19 :** La même page en arabe. L'arabe impose l'écriture de droite à gauche, ce qui a dicté l'emploi de propriétés CSS logiques dans toute l'interface plutôt que de marges directionnelles.
+:::
+
+
+### 4.10.2 Usage mobile
+
+L'interface est utilisable depuis un téléphone, ce qui compte pour un chef de chantier qui consulte l'avancement sans revenir au bureau.
+
+La **Figure H.20** montre la vue d'ensemble sur téléphone.
+
+::: {custom-style="FigureImage"}
+![](screens/mobile-overview.jpg){ width=11.2cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.20 :** Vue d'ensemble sur téléphone : la barre latérale se replie et les indicateurs passent sur une colonne.
+:::
+
+La **Figure H.21** montre l'écran des rapports dans le même format.
+
+::: {custom-style="FigureImage"}
+![](screens/mobile-reports.jpg){ width=11.2cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.21 :** Rapports sur téléphone : le tableau défile horizontalement dans son propre conteneur, la page elle-même ne défilant jamais latéralement.
+:::
+
+La **Figure H.22** montre l'organigramme sur téléphone.
+
+::: {custom-style="FigureImage"}
+![](screens/mobile-equipe.jpg){ width=11.2cm }
+:::
+
+::: {custom-style="FigureCaption"}
+**Figure H.22 :** Organigramme sur téléphone. Le glisser-déposer natif ne fonctionnant ni au toucher ni au clavier, la liste déroulante du panneau de détail est ici le chemin réel de réaffectation.
+:::
 

@@ -1,6 +1,13 @@
-# Build the report: Markdown -> .docx -> .pdf, in one step.
+# Build the report: Markdown -> .docx, and optionally -> .pdf.
 #
 #   powershell -ExecutionPolicy Bypass -File build.ps1
+#   powershell -ExecutionPolicy Bypass -File build.ps1 -ExportPdf     # also export the PDF
+#
+# The PDF is opt-in because it is by far the slowest step: exporting 133 pages
+# carrying 38 images took ~20 minutes and 745 s of CPU on this machine, while
+# everything before it (fields, both lists, repagination, save) finishes in
+# well under a minute. The .docx is the working deliverable; the PDF is only
+# needed for the final print, so paying that cost on every build is waste.
 #
 # Rapport-PFE.md is the single source of truth. Everything else in this folder
 # is either an input (build/, diagrams/, screens/, assets/) or an output
@@ -11,6 +18,8 @@
 # contents, the list of figures and tables, and the PAGE/NUMPAGES fields in the
 # footer -- so the page numbers agree with the contents by construction -- and
 # it exports the PDF that gets reviewed.
+param([switch]$ExportPdf)
+
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $here
@@ -85,11 +94,17 @@ $doc.Repaginate()
 
 $pages = $doc.ComputeStatistics(2)
 $doc.Save()
-$doc.ExportAsFixedFormat($pdf, 17)
+Write-Output "pages: $pages"
+Write-Output "docx : $docx"
+
+if ($ExportPdf) {
+    Write-Output "word: exporting pdf (slow -- minutes, not seconds) ..."
+    $doc.ExportAsFixedFormat($pdf, 17)
+    Write-Output "pdf  : $pdf"
+} else {
+    Write-Output "pdf  : skipped (pass -ExportPdf to export)"
+}
+
 $doc.Close(0)
 $word.Quit()
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null
-
-Write-Output "pages: $pages"
-Write-Output "docx : $docx"
-Write-Output "pdf  : $pdf"
