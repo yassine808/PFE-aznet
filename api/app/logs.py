@@ -1892,9 +1892,14 @@ def notify_technician_manager(
                 "SELECT manager_id FROM persons WHERE name = %s ORDER BY id LIMIT 1",
                 (technicien,),
             )
-            row = cur.fetchone()
+            # `_one`, and by name rather than by position: the pool sets
+            # RealDictCursor, so a row is a dict and `row[0]` raised KeyError —
+            # which _cursor() rewrapped as LogStoreError, so /process logged
+            # "notification failed" and the bell never rang for a technician we
+            # actually knew. The escalation below was unreachable too.
+            row = _one(cur)
             if row is not None:
-                manager_id = row[0]
+                manager_id = row["manager_id"]
     if manager_id is not None:
         with _cursor() as cur:
             cur.execute(
@@ -1902,7 +1907,11 @@ def notify_technician_manager(
                 (manager_id,),
             )
             if cur.fetchone() is not None:
-                return create_notification(manager_id, kind, title, body, route, ref_id)
+                create_notification(manager_id, kind, title, body, route, ref_id)
+                # 1, not create_notification's None: this function documents its
+                # return as "rows written", and None is what it means by
+                # "nobody to notify" — the exact opposite of what just happened.
+                return 1
     return notify_managers(kind, title, body, route, ref_id)
 
 
@@ -2182,10 +2191,14 @@ def stt_usage(days: int = 7) -> Dict[str, Any]:
             """,
             (days,),
         )
-        rows = cur.fetchall()
+        rows = [dict(r) for r in cur.fetchall()]
     return {
         "days": days,
+        # Keyed by the SELECT's own aliases: RealDictCursor rows are dicts, so
+        # positional access raised KeyError and left the panel permanently
+        # empty behind an error that read like Postgres was down.
         "engines": [
-            {"engine": r[0], "today": int(r[1]), "period": int(r[2])} for r in rows
+            {"engine": r["engine"], "today": int(r["today"]), "period": int(r["period"])}
+            for r in rows
         ],
     }

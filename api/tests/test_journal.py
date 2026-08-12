@@ -195,11 +195,14 @@ class FakeSheet:
         self.appended = []
         self.written = []
         self.mirrored = []
+        self.calls = []  # every Google round trip, in order
 
     def read_tab(self, tab):
+        self.calls.append(("read_tab", tab))
         return [dict(r) for r in self.rows]
 
     def ensure_tab(self, tab, headers):
+        self.calls.append(("ensure_tab", tab))
         self.created.append((tab, tuple(headers)))
 
     def append_row(self, tab, values, headers):
@@ -401,6 +404,38 @@ def test_mirror_failure_never_costs_the_journal_row(fake, monkeypatch):
     assert result["row"] == 2
     assert fake.appended[0][1]["Câble installé"] == "120"
     assert result["rapports_row"] is None  # nothing to clear later
+
+
+# --- the tab round trip ----------------------------------------------------
+# Two properties of the Google traffic itself, both invisible to the assertions
+# above because FakeSheet answers anything instantly.
+
+
+def test_the_tab_is_created_before_it_is_read(fake):
+    """`read_tab` on a tab Google has never heard of is a 400, not an empty
+    list, so a chantier added in the dashboard would 502 on its first message
+    and fail identically on every retry after that."""
+    from app.journal import file_report
+
+    file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "Nouveau",
+        "report": {"cables_installes_m": 120, "resume": "Résumé."},
+    })
+    kinds = [name for name, _ in fake.calls]
+    assert kinds.index("ensure_tab") < kinds.index("read_tab")
+
+
+def test_filing_a_report_reads_the_tab_once(fake):
+    """The row lookup, the duplicate check and the stock baseline all want the
+    same rows. Reading per question costs a full-tab round trip each time, on
+    the path a technician is waiting on."""
+    from app.journal import file_report
+
+    file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "report": {"cables_installes_m": 120, "resume": "Résumé."},
+    })
+    assert [c for c in fake.calls if c[0] == "read_tab"] == [("read_tab", "DGH")]
 
 
 # --- retry idempotency -----------------------------------------------------

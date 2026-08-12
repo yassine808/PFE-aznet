@@ -255,13 +255,20 @@ def _same_day(cell, when) -> bool:
     return left is not None and left == right
 
 
-def find_row(tab: str, date: str, technicien: str) -> Tuple[Optional[int], Dict[str, str]]:
-    """Today's row for this technician on this chantier, if it exists."""
-    for row in sheets.read_tab(tab):
+def find_row(
+    tab: str, date: str, technicien: str, rows: Optional[List[Dict[str, str]]] = None
+) -> Tuple[Optional[int], Dict[str, str]]:
+    """Today's row for this technician on this chantier, if it exists.
+
+    `rows` lets a caller that already read the tab pass those rows in rather
+    than pay a second full-tab round trip for the same data. The match is
+    copied before `_row` is stripped, so a shared list is never mutated.
+    """
+    for row in (sheets.read_tab(tab) if rows is None else rows):
         if _same_day(row.get(COL_DATE, ""), date) and \
                 str(row.get(COL_TECHNICIEN, "")).strip().lower() == technicien.strip().lower():
-            number = row.pop("_row")
-            return number, row
+            cells = dict(row)
+            return cells.pop("_row"), cells
     return None, {}
 
 
@@ -273,26 +280,30 @@ def write_report(
     report: ExtractedReport,
     metadata: Optional[Dict[str, str]] = None,
     known: Optional[Tuple[Optional[int], Dict[str, str]]] = None,
+    rows: Optional[List[Dict[str, str]]] = None,
 ) -> Tuple[Optional[int], List[str]]:
     """Put one report on the journal tab, merging if the day already has a row.
 
     Returns the row number and any warnings raised while reconciling stock.
     The tab is created on demand, so a chantier added in the dashboard works on
     its first message rather than after someone opens Google Sheets.
-    `known` is find_row's (row, cells) when the caller already read the tab —
-    the retry idempotency check in file_report needs the same row, so it reads
-    once and hands it down instead of reading twice.
+    `known` is find_row's (row, cells) and `rows` the tab it came from, when the
+    caller already read it — the retry idempotency check in file_report needs
+    the same row, so it ensures, reads once, and hands both down. Supplying
+    `rows` therefore also means "the tab is already ensured".
     """
-    sheets.ensure_tab(tab, list(HEADERS))
+    if rows is None:
+        sheets.ensure_tab(tab, list(HEADERS))
+        rows = sheets.read_tab(tab)
     if known is None:
-        existing_row, existing = find_row(tab, date, technicien)
+        existing_row, existing = find_row(tab, date, technicien, rows)
     else:
         existing_row, existing = known
 
     # Stock draws down from the last known level on this chantier — the
     # technician's own previous row if there is one, else the last row anyone
     # wrote. Stock is site-wide: two technicians cut from the same reel.
-    baseline = existing or _last_stock(tab)
+    baseline = existing or _last_stock(tab, rows)
     stock_cells, warnings = reconcile_stock(report, baseline)
 
     cells = report_cells(report)
@@ -309,10 +320,10 @@ def write_report(
     return existing_row, warnings
 
 
-def _last_stock(tab: str) -> Dict[str, str]:
+def _last_stock(tab: str, rows: Optional[List[Dict[str, str]]] = None) -> Dict[str, str]:
     """Last non-empty stock reading on the tab, whoever wrote it."""
     out: Dict[str, str] = {}
-    for row in sheets.read_tab(tab):
+    for row in (sheets.read_tab(tab) if rows is None else rows):
         for column, _ in STOCK_COLUMNS.values():
             if str(row.get(column, "")).strip():
                 out[column] = row[column]
@@ -433,9 +444,15 @@ def file_report(payload: Dict) -> Dict:
     chantier, tab, routing_warnings = resolve_tab(technicien, payload.get("chantier"))
     warnings.extend(routing_warnings)
 
-    # One read serves both checks: the retry idempotency test below and the
-    # merge lookup inside write_report.
-    known = find_row(tab, str(payload.get("date") or ""), technicien)
+    # Create the tab before reading it. `read_tab` on a tab Google has never
+    # heard of is a 400 ("Unable to parse range"), not an empty list, so the
+    # first message to a chantier added in the dashboard used to 502, park in
+    # `failed_writes`, and fail identically on every drain thereafter.
+    sheets.ensure_tab(tab, list(HEADERS))
+    # One read serves all three: the retry idempotency test below, the merge
+    # lookup and the stock baseline inside write_report.
+    rows = sheets.read_tab(tab)
+    known = find_row(tab, str(payload.get("date") or ""), technicien, rows)
     existing_row, existing = known
     correlation = str(payload.get("correlation_id") or "").strip()
     if existing_row is not None and correlation:
@@ -470,7 +487,7 @@ def file_report(payload: Dict) -> Dict:
     row, stock_warnings = write_report(
         tab, payload.get("date") or "", technicien, chantier, report,
         {k: v for k, v in metadata.items() if v not in (None, "")},
-        known,
+        known, rows,
     )
     warnings = warnings + stock_warnings
     # After the journal write succeeded, so a mirror failure cannot cost the
