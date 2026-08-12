@@ -44,8 +44,6 @@ LINE = RGBColor(0xDF, 0xE1, 0xDE)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 
 FONT = "Arial"  # one of the two fonts EMSI sanctions, and present on any machine
-SERIF = "Georgia"  # display face, used only on the quotation slide; ships with
-                   # Windows and macOS, so no substitution on a school projector
 
 SLIDE_W, SLIDE_H = 13.333, 7.5
 MARGIN = 0.85
@@ -80,19 +78,14 @@ def _txbox(slide, x, y, w, h):
     return tf
 
 
-def _run(p, text, size: float = 16, bold=False, color=INK, italic=False,
-         font=None, track=None):
+def _run(p, text, size: float = 16, bold=False, color=INK, italic=False):
     r = p.add_run()
     r.text = text
     r.font.size = Pt(size)
     r.font.bold = bold
     r.font.italic = italic
     r.font.color.rgb = color
-    r.font.name = font or FONT
-    if track is not None:
-        # letter-spacing has no python-pptx accessor; DrawingML carries it as
-        # rPr/@spc in hundredths of a point.
-        r.font._rPr.set("spc", str(int(track * 100)))
+    r.font.name = FONT
     return r
 
 
@@ -385,52 +378,24 @@ def s02_plan(prs, n):
     footer(slide, n)
 
 
-def s03_quote(prs, n):
+def s03_quote(prs, _n):
     """Placed before any architecture: the jury meets the human stake first.
 
     The quote is the thesis of the whole project in one sentence -- the system
     exists so a technician reports in the language he actually thinks in,
     instead of translating himself into a form.
     """
-    slide = new_slide(prs, bg=INK)
-    _rect(slide, 0, 0, SLIDE_W, 0.10, fill=GREEN)
-    _rect(slide, 0, SLIDE_H - 0.10, SLIDE_W, 0.10, fill=BLUE)
-
-    # An oversized opening mark, set only a shade above the background: it reads
-    # as texture and gives the quotation an optical left edge to hang from,
-    # without competing with the words.
-    tf = _txbox(slide, MARGIN - 0.30, 1.05, 3.0, 3.0)
-    _run(_para(tf, first=True), "“", size=200, bold=True,
-         color=RGBColor(0x2B, 0x31, 0x38), font=SERIF)
-
-    # Serif, and large. The deck is Arial throughout, so the change of voice is
-    # itself the signal that this slide is not a content slide.
-    tf = _txbox(slide, MARGIN + 0.95, 2.22, CONTENT_W - 1.6, 2.5)
-    p = _para(tf, first=True)
-    p.line_spacing = 1.16
-    _run(p, "The limits of my language\n", size=42, color=RGBColor(0x9A, 0xA2, 0xAB), font=SERIF)
-    _run(p, "mean the limits of my world.", size=42, bold=True, color=WHITE, font=SERIF)
-
-    _rect(slide, MARGIN + 0.98, 4.70, 0.85, 0.030, fill=BLUE)
-
-    tf = _txbox(slide, MARGIN + 0.98, 4.98, CONTENT_W - 1.6, 0.30)
-    _run(_para(tf, first=True), "LUDWIG WITTGENSTEIN", size=12, bold=True,
-         color=RGBColor(0x5C, 0xB0, 0xF7), track=2.2)
-
-    tf = _txbox(slide, MARGIN + 0.98, 5.30, CONTENT_W - 1.6, 0.30)
-    _run(_para(tf, first=True), "Tractatus Logico-Philosophicus, §5.6 — 1921",
-         size=12, italic=True, color=RGBColor(0x76, 0x7C, 0x84), font=SERIF)
-
-    tf = _txbox(slide, MARGIN + 0.98, 5.92, CONTENT_W - 2.4, 0.9)
-    p = _para(tf, first=True)
-    p.line_spacing = 1.26
-    _run(p, "Le technicien de câblage pense, compte et raconte sa journée en darija. ",
-         size=13.5, color=RGBColor(0x8E, 0x95, 0x9C))
-    _run(p, "Lui demander un rapport en français, c'est rétrécir ce qu'il peut dire.",
-         size=13.5, bold=True, color=RGBColor(0xD3, 0xD8, 0xDD))
-    _run(p, " Tout le projet tient dans le refus de lui faire faire ce trajet.",
-         size=13.5, color=RGBColor(0x8E, 0x95, 0x9C))
-    footer(slide, n, on_dark=True)
+    slide = new_slide(prs)
+    # Full bleed, no footer and no rule: the artwork already carries the quote
+    # and its attribution, and a page number laid over it would read as an
+    # accident. The tie back to the project is spoken, not printed -- a caption
+    # explaining the slide would compete with the one line it exists to show.
+    img = ASSETS / "quote-wittgenstein.png"
+    iw, ih = Image.open(img).size
+    assert abs(iw / ih - SLIDE_W / SLIDE_H) < 0.02, (
+        f"{img.name} is {iw}x{ih} ({iw / ih:.2f}); a full-bleed slide needs 16:9"
+    )
+    slide.shapes.add_picture(str(img), 0, 0, Inches(SLIDE_W), Inches(SLIDE_H))
 
 
 def s03_contexte(prs, n):
