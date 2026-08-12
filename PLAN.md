@@ -123,7 +123,7 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - [x] **Report editing + versions** (2026-08-04): daily and weekly reports are editable in the dashboard with a line diff and an append-only history (`report_versions`); export is `.docx` only, because it is the one format that can carry the generated card.
 - [x] **Bell, tasks and per-account settings** (2026-08-04): per-account notifications, a shared to-do page with lead times and custom cadences (both rung by `jobs.py`), and UI preferences stored server-side in `person_settings` so they follow the person, not the browser.
 - [x] Visual verification of the dashboard — `Dashboard/scripts/visual-check.mjs` logs in headless, walks all 9 pages and fails on console errors, HTTP ≥ 400, horizontal overflow, broken images or a blank page.
-- [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director — SMTP is wired (`POST /notify/test`, recipients in the Automation panel) but `SMTP_USER`/`SMTP_PASS` are still unset in `.env`, so nothing can actually send yet
+- [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director — SMTP is wired (`POST /notify/test`, recipients in the Automation panel) and `SMTP_USER`/`SMTP_PASS` are **set in `.env`** (2026-08-12), so nothing blocks a test send + the live demo anymore
 - Report in parallel: conception (UML: use cases, séquence, classes, déploiement)
 
 ### Sprint 3 — Pilot, docs, report (Aug 17 – Aug 28)

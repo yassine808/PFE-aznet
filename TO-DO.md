@@ -14,7 +14,7 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
 ## Open before production (found reviewing the `opencode` merge, 2026-08-04)
 - [x] **Retention for the archive tables.** Done 2026-08-10 with the owner's policy: `media_files` 30 days, `chat_messages` 90 days, read `notifications` 30 days, `manager_reports` kept forever; env-tunable via `MEDIA_RETENTION_DAYS` / `CHAT_RETENTION_DAYS` / `NOTIF_RETENTION_DAYS`, swept by `logs.prune_meta` at 03:00 — see FIXED.md (Fourth pass)
 - [ ] **`INTERNAL_API_KEY` must be set in the deployed n8n environment.** `/process` is auth-gated since this branch, and n8n has no browser, so it authenticates with `X-API-Key`. All 17 n8n HTTP nodes send the header; the key has to exist on *both* sides or every incoming message 401s. Unset on the API means machine access is disabled, never "everyone is a machine" — so the failure is a silent pipeline, not an open door.
-- [ ] **`SMTP_USER` / `SMTP_PASS` are still unset in `.env`.** Every mail path is wired (`POST /notify/test`, the daily/weekly jobs, the to-do reminders) and none of them can actually send until the Gmail app password is filled in.
+- [x] **`SMTP_USER` / `SMTP_PASS` set in `.env`** (2026-08-12) — every mail path is live; remaining action is a real test send via `POST /notify/test`.
 - [x] check email
 - [] check Automated reports.
 - [] check Automated weekly reports
