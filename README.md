@@ -27,7 +27,8 @@ flowchart TB
     AUTHZ -- oui --> KIND{Media or text?}:::dec
 
     %% ── The five models (4 and 5 fire outside this path) ─────────
-    KIND -- audio --> STT["**1. STT**<br/>groq whisper-large-v3<br/>→ gemini → hf-darija"]:::ai
+    KIND -- audio --> STT["**1. STT**<br/>gemini → local → groq<br/><i>order set by the benchmark:<br/>accuracy, not latency</i>"]:::ai
+    GPU["stt-local sidecar<br/>Morocco-Darija-STT-large<br/><i>lazy load, RTX 3070</i>"]:::ai -.-> STT
     KIND -- image --> VIS["**3. Vision**<br/>gemini 3.6-flash<br/>→ 3.5-flash-lite → flash-lite<br/><i>photo → schema, one call</i>"]:::ai
     KIND -- text --> TXT["**2. Extraction**<br/>groq gpt-oss-120b<br/>→ gemini flash-lite → 3.6-flash"]:::ai
     STT --> TXT
@@ -39,28 +40,31 @@ flowchart TB
 
     %% ── Reply first, then the Sheet ──────────────────────────────
     JSON --> REPLY[["✅ résumé au technicien<br/><i>on the originating channel</i>"]]:::reply
-    REPLY --> SHEET[(Google Sheets<br/>Rapports)]:::sheet
-    SHEET -- write failed --> QUEUE[(failed_writes)]:::db
-    QUEUE --> RETRY[/"cron 5 min<br/>drain queue"/]:::cron
-    RETRY --> SHEET
+    REPLY --> JOURNAL{{"POST /journal<br/><i>merge (date, technicien)</i><br/>accumulate · reconcile stock"}}:::api
+    JOURNAL --> SHEET[(Google Sheets<br/>one tab per chantier<br/>+ Rapports mirror)]:::sheet
+    JOURNAL -- write failed --> QUEUE[(failed_writes)]:::db
+    QUEUE --> RETRY[/"job: drain, 5 min"/]:::cron
+    RETRY --> JOURNAL
 
     %% ── Scheduled jobs ───────────────────────────────────────────
-    C1[/"18:30 Mon–Sat"/]:::cron --> MAIL["POST /daily-report<br/>→ Gmail SMTP"]:::api
-    C3[/"weekly_day / weekly_time"/]:::cron --> MAIL2["POST /daily-report<br/>week span → Gmail SMTP"]:::api
-    C2[/"03:00 daily"/]:::cron --> PRUNE[prune logs 30 j]:::api
-    C2 --> REFRESH["**5. Profils**<br/>POST /profiles/refresh<br/><i>reads the Sheet</i>"]:::ai
+    SCHED[/"api/app/jobs.py — one thread, 30 s tick<br/>six jobs, times read from app_settings"/]:::cron
+    SCHED --> MAIL["daily report — Mon–Sat<br/>weekly report — weekly_day<br/>→ Gmail SMTP"]:::api
+    SCHED --> PRUNE["prune logs + samples — 03:00"]:::api
+    SCHED --> RETRY
+    SCHED --> REMIND[reminders]:::api
+    SCHED --> REFRESH["**5. Profils** — 03:00<br/><i>reads the Sheet, never the reply path</i>"]:::ai
     SHEET -.-> REFRESH --> PROF
-    MAIL & MAIL2 --> BOSS([Chef de chantier]):::actor
+    MAIL --> BOSS([Chef de chantier]):::actor
 
     %% ── Dashboard ────────────────────────────────────────────────
     ADMIN([Directeur · Chefs]):::actor --> LOGIN{{"POST /auth/login<br/>bcrypt + session cookie"}}:::api
-    LOGIN --> DASH[Dashboard React<br/>Vue · Inbox · Rapports · Automatisation<br/>Accès · Journaux · Équipe]:::ui
+    LOGIN --> DASH[Dashboard React<br/>Vue · Inbox · Rapports · Quotidien · Hebdo<br/>Automatisation · Journaux · Équipe]:::ui
     DASH --> AUDIT[(user_actions<br/>page_visits)]:::db
     DASH --> SHEET & DB
     DASH --> IMG["**4. Image**<br/>POST /generate-image<br/><i>click only — never a cron</i>"]:::ai
 
     %% ── Logging spine ────────────────────────────────────────────
-    CORR & STT & TXT & VIS & SHEET -. "one row per stage,<br/>same correlation_id" .-> LOGS[(pipeline_logs)]:::db
+    CORR & STT & TXT & VIS & JOURNAL -. "one row per stage,<br/>same correlation_id" .-> LOGS[(pipeline_logs)]:::db
     LOGS --> DASH
 
     classDef actor  fill:#1f2937,stroke:#4b5563,color:#f9fafb
@@ -81,7 +85,7 @@ flowchart TB
 
 Five things in that diagram are deliberate and easy to break:
 
-1. **The reply comes before the Sheet write.** The append used to sit between the LLM result and the technician, so a Google outage silently swallowed the report. It is now a recoverable side effect: a failed write parks in `failed_writes`, is drained every 5 minutes, and the technician always gets their summary.
+1. **The reply comes before the journal write.** The append used to sit between the LLM result and the technician, so a Google outage silently swallowed the report. It is now a recoverable side effect: `POST /journal` returns 502 *and* parks the row in `failed_writes`, which is drained every 5 minutes through the same code path as the live flow — and the technician always gets their summary. The n8n node calls it with **no retry**, because the API self-parks and a retry would double-park.
 2. **Access control is a table, not a literal.** `GET /technicians/lookup` reads `persons`/`technicians`, so adding a colleague in the dashboard takes effect on their next message — no workflow edit, no re-import.
 3. **One person, many channels.** WhatsApp and Telegram identities point at the same `persons` row, which is what lets one profile cover both.
 4. **The profile is context, never data.** It is injected into the extraction prompt explicitly labelled informational and forbidden as a source of values, and its own prompt bans numbers outright.
@@ -94,8 +98,9 @@ Five things in that diagram are deliberate and easy to break:
 | `api/` | FastAPI AI service — five models (STT, text extraction, vision, image card, nightly profiles), versioned prompts in `app/prompts/`, auth + audit trail, dashboard and report endpoints |
 | `Dashboard/` | React 19 + Vite + Tailwind v4 — login, metrics, inbox, reports, automation, access control, live logs, Équipe (accounts + audit). Light/dark + FR/EN/AR (RTL) from JSON locales. Replaced `web/` on 2026-07-26 |
 | `n8n/` | **`aznet-complete.json` — the one file to import** (reception + error handler, two labelled bands). Everything scheduled moved to `api/app/jobs.py`; set the workflow as its own Error Workflow after import |
-| `benchmark/` | Darija STT benchmark — dataset protocol, WER harness (Sprint 1) |
-| `docs/` | Cahier des charges, installation doc, user guide |
+| `benchmark/` | Darija STT benchmark — **run 2026-08-07/08**, 13 engines over 11 real clips (`STT-BENCHMARK-STATUS.md`), plus the containerised `stt-local` GPU sidecar (`Dockerfile`, `stt_server.py`). Weights are bind-mounted, not in git: 5.8 GB, over GitHub's LFS ceiling — `download_models.py` is the versioned recipe |
+| `docs/` | Cahier des charges, setup guide, audits |
+| `Pres+report/` | The PFE report (`Rapport-PFE.md` → `.docx` via `build.ps1`) and the defence deck (`presentation.py` → `.pptx`). Both are generated: never hand-edit the outputs |
 
 ## Quickstart (n8n)
 
@@ -103,14 +108,24 @@ Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ```bash
 cp .env.example .env        # fill keys as you obtain them (see docs/setup-guide.md)
-docker compose up -d        # n8n :5678, API :8000, Postgres (pipeline logs) :5432
+docker compose up -d        # five services
 ```
+
+| Service | Published port | Notes |
+|---|---|---|
+| `web` (nginx) | **:8080 — the only one** | serves the dashboard and proxies `/api/ → api:8000` |
+| `n8n` | :5678 | reception + error-handler workflow |
+| `api` | *none* | reachable only on the compose network, through nginx |
+| `postgres` | 127.0.0.1:5432 | loopback only |
+| `stt-local` | *none* | GPU sidecar; needs a working `--gpus all`, or it silently runs on CPU at 60–180 s per note |
+
+Because `api` publishes no host port, the Vite dev proxy must target **`http://127.0.0.1:8080`**, not `:8000` — and with no `rewrite`, since nginx already maps the prefix.
 
 Three keys are required before the dashboard and the pipeline can talk to each other:
 
 ```bash
 INTERNAL_API_KEY=...        # n8n sends it as X-API-Key; unset = machine access DISABLED
-ADMIN_EMAIL=you@aznet.ma    # seeds the first director account, only while `users` is empty
+ADMIN_EMAIL=you@aznet.ma    # seeds the first director account, only while no `persons` row has a password_hash
 ADMIN_PASSWORD=...          # min 8 characters
 ```
 
@@ -130,9 +145,15 @@ No Docker yet? Instant dev run: `npx n8n` (Node 20+). See `n8n/README.md` for we
 - [x] Sprint 2: **one person across channels + nightly profiles** (2026-07-29) — `persons`/`technicians` split so a colleague's memory follows them, not their phone number; the n8n allowlist now reads the table; a fifth model writes a short profile at 03:00 from their own past reports and it is injected into extraction as labelled context.
 - [x] Sprint 2: **dashboard accounts** (2026-07-29) — login (bcrypt + revocable Postgres sessions), roles `directeur`/`chef`, every endpoint gated on the API, `X-API-Key` for n8n, and an audit trail (actions with before → after, time per page) in the new **Équipe** panel. New **Journaux** panel renders the live pipeline log.
 - [x] Publish-readiness hardening (2026-07-30) — `cors_origins` narrowed from `*` to the Vite dev origins, `/auth/login` throttled (8 failures / 5 min per client address, honoring `trusted_proxy_hops`), sessions stored server-side.
-- [ ] STT benchmark → pick default provider (`benchmark/`)
-- [ ] Durable Drive audio links, `/rapport` boss command
-- [ ] Sprint 3: pilot + docs + PFE report
+- [x] **Durable Drive audio links + technician commands** (2026-08-04) — audio pushed to Drive for a lasting `lien_audio`; raw media and chat archived in Postgres and the Inbox rebuilt as a conversation with a reply composer; `/rapport`, `/modifier`, `/supprimer` (the last empties the row in place — a positional delete would shift every row number below it and break every stored message→row link).
+- [x] **The schema rebuilt on the director's real file + the journal** (2026-08-05) — typed quantity fields per column, enum-validated locations, and the Sheet write moved from n8n into `POST /journal`: one row per (date, technicien) in that chantier's own tab, with intra-day accumulation and stock reconciliation. Merging needs a read-modify-write no IF node can express.
+- [x] **Chantiers and the bordereau** (2026-08-05) — routing lives on the chef and technicians inherit it; installed quantities are computed from the journal on every call and stored nowhere, so they cannot drift.
+- [x] **STT benchmark run and settled** (2026-08-07/08) — 13 engines, 3 by API and 12 locally on an RTX 3070, over 11 real clips. `stt_chain = gemini,local,groq`, ordered by accuracy judged against the audio by a native speaker. It reversed its own hypothesis twice and exposed a silent harness bug that had been crowning a winner on a transcription never generated. The dead `hf-darija` adapter was deleted.
+- [x] **Rapports mirror + n8n rewire** (2026-08-09) — the field→column mapping moved out of untestable n8n expressions into Python; n8n now writes no Sheet at all.
+- [x] **Local engine containerised** (`stt-local`) — weights bind-mounted rather than baked, loaded lazily on first use and lock-guarded so two notes cannot both start a 4 GB load and OOM an 8 GB card.
+- [x] **CI hardened to 17 checks** — correctness, CodeQL ×2, Semgrep, Bandit, Trivy ×2, pip-audit, npm audit, gitleaks, Hadolint ×2, actionlint. Dependabot covers five ecosystems daily.
+- [x] **PFE report and defence deck** (2026-08-12) — `Pres+report/`, both generated from source and checked against the EMSI writing guide.
+- [ ] **Pilot**: deploy on the aznet server, register 2–3 real technicians. The one open item — the report reserves slots for its measured latency and usage numbers.
 
 Setup walkthrough for the whole pipeline: [docs/setup-guide.md](docs/setup-guide.md).
-Draft PFE report: `Pres+report/Rapport-PFE.docx`.
+PFE report: `Pres+report/Rapport-PFE.docx` · defence deck: `Pres+report/Soutenance-PFE.pptx`.

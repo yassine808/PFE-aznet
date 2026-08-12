@@ -2,7 +2,7 @@
 
 Open items only. Everything marked done moves to `FIXED.md` — that file is the done log, this one is the queue.
 
-- [ ] Finish STT benchmark → pick default provider — **blocked on the dataset**: `benchmark/dataset/audio/` is still empty, so `stt_provider=groq` is an assumption, not a measurement. Harness is ready (`benchmark/run_benchmark.py`).
+- [x] Finish STT benchmark → pick default provider — **done 2026-08-07/08**: 13 engines, 3 by API and 12 locally on the RTX 3070, over 11 real clips. `stt_chain = gemini,local,groq`, ordered by accuracy judged against the audio by a native speaker rather than by latency. WER/CER deliberately not computed (`references.csv` stays header-only) — the criterion is preservation of digits and French technical loanwords, because that is all the journal consumes. Results: `benchmark/STT-BENCHMARK-STATUS.md`. The dead `hf-darija` adapter was deleted in the same pass.
 - [x] Daily stat: % spoken Darija words vs French (post-PFE, zero cahier value)
 
 ## Code audit 2026-08-04 → `docs/audit-2026-08-04.md`
@@ -20,7 +20,7 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
 - [] check Automated weekly reports
 - [] check images
 - [x] better sign-in design (profesionnal) — 2026-08-10: rewritten with language switcher, accent glow, AZnet avatar, aria-busy submit — see FIXED.md (Fourth pass)
-- [] adds 404 page.
+- [x] adds 404 page — exists and is captured in the report (Annexe H): an unknown address says so explicitly instead of redirecting silently to the home page, where the user would think their link had worked.
 - [x] remove image card generating in reports pages (make it auto when generating reports) — 2026-08-10: the card now rides along with the report's "Générer" click on both Daily and Weekly — see FIXED.md (Fourth pass)
 - [] Add charging animation in the website, if things are getting charged from the database
 - [] Add more columns inspired from the given data

@@ -12,11 +12,11 @@
 | Scope | Hybrid: n8n orchestration (per cahier) + custom-coded AI service + web app (for PFE substance) |
 | Code boundary | **Option A** — you code: FastAPI AI service (STT + LLM extraction + French reformulation), React web form, manager dashboard. n8n does: **Telegram** reception, Sheets writes, notifications |
 | Reception channel | **Telegram Bot API + WhatsApp Cloud API — both live** (unified n8n workflow, one import: `n8n/aznet-complete.json`). Telegram first (no Meta friction); WhatsApp brought up E2E 2026-07-23 (System User token = no expiry, published app, WABA `subscribed_apps`, manual GET-echo webhook since n8n's WhatsApp Trigger fails Meta's challenge, media download via HTTP node). Cahier §5 *"passerelle équivalente"* satisfied and then some. Channel-agnostic: both feed one `/process` + one Sheet; reply goes back on the originating channel |
-| STT (Darija) | Week-1 **benchmark** via `TranscriptionProvider` adapter interface: Groq Whisper-large-v3, Gemini native audio (uses `gemini_model`, currently flash-lite), 1 HF Darija fine-tune. Benchmark picks the primary; until the dataset is recorded, `stt_provider=groq` by assumption |
-| Test dataset | 15–20 **self-simulated** Darija voice notes + hand-written reference transcriptions. Wave 2 with real technician notes if director provides |
+| STT (Darija) | **Settled by benchmark, 2026-08-07/08** (`benchmark/STT-BENCHMARK-STATUS.md`): 13 engines, 3 by API and 12 locally on an RTX 3070, over 11 real clips. `stt_chain = gemini,local,groq` — ordered by **accuracy judged against the audio by a native speaker**, not by latency. `local` is `BounharAbdelaziz/Morocco-Darija-STT-large`, the only engine preserving both numeric quantities and French technical loanwords; groq is last on purpose, as the always-available floor. The `hf-darija` adapter was **deleted**: it pointed at a checkpoint that does not exist, and an unset `HF_TOKEN` made it fail at the token check before it could reach the 404, so it never ran once |
+| Test dataset | 11 real Darija chantier clips, used for the benchmark. **WER and CER were deliberately not computed** — see §8 |
 | LLM | **Ranked chains, one per input shape** (benchmark 2026-07-27 over 10 Darija/French cases): text = `groq gpt-oss-120b → gemini flash-lite → gemini-3.6-flash` (alternates vendors so free-tier quotas meter separately); image = Google-only `gemini-3.6-flash → 3.5-flash-lite → flash-lite` (no free Groq vision model); image card = `gemini-3.1-flash-image → nano-banana-pro → 3-pro-image` (click-only, never a cron); profiles = same text chain |
 | Backend/Frontend | **FastAPI (Python)** + **React (TypeScript)**, web only (Electron dropped) |
-| Hosting | Dev: Docker Compose (n8n) + FastAPI hot-reload local + **Cloudflare tunnel** for webhooks. Front: Vercel free. Pilot: same compose on aznet server if available, else Oracle Always Free VM |
+| Hosting | Dev: Docker Compose + FastAPI hot-reload local. Public URL for the WhatsApp webhook is a **Tailscale Funnel** (stable hostname, so Meta is configured once and survives reboots) — Cloudflare was not used. **Vercel was rejected:** the dashboard is served same-origin behind the compose nginx, which is the only service publishing a host port. Pilot: the same compose on the aznet server |
 
 ## 2. Assumptions (veto anytime)
 
@@ -43,7 +43,8 @@ Telegram (polling)  +  WhatsApp Cloud API (webhook via Tailscale Funnel)
              │   └─ employee → Media or text?  →  Audio or image?
              ▼
  FastAPI AI Service   (exactly one of audio | image | text)
- ├─ audio → STT (groq whisper-large-v3 → gemini → hf-darija) → text
+ ├─ audio → STT chain: gemini → local (GPU sidecar) → groq   ← order set by the
+ │            benchmark, by accuracy against the audio, not by latency
  ├─ image → vision chain, photo → schema in one call (flag_review=true)
  ├─ text  → extraction chain (ranked, cross-vendor fallback)
  └─ extraction prompt ← persons.profile (nightly model, context only)
@@ -55,8 +56,13 @@ Telegram (polling)  +  WhatsApp Cloud API (webhook via Tailscale Funnel)
       `Rapport exploitable ?`  (has_data → no_report_content?)
              │
              ▼
-      append row → Google Sheets (Rapports)
-           └─ write failed → failed_writes (Postgres) → drain every 5 min
+ POST /journal  (the API writes the Sheet, not n8n — since 2026-08-05)
+   ├─ merge on (date, technicien) in that chantier's own tab
+   │    numbers add · locations union · prose appends · stock replaces
+   ├─ reconcile stock; a mismatch emits stock_ecart with the delta
+   ├─ mirror a flat row into Rapports for the dashboard feed
+   └─ write failed → 502 + failed_writes (Postgres) → drained every 5 min
+        through this same function, so a retry cannot become a duplicate
 
  API scheduler (jobs.py, 30 s tick, times from app_settings):
    ├─ sheet-queue drain       — every 5 min
@@ -84,7 +90,7 @@ Telegram (polling)  +  WhatsApp Cloud API (webhook via Tailscale Funnel)
    └─ /supprimer    → POST /modify-command  (empty the row in place, never delete)
 ```
 
-JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'activité, goulottes_m, cables_m, bureaux_termines, panneaux_raccordes, autres_travaux, observations, rapport_complet, lien_audio (+ `canal`, `confidence`, `flag_review` added in Sprint 2).
+**The schema was rebuilt on 2026-08-05** from the director's real tracking file (*Tableau de Suivi projet*), replacing the generic cahier §3 field list. It now carries one typed quantity field per journal column — `cables_prepares_m`, `cables_installes_m`, `goulotte_m`, three separate prise counters (bureau, panneau, testée), `fibre_m`, `interconnexions`, `connexions_optiques_brins` — plus an enum-validated multi-valued location (`etages` RDC/E1..E4, `ailes`, `locaux_techniques` RG/SR1..SR10), stock, and `remarques`. An unrecognised location **raises** rather than being dropped, so the chain retries instead of writing an invented floor. `chantier` is deliberately *not* a model field: routing comes from the org chart, never from what the model thought it heard.
 
 **Reply-first ordering is deliberate:** the technician gets their summary before the Sheet append, so a Sheets outage never costs them their reply. The `Rapport exploitable ?` gate therefore sits *after* the reply, never before it.
 
@@ -93,18 +99,18 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 ## 4. Timeline (Jul 15 → Aug 31)
 
 ### Week 0 — Setup & risk-kill (Jul 15–19)
-- [x] Accounts: Telegram bot (BotFather), Google Cloud (Sheets API), Groq, Gemini (AI Studio), WhatsApp Cloud API. **Not used:** Cloudflare (public URL is a Tailscale Funnel instead), Vercel (dashboard runs on the admin's PC). **HF token still unset** — the `hf-darija` adapter therefore cannot run.
+- [x] Accounts: Telegram bot (BotFather), Google Cloud (Sheets API), Groq, Gemini (AI Studio), WhatsApp Cloud API. **Not used:** Cloudflare (public URL is a Tailscale Funnel instead), Vercel (rejected — the dashboard is served same-origin behind nginx).
 - [x] Repo scaffold: `api/`, `Dashboard/` (replaced `web/` 2026-07-26), `n8n/`, `docs/`, `benchmark/`
 - [x] Docker Compose n8n up + **E2E smoke test PASSED (Jul 17): Telegram voice note → n8n polling workflow → binary audio downloaded** (biggest integration risk killed; localhost-only via getUpdates polling, no tunnel needed)
-- [ ] Record dataset: 15–20 simulated Darija chantier voice notes + reference transcriptions — **still empty; this is the single blocker on the STT decision**
+- [x] Dataset recorded — 11 real Darija chantier clips, enough to run the benchmark (2026-08-07/08)
 - [ ] Director sign-off on this plan + ask: aznet server? real technician recordings?
 
 ### Sprint 1 — AI core + benchmark (Jul 20 – Aug 1)
-- [x] FastAPI skeleton, `TranscriptionProvider` interface + 3 adapters (groq / gemini / hf-darija)
-- [~] Benchmark harness: WER/CER harness written (`benchmark/run_benchmark.py`) but **cannot run without the audio dataset**, so the primary STT is still unpicked. The *extraction* side is measured: `benchmark/run_model_benchmark.py` ranks text and vision models on 10 hand-written Darija/French cases, and that table sets `extraction_text_chain` / `extraction_image_chain`.
+- [x] FastAPI skeleton, `TranscriptionProvider` interface + 3 adapters (`groq` / `gemini` / `local`; `hf-darija` deleted, it had never run)
+- [x] **Benchmark run and settled (2026-08-07/08)** — 13 engines over 11 real clips, 3 by API and 12 locally on the RTX 3070. It reversed the initial hypothesis twice and exposed a silent harness bug that had been crowning a winner on a transcription never generated. Results in `benchmark/STT-BENCHMARK-STATUS.md`. The *extraction* side is measured separately: `benchmark/run_model_benchmark.py` ranks text and vision models on 10 hand-written Darija/French cases, and that table sets `extraction_text_chain` / `extraction_image_chain`.
 - [x] Extraction: Pydantic schema, ordered per-modality fallback chains (text: `groq gpt-oss-120b` → `gemini flash-lite` → `3.6-flash`; image: `3.6-flash` → `3.5-flash-lite` → `flash-lite`), French reformulation prompt
-- [x] Unit tests (53, no API keys or DB needed) + golden-set eval on extraction (the benchmark's 10 cases, two of which exist purely to catch invented quantities)
-- **Exit:** `/process` endpoint audio→structured JSON works; benchmark results table done
+- [x] Unit tests (**272** across 22 files, no API keys and no database needed) + golden-set eval on extraction (the benchmark's 10 cases, two of which exist purely to catch invented quantities)
+- **Exit:** `/process` endpoint audio→structured JSON works; benchmark results table done ✅
 - Report in parallel: état de l'art (STT Darija, LLM extraction, outils)
 
 ### Sprint 2 — E2E pipeline + web app (Aug 3 – Aug 14)
@@ -123,16 +129,22 @@ JSON schema = cahier §3: date, heure, technicien, chantier, client, type d'acti
 - [x] **Report editing + versions** (2026-08-04): daily and weekly reports are editable in the dashboard with a line diff and an append-only history (`report_versions`); export is `.docx` only, because it is the one format that can carry the generated card.
 - [x] **Bell, tasks and per-account settings** (2026-08-04): per-account notifications, a shared to-do page with lead times and custom cadences (both rung by `jobs.py`), and UI preferences stored server-side in `person_settings` so they follow the person, not the browser.
 - [x] Visual verification of the dashboard — `Dashboard/scripts/visual-check.mjs` logs in headless, walks all 9 pages and fails on console errors, HTTP ≥ 400, horizontal overflow, broken images or a blank page.
-- [ ] Email notif on each report (daily cron done; per-report email optional) + live demo to director — SMTP is wired (`POST /notify/test`, recipients in the Automation panel) and `SMTP_USER`/`SMTP_PASS` are **set in `.env`** (2026-08-12), so nothing blocks a test send + the live demo anymore
+- [x] **The schema rebuilt on the director's real file** (2026-08-05): typed quantity fields per journal column, enum-validated locations, stock, remarques. `has_data` now counts remarques, location and stock — a day with no metres but a blocker *is* the report he most needs.
+- [x] **The Sheet write moved from n8n into the API** (2026-08-05, `POST /journal`): one row per (date, technicien) in that chantier's own tab. Two rules make it correct — **accumulation** (a second message the same day merges: numbers add, locations union, prose appends) and **stock reconciliation** (a reported figure wins and becomes the new baseline; a mismatch emits `stock_ecart` with the delta rather than silently picking a number). Merging needs a read-modify-write that an IF node cannot express. Reply-first ordering is unchanged.
+- [x] **Chantiers and the bordereau** (2026-08-05): routing lives on the chef (`persons.chantier_id`) and technicians inherit it, so one edit moves a crew. `GET /chantiers/{id}/bordereau` computes installed quantities from the journal on every call and stores them nowhere.
+- [x] **Rapports mirror + n8n rewire** (2026-08-09): `file_report` also appends a flat row for the dashboard feed, so the field→column mapping moved out of untestable n8n expressions into Python. The googleSheets append node and its four companions are gone; n8n now writes no Sheet at all.
+- [x] **Local Darija engine containerised** (`stt-local`, GPU sidecar): weights bind-mounted rather than baked (5.8 GB, over GitHub's LFS ceiling) and loaded lazily on the first `/transcribe`, lock-guarded so two notes cannot both start a 4 GB load and OOM an 8 GB card.
+- [x] Email notif: SMTP wired (`POST /notify/test`, recipients in the Automation panel), `SMTP_USER`/`SMTP_PASS` set in `.env` (2026-08-12)
+- [ ] Live demo to director
 - Report in parallel: conception (UML: use cases, séquence, classes, déploiement)
 
 ### Sprint 3 — Pilot, docs, report (Aug 17 – Aug 28)
-- [ ] Deploy pilot (aznet server or Oracle VM), register 2–3 real phone numbers
-- [ ] Wave-2 benchmark on real notes if available
-- [ ] Cahier deliverables: documented n8n workflow, AI prompts doc, installation doc (= compose + README), user guide (1 page)
-- [ ] Report bulk writing: réalisation, tests/benchmark, conclusion & perspectives
-- [ ] Presentation deck + **recorded demo video** (backup if live demo fails at defense)
-- **Exit:** report v1 complete, pilot running
+- [ ] Deploy pilot (aznet server), register 2–3 real phone numbers — **the last open item that gates real numbers**: §4.6.4 (latence E2E), §4.6.5 (pilote) and the résumé/abstract/ملخص all reserve a slot for them
+- [x] Wave-2 benchmark on real notes — done as *the* benchmark (11 real clips, 2026-08-07/08)
+- [x] Cahier deliverables: documented n8n workflow (Annexe D), AI prompts doc (Annexe C), installation doc (Annexe E), user guide (Annexe F)
+- [x] Report bulk writing: réalisation, banc d'essai, conclusion & perspectives — `Pres+report/Rapport-PFE.md` → `.docx`, 137 pages, EMSI-compliant (margins, i/ii/iii → 1/2/3 pagination, 61 cited figures and tables, table titles above)
+- [x] Presentation deck — `Pres+report/Soutenance-PFE.pptx`, 23 slides + 6 backup captures, built from `presentation.py`. **Demo will be live from the laptop**; the backup captures cover the same parcours if the network or a free tier fails, so no recorded video is needed
+- **Exit:** report v1 complete ✅, pilot still to run
 
 ### Buffer (Aug 28–31)
 Report polish, rehearsal, slack for slippage.
@@ -155,19 +167,24 @@ Report polish, rehearsal, slack for slippage.
 - **Could:** Teams webhook, PWA manifest, wave-2 benchmark, Supabase migration doc
 - **Won't (this PFE):** Meta production approval, Electron, multi-company tenancy, Slack
 
-## 7. PFE report skeleton (French)
+## 7. PFE report — as written (French)
 
-1. Introduction générale — contexte aznet, problématique (rapports terrain non structurés)
-2. État de l'art — STT arabe dialectal, LLM extraction structurée, outils d'automatisation (n8n vs alternatives)
-3. Analyse & spécification — cahier des charges, besoins fonctionnels/non-fonctionnels, MoSCoW
-4. Conception — architecture, UML (cas d'utilisation, séquence, classes, déploiement), choix technologiques justifiés (benchmarks)
-5. Réalisation — service IA, workflow n8n, form & dashboard, sécurité
-6. Tests & évaluation — benchmark STT (WER), précision d'extraction, latence E2E, pilote
-7. Conclusion & perspectives — Supabase, WhatsApp prod, multi-chantiers, analytics
+`Pres+report/Rapport-PFE.md` is the single source; `build.ps1` produces the `.docx`
+(and the PDF with `-ExportPdf`). Four chapters rather than the seven planned —
+analyse et spécification folded into chapter 1, tests folded into chapter 4:
+
+1. **Contexte général** — organisme, étude de l'existant, problématique, besoins, MoSCoW, conduite du projet, risques
+2. **État de l'art et étude technique** — darija comme langue peu dotée, Whisper vs wav2vec2/CTC, extraction par LLM à sortie contrainte, plateformes d'orchestration, canal de réception, technologies retenues
+3. **Conception** — architecture hybride et la frontière orchestration/code, modèle de données, service applicatif (Stratégie, chaînes de repli, contrat d'erreurs, prompts versionnés, profils, journal, ordonnanceur), workflow, tableau de bord, sécurité, données personnelles
+4. **Réalisation, banc d'essai, tests et résultats** — environnement, le banc d'essai des 13 moteurs, difficultés résolues, stratégie de test et CI, résultats, coûts et quotas, statistiques et qualité
+- Bilan et compétences · Conclusion et perspectives · Références · **Annexes A–H**
+
+Format is checked against `Pres+report/build/guidance-emsi.pdf` (now in version
+control — the generic `build/` rule in `.gitignore` had been swallowing it).
 
 ## 8. Success metrics (defense-ready numbers)
 
 - Report submission time < 2 min (cahier's own KPI)
-- E2E latency voice-note → Sheet row: target < 60 s
+- E2E latency voice-note → journal row: **to be measured on the pilot**. Unit latencies are known: transcription 1,53 s (Groq) to 7,7 s (local engine)
 - Extraction accuracy on golden set: target > 90% fields correct
-- STT WER per engine: measured, compared, argued
+- **STT: WER and CER were deliberately not computed.** Establishing a ground truth in darija presupposes a reference orthography that does not exist — two equally correct transcriptions diverge on spelling, and WER punishes that divergence exactly like an error of meaning. The criterion is applicative instead: preservation of numeric quantities and French technical loanwords, judged against the audio by a native speaker, because that is all the journal consumes. The limit is stated in the report: rigorous, but not reproducible by a third party without the same speaker.
