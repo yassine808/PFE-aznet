@@ -35,6 +35,19 @@ def test_more_hops_configured_than_present_never_indexes_out_of_range(monkeypatc
     assert main._client_ip(_req("203.0.113.7")) == "203.0.113.7"
 
 
+def test_no_trusted_proxy_ignores_the_header_entirely(monkeypatch):
+    """`0` is config.py's documented value for host-run uvicorn. With no proxy
+    in front, every X-Forwarded-For entry is the caller's own invention, so the
+    socket peer is the only address that means anything.
+
+    It also must not crash: `len(hops) - 0` indexes one past the end, and the
+    header is caller-supplied — so this was a 500 on /auth/login that anyone
+    could trigger just by sending the header."""
+    monkeypatch.setattr(main.settings, "trusted_proxy_hops", 0)
+    assert main._client_ip(_req("1.2.3.4, 203.0.113.7")) == "10.0.0.9"
+    assert main._client_ip(_req("203.0.113.7")) == "10.0.0.9"
+
+
 def test_falls_back_to_the_socket_peer():
     assert main._client_ip(_req()) == "10.0.0.9"
 

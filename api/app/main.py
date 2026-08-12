@@ -96,8 +96,11 @@ def _notify_report_event(
     log store outage must not cost the technician their summary.
     """
     try:
-        if not warnings or not ({"low_confidence_transcription", "short_transcription",
-                                 "image_input"} & set(warnings)):
+        # journal.REVIEW_WARNINGS, not a second copy of the same three strings:
+        # it is what sets the row's `Flag review` cell, so a literal here means
+        # the bell saying "à vérifier" and the Sheet column marking the row
+        # could disagree the day either list is edited alone.
+        if not (journal.REVIEW_WARNINGS & set(warnings)):
             logs.notify_technician_manager(
                 technicien, "report",
                 f"Nouveau rapport — {technicien or 'inconnu'}",
@@ -172,11 +175,22 @@ def _client_ip(request: Request) -> str:
         "X-Forwarded-For: 9.9.9.9" and observing only tailscaled's value arrive
         -- then nginx appends its own peer. Two hops, so the first entry wins.
 
-    Set it too low and a script rotates the header to dodge the limit; too high
-    and every visitor collapses onto one key and locks the whole team out.
+    Both wrong values fail, in opposite directions. Too LOW and the index lands
+    on an entry one of our own proxies wrote -- the same address for every
+    visitor -- so the whole team shares one key and eight failures by anyone
+    locks everybody out. Too HIGH and it lands left of what the outermost proxy
+    recorded, i.e. on a value the caller supplied, which a script rotates to
+    dodge the limit entirely. Zero is handled above: no trusted proxy means no
+    trustworthy entry, so the header is ignored rather than indexed.
     """
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
+    # Zero trusted proxies means the header is entirely caller-supplied, so it is
+    # ignored rather than indexed: `len(hops) - 0` is one past the end, and the
+    # `max(0, ...)` below only ever guarded the *upper* bound. Since the header
+    # comes from the caller, that IndexError was a 500 on /auth/login that
+    # anyone could trigger on a deployment configured the way config.py
+    # documents for host-run uvicorn.
+    if forwarded and settings.trusted_proxy_hops > 0:
         hops = [h.strip() for h in forwarded.split(",") if h.strip()]
         if hops:
             # Discard the entries our own proxies appended and keep the value the
