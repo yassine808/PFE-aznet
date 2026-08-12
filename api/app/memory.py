@@ -18,6 +18,7 @@ mind: this text is injected into the extraction prompt, so a fabricated
 "pose environ 40 m par jour" would be sitting there as context the next time the
 model has to decide what `goulottes_m` is on a message that never said.
 """
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 from app import prompt_loader
@@ -76,23 +77,37 @@ def collect(rows: List[Dict[str, Any]], name: str) -> str:
     return "\n".join(lines)
 
 
+# One SDK client per process, the rule extraction.py and the three STT
+# providers already follow: a client owns a keep-alive connection pool, so
+# building one per call threw it away and paid a fresh TLS handshake. The
+# nightly rebuild is one call per technician, so that was once per colleague.
+# The key check stays in the callers below, where a missing key still fails
+# loudly and never reaches the cache.
+@lru_cache(maxsize=1)
+def _gemini_client():
+    from google import genai  # lazy: keeps the test suite dependency-free
+
+    return genai.Client(api_key=settings.gemini_api_key)
+
+
+@lru_cache(maxsize=1)
+def _groq_client():
+    from groq import Groq  # lazy: keeps the test suite dependency-free
+
+    return Groq(api_key=settings.groq_api_key)
+
+
 def _call_gemini(model: str, prompt: str) -> str:
     if not settings.gemini_api_key:
         raise ProfileError("GEMINI_API_KEY not configured")
-    from google import genai
-
-    client = genai.Client(api_key=settings.gemini_api_key)
-    resp = client.models.generate_content(model=model, contents=prompt)
+    resp = _gemini_client().models.generate_content(model=model, contents=prompt)
     return (resp.text or "").strip()
 
 
 def _call_groq(model: str, prompt: str) -> str:
     if not settings.groq_api_key:
         raise ProfileError("GROQ_API_KEY not configured")
-    from groq import Groq
-
-    client = Groq(api_key=settings.groq_api_key)
-    resp = client.chat.completions.create(
+    resp = _groq_client().chat.completions.create(
         model=model, messages=[{"role": "user", "content": prompt}]
     )
     return (resp.choices[0].message.content or "").strip()

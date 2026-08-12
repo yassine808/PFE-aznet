@@ -6,6 +6,7 @@ n8n's daily cron collects the day's Sheet rows and calls /daily-report;
 this module only turns rows into email-ready content.
 """
 import json
+from functools import lru_cache
 from typing import List
 
 from pydantic import BaseModel, Field
@@ -65,14 +66,30 @@ Rapports du jour (JSON) :
 """
 
 
+# One SDK client per process — the rule extraction.py and the STT providers
+# follow. The report jobs call this once for the company digest and once per
+# chef, so a client per call meant a fresh TLS handshake per manager, twice a
+# day. The key checks stay in the callers, so a missing key still fails loudly
+# and never reaches the cache.
+@lru_cache(maxsize=1)
+def _gemini_client():
+    from google import genai  # lazy: keeps the test suite dependency-free
+
+    return genai.Client(api_key=settings.gemini_api_key)
+
+
+@lru_cache(maxsize=1)
+def _groq_client():
+    from groq import Groq  # lazy: keeps the test suite dependency-free
+
+    return Groq(api_key=settings.groq_api_key)
+
+
 def _generate_gemini(date: str, rows_json: str) -> DailyReportContent:
     if not settings.gemini_api_key:
         raise DailyReportError("GEMINI_API_KEY not configured")
-    from google import genai
-
-    client = genai.Client(api_key=settings.gemini_api_key)
     try:
-        resp = client.models.generate_content(
+        resp = _gemini_client().models.generate_content(
             model=settings.gemini_model,
             contents=_INSTRUCTIONS.format(date=date) + rows_json,
             config={
@@ -91,11 +108,8 @@ def _generate_gemini(date: str, rows_json: str) -> DailyReportContent:
 def _generate_groq(date: str, rows_json: str) -> DailyReportContent:
     if not settings.groq_api_key:
         raise DailyReportError("GROQ_API_KEY not configured")
-    from groq import Groq
-
-    client = Groq(api_key=settings.groq_api_key)
     try:
-        resp = client.chat.completions.create(
+        resp = _groq_client().chat.completions.create(
             model=settings.groq_llm_model,
             response_format={"type": "json_object"},
             messages=[

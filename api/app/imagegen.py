@@ -11,6 +11,7 @@ text ones. This runs only on an explicit user action from the dashboard, never
 on a cron and never per report.
 """
 import base64
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 from app import prompt_loader
@@ -73,14 +74,22 @@ def summarise(rows: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+# One SDK client per process, as in extraction.py and the STT providers: the
+# client owns a keep-alive pool, and rebuilding it per call threw that away for
+# a fresh TLS handshake. The key check stays in the caller, so a missing key
+# fails loudly and never reaches the cache.
+@lru_cache(maxsize=1)
+def _gemini_client():
+    from google import genai  # lazy: keeps the test suite dependency-free
+
+    return genai.Client(api_key=settings.gemini_api_key)
+
+
 def _call_gemini(model: str, prompt: str) -> Tuple[bytes, str]:
     if not settings.gemini_api_key:
         raise ImageGenerationError("GEMINI_API_KEY not configured")
-    from google import genai
-
-    client = genai.Client(api_key=settings.gemini_api_key)
     try:
-        resp = client.models.generate_content(model=model, contents=prompt)
+        resp = _gemini_client().models.generate_content(model=model, contents=prompt)
     except Exception as exc:  # noqa: BLE001
         raise ImageGenerationError(f"gemini/{model}: {exc}") from exc
 
