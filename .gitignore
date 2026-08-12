@@ -18,6 +18,17 @@ dist/
 build/
 .vercel/
 
+# ...but Pres+report/build/ holds build *inputs*, not output: the pandoc
+# reference document that carries the EMSI page setup and styles, the school
+# template and the writing guide the report is checked against. The generic
+# build/ rule above is meant for node output and was silently dropping all
+# three, so an edit to the report's margins lived on one machine only.
+!Pres+report/build/
+!Pres+report/build/**
+
+# Word's lock file for an open document
+~$*.docx
+
 # audio dataset (binary bloat — references.csv stays in git)
 benchmark/dataset/audio/
 # image fixtures are rendered from text_cases.json on every run, and results are

@@ -30,11 +30,50 @@ Write-Output "pandoc ..."
 & pandoc $md -o $docx --reference-doc=$ref
 if ($LASTEXITCODE -ne 0) { throw "pandoc failed" }
 
-Write-Output "word: fields, repagination, pdf ..."
+Write-Output "word: sections, fields, repagination, pdf ..."
 $word = New-Object -ComObject Word.Application
 $word.Visible = $false
 $word.DisplayAlerts = 0
 $doc = $word.Documents.Open($docx, [ref]$false, [ref]$false)
+
+# EMSI guide 2.4: the preliminary pages are numbered i, ii, iii and the main
+# content restarts at 1. That is two sections, and pandoc emits one -- a raw
+# sectPr in the Markdown would have to repeat the header/footer relationship ids
+# by hand and silently loses them when they change, so the split is made here,
+# where Word maintains the linkage itself.
+# The match is deliberately ASCII-only. Windows PowerShell 5.1 reads a .ps1 as
+# ANSI unless it carries a UTF-8 BOM, so an accented literal here ("generale")
+# silently becomes mojibake and never matches. Prefix-matching sidesteps the
+# encoding of this file entirely -- exactly one level-1 heading starts this way.
+$introFound = $false
+foreach ($p in $doc.Paragraphs) {
+    # OutlineLevel is not localised; style names ("Heading 1" / "Titre 1") are.
+    if ($p.OutlineLevel -eq 1 -and $p.Range.Text.Trim() -like "Introduction g*") {
+        $r = $p.Range
+        $r.Collapse(1)                     # wdCollapseStart
+        $r.InsertBreak(2)                  # wdSectionBreakNextPage
+        $introFound = $true
+        break
+    }
+}
+if (-not $introFound) { throw "level-1 heading 'Introduction g...' not found: cannot split the sections" }
+
+$front = $doc.Sections.Item(1)
+$body = $doc.Sections.Item(2)
+
+# 2 = wdPageNumberStyleLowercaseRoman, 0 = wdPageNumberStyleArabic.
+# 1 = wdHeaderFooterPrimary.
+$front.Footers.Item(1).PageNumbers.NumberStyle = 2
+$body.Footers.Item(1).LinkToPrevious = $true
+$body.Footers.Item(1).PageNumbers.NumberStyle = 0
+$body.Footers.Item(1).PageNumbers.RestartNumberingAtSection = $true
+$body.Footers.Item(1).PageNumbers.StartingNumber = 1
+
+# The cover carries no number (titlePg on section 1). The body's first page must,
+# so the inherited "different first page" is switched off there.
+$body.PageSetup.DifferentFirstPageHeaderFooter = 0
+
+Write-Output ("sections: " + $doc.Sections.Count + " (front matter roman, body arabic from 1)")
 
 # Order matters: the lists need page numbers to exist, and NUMPAGES needs the
 # lists' own pages to exist. Two passes settle it.

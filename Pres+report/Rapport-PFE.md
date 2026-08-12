@@ -259,16 +259,16 @@ Le cahier des charges fourni par l'entreprise (Annexe A) définit les exigences 
 
 ### 1.5.3 Priorisation MoSCoW
 
+::: {custom-style="TableCaption"}
+**Tableau 1.1 :** Priorisation MoSCoW du périmètre fonctionnel.
+:::
+
 | Priorité | Périmètre |
 |---|---|
 | **Must** | Chaîne vocale complète (réception → transcription → extraction → résumé français → Sheets → notification) ; documentation d'installation ; guide utilisateur |
 | **Should** | Tableau de bord de consultation ; chapitre de benchmark STT ; réponse de confirmation au technicien ; signalement des transcriptions douteuses |
 | **Could** | Second canal de réception ; deuxième vague de benchmark sur enregistrements réels ; document de migration base de données |
 | **Won't (ce PFE)** | Application de bureau ; multi-entreprises |
-
-::: {custom-style="TableCaption"}
-**Tableau 1.1 :** Priorisation MoSCoW du périmètre fonctionnel.
-:::
 
 
 Le périmètre effectivement livré dépasse cette priorisation sur trois points, documentés au chapitre 4 : le second canal de réception (WhatsApp Cloud API) est en service et non resté en « Could » ; la base de données PostgreSQL a été introduite en complément de Google Sheets et non reportée ; et le tableau de bord a dépassé la consultation pour devenir l'outil d'administration du système (organigramme, comptes, ordonnanceur, journaux).
@@ -279,9 +279,13 @@ Le périmètre effectivement livré dépasse cette priorisation sur trois points
 
 Le projet étant mené par un développeur unique avec un encadrant industriel jouant le rôle de *product owner*, une méthode Scrum complète serait artificielle. Une déclinaison allégée est adoptée : backlog priorisé, sprints de deux semaines, démonstration à l'encadrant en fin de sprint, rétrospective individuelle. Cette approche conserve les bénéfices essentiels — itérations courtes, feedback régulier, priorisation explicite — sans le cérémonial d'équipe.
 
-Le dépôt Git compte **207 commits** entre le 15 juillet 2026 (`feat: week 0 scaffold`) et la date de rédaction, en convention *Conventional Commits*, ce qui fournit une trace fine et vérifiable de l'avancement.
+Le dépôt Git compte **220 commits** entre le 15 juillet 2026 (`feat: week 0 scaffold`) et la date de rédaction, en convention *Conventional Commits*, ce qui fournit une trace fine et vérifiable de l'avancement.
 
 ### 1.6.2 Planification
+
+::: {custom-style="TableCaption"}
+**Tableau 1.2 :** Planning prévisionnel du projet.
+:::
 
 | Phase | Période | Objectifs principaux |
 |---|---|---|
@@ -291,12 +295,12 @@ Le dépôt Git compte **207 commits** entre le 15 juillet 2026 (`feat: week 0 sc
 | Sprint 3 — Pilote, documentation, rapport | 17 – 28 août | Déploiement pilote, livrables documentaires, rédaction finale, présentation |
 | Tampon | 28 – 31 août | Finitions, répétition de la soutenance |
 
-::: {custom-style="TableCaption"}
-**Tableau 1.2 :** Planning prévisionnel du projet.
-:::
-
 
 ### 1.6.3 Gestion des risques
+
+::: {custom-style="TableCaption"}
+**Tableau 1.3 :** Registre des risques principaux.
+:::
 
 | Risque | Impact | Mitigation |
 |---|---|---|
@@ -305,10 +309,6 @@ Le dépôt Git compte **207 commits** entre le 15 juillet 2026 (`feat: week 0 sc
 | Quotas des offres gratuites | Moyen | Volumétrie très faible ; chaîne de repli alternant les fournisseurs, qui mesurent leurs quotas séparément ; moteur local sur GPU en dernier recours |
 | Panne d'un service externe (Google Sheets, fournisseur LLM) | Moyen | File de reprise persistante en base ; journal d'événements en PostgreSQL, délibérément hors du Sheet |
 | Glissement de planning (développeur seul) | Moyen | Ordre de coupe explicite ; le cœur du périmètre *Must* est protégé |
-
-::: {custom-style="TableCaption"}
-**Tableau 1.3 :** Registre des risques principaux.
-:::
 
 
 ## 1.7 Conclusion du chapitre
@@ -379,6 +379,10 @@ Sous contrainte d'offre gratuite, deux fournisseurs se distinguent : **Gemini** 
 
 Le cahier des charges recommande n8n comme outil d'automatisation. L'étude comparative confirme ce choix :
 
+::: {custom-style="TableCaption"}
+**Tableau 2.1 :** Comparaison des solutions d'orchestration.
+:::
+
 | Critère | n8n | Zapier / Make | Code sur mesure |
 |---|---|---|---|
 | Coût | Gratuit (auto-hébergé, licence fair-code) | Quotas gratuits restrictifs | Gratuit |
@@ -386,10 +390,6 @@ Le cahier des charges recommande n8n comme outil d'automatisation. L'étude comp
 | Intégrations (messageries, Sheets, e-mail) | Natives | Natives | À développer |
 | Logique personnalisée | Nœuds de code JavaScript | Limitée | Totale |
 | Valeur pédagogique / maintenance | Workflows visuels documentables | Boîte noire | Coût de maintenance élevé |
-
-::: {custom-style="TableCaption"}
-**Tableau 2.1 :** Comparaison des solutions d'orchestration.
-:::
 
 
 n8n auto-hébergé en Docker combine gratuité, intégrations prêtes à l'emploi et possibilité d'insérer du code JavaScript. Le choix architectural du projet — détaillé au chapitre 3 — est toutefois **hybride** : n8n orchestre les intégrations, mais le cœur métier est un microservice codé sur mesure, testable et versionné.
@@ -400,6 +400,10 @@ Le chapitre 4 documente la limite pratique qui a fixé la frontière entre les d
 
 Le cahier des charges cite WhatsApp Business API « ou passerelle équivalente ». L'étude pratique des deux principaux candidats a structuré le calendrier du projet :
 
+::: {custom-style="TableCaption"}
+**Tableau 2.2 :** Comparaison des canaux de réception.
+:::
+
 | Critère | WhatsApp Cloud API (Meta) | Telegram Bot API |
 |---|---|---|
 | Processus d'accès | Compte développeur Meta, application publiée, validation d'entreprise | Création d'un bot en une minute (BotFather) |
@@ -408,10 +412,6 @@ Le cahier des charges cite WhatsApp Business API « ou passerelle équivalente �
 | Réception des messages | Webhook obligatoire (URL publique HTTPS + poignée de main de vérification) | Webhook **ou** interrogation périodique (long polling) |
 | Coût | Gratuit en test, conversations facturées en production | Gratuit |
 | Adoption par le public cible | Très forte au Maroc | Moyenne |
-
-::: {custom-style="TableCaption"}
-**Tableau 2.2 :** Comparaison des canaux de réception.
-:::
 
 
 **Décision et évolution.** Telegram a été retenu en premier pour le développement, précisément parce qu'il n'impose aucune approbation et autorise le *polling* — donc aucune exposition publique du poste de développement. WhatsApp, indispensable à terme du fait de son adoption au Maroc, a été mis en service dans un second temps une fois les obstacles Meta levés (jeton *System User* sans expiration, application publiée, souscription `subscribed_apps` du WABA). **Les deux canaux sont aujourd'hui en production simultanément**, servis par un seul workflow et un seul service.
@@ -429,6 +429,10 @@ Avant de concevoir un système, il faut justifier de ne pas en acheter un. Trois
 
 **Les assistants de transcription généralistes** — Otter, Notta, ou l'envoi manuel à un modèle de langage. Ils transcrivent, mais ne structurent pas, n'écrivent pas dans le tableau de suivi, ne notifient personne et ne connaissent pas le vocabulaire du câblage. Ils résolvent un cinquième du problème.
 
+::: {custom-style="TableCaption"}
+**Tableau 2.3 :** Positionnement face aux solutions existantes.
+:::
+
 | Critère | Applications de chantier | Automatisation + IA managée | Assistants de transcription | **Ce projet** |
 |---|---|---|---|---|
 | Coût | Par utilisateur / mois | À l'usage | Abonnement | **Nul** |
@@ -438,16 +442,16 @@ Avant de concevoir un système, il faut justifier de ne pas en acheter un. Trois
 | Écriture dans le fichier du client | Export | Oui | Non | **Oui, fusion par chantier** |
 | Logique versionnée et testée | Non | Non | — | **Oui, 272 tests** |
 
-::: {custom-style="TableCaption"}
-**Tableau 2.3 :** Positionnement face aux solutions existantes.
-:::
-
 
 La conclusion n'est pas que ces produits sont mauvais, mais que le besoin d'AZNET a une contrainte que le marché ne traite pas : **l'entrée doit être de la parole spontanée en langue peu dotée**, et tout le reste en découle.
 
 ## 2.7 Technologies et langages retenus
 
 ### 2.7.1 Vue d'ensemble
+
+::: {custom-style="TableCaption"}
+**Tableau 2.4 :** Technologies retenues et alternatives écartées.
+:::
 
 | Technologie | Rôle dans le projet | Principales alternatives | Raison du choix |
 |---|---|---|---|
@@ -468,10 +472,6 @@ La conclusion n'est pas que ces produits sont mauvais, mais que le besoin d'AZNE
 | **GitHub Actions** | Intégration continue | GitLab CI, Jenkins | Gratuit sur dépôt privé ; au plus près du dépôt |
 | **Mermaid** | Diagrammes | draw.io, Visio | Diagrammes en texte, donc versionnés et révisables comme du code |
 
-::: {custom-style="TableCaption"}
-**Tableau 2.4 :** Technologies retenues et alternatives écartées.
-:::
-
 
 ### 2.7.2 Les choix qui méritaient un débat
 
@@ -488,6 +488,10 @@ Quatre décisions n'allaient pas de soi et ont été tranchées sur des critère
 
 ## 2.8 Synthèse des choix technologiques
 
+::: {custom-style="TableCaption"}
+**Tableau 2.5 :** Récapitulatif des choix technologiques.
+:::
+
 | Besoin | Choix | Justification résumée |
 |---|---|---|
 | Canal de réception | Telegram Bot API **et** WhatsApp Cloud API | Gratuit et sans approbation pour le premier ; adoption réelle du public cible pour le second |
@@ -498,10 +502,6 @@ Quatre décisions n'allaient pas de soi et ont été tranchées sur des critère
 | Interface Web | React 19 + TypeScript + Vite + Tailwind v4 | Standard industriel ; rendu statique servi par la même origine que l'API |
 | Stockage métier | Google Sheets | Imposé par le cahier des charges ; c'est le fichier que le directeur lit déjà |
 | Stockage technique | PostgreSQL | Journal d'événements, idempotence, sessions, file de reprise — délibérément hors du Sheet |
-
-::: {custom-style="TableCaption"}
-**Tableau 2.5 :** Récapitulatif des choix technologiques.
-:::
 
 
 ## 2.9 Conclusion du chapitre
@@ -589,6 +589,10 @@ L'ordre des étapes 5 et 6 est un invariant de conception, développé en §3.5.
 
 Le schéma `ExtractedReport` est le contrat entre le service, n8n et le journal. Il a été **reconstruit le 5 août 2026 à partir du fichier de suivi réel du directeur**, en remplacement d'un schéma générique initial :
 
+::: {custom-style="TableCaption"}
+**Tableau 3.1 :** Schéma du rapport extrait (`ExtractedReport`).
+:::
+
 | Champ | Type | Description |
 |---|---|---|
 | `cables_prepares_m` | décimal ≥ 0, optionnel | Mètres de câble cuivre préparés (tirés et mesurés) |
@@ -608,10 +612,6 @@ Le schéma `ExtractedReport` est le contrat entre le service, n8n et le journal.
 | `stock_fibre_m` | décimal ≥ 0, optionnel | Fibre restante en stock |
 | `remarques` | texte, optionnel | Problèmes, blocages, matériel manquant |
 | `resume` | texte, **obligatoire** | Résumé professionnel en français (2 à 4 phrases) |
-
-::: {custom-style="TableCaption"}
-**Tableau 3.1 :** Schéma du rapport extrait (`ExtractedReport`).
-:::
 
 
 Trois décisions de modélisation méritent d'être justifiées.
@@ -749,6 +749,10 @@ La chaîne texte **alterne délibérément les fournisseurs**, Gemini et Groq me
 
 ### 3.4.4 Contrat d'erreurs
 
+::: {custom-style="TableCaption"}
+**Tableau 3.2 :** Contrat d'erreurs du service.
+:::
+
 | Situation | Code HTTP | Comportement attendu de n8n |
 |---|---|---|
 | Entrée invalide (ni audio, ni image, ni texte ; fournisseur inconnu) | 422 | Erreur de configuration à corriger |
@@ -756,10 +760,6 @@ La chaîne texte **alterne délibérément les fournisseurs**, Gemini et Groq me
 | Échec de transport de la réponse au technicien | 502 | Distinguer une panne externe d'un défaut du service |
 | Transcription anormalement courte (moins de 10 caractères) | 200 + `short_transcription` | Ligne enregistrée mais signalée |
 | Message sans contenu exploitable | 200 + `no_report_content` | Réponse au technicien, **pas** d'écriture dans le journal |
-
-::: {custom-style="TableCaption"}
-**Tableau 3.2 :** Contrat d'erreurs du service.
-:::
 
 
 La distinction 422/502 sépare les erreurs de l'appelant des défaillances des moteurs externes ; l'avertissement plutôt que l'erreur illustre le principe : un signal de qualité douteuse est un avertissement structuré, ni une erreur bloquante ni un silence.
@@ -919,6 +919,10 @@ Le système enregistre la voix de salariés identifiés, la rattache à leur nom
 
 ### 3.8.1 Ce qui est collecté, et où
 
+::: {custom-style="TableCaption"}
+**Tableau 3.3 :** Données personnelles traitées par le système.
+:::
+
 | Donnée | Emplacement | Durée de conservation |
 |---|---|---|
 | Enregistrement audio | PostgreSQL, table des médias | Purgée par la tâche de rétention |
@@ -927,10 +931,6 @@ Le système enregistre la voix de salariés identifiés, la rattache à leur nom
 | Identifiants de messagerie | PostgreSQL, `technicians` | Désactivables sans suppression |
 | Profil rédigé automatiquement | PostgreSQL, `persons.profile` | Réécrit chaque nuit |
 | Journal d'étapes, sessions, visites | PostgreSQL | Purgés à 03:00 par la tâche de rétention |
-
-::: {custom-style="TableCaption"}
-**Tableau 3.3 :** Données personnelles traitées par le système.
-:::
 
 
 ### 3.8.2 Les principes appliqués
@@ -973,6 +973,10 @@ Ce chapitre décrit la mise en œuvre de la conception : l'environnement de dév
 
 ## 4.2 Environnement et outils de développement
 
+::: {custom-style="TableCaption"}
+**Tableau 4.1 :** Environnement de développement.
+:::
+
 | Outil | Rôle |
 |---|---|
 | Python 3.11 / FastAPI / Pydantic | Service applicatif |
@@ -981,13 +985,9 @@ Ce chapitre décrit la mise en œuvre de la conception : l'environnement de dév
 | React 19 / TypeScript / Vite / Tailwind v4 | Tableau de bord |
 | Docker / Docker Compose | Exécution de la pile complète (5 services) |
 | n8n | Orchestration des workflows |
-| Git / GitHub Actions | Versionnage (207 commits), intégration continue |
+| Git / GitHub Actions | Versionnage (220 commits), intégration continue (17 contrôles) |
 | PyTorch 2.5 / CUDA / transformers | Banc d'essai local sur GPU |
 | Groq API, Google AI Studio, Hugging Face | Inférence (offres gratuites) |
-
-::: {custom-style="TableCaption"}
-**Tableau 4.1 :** Environnement de développement.
-:::
 
 
 Le dépôt est organisé en modules : `api/` (service), `Dashboard/` (tableau de bord), `n8n/` (workflow exporté et documentation), `benchmark/` (banc d'essai), `docs/` (cahier des charges, guides).
@@ -1047,15 +1047,15 @@ Ce critère a été appliqué par lecture des transcriptions clip par clip, puis
 
 ### 4.3.3 Résultats — moteurs par API
 
+::: {custom-style="TableCaption"}
+**Tableau 4.2 :** Comparaison des moteurs accessibles par API (7 août 2026).
+:::
+
 | Moteur | Clips | Erreurs | Latence moyenne | Confiance moyenne | Caractères moyens |
 |---|---|---|---|---|---|
 | Groq (Whisper large-v3) | 11 | 0 | **1,53 s** | 0,483 | 613 |
 | Gemini | 11 | 0 | 16,94 s | non exposée | 20 651 (faussé, voir §4.4.1) |
 | Hugging Face (affinage darija) | 11 | **11** | — | — | jeton non configuré |
-
-::: {custom-style="TableCaption"}
-**Tableau 4.2 :** Comparaison des moteurs accessibles par API (7 août 2026).
-:::
 
 
 **Constat majeur : Groq déforme les quantités.** Sur un même clip, Gemini produit `40 كابل`, `8 ديال les panneaux`, `12 پانُو`, `3ème étage` ; Groq produit `mniya dyal panno`, `Pouzina ssimetro`, `3O mietage`, `ondélique`. Le schéma métier étant intégralement composé de quantités et de localisations, un moteur qui fusionne un chiffre dans le mot suivant ne donne rien à extraire — et `has_data()` renvoie alors « faux » sur un rapport qui *contenait* pourtant des données.
@@ -1063,6 +1063,10 @@ Ce critère a été appliqué par lecture des transcriptions clip par clip, puis
 ### 4.3.4 Résultats — moteurs locaux sur GPU
 
 Douze moteurs ont été exécutés localement en demi-précision sur la RTX 3070.
+
+::: {custom-style="TableCaption"}
+**Tableau 4.3 :** Campagne locale complète, 12 moteurs, 11 clips, RTX 3070 (7 août 2026). Trié par confiance décroissante.
+:::
 
 | Modèle | Latence | Confiance | Caractères | Chiffres |
 |---|---|---|---|---|
@@ -1077,10 +1081,6 @@ Douze moteurs ont été exécutés localement en demi-précision sur la RTX 3070
 | `openai/whisper-large-v3` (contrôle) | 5,7 s | 0,582 | 214 | 55 |
 | `C-Ilyas/whisper-base-darija` | 5,0 s | 0,548 | **0** | 0 |
 
-::: {custom-style="TableCaption"}
-**Tableau 4.3 :** Campagne locale complète, 12 moteurs, 11 clips, RTX 3070 (7 août 2026). Trié par confiance décroissante.
-:::
-
 
 **Ce tableau est trié par confiance précisément pour démontrer qu'il ne faut pas s'y fier.** `boumehdi` domine la colonne à 0,916 et perd purement et simplement le « 40 » ; le meilleur moteur n'arrive qu'en cinquième position. C'est la troisième confirmation indépendante que `exp(mean logprob)` mesure la certitude du décodeur, non son exactitude.
 
@@ -1093,15 +1093,15 @@ Deux précautions de lecture s'imposent :
 
 `BounharAbdelaziz/Morocco-Darija-STT-large` (environ 2 milliards de paramètres, licence Apache 2.0) a été retenu. Sur un clip de référence dont le contenu est *« hier 20/07/2026, arrivés à Essaouira à 1 h, vérifié le chemin de 27 câbles, pris le métrage, coupés, vérifié le chemin de la fibre, sortis à 7 h »* :
 
+::: {custom-style="TableCaption"}
+**Tableau 4.4 :** Comportement comparé sur les champs métier d'un clip de référence.
+:::
+
 | Modèle | Effet sur les champs de données |
 |---|---|
 | **Morocco-Darija-STT-large** | `20 سبعة 2026`, `27 كابل`, `فيريفينا` (vérifier), `لافيبر` (la fibre), `السبع` (7 h) — **tous les champs extractibles survivent** |
 | `whisper-large-v3` | Date et `27 كابل` corrects, mais *vérifier* devient **`فرحنا`** (« nous nous sommes réjouis ») — un verbe technique français transformé en mot arabe sans rapport |
 | `ychafiqui/medium-darija` | **`27 câbles` devient `السبعة وعشر وعشر الين كابل`** — la quantité est détruite ; la ligne atteint le journal sans compte de câbles |
-
-::: {custom-style="TableCaption"}
-**Tableau 4.4 :** Comportement comparé sur les champs métier d'un clip de référence.
-:::
 
 
 Le moteur retenu conserve également les noms propres du domaine — Novec, Essaouira, Kenitra — à travers l'ensemble des clips.
@@ -1134,14 +1134,14 @@ Le troisième est le seul qui compte vraiment. Il produisait `Kmmalna khamsa dya
 
 Une même instruction produit deux comportements opposés selon la voie d'exécution.
 
+::: {custom-style="TableCaption"}
+**Tableau 4.5 :** Effet de l'invite de vocabulaire en exécution locale.
+:::
+
 | Condition | Sortie observée (`whisper-large-v3` local) |
 |---|---|
 | Invite activée | `The work, the work, the work…` — boucle dégénérée, sur **tous** les clips |
 | Invite désactivée | `السلام عليكم بالنسبة لخدمة اليوم في نوفيك…` — darija propre |
-
-::: {custom-style="TableCaption"}
-**Tableau 4.5 :** Effet de l'invite de vocabulaire en exécution locale.
-:::
 
 
 Les deux explications concurrentes ont été **éliminées avant** de conclure, et non écartées par hypothèse : le décodage audio a été validé par corrélation de 1,0000 entre deux décodeurs indépendants, et la précision de calcul a produit un texte identique octet pour octet.
@@ -1198,6 +1198,10 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 
 ### 4.6.2 Périmètre livré
 
+::: {custom-style="TableCaption"}
+**Tableau 4.6 :** État du périmètre livré.
+:::
+
 | Composant | État |
 |---|---|
 | Réception Telegram | En production |
@@ -1210,22 +1214,22 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 | Observabilité PostgreSQL | En production |
 | Tableau de bord trilingue (FR/EN/AR) | En production |
 | Organigramme, comptes, chantiers, bordereau | En production |
-| Ordonnanceur (5 tâches) et page Automatisation | En production |
+| Ordonnanceur (6 tâches) et page Automatisation | En production |
 | Rapports quotidien et hebdomadaire par e-mail | En production |
 | Commandes `/rapport`, `/modifier`, `/supprimer` | En production |
 | Moteur local sur GPU, conteneurisé | En production |
 | Pilote en conditions réelles avec les techniciens | *[À COMPLÉTER]* |
 
-::: {custom-style="TableCaption"}
-**Tableau 4.6 :** État du périmètre livré.
-:::
-
 
 ### 4.6.3 Métriques du projet
 
+::: {custom-style="TableCaption"}
+**Tableau 4.7 :** Métriques du projet à la date de rédaction.
+:::
+
 | Indicateur | Valeur |
 |---|---|
-| Commits | 207 |
+| Commits | 220 |
 | Lignes de Python (service) | 8 489 |
 | Lignes de tests | 3 782 (22 fichiers, 272 tests) |
 | Lignes de TypeScript (tableau de bord) | 11 590 |
@@ -1235,10 +1239,6 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 | Moteurs STT évalués | 13 |
 | Tables PostgreSQL | 11 |
 | Services Docker | 5 |
-
-::: {custom-style="TableCaption"}
-**Tableau 4.7 :** Métriques du projet à la date de rédaction.
-:::
 
 
 ### 4.6.4 Latence de bout en bout
@@ -1255,6 +1255,10 @@ Lors de ces essais, **le repli d'extraction s'est déclenché en conditions rée
 
 La contrainte de budget nul n'est tenable que si elle est chiffrée. Un rapport consomme, au plus, **un appel de transcription** et **un appel d'extraction**, plus les écritures dans le classeur.
 
+::: {custom-style="TableCaption"}
+**Tableau 4.8 :** Consommation des offres gratuites.
+:::
+
 | Service | Offre gratuite | Consommation par rapport | Marge à 10 rapports/jour |
 |---|---|---|---|
 | Groq (transcription et extraction) | Quotas par minute et par jour | 1 appel | Très large |
@@ -1265,10 +1269,6 @@ La contrainte de budget nul n'est tenable que si elle est chiffrée. Un rapport 
 | Google Sheets API | Quota par minute et par utilisateur | 3 à 5 appels | Large |
 | Gmail SMTP | Envois quotidiens | 1 à 2 par jour | Large |
 | PostgreSQL, n8n, Docker | Auto-hébergés | — | Sans objet |
-
-::: {custom-style="TableCaption"}
-**Tableau 4.8 :** Consommation des offres gratuites.
-:::
 
 
 Trois décisions d'architecture entretiennent directement cette marge. La **chaîne d'extraction alterne les fournisseurs**, Gemini et Groq mesurant leurs quotas séparément — l'alternance double la capacité effective. Le **moteur local n'a aucun quota**, ce qui en fait le filet de sécurité en cas d'épuisement simultané. Et la **file de reprise** absorbe un dépassement de quota du côté Google sans perdre une ligne : la reprise a lieu cinq minutes plus tard, quand la fenêtre s'est rouverte.
@@ -1281,6 +1281,10 @@ Le facteur limitant n'est donc pas le nombre de rapports mais leur **simultanéi
 
 Hors fichiers générés — verrous de dépendances, exports d'outils — le dépôt représente **33 274 lignes** réparties comme suit :
 
+::: {custom-style="TableCaption"}
+**Tableau 4.9 :** Répartition du code par langage.
+:::
+
 | Langage | Fichiers | Lignes | Part |
 |---|---|---|---|
 | Python | 59 | 15 040 | 45,2 % |
@@ -1292,14 +1296,14 @@ Hors fichiers générés — verrous de dépendances, exports d'outils — le d�
 | HTML | 2 | 83 | 0,2 % |
 | PowerShell | 1 | 32 | 0,1 % |
 
-::: {custom-style="TableCaption"}
-**Tableau 4.9 :** Répartition du code par langage.
-:::
-
 
 Deux lectures méritent d'être faites. La part de **Markdown à 15 %** n'est pas de la documentation d'accompagnement : elle contient les instructions versionnées des modèles (§3.4.5), qui sont du contenu exécutable au même titre que du code. Et l'équilibre Python/TypeScript reflète fidèlement l'architecture — un service métier substantiel et une interface d'administration complète, plutôt qu'une simple façade.
 
 ### 4.9.2 Indicateurs de qualité mesurés
+
+::: {custom-style="TableCaption"}
+**Tableau 4.10 :** Indicateurs de qualité mesurés.
+:::
 
 | Indicateur | Valeur |
 |---|---|
@@ -1308,23 +1312,56 @@ Deux lectures méritent d'être faites. La part de **Markdown à 15 %** n'est pa
 | Ratio test / code applicatif | ≈ 1 ligne de test pour 4 lignes de service |
 | Dépendances d'exécution requises pour les tests | **Aucune** — ni clé d'API, ni base de données |
 | Durée de la suite complète | ≈ 8 minutes |
-| Contrôles d'intégration continue | Tests, analyse statique, parité des trois fichiers de traduction, contrôle de secrets, validation du workflow |
-| Commits | 207, en convention *Conventional Commits* |
+| Contrôles d'intégration continue | **17** par *push* (détail au §4.9.3) |
+| Commits | **220**, en convention *Conventional Commits* |
+| Période de développement | 15 juillet – 12 août 2026, soit 29 jours |
+
+
+### 4.9.3 La chaîne d'intégration continue
+
+Chaque *push* sur la branche principale déclenche **dix-sept contrôles automatiques**, définis dans un unique fichier `.github/workflows/ci.yml`. Ils se répartissent en quatre familles, et cette répartition n'est pas décorative : elle correspond à quatre natures de défaut distinctes, qu'aucun outil unique ne détecte toutes.
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.10 :** Indicateurs de qualité mesurés.
+**Tableau 4.11 :** Les dix-sept contrôles d'intégration continue, par famille.
+:::
+
+| Famille | Contrôles | Ce qu'ils attrapent |
+|---|---|---|
+| Correction | `API — lint, types & tests` (ruff, 272 tests), `Dashboard — types, lint & build` (tsc, oxlint), `n8n workflow`, `Docker compose config`, `Locale key parity` | Régressions de logique, dérive de types, workflow invalide, clé de traduction manquante dans l'une des trois langues |
+| Sécurité du code | `CodeQL (python)`, `CodeQL (javascript-typescript)`, `Semgrep (OWASP Top 10)`, `Bandit SAST` | Injections, chemins de données non assainis, primitives cryptographiques faibles |
+| Dépendances et secrets | `Trivy filesystem scan`, `Trivy config scan`, `pip-audit`, `npm audit`, `Secret scan` (gitleaks + `scripts/check_secrets.py`) | Vulnérabilités connues des bibliothèques tierces, mauvaise configuration d'infrastructure, jeton commité |
+| Conformité des fichiers | `Hadolint (api/Dockerfile)`, `Hadolint (Dashboard/Dockerfile)`, `actionlint` | Images Docker non conformes aux bonnes pratiques, workflow GitHub Actions syntaxiquement fragile |
+
+
+Deux points méritent d'être soulignés. Le contrôle de secrets s'exécute sur **l'historique complet** (`fetch-depth: 0`) et non sur le seul dernier état : un jeton retiré dans le dernier commit reste public dans l'historique, et ne le vérifier qu'au sommet donnerait une fausse assurance. Et la **parité des clés de traduction** est un contrôle propre à ce projet : l'interface étant trilingue, une clé ajoutée en français mais oubliée en arabe ne casse aucun test et ne se voit qu'à l'usage, en production, par un utilisateur arabophone.
+
+**Dependabot** complète le dispositif : configuré sur **cinq écosystèmes** — `npm` pour le tableau de bord, `pip` pour le service, les deux images Docker et les actions GitHub elles-mêmes — il ouvre **quotidiennement** des demandes de mise à jour, groupées par niveau de version pour éviter une avalanche de demandes unitaires. **Trente-cinq** ont été ouvertes sur la durée du projet. Chacune franchit les dix-sept contrôles avant d'être fusionnée : la mise à jour automatique n'a d'intérêt que si elle est automatiquement vérifiée, sans quoi elle ne fait que déplacer le risque.
+
+::: {custom-style="FigureImage"}
+![](diagrams/14-devops.png){ width=14.7cm }
 :::
 
 
-### 4.9.3 Analyse statique externe
+::: {custom-style="FigureCaption"}
+**Figure 4.3 :** La chaîne d'intégration continue : les deux sources de changement, les dix-sept contrôles et l'analyse statique externe avant fusion.
+:::
 
-[ESPACE RÉSERVÉ — insérer ici la capture du tableau de bord SonarQube du projet : note de fiabilité, de sécurité et de maintenabilité, dette technique, taux de duplication et couverture de tests.]
 
-*[FIGURE À INSÉRER — capture SonarQube.]*
+### 4.9.4 Analyse statique externe
 
-### 4.9.4 Chronologie réelle du développement
+Au-delà des contrôles exécutés dans le dépôt, le projet est analysé par **SonarCloud**, qui fournit une lecture indépendante de la qualité du code : notes de fiabilité, de sécurité et de maintenabilité, dette technique estimée, taux de duplication et couverture de tests.
+
+[ESPACE RÉSERVÉ — insérer ici le tableau des indicateurs SonarCloud et la capture du tableau de bord.]
+
+*[FIGURE À INSÉRER — capture SonarCloud.]*
+
+### 4.9.5 Chronologie réelle du développement
 
 L'historique Git fournit une mesure d'activité que le planning prévisionnel ne peut pas donner, puisqu'elle est constatée et non annoncée :
+
+::: {custom-style="TableCaption"}
+**Tableau 4.12 :** Activité de développement par semaine.
+:::
 
 | Semaine | Commits | Étape |
 |---|---|---|
@@ -1333,10 +1370,6 @@ L'historique Git fournit une mesure d'activité que le planning prévisionnel ne
 | S31 (27 juillet – 2 août) | 92 | Chaîne complète, observabilité, tableau de bord |
 | S32 (3–9 août) | 49 | Journal par chantier, banc d'essai, organigramme |
 | S33 (10–16 août) | 23 | Conteneurisation du moteur local, corrections, rapport |
-
-::: {custom-style="TableCaption"}
-**Tableau 4.11 :** Activité de développement par semaine.
-:::
 
 
 Le pic de la semaine 31 correspond à la construction simultanée du tableau de bord et de la couche d'observabilité ; la décroissance ensuite traduit le passage de la construction à la consolidation — corrections, tests et documentation — ce qui est le profil attendu d'un projet qui converge.
@@ -1353,7 +1386,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.3 :** L'écran de connexion. Le contrôle d'accès est appliqué par le service, non par ce formulaire : le tableau de bord étant un paquet statique, un écran de connexion seul serait contournable.
+**Figure 4.4 :** L'écran de connexion. Le contrôle d'accès est appliqué par le service, non par ce formulaire : le tableau de bord étant un paquet statique, un écran de connexion seul serait contournable.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1361,7 +1394,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.4 :** Vue d'ensemble. Les repères du jour, le rythme horaire des messages, l'état des sept services et l'activité de l'année. La disponibilité provient d'échantillons enregistrés, non d'une sonde instantanée.
+**Figure 4.5 :** Vue d'ensemble. Les repères du jour, le rythme horaire des messages, l'état des sept services et l'activité de l'année. La disponibilité provient d'échantillons enregistrés, non d'une sonde instantanée.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1369,7 +1402,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.5 :** Vue d'ensemble, partie basse : qualité des extractions, répartition par chantier et derniers rapports reçus.
+**Figure 4.6 :** Vue d'ensemble, partie basse : qualité des extractions, répartition par chantier et derniers rapports reçus.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1377,7 +1410,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.6 :** Réception. Le flux des messages entrants, canal par canal, avec le média d'origine et le texte transcrit — l'écran qui permet de remonter d'une ligne douteuse à l'audio qui l'a produite.
+**Figure 4.7 :** Réception. Le flux des messages entrants, canal par canal, avec le média d'origine et le texte transcrit — l'écran qui permet de remonter d'une ligne douteuse à l'audio qui l'a produite.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1385,7 +1418,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.7 :** Rapports. Le miroir plat du journal, filtrable et corrigeable ; une correction faite ici est écrite dans le classeur, pas seulement affichée.
+**Figure 4.8 :** Rapports. Le miroir plat du journal, filtrable et corrigeable ; une correction faite ici est écrite dans le classeur, pas seulement affichée.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1393,7 +1426,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.8 :** Rapport du jour, tel qu'il part par courriel, avec régénération et téléchargement.
+**Figure 4.9 :** Rapport du jour, tel qu'il part par courriel, avec régénération et téléchargement.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1401,7 +1434,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.9 :** Rapport hebdomadaire : le même moteur que le rapport quotidien, appelé sur une plage de dates.
+**Figure 4.10 :** Rapport hebdomadaire : le même moteur que le rapport quotidien, appelé sur une plage de dates.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1409,7 +1442,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.10 :** Automatisation. Les six tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
+**Figure 4.11 :** Automatisation. Les six tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1417,7 +1450,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.11 :** Tâches et rappels, avec leur périodicité.
+**Figure 4.12 :** Tâches et rappels, avec leur périodicité.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1425,7 +1458,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.12 :** Journaux. La chronologie du pipeline reconstituée par identifiant de corrélation : les étapes publiées par n8n et les erreurs journalisées par le service apparaissent dans une seule suite.
+**Figure 4.13 :** Journaux. La chronologie du pipeline reconstituée par identifiant de corrélation : les étapes publiées par n8n et les erreurs journalisées par le service apparaissent dans une seule suite.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1433,7 +1466,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.13 :** File de reprise : les écritures en échec en attente de rejeu, avec leur nombre de tentatives.
+**Figure 4.14 :** File de reprise : les écritures en échec en attente de rejeu, avec leur nombre de tentatives.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1441,7 +1474,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.14 :** Organigramme. Trois bandes fixes — directeur, chefs, techniciens — et non une récursion, ce qui est la raison pour laquelle aucun garde-fou anti-cycle n'est nécessaire.
+**Figure 4.15 :** Organigramme. Trois bandes fixes — directeur, chefs, techniciens — et non une récursion, ce qui est la raison pour laquelle aucun garde-fou anti-cycle n'est nécessaire.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1449,7 +1482,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.15 :** Organigramme, panneau de détail : canaux, profil et accès d'un technicien. Le panneau change de contenu selon le rôle, un technicien n'ayant pas de compte.
+**Figure 4.16 :** Organigramme, panneau de détail : canaux, profil et accès d'un technicien. Le panneau change de contenu selon le rôle, un technicien n'ayant pas de compte.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1457,7 +1490,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.16 :** La palette de commandes (Ctrl+K) : navigation, collègues et actions, sans quitter le clavier.
+**Figure 4.17 :** La palette de commandes (Ctrl+K) : navigation, collègues et actions, sans quitter le clavier.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1465,7 +1498,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.17 :** Recherche approximative : « rapprt » est mal orthographié et trouve malgré tout les entrées pertinentes.
+**Figure 4.18 :** Recherche approximative : « rapprt » est mal orthographié et trouve malgré tout les entrées pertinentes.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1473,7 +1506,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.18 :** Aucune correspondance : plutôt qu'une liste vide, la palette propose les entrées les plus proches. Un cul-de-sac est une impasse ; une suggestion est une issue.
+**Figure 4.19 :** Aucune correspondance : plutôt qu'une liste vide, la palette propose les entrées les plus proches. Un cul-de-sac est une impasse ; une suggestion est une issue.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1481,7 +1514,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.19 :** Une adresse qui ne correspond à aucune route. L'application le dit explicitement au lieu de rediriger silencieusement vers l'accueil, où l'utilisateur croirait que son lien a fonctionné.
+**Figure 4.20 :** Une adresse qui ne correspond à aucune route. L'application le dit explicitement au lieu de rediriger silencieusement vers l'accueil, où l'utilisateur croirait que son lien a fonctionné.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1489,7 +1522,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.20 :** Le même écran en thème clair : le thème est un choix persistant de l'utilisateur, pas une préférence système imposée.
+**Figure 4.21 :** Le même écran en thème clair : le thème est un choix persistant de l'utilisateur, pas une préférence système imposée.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1497,7 +1530,7 @@ Les captures ci-dessous proviennent de l'application réelle, connectée à la p
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.21 :** La même page en arabe. L'arabe impose l'écriture de droite à gauche, ce qui a dicté l'emploi de propriétés CSS logiques dans toute l'interface plutôt que de marges directionnelles.
+**Figure 4.22 :** La même page en arabe. L'arabe impose l'écriture de droite à gauche, ce qui a dicté l'emploi de propriétés CSS logiques dans toute l'interface plutôt que de marges directionnelles.
 :::
 
 
@@ -1510,7 +1543,7 @@ L'interface est utilisable depuis un téléphone, ce qui compte pour un chef de 
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.22 :** Vue d'ensemble sur téléphone : la barre latérale se replie et les indicateurs passent sur une colonne.
+**Figure 4.23 :** Vue d'ensemble sur téléphone : la barre latérale se replie et les indicateurs passent sur une colonne.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1518,7 +1551,7 @@ L'interface est utilisable depuis un téléphone, ce qui compte pour un chef de 
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.23 :** Rapports sur téléphone : le tableau défile horizontalement dans son propre conteneur, la page elle-même ne défilant jamais latéralement.
+**Figure 4.24 :** Rapports sur téléphone : le tableau défile horizontalement dans son propre conteneur, la page elle-même ne défilant jamais latéralement.
 :::
 
 ::: {custom-style="FigureImage"}
@@ -1526,7 +1559,7 @@ L'interface est utilisable depuis un téléphone, ce qui compte pour un chef de 
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.24 :** Organigramme sur téléphone. Le glisser-déposer natif ne fonctionnant ni au toucher ni au clavier, la liste déroulante du panneau de détail est ici le chemin réel de réaffectation.
+**Figure 4.25 :** Organigramme sur téléphone. Le glisser-déposer natif ne fonctionnant ni au toucher ni au clavier, la liste déroulante du panneau de détail est ici le chemin réel de réaffectation.
 :::
 
 
