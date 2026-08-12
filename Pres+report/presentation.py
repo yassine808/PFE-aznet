@@ -389,25 +389,29 @@ def s03_quote(prs, n):
     _rect(slide, 0, 0, SLIDE_W, 0.10, fill=GREEN)
     _rect(slide, 0, SLIDE_H - 0.10, SLIDE_W, 0.10, fill=BLUE)
 
-    _rect(slide, MARGIN + 0.1, 2.15, 0.05, 2.45, fill=BLUE)
+    _rect(slide, MARGIN + 0.1, 2.05, 0.05, 2.25, fill=BLUE)
 
-    tf = _txbox(slide, MARGIN + 0.75, 2.20, CONTENT_W - 1.4, 2.4)
+    tf = _txbox(slide, MARGIN + 0.75, 2.10, CONTENT_W - 1.4, 2.2)
     p = _para(tf, first=True)
     p.line_spacing = 1.30
-    _run(p, "« Si vous parlez à un homme dans une langue qu'il comprend, vous parlez à sa tête. ",
-         size=25, color=RGBColor(0xD5, 0xD5, 0xD5))
-    _run(p, "Si vous lui parlez dans sa langue, vous parlez à son cœur.",
-         size=25, bold=True, color=WHITE)
-    _run(p, " »", size=25, color=RGBColor(0xD5, 0xD5, 0xD5))
+    _run(p, "“The first principle is that you must not fool yourself — ",
+         size=26, color=RGBColor(0xD5, 0xD5, 0xD5))
+    _run(p, "and you are the easiest person to fool.", size=26, bold=True, color=WHITE)
+    _run(p, "”", size=26, color=RGBColor(0xD5, 0xD5, 0xD5))
 
-    tf = _txbox(slide, MARGIN + 0.75, 4.78, CONTENT_W - 1.4, 0.32)
-    _run(_para(tf, first=True), "Nelson Mandela", size=14, bold=True, color=RGBColor(0x4F, 0xA9, 0xF5))
-
-    tf = _txbox(slide, MARGIN + 0.75, 5.34, CONTENT_W - 1.4, 0.9)
+    tf = _txbox(slide, MARGIN + 0.75, 4.46, CONTENT_W - 1.4, 0.32)
     p = _para(tf, first=True)
-    p.line_spacing = 1.22
-    _run(p, "Le technicien de câblage pense, compte et raconte sa journée en darija. Tout le projet tient dans le refus de lui demander de se traduire lui-même : c'est au système de faire le trajet, pas à lui.",
-         size=14, color=RGBColor(0x9C, 0x9C, 0x9C))
+    _run(p, "Richard P. Feynman", size=14, bold=True, color=RGBColor(0x4F, 0xA9, 0xF5))
+    _run(p, "   ·   Caltech, 1974", size=12.5, color=RGBColor(0x7E, 0x7E, 0x7E))
+
+    tf = _txbox(slide, MARGIN + 0.75, 5.02, CONTENT_W - 1.4, 1.4)
+    p = _para(tf, first=True)
+    p.line_spacing = 1.24
+    _run(p, "Le banc d'essai de ce projet s'est trompé deux fois avant de trancher : ", size=14, color=RGBColor(0xB8, 0xB8, 0xB8))
+    _run(p, "un score de confiance qui couronnait un moteur ayant perdu le « 40 »", size=14, bold=True, color=RGBColor(0xE2, 0xE2, 0xE2))
+    _run(p, ", puis ", size=14, color=RGBColor(0xB8, 0xB8, 0xB8))
+    _run(p, "un bogue de harnais qui désignait un vainqueur sur une transcription jamais produite", size=14, bold=True, color=RGBColor(0xE2, 0xE2, 0xE2))
+    _run(p, ". La même exigence gouverne le système lui-même : aucune donnée inventée, aucun échec silencieux, et un écart de stock signalé plutôt que deviné.", size=14, color=RGBColor(0xB8, 0xB8, 0xB8))
     footer(slide, n, on_dark=True)
 
 
