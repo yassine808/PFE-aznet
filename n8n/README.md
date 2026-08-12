@@ -156,9 +156,9 @@ Band 1 of `aznet-complete.json` carries both channels: the WhatsApp branch mirro
 
 Uses n8n's **native WhatsApp nodes** — two credentials:
 
-1. **WhatsApp OAuth** (for the *WhatsApp Trigger* node): App ID + App Secret — developers.facebook.com → your app → *App settings → Basic*. The trigger handles the webhook verify handshake AND validates Meta's `X-Hub-Signature-256` payload signatures automatically.
+1. **WhatsApp OAuth** (for the *WhatsApp Trigger* node): App ID + App Secret — developers.facebook.com → your app → *App settings → Basic*. It validates Meta's `X-Hub-Signature-256` payload signatures automatically. It does **not** get you through the verify handshake: n8n's WhatsApp Trigger fails Meta's challenge, which is why reception runs on a plain Webhook node that echoes `hub.challenge` itself (see below).
 2. **WhatsApp API** (for the *WhatsApp Business Cloud* send/media nodes): Access token + Business Account ID (WABA ID, from *WhatsApp → API Setup*). ⚠️ Test-mode temporary tokens expire in 24h — generate a durable one via *Business settings → System users → Generate token* (`whatsapp_business_messaging` + `whatsapp_business_management` scopes).
-3. **Env**: `WHATSAPP_PHONE_NUMBER_ID=...` in `.env` (compose passes it to the container; send nodes read `$env.WHATSAPP_PHONE_NUMBER_ID`). `WHATSAPP_VERIFY_TOKEN` no longer needed — the trigger node manages verification itself.
+3. **Env**: `WHATSAPP_PHONE_NUMBER_ID=...` in `.env` (compose passes it to the container; send nodes read `$env.WHATSAPP_PHONE_NUMBER_ID`). **`WHATSAPP_VERIFY_TOKEN` is required**: the GET-echo node answers `hub.challenge` only when `hub.verify_token` matches `$env.WHATSAPP_VERIFY_TOKEN`, so an unset variable compares against an empty string and returns `forbidden` — Meta then refuses to (re-)verify the webhook. Compose warns `variable is not set` at startup when it is missing; that warning is the whole symptom, because an already-subscribed webhook keeps delivering until something forces re-verification.
 4. Activate the workflow, then in Meta dashboard → *WhatsApp → Configuration → Webhook* paste the trigger's production webhook URL + verify string (the trigger node displays both) and subscribe to the `messages` field.
 5. Test-mode limits: recipient allowlist of 5 numbers; recipients must first message the number or be added in API Setup.
 
