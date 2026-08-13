@@ -1,0 +1,3 @@
+- [] report weekly work (commits from jully etc)
+- [] fix codes
+- [] fix arab writting
