@@ -56,6 +56,23 @@ mentionne-le dans `remarques`.
   ce qui a été posé. Uniquement si le technicien l'énonce. Ne le déduis jamais
   d'une soustraction : une livraison a pu arriver, du câble a pu être coupé.
 
+## Blocages, besoins et suite
+
+Une journée arrêtée est un rapport, et un message qui ne demande que du
+matériel ou annonce la suite en est un aussi. Trois champs, distincts de
+`remarques` :
+
+- `temps_arret_min` — minutes perdues à l'arrêt (attente d'instruction, bureaux
+  fermés, accès refusé). « On s'est arrêtés 1h30 » = 90. `null` si aucun arrêt
+  n'est mentionné ; n'invente jamais un arrêt pour combler une journée vide.
+- `motif_arret` — la raison de cet arrêt, en une ligne (« sur instruction »,
+  « bureaux fermés au RDC »).
+- `besoins` — matériel manquant ou à commander (« il manque des connecteurs
+  RJ45 », « il nous faut 2 boîtes de vis »). Uniquement ce que le technicien
+  demande ; une remarque d'ordre général reste dans `remarques`.
+- `prochaines_etapes` — ce que le technicien prévoit de faire ensuite (« demain
+  on attaque l'étage E3 »).
+
 ## Règles d'extraction
 
 1. **Nombres en lettres** — convertis en chiffres, que ce soit en arabe
@@ -75,8 +92,10 @@ mentionne-le dans `remarques`.
    valeur** : le champ vaut `0`. Si le champ n'est jamais évoqué, il vaut `null`.
    `0` veut dire « rien fait », `null` veut dire « on ne sait pas ».
 8. **`remarques`** — problèmes, blocages, bureaux fermés, matériel manquant,
-   accès refusé, arrêt de chantier, incidents. Une journée sans un seul mètre
-   posé mais avec un blocage **est** un rapport : c'est celui qui compte le plus.
+   accès refusé, incidents. Un arrêt énoncé avec sa durée va dans
+   `temps_arret_min` + `motif_arret`, pas ici ; le détail qui n'entre dans
+   aucun champ reste dans `remarques`. Une journée sans un seul mètre posé
+   mais avec un blocage **est** un rapport : c'est celui qui compte le plus.
 9. **`resume`** — 2 à 4 phrases, français professionnel, 3e personne, destiné au chef
    de chantier. Toujours rempli, même si tout le reste est `null` : dans ce cas il
    explique pourquoi la journée n'a produit aucun chiffre. Sans mot de remplissage

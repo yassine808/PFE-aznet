@@ -148,6 +148,23 @@ def test_quantities_accumulate():
     assert merged["Câble installé"] == "280"
 
 
+def test_arret_minutes_accumulate():
+    """Two stops in one day are two stops: minutes add like any quantity."""
+    merged = merge_rows({"Arrêt (min)": "60"}, {"Arrêt (min)": "90"})
+    assert merged["Arrêt (min)"] == "150"
+
+
+def test_blocker_fields_land_in_their_own_columns():
+    cells = report_cells(rep(
+        temps_arret_min=90, motif_arret="Bureaux fermés",
+        besoins="Connecteurs RJ45", prochaines_etapes="E3 demain",
+    ))
+    assert cells["Arrêt (min)"] == "90"
+    assert cells["MOTIF D'ARRÊT"] == "Bureaux fermés"
+    assert cells["BESOINS / MATÉRIEL"] == "Connecteurs RJ45"
+    assert cells["PROCHAINES ÉTAPES"] == "E3 demain"
+
+
 def test_empty_existing_cell_takes_the_new_value():
     merged = merge_rows({"Câble installé": ""}, {"Câble installé": "160"})
     assert merged["Câble installé"] == "160"
@@ -162,6 +179,22 @@ def test_remarks_append_rather_than_replace():
     merged = merge_rows({"Remarques": "Bureaux fermés."},
                         {"Remarques": "Arrêt de 1h30."})
     assert merged["Remarques"] == "Bureaux fermés.\nArrêt de 1h30."
+
+
+def test_need_fields_append_like_remarks():
+    """A second list of needs joins the first; a repeated motive is not
+    repeated twice — same rules as Remarques."""
+    merged = merge_rows(
+        {"MOTIF D'ARRÊT": "Attente d'instruction.",
+         "BESOINS / MATÉRIEL": "Connecteurs RJ45.",
+         "PROCHAINES ÉTAPES": "On attaque E3."},
+        {"MOTIF D'ARRÊT": "Attente d'instruction.",
+         "BESOINS / MATÉRIEL": "2 boîtes de vis.",
+         "PROCHAINES ÉTAPES": "On attaque E3."},
+    )
+    assert merged["MOTIF D'ARRÊT"] == "Attente d'instruction."
+    assert merged["BESOINS / MATÉRIEL"] == "Connecteurs RJ45.\n2 boîtes de vis."
+    assert merged["PROCHAINES ÉTAPES"] == "On attaque E3."
 
 
 def test_identical_remark_is_not_duplicated():
@@ -308,6 +341,23 @@ def test_stock_baseline_comes_from_the_whole_tab_not_just_this_person(fake):
     assert fake.appended[0][1]["Reste du câble (Stock)"] == "2095"
 
 
+def test_merge_uses_the_site_latest_reading_not_the_own_staler_row(fake):
+    """Merging into today's own row must not resurrect that row's staler stock
+    when a colleague wrote a fresher reading behind it — stock is site-wide."""
+    from app.journal import write_report
+
+    fake.rows.append({"Date": "2026-08-05", "Technicien": "NAROUZE",
+                      "Reste du câble (Stock)": "2274", "_row": 2})
+    fake.rows.append({"Date": "2026-08-05", "Technicien": "DRISS",
+                      "Reste du câble (Stock)": "2095", "_row": 3})
+    _, warnings = write_report("DGH", "2026-08-05", "NAROUZE", "DGH",
+                               rep(cables_installes_m=16, stock_cable_m=2043))
+
+    # Baseline = site latest 2095 - 16 installed = 2079 expected; 2043 is a
+    # -36 ecart. The own row's 2274 would have claimed -215.
+    assert warnings == ["stock_ecart:Reste du câble (Stock):-36"]
+
+
 def test_stock_discrepancy_surfaces_as_a_warning(fake):
     from app.journal import write_report
 
@@ -341,6 +391,8 @@ def test_rapports_cells_map_the_new_schema_onto_old_columns():
         "report": {
             "goulotte_m": 150, "cables_installes_m": 800,
             "prises_connectees": 14, "panneaux_prises_brassees": 12,
+            "temps_arret_min": 90, "motif_arret": "Bureaux fermés au RDC.",
+            "besoins": "Connecteurs RJ45.", "prochaines_etapes": "On attaque E3.",
             "remarques": "Bureaux fermés au RDC.",
             "resume": "Résumé professionnel.",
         },
@@ -350,6 +402,8 @@ def test_rapports_cells_map_the_new_schema_onto_old_columns():
     assert cells["cables_m"] == 800
     assert cells["bureaux_termines"] == 14
     assert cells["panneaux_raccordes"] == 12
+    assert cells["arrets_min"] == 90
+    assert cells["besoins"] == "Connecteurs RJ45."
     assert cells["observations"] == "Bureaux fermés au RDC."
     assert cells["heure"] == "09:15"
     assert cells["chantier"] == "DGH"
@@ -554,3 +608,14 @@ def test_totals_ignore_unparseable_cells():
 
     out = totals([{"Câble installé": "120"}, {"Câble installé": "n/a"}])
     assert out["cables_installes_m"] == 120
+
+
+def test_totals_never_count_arret_minutes():
+    """`Arrêt (min)` accumulates on a merge but is not an installed quantity:
+    the bordereau must not present it as one."""
+    from app.journal import totals
+
+    out = totals([{"Câble installé": "120", "Arrêt (min)": "90"},
+                  {"Câble installé": "", "Arrêt (min)": "40"}])
+    assert out["cables_installes_m"] == 120
+    assert "temps_arret_min" not in out

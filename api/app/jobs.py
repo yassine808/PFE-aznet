@@ -56,6 +56,12 @@ _STATUS: Dict[str, dict] = {}
 _LOCK = threading.Lock()
 _THREAD: Optional[threading.Thread] = None
 
+# name -> the timed path's last worker, kept so a run that outlived its budget
+# is visible to the next fire. The reminders job is due every 60 s with a 60 s
+# budget, so without this an overrun (a few due tasks and a stalled SMTP) would
+# spawn a second worker that re-sends what the first has not stamped yet.
+_WORKERS: Dict[str, threading.Thread] = {}
+
 
 # ── The jobs ───────────────────────────────────────────────────────────────
 
@@ -493,11 +499,23 @@ def run(name: str) -> dict:
     timeout = _TIMEOUT_SECONDS.get(name)
     if timeout is None:
         return _execute(job, name, started)
+    # last_run is stamped at schedule time, not completion: a run that outlives
+    # its interval would otherwise be re-fired by the next tick while the first
+    # worker is still sending. That is exactly the reminders shape (60 s due,
+    # 60 s budget), and a duplicate fire would re-send bells and mails for
+    # tasks the first worker has not stamped yet. Recorded as a failed run so
+    # the panel shows the job is wedged instead of silently overlapping it.
+    prev = _WORKERS.get(name)
+    if prev is not None and prev.is_alive():
+        return _record(
+            name, {"ok": False, "error": "previous run still in progress, skipped"}, started
+        )
     result: Dict[str, dict] = {}
     claim = _make_claim()
     worker = threading.Thread(
         target=_execute, args=(job, name, started, result, claim), name=f"job-{name}", daemon=True
     )
+    _WORKERS[name] = worker
     worker.start()
     worker.join(timeout)
     if worker.is_alive() and claim():

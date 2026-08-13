@@ -72,6 +72,24 @@ def test_location_only_report_counts_as_data():
     assert r.has_data()
 
 
+def test_arret_only_report_counts_as_data():
+    """90 minutes lost are a report even when not a metre was laid."""
+    r = ExtractedReport(
+        temps_arret_min=90, motif_arret="Sur instruction",
+        resume="Arrêt de 90 minutes, aucun mètre posé.",
+    )
+    assert r.has_data()
+
+
+def test_needs_only_report_counts_as_data():
+    """A message that only asks for material is the report of the day."""
+    r = ExtractedReport(
+        besoins="Il manque des connecteurs RJ45.",
+        resume="Pose terminée au 3e, matériel manquant.",
+    )
+    assert r.has_data()
+
+
 def test_zero_is_data_not_absence():
     r = ExtractedReport(goulotte_m=0, resume="Aucune goulotte posée aujourd'hui.")
     assert r.has_data()

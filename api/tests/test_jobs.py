@@ -135,6 +135,37 @@ def test_run_fast_job_with_timeout_config_keeps_result(monkeypatch):
     assert status["result"] == {"done": 1}
 
 
+def test_run_refuses_to_overlap_a_still_running_job(monkeypatch):
+    """A run that outlived its timeout keeps its worker alive; the next fire
+    must not spawn a second one. The reminders job is due every 60 s with a
+    60 s budget, so an overrun (a few due tasks and a stalled SMTP) would
+    otherwise re-send the bells and mails the first worker has not stamped
+    yet."""
+    monkeypatch.setattr(jobs.logs, "write_safe", lambda *a, **k: None)
+    calls = []
+
+    def slow():
+        calls.append(len(calls) + 1)
+        time.sleep(0.4)
+        return {}
+
+    monkeypatch.setitem(jobs.JOBS, "slow", slow)
+    monkeypatch.setitem(jobs._TIMEOUT_SECONDS, "slow", 0.05)
+
+    first = jobs.run("slow")
+    assert first["ok"] is False and "timed out" in first["error"]
+
+    second = jobs.run("slow")
+    assert second["ok"] is False
+    assert "previous run still in progress" in second["error"]
+    assert calls == [1]  # the stuck worker, not a duplicate
+
+    time.sleep(0.5)  # the first worker finishes now...
+    third = jobs.run("slow")
+    assert third["ok"] is False and "timed out" in third["error"]
+    assert calls == [1, 2]  # ...so the next fire runs again
+
+
 def test_due_skips_sunday_for_daily_report(monkeypatch):
     monkeypatch.setattr(jobs, "_settings_safe", lambda: {"daily_time": "18:30"})
     sunday = datetime(2026, 8, 2, 19, 0)   # 2026-08-02 is a Sunday

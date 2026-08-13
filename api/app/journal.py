@@ -15,6 +15,11 @@ delivery arrives, a cable gets cut by mistake, someone miscounts. So a reported
 figure always wins, and when it disagrees with the baseline the row carries a
 `stock_ecart` warning with the delta instead of silently picking a number.
 
+Beyond the director's original columns, the row also carries the blocker block
+(`Arrêt (min)` + `MOTIF D'ARRÊT`), material needs (`BESOINS / MATÉRIEL`) and
+the next steps (`PROCHAINES ÉTAPES`) — the three things he re-keys from
+remarks prose today.
+
 Everything here is pure: `merge_rows` and `reconcile_stock` take dicts and
 return dicts. The Sheets round trip lives in `sheets.py`.
 """
@@ -55,6 +60,7 @@ NUMERIC_COLUMNS = {
     "fibre_m": "Fibre installée",
     "interconnexions": "Interconnexion installée",
     "connexions_optiques_brins": "Connexion optique",
+    "temps_arret_min": "Arrêt (min)",
 }
 
 LIST_COLUMNS = {
@@ -70,7 +76,17 @@ STOCK_COLUMNS = {
     "stock_fibre_m": ("Reste du Fibre optique (Stock)", "fibre_m"),
 }
 
-TEXT_COLUMNS = {"remarques": "Remarques"}
+TEXT_COLUMNS = {
+    "remarques": "Remarques",
+    "motif_arret": "MOTIF D'ARRÊT",
+    "besoins": "BESOINS / MATÉRIEL",
+    "prochaines_etapes": "PROCHAINES ÉTAPES",
+}
+
+# Column order inside a merge must stay the director's order, so the new
+# blocker columns sit at the end of their blocks: quantity totals first, then
+# the prose columns — the additions are the ones nothing depends on the
+# position of.
 
 # How a column merges, resolved once here rather than on every merged row.
 _NUMERIC_COLS = set(NUMERIC_COLUMNS.values())
@@ -300,10 +316,13 @@ def write_report(
     else:
         existing_row, existing = known
 
-    # Stock draws down from the last known level on this chantier — the
-    # technician's own previous row if there is one, else the last row anyone
-    # wrote. Stock is site-wide: two technicians cut from the same reel.
-    baseline = existing or _last_stock(tab, rows)
+    # Stock draws down from the last known level on this chantier: the last
+    # reading anyone wrote, whoever it was. Stock is site-wide — two
+    # technicians cut from the same reel — and the whole-tab scan is at least
+    # as fresh as this technician's own row (which is itself part of `rows`),
+    # so merging must not resurrect a staler reading when a colleague has
+    # written a newer one behind it.
+    baseline = _last_stock(tab, rows)
     stock_cells, warnings = reconcile_stock(report, baseline)
 
     cells = report_cells(report)
@@ -378,6 +397,10 @@ RAPPORTS_COLUMNS = {
     "prises_connectees": "bureaux_termines",
     "panneaux_prises_brassees": "panneaux_raccordes",
     "remarques": "observations",
+    "temps_arret_min": "arrets_min",
+    "motif_arret": "motif_arret",
+    "besoins": "besoins",
+    "prochaines_etapes": "prochaines_etapes",
 }
 
 
@@ -503,16 +526,24 @@ def file_report(payload: Dict) -> Dict:
     }
 
 
+# Summed on a merge (two stops make 130 minutes) but never into the bordereau:
+# `Arrêt (min)` is a loss, not an installed quantity, and the one number the
+# bordereau answers is how much of the contract is in.
+_TOTAL_EXCLUDED = frozenset({"temps_arret_min"})
+
+
 def totals(rows: List[Dict[str, str]]) -> Dict[str, float]:
     """Sum every quantity column across a journal tab, keyed by schema field.
 
-    This is the bordereau's `qte_installée` and nothing else computes it: the
+    This is the bordereau's `qte_installee` and nothing else computes it: the
     journal is where a quantity is entered, so a stored total could only drift
     from it. A cell that will not parse is skipped rather than counted as 0 —
     the same rule as everywhere else here, absence is not zero.
     """
     out: Dict[str, float] = {}
     for field, column in NUMERIC_COLUMNS.items():
+        if field in _TOTAL_EXCLUDED:
+            continue
         running = None
         for row in rows:
             value = _num(row.get(column))

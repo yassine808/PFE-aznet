@@ -27,16 +27,18 @@ LOCAUX_TECHNIQUES = ("RG",) + tuple("SR%d" % i for i in range(1, 11))
 # "salut". It is the only field that cannot distinguish a report from a
 # greeting, which is exactly the distinction `has_data` answers.
 #
-# The location, stock and remarks fields ARE in here. A day where the crew was
-# stopped for 1h30 or found every office locked produces no quantity at all,
-# and it is the report the director most needs to read.
+# The location, stock, remarks and blocker fields ARE in here. A day where the
+# crew was stopped for 1h30 or found every office locked produces no quantity
+# at all, and it is the report the director most needs to read — as is a
+# message that only reports missing material or tomorrow's plan.
 DATA_FIELDS = (
     "cables_prepares_m", "cables_installes_m", "goulotte_m",
     "prises_connectees", "panneaux_prises_brassees", "prises_testees",
     "fibre_m", "interconnexions", "connexions_optiques_brins",
     "etages", "ailes", "locaux_techniques",
     "stock_cable_m", "stock_goulotte_m", "stock_fibre_m",
-    "remarques",
+    "remarques", "temps_arret_min", "motif_arret",
+    "besoins", "prochaines_etapes",
 )
 
 # Formatting the model gets wrong without being wrong about the facts:
@@ -125,6 +127,24 @@ class ExtractedReport(BaseModel):
 
     remarques: Optional[str] = Field(
         default=None, description="Problèmes, blocages, matériel manquant, remarques"
+    )
+    # --- blocages, besoins, suite ----------------------------------------
+    # A stopped day is a report (bureaux fermés, attente d'instruction), and so
+    # is a message that only asks for material or announces tomorrow's plan.
+    # These are the three things the director re-keys from remarks prose today,
+    # structured so the cook can actually count them.
+    temps_arret_min: Optional[float] = Field(
+        default=None, ge=0,
+        description="Minutes perdues à l'arrêt (attente, bureaux fermés, instruction). « Arrêtés 1h30 » = 90"
+    )
+    motif_arret: Optional[str] = Field(
+        default=None, description="Raison de l'arrêt, une ligne"
+    )
+    besoins: Optional[str] = Field(
+        default=None, description="Matériel manquant ou à commander"
+    )
+    prochaines_etapes: Optional[str] = Field(
+        default=None, description="Ce que le technicien prévoit de faire ensuite"
     )
     resume: str = Field(
         ..., description="Résumé professionnel en français (2-4 phrases)"

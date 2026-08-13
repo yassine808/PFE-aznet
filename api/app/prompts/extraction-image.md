@@ -40,6 +40,10 @@ blanc, bon de livraison, écran, ou vue du chantier lui-même.
   `locaux_techniques` (`RG`, `SR1`..`SR10`) uniquement si l'étiquette est **écrite**
   sur la photo. Reconnaître un couloir n'est pas lire un étage.
 
+- **Blocages et besoins** — `temps_arret_min`, `motif_arret`, `besoins` et
+  `prochaines_etapes` uniquement s'ils sont **écrits** (page de carnet, bon de
+  livraison, note). Ne déduis jamais un arrêt d'une photo de chantier vide.
+
 Les règles générales d'extraction (nombres en lettres, unités en mètres, absence =
 `null`, nombres qui ne sont pas des quantités, distinction préparé / installé /
 brassé / testé, stock jamais déduit) s'appliquent à l'identique.

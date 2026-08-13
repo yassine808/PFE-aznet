@@ -170,6 +170,24 @@ def _headers(svc, tab: str = RAPPORTS_TAB) -> List[str]:
     return list(headers)
 
 
+def _extend_headers(svc, names: List[str]) -> None:
+    """Append columns to the Rapports header row.
+
+    Called by `append_report` when a value has no column yet. Appends happen
+    after the last existing header, never in the middle of the director's
+    columns. The header cache dies with the `invalidate_reports()` the write
+    already performs, so the next read sees the new layout.
+    """
+    start = _col_letter(len(_headers(svc)) + 1)
+    end = _col_letter(len(_headers(svc)) + len(names))
+    svc.spreadsheets().values().update(
+        spreadsheetId=settings.sheet_id,
+        range=f"{RAPPORTS_TAB}!{start}1:{end}1",
+        valueInputOption="USER_ENTERED",
+        body={"values": [names]},
+    ).execute(num_retries=_RETRIES)
+
+
 def update_report_field(row: int, field: str, value: Optional[str],
                         tab: str = RAPPORTS_TAB) -> None:
     """Write one cell back (manual correction). Column resolved from the header row."""
@@ -237,17 +255,28 @@ def clear_row(row: int, tab: str = RAPPORTS_TAB) -> None:
 def append_report(values: dict) -> Optional[int]:
     """Append one report row to the Rapports tab, returning its row number.
 
-    Used by the retry drain: the happy path still appends from n8n. Cells are
-    placed by header name, so a column reordered in the Sheet moves the value
-    with it instead of silently writing `chantier` into `client`. The returned
-    row number is the same positional numbering read_reports uses, which is
-    what lets the drain link the message to the row for /modify.
+    The journal mirror (`_mirror_rapports`) and the retry drain both file
+    through here. Columns not yet in the header row are appended to it first,
+    so a new schema field can never be silently dropped. Cells are placed by
+    header name, so a column reordered in the Sheet moves the value with it
+    instead of silently writing `chantier` into `client`. The returned row
+    number is the same positional numbering read_reports uses, which is what
+    lets the drain link the message to the row for /modify.
     """
     svc = _service()
     try:
         headers = _headers(svc)
         if not headers:
             raise SheetsError("Rapports tab has no header row")
+        missing = [h for h in values if h not in headers]
+        if missing:
+            # A new schema field arrives with no column to land in: extend the
+            # header row first, then write the value. Without this, the mirror
+            # would silently drop the first (and every) new field, and a column
+            # that appears only after the feature shipped looks like the field
+            # never worked.
+            _extend_headers(svc, missing)
+            headers = headers + missing
         row = [_cell(values.get(h)) for h in headers]
         resp = (
             svc.spreadsheets()

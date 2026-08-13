@@ -23,6 +23,10 @@ const EDITABLE: { field: keyof ReportRow; labelKey: string; long?: boolean }[] =
   { field: 'chantier', labelKey: 'col.chantier' },
   { field: 'goulottes_m', labelKey: 'metric.goulottes' },
   { field: 'cables_m', labelKey: 'metric.cables' },
+  { field: 'arrets_min', labelKey: 'inbox.field.arrets' },
+  { field: 'motif_arret', labelKey: 'inbox.field.motif' },
+  { field: 'besoins', labelKey: 'inbox.field.besoins', long: true },
+  { field: 'prochaines_etapes', labelKey: 'inbox.field.etapes', long: true },
   { field: 'observations', labelKey: 'inbox.field.observations', long: true },
 ]
 
@@ -133,6 +137,27 @@ function MessageCard({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: 
             {r.observations && (
               <span>
                 {t('inbox.field.observations')}: <span className="text-ink">{r.observations}</span>
+              </span>
+            )}
+            {num(r.arrets_min) > 0 && (
+              <span>
+                {t('inbox.field.arrets')}:{' '}
+                <span className="tabular text-ink">{num(r.arrets_min)} min</span>
+              </span>
+            )}
+            {r.motif_arret && (
+              <span>
+                {t('inbox.field.motif')}: <span className="text-ink">{r.motif_arret}</span>
+              </span>
+            )}
+            {r.besoins && (
+              <span>
+                {t('inbox.field.besoins')}: <span className="text-ink">{r.besoins}</span>
+              </span>
+            )}
+            {r.prochaines_etapes && (
+              <span>
+                {t('inbox.field.etapes')}: <span className="text-ink">{r.prochaines_etapes}</span>
               </span>
             )}
           </div>

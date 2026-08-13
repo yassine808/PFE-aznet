@@ -23,6 +23,10 @@ export interface ReportRow {
   panneaux_raccordes?: string
   autres_travaux?: string
   observations?: string
+  arrets_min?: string
+  motif_arret?: string
+  besoins?: string
+  prochaines_etapes?: string
   resume?: string
   rapport_complet?: string
   confidence?: string

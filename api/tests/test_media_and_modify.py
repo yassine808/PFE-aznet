@@ -368,6 +368,7 @@ def _fake_service(updated_range="Rapports!A17:Q17"):
             return _Resp({})
 
         def update(self, **kwargs):
+            self._svc.updated = kwargs
             return _Resp({})
 
         def clear(self, spreadsheetId=None, range=None, body=None):
@@ -380,7 +381,7 @@ def _fake_service(updated_range="Rapports!A17:Q17"):
 
     class Svc:
         spreadsheets = lambda self: Spreadsheets(self)
-        appended = batched = cleared = None
+        appended = batched = cleared = updated = None
 
     class _Resp:
         def __init__(self, body):
@@ -397,6 +398,18 @@ def test_append_report_returns_row_number(monkeypatch):
     monkeypatch.setattr(main.sheets, "_service", _fake_service)
     row = main.sheets.append_report({"chantier": "Tour Atlas", "lien_audio": "x"})
     assert row == 17
+
+
+def test_append_report_extends_headers_for_new_columns(monkeypatch):
+    """A schema field with no Rapports column yet lands anyway: append_report
+    adds the missing headers before the append, so the mirror can never
+    silently drop the first report carrying a new field."""
+    svc = _fake_service()
+    monkeypatch.setattr(main.sheets, "_service", lambda: svc)
+    main.sheets.append_report({"chantier": "Tour Atlas", "besoins": "connecteurs"})
+    assert svc.updated["range"] == "Rapports!I1:I1"
+    assert svc.updated["body"]["values"] == [["besoins"]]
+    assert svc.appended["values"][0][8] == "connecteurs"
 
 
 def test_update_report_fields_places_cells_by_header(monkeypatch):

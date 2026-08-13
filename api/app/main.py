@@ -1008,7 +1008,7 @@ class ImageCardRequest(BaseModel):
 
 @app.post("/generate-image", responses={422: {"description": "No rows to illustrate"}, 502: {"description": "Image generation failed"}})
 async def generate_image(payload: ImageCardRequest, caller: dict = Depends(auth.require_human)) -> dict:
-    auth.record(caller, "image_generated", target=getattr(payload, 'date', None))
+    auth.record(caller, "image_generated", target=payload.title)
     """Illustrated summary card for a day or week.
 
     Returns the image as a base64 data URI rather than a file: the dashboard
