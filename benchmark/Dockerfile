@@ -26,14 +26,27 @@ WORKDIR /app
 
 # torch/torchaudio come from the base image, so requirements-local.txt (which
 # deliberately omits torch — it needs the CUDA index URL) installs cleanly here.
+# --only-binary :all: refuses sdists, so no dependency can run a setup script at
+# build time; requirements-local.txt is pinned exactly, so the same commit
+# always resolves to the same wheels. Same posture as api/Dockerfile, minus the
+# hashes — see the header of requirements-local.txt for why they cannot apply
+# here.
 COPY requirements-local.txt .
-RUN pip install --no-cache-dir -r requirements-local.txt
+RUN pip install --no-cache-dir --only-binary :all: -r requirements-local.txt \
+    && groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
 
 # Only the two modules the sidecar imports (stt_server pulls WhisperRunner and
 # load_audio from run_local, which imports nothing else local). Copying all of
 # benchmark/ would drag the dataset and results into the build context for no
 # reason.
-COPY stt_server.py run_local.py ./
+COPY --chown=appuser:appuser stt_server.py run_local.py ./
+
+# Unprivileged from here on: port 8100 needs no privilege, the weights are
+# mounted read-only, and the only path the process writes is a temp file per
+# request. HF_HOME is pointed at the user's own home because the default
+# (~/.cache) is root's and would be unwritable after the switch.
+ENV HF_HOME=/home/appuser/.cache/huggingface
+USER appuser
 
 EXPOSE 8100
 

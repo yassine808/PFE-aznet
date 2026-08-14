@@ -58,8 +58,18 @@ jobs:
         run: ruff check app/ tests/
       # No API keys and no database: external SDKs are lazy-imported and mocked
       # at the boundary. If this ever needs a secret, the test is wrong.
+      # --cov writes api/coverage.xml, which the `sonar` job below reads. No
+      # threshold is enforced: the suite is offline by construction, so a line
+      # coverage gate would reward tests that touch code without exercising the
+      # network contracts where the real defects have all been (see §4.4).
       - name: Pytest
-        run: python -m pytest -q --tb=short
+        run: python -m pytest -q --tb=short --cov=app --cov-report=xml
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: api/coverage.xml
+          if-no-files-found: error
 
   dashboard:
     name: Dashboard — types, lint & build
@@ -125,6 +135,38 @@ jobs:
       # raw key string to whoever switched language.
       - name: fr / en / ar have the same keys
         run: python scripts/check_locales.py
+
+  # External static analysis. Runs after `api` because it consumes that job's
+  # coverage report -- without it SonarCloud reports 0 % and the quality gate
+  # fails on a metric nothing measured.
+  #
+  # PREREQUISITE, one manual step: SonarCloud's *Automatic Analysis* must be
+  # switched off (project -> Administration -> Analysis Method). The two modes
+  # are mutually exclusive; while automatic analysis is on, this job fails with
+  # "you are running manual analysis while Automatic Analysis is enabled", and
+  # automatic analysis cannot ingest a coverage report at all.
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    needs: api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # blame data: Sonar attributes new code to a commit
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-coverage
+          path: api
+      # Non-fatal for the same reason as the security scans below, plus one of
+      # its own: until the manual toggle above is flipped and SONAR_TOKEN is set
+      # as a repository secret, this step fails for a configuration reason that
+      # says nothing about the code under test.
+      - name: SonarCloud scan
+        continue-on-error: true
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
   # --- Security jobs below: continue-on-error on the scan step only, so a
   # finding never blocks a merge (not enforced yet) but infra failures
