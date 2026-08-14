@@ -129,6 +129,13 @@ def test_reply_log_store_down_is_502(monkeypatch):
 def test_telegram_timeout_is_a_reply_error(monkeypatch):
     import requests
 
+    # The token has to be injected, exactly as the WhatsApp test below injects
+    # its own: _telegram checks it BEFORE it ever calls requests.post, so
+    # without this the test passes on a developer machine (where .env supplies
+    # one) and fails in CI (where nothing does) on the earlier "non configurée"
+    # error -- proving the guard, not the timeout translation it is named for.
+    monkeypatch.setattr(main.reply.settings, "telegram_bot_token", "tok")
+
     def boom(*a, **k):
         raise requests.Timeout("slow network")
 
