@@ -51,26 +51,186 @@
 
 ---
 
-## To do
+## To do — handoff, 2026-08-15
 
-### Blocking for the report
-- [ ] **Switch SonarCloud to CI analysis** — SonarCloud → project → *Administration* → *Analysis Method* → **turn off Automatic Analysis**. The two modes are mutually exclusive (the CI job currently fails with *"You are running CI analysis while Automatic Analysis is enabled"*), and automatic analysis cannot ingest a coverage report, so coverage will stay blank on SonarCloud until this is flipped. `SONAR_TOKEN` is already set as a repository secret.
-- [ ] **SonarCloud screenshot** to insert under Table 4.16.
-- [ ] **Re-read Table 4.16** after the switch, in case the CI-based scan reports different totals than AutoScan.
+State at the end of the session: **CI green (18/18)**, **SonarCloud quality gate passing**,
+report rebuilt at **146 pages**. Everything below is pushed to `main`; the last commit is
+`96eaf35`. Nothing is left uncommitted.
 
-### Missing content
-- [ ] **Pilot figures** — `[À COMPLÉTER]` in all three abstracts and in §4.6.5.
-- [ ] **Measured end-to-end latency** (§4.6.4) — per-engine latency exists, "the technician waits N seconds" does not.
-- [ ] **Comparison against the manual process** — without "before: X min/report, Y % of rows missing", the gain is asserted rather than measured.
-- [ ] **Company fact sheet** (§1.2) — founding date, headcount, org chart, client references.
-- [ ] **Cover and acknowledgements blanks** — academic supervisor, industrial supervisor, defence date, jury.
+Order below is the order I would do it in.
 
-### Consistency to check
-- [ ] **STT engine contradiction** — the abstracts name `Morocco-Darija-STT-large` as the retained engine, while `config.stt_chain` is `gemini,local,groq`. Reconcile §4.3.5 with the shipped configuration; a jury reading both will call it out.
-- [ ] **"35 Dependabot pull requests"** (§4.9.3) — verify or drop the number.
-- [ ] **Methodological weakness to own** — the 10 extraction test cases were written by the author of the system under test. State it explicitly, the way §4.3.2 owns the absence of ground truth.
+---
 
-### Deliverables
-- [ ] **Port the same changes into `presentation.py`** — 6-month plan, no commit statistics, the two extraction benchmarks.
-- [ ] **Rebuild the .docx** after the last figures land, and check the Arabic rendering in Word.
-- [ ] **15 remaining SonarCloud code smells** (5 of them in `presentation.py`) — cosmetic; maintainability is already A.
+### 1. One manual step nobody but you can do — SonarCloud analysis mode
+
+**Why it matters:** the `sonar` job in CI currently *fails* and only looks green because the
+step is `continue-on-error`. Its log says, verbatim:
+
+> `ERROR You are running CI analysis while Automatic Analysis is enabled. Please consider disabling one or the other.`
+
+Automatic Analysis cannot read a coverage report — any coverage report. So until this is
+switched, SonarCloud will show **no coverage at all**, and the 60 % in Table 4.16 rests on a
+local `pytest --cov` run rather than on the tool the report credits.
+
+**Do this:**
+1. https://sonarcloud.io/project/administration?id=yassine808_PFE-aznet → **Analysis Method**
+2. Turn **Automatic Analysis OFF**.
+3. Push anything (or re-run the last CI run). `SONAR_TOKEN` is already a repository secret, so
+   nothing else is needed.
+4. Confirm coverage landed:
+   ```bash
+   curl -s -u "$SONAR_TOKEN:" \
+     "https://sonarcloud.io/api/measures/component?component=yassine808_PFE-aznet&metricKeys=coverage,ncloc,bugs,vulnerabilities,code_smells"
+   ```
+
+- [ ] Automatic Analysis turned off
+- [ ] CI-based scan succeeded (the `SonarCloud` job step no longer errors)
+- [ ] **Re-read Table 4.16** — a CI scan analyses a slightly different file set than AutoScan, so
+      `ncloc`, `code_smells` and the debt figure may shift. The ratings should not.
+- [ ] **Screenshot of the SonarCloud dashboard** to place under Table 4.16 (§4.9.4 already has the
+      caption placeholder: `*[FIGURE À INSÉRER — capture du tableau de bord SonarCloud.]*`).
+
+---
+
+### 2. The contradiction a jury will find — which STT engine is actually used
+
+This is the single most exploitable inconsistency left in the document.
+
+- The three abstracts and §4.3.5 state that the retained engine is
+  `BounharAbdelaziz/Morocco-Darija-STT-large`.
+- `api/app/config.py:36` ships `stt_chain = "gemini,local,groq"` — Gemini answers first, and the
+  local Darija model only runs when Gemini fails.
+
+Both statements are defensible on their own; together they are a contradiction, and an examiner
+reading the config after reading the abstract will ask about it.
+
+**Decide one of two framings, then make the whole document say it:**
+
+- *(a) The benchmark winner is the accuracy reference, Gemini is the operational primary.* Then
+  §4.3.5 must say so explicitly: the local model won on preservation of digits and French
+  loanwords, but sits second in the chain because it costs 7.7 s and 4 GB of VRAM against
+  Gemini's API call. Abstracts change from "the engine selected is…" to "the benchmark
+  identified… which serves as the accuracy reference inside a three-engine chain".
+- *(b) The local model really is the primary.* Then `config.stt_chain` is wrong and should be
+  `local,gemini,groq` — but that changes production latency for every technician, so this is a
+  real product decision, not an editorial one.
+
+**Files to touch for (a):** `Pres+report/Rapport-PFE.md` §4.3.5, plus the FR abstract (~line 81),
+the EN abstract, and the Arabic abstract (which is now a raw OpenXML block — edit the text inside
+the `<w:t>` runs, do not re-wrap it).
+
+- [ ] Framing chosen
+- [ ] §4.3.5 harmonised with `config.py`
+- [ ] All three abstracts updated
+
+---
+
+### 3. The 12 remaining `[À COMPLÉTER]` in the report
+
+`grep -n "À COMPLÉTER" Pres+report/Rapport-PFE.md` lists them. Grouped by what they need:
+
+**Administrative — you just have to type them (5)**
+- [ ] line 38 — cover: academic supervisor, industrial supervisor
+- [ ] line 46 — cover: defence date, jury members
+- [ ] lines 63, 65 — acknowledgements: same two names
+- [ ] line 204 — §1.2 AZNET fact sheet: founding date, headcount, org chart, client references
+      (marked "to validate with the industrial supervisor")
+
+**Pilot results — needs field data (4)**
+- [ ] lines 81 / EN / AR — one sentence of pilot figures in each abstract
+- [ ] line 1365 — the "pilot with technicians" row of the delivered-scope table
+- [ ] line 1392 — §4.6.4 end-to-end latency. **Note:** per-engine latencies exist (1.53 s Groq →
+      7.7 s local); what is missing is "the technician waits N seconds from voice note to reply".
+      A stopwatch on five real notes closes this.
+- [ ] line 1396 — §4.6.5 pilot: number of reports processed, technician and management feedback,
+      incidents
+- [ ] lines 1611, 1613 — the same gap restated in the conclusion and in the limits
+
+**Bibliography (1)**
+- [ ] line 1653 — additional academic references on dialectal Arabic ASR, per your filière's
+      requirements
+
+---
+
+### 4. Two claims in the report I could not verify
+
+- [ ] **"Thirty-five Dependabot pull requests were opened"** (§4.9.3). I found no evidence for the
+      number. Either count them (`gh pr list --state all --author "app/dependabot" | wc -l`) and
+      correct it, or drop the figure and keep the mechanism, which is verified.
+- [ ] **Comparison against the manual process.** The report asserts a gain but never measures the
+      baseline. Even rough numbers — "before: ~10 min per report, ~40 % of days missing" — turn an
+      assertion into a result. This is probably the highest-value missing paragraph in the whole
+      document.
+
+---
+
+### 5. A methodological weakness worth owning before the jury names it
+
+The ten extraction test cases (`benchmark/dataset/text_cases.json`, Table 4.6) were written by the
+author of the system under test. That is a genuine limitation: the cases encode the same
+assumptions as the prompts they evaluate.
+
+§4.3.2 already does exactly the right thing for the transcription benchmark — it states plainly
+that ground truth was discarded and why. §4.3.9 should do the same for this. Owning it costs one
+paragraph; being caught by it costs credibility.
+
+- [ ] Paragraph added to §4.3.9
+
+---
+
+### 6. Port all of this into the presentation
+
+`Pres+report/presentation.py` still carries the figures the report no longer uses. Concretely:
+
+| Line | Currently says | Should say |
+|---|---|---|
+| 892 | "Dès la semaine 0" | "Dès la phase 3" |
+| 893 | "le planning la prévoyait au sprint 2" | "le planning la prévoyait en phase 4" |
+| 926 | stat tile `220` / "commits en 29 jours (15 juil. – 12 août 2026)" | replace entirely — no commit statistics. Suggest `6 mois` / "2 mars – 31 août 2026" |
+| 928 | stat tile `272` tests | `288` tests |
+| 934 | "Les 17 contrôles, par famille" | "Les 18 contrôles, par famille" |
+| 936 | "API — ruff, types, 272 tests" | "288 tests" |
+| 952 | "chacune franchit les 17 contrôles" | "les 18 contrôles" |
+
+Also missing from the deck entirely:
+- [ ] The planning slide needs the 7-phase timeline from §1.6.2, not the 4 sprints.
+- [ ] A slide for the **two extraction benchmarks** (§4.3.9 / §4.3.10) — the deck only covers the
+      STT benchmark. The strongest single number there is `llama-3.1-8b-instant`: fastest model
+      tested, and five invented values.
+- [ ] A slide (or a line) for the **SonarCloud result**, now that the gate passes: 0 bugs,
+      0 vulnerabilities, A/A/A, 18 green CI checks.
+
+Rebuild with `Pres+report/build.ps1` for the report; the deck is generated by running
+`presentation.py`.
+
+---
+
+### 7. Small, optional
+
+- [ ] **15 SonarCloud code smells** remain (5 of them in `presentation.py`: cognitive complexity,
+      duplicated literals, a non-conforming variable name). Maintainability is already A and the
+      debt is 121 minutes total, so this is cosmetic.
+- [ ] **Dashboard has no test runner**, so `sonar.javascript.lcov.reportPaths` points at a file
+      that is never produced. Harmless (Sonar logs a warning), but it means the 60 % coverage
+      figure describes the Python service only — worth one clause in §4.9.4 if you want to be
+      precise.
+- [ ] `Pres+report/build/reference.docx.bak` was removed after patching the footer; if you ever
+      need the original `NUMPAGES` footer back, it is in git history before commit `96eaf35`.
+
+---
+
+### Verification commands, for whoever picks this up
+
+```bash
+# Test suite with coverage (~8 min, no API keys, no database needed)
+cd api && .venv/Scripts/python.exe -m pytest -q --cov=app --cov-report=term
+
+# Current SonarCloud state
+curl -s -u "$SONAR_TOKEN:" "https://sonarcloud.io/api/qualitygates/project_status?projectKey=yassine808_PFE-aznet"
+
+# CI status
+gh run list --workflow=ci.yml --limit 1
+
+# Rebuild the report (kills Word first; ~1 min, add -ExportPdf for the PDF, ~20 min)
+powershell -ExecutionPolicy Bypass -File Pres+report/build.ps1
+```
