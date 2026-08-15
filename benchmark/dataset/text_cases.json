@@ -1,5 +1,5 @@
 {
-  "_comment": "Text-path benchmark cases for the extraction step. Written by hand, not generated, so the expected values are ground truth rather than another model's opinion. Fields are those of `schemas.ExtractedReport` as rebuilt on 2026-08-05 and extended with the 25 bordereau article fields on 2026-08-15 — `chantier` and `client` are NOT model fields (routing comes from the org chart) and must never appear here. `expected` grades only the listed fields (metrics.extraction_accuracy skips `resume`); an explicit null means the model must NOT invent a value, which is the single most important property for this project. Explicit negation ('pas de goulotte', 'aucune prise raccordée') is a STATED value and grades as 0; a field simply never mentioned grades as null. The two are different facts and the prompt must keep them apart — this file was internally inconsistent about it until 2026-07-27. Free-text fields (remarques, motif_arret, besoins, prochaines_etapes) are graded by exact normalized string equality, so they are only ever graded as null here; their content is judged by a human.",
+  "_comment": "Text-path benchmark cases for the extraction step. Written by hand, not generated, so the expected values are ground truth rather than another model's opinion. Fields are those of `schemas.ExtractedReport` as rebuilt on 2026-08-05 and extended with the 25 bordereau article fields on 2026-08-15 — `chantier` and `client` are NOT model fields (routing comes from the org chart) and must never appear here. `expected` grades only the listed fields (metrics.extraction_accuracy skips `resume`); an explicit null means the model must NOT invent a value, which is the single most important property for this project. Explicit negation ('pas de goulotte', 'aucune prise raccordée') is a STATED value and grades as 0; a field simply never mentioned grades as null. The two are different facts and the prompt must keep them apart — this file was internally inconsistent about it until 2026-07-27. Free-text fields (remarques, motif_arret, besoins, prochaines_etapes) are graded by exact normalized string equality, so they are only ever graded as null here; their content is judged by a human. `chantier_mentionne` (depuis 2026-08-15) se note mot pour mot et vaut null quand aucun site n'est énoncé — c'est cette absence qui déclenche la reprise du dernier chantier connu, donc un nom deviné y est plus coûteux qu'un champ vide.",
   "cases": [
     {
       "id": "t01_plain_french",
@@ -10,7 +10,10 @@
         "cables_installes_m": 800,
         "prises_connectees": 5,
         "panneaux_prises_brassees": 2,
-        "etages": ["E1"]
+        "etages": [
+          "E1"
+        ],
+        "chantier_mentionne": "Marina Center"
       }
     },
     {
@@ -22,7 +25,8 @@
         "cables_installes_m": 400,
         "prises_connectees": 3,
         "panneaux_prises_brassees": null,
-        "prises_testees": null
+        "prises_testees": null,
+        "chantier_mentionne": "Anfa Place"
       }
     },
     {
@@ -73,8 +77,12 @@
         "cables_installes_m": 210,
         "prises_connectees": 2,
         "panneaux_prises_brassees": 1,
-        "etages": ["RDC"],
-        "locaux_techniques": ["SR2"]
+        "etages": [
+          "RDC"
+        ],
+        "locaux_techniques": [
+          "SR2"
+        ]
       }
     },
     {
@@ -111,7 +119,9 @@
         "panneaux_prises_brassees": 3,
         "goulotte_m": 0,
         "prises_connectees": null,
-        "etages": ["E3"]
+        "etages": [
+          "E3"
+        ]
       }
     },
     {
@@ -133,7 +143,9 @@
         "cordons_brassage_1m_u": 12,
         "cordons_liaison_3m_u": 3,
         "guide_cable_u": 2,
-        "etages": ["RDC"],
+        "etages": [
+          "RDC"
+        ],
         "cables_installes_m": null
       }
     },
@@ -170,8 +182,12 @@
         "cables_prepares_m": null,
         "flexible_arme_d16_m": null,
         "cable_dac_u": null,
-        "etages": ["E2"],
-        "ailes": ["Droite"]
+        "etages": [
+          "E2"
+        ],
+        "ailes": [
+          "Droite"
+        ]
       }
     },
     {
@@ -194,7 +210,10 @@
         "connexions_optiques_brins": 24,
         "pigtail_sc_u": 12,
         "fibre_m": 60,
-        "locaux_techniques": ["SR3", "SR4"],
+        "locaux_techniques": [
+          "SR3",
+          "SR4"
+        ],
         "jarretiere_om3_u": null
       }
     },
@@ -208,7 +227,9 @@
         "point_acces_ap_u": 0,
         "switch_acces_u": null,
         "switch_federateur_u": null,
-        "locaux_techniques": ["RG"]
+        "locaux_techniques": [
+          "RG"
+        ]
       }
     },
     {
@@ -222,7 +243,9 @@
         "module_sfp_rj45_u": 2,
         "module_sfp_u": null,
         "cable_dac_u": 3,
-        "etages": ["E1"]
+        "etages": [
+          "E1"
+        ]
       }
     },
     {
@@ -250,8 +273,66 @@
         "temps_arret_min": 90,
         "stock_cable_m": 340,
         "stock_goulotte_m": null,
-        "etages": ["RDC"],
+        "etages": [
+          "RDC"
+        ],
         "goulotte_m": null
+      }
+    },
+    {
+      "id": "t21_chantier_annonce",
+      "note": "Le technicien nomme le site franchement. Extraction mot pour mot : le rapprochement avec la table `chantiers` est le travail du pipeline, pas du modèle.",
+      "text": "Salam, lyoum ana f ACAPS. Dirna 240 mètres d'câble UTP w rakebna 12 prises f l'étage E2.",
+      "expected": {
+        "chantier_mentionne": "ACAPS",
+        "cables_installes_m": 240,
+        "prises_connectees": 12,
+        "etages": [
+          "E2"
+        ],
+        "goulotte_m": null,
+        "fibre_m": null
+      }
+    },
+    {
+      "id": "t22_chantier_jamais_nomme",
+      "note": "Aucun site énoncé — le cas le plus fréquent. `chantier_mentionne` DOIT rester null : c'est ce qui déclenche la reprise du dernier chantier connu. Un nom deviné ici enverrait toute la journée sur le mauvais chantier.",
+      "text": "Sbah lkhir, l'yum posina 80 mètres d'goulotte w tirina 300 mètres d'câble. Ghedda nkemlo.",
+      "expected": {
+        "chantier_mentionne": null,
+        "goulotte_m": 80,
+        "cables_prepares_m": 300,
+        "cables_installes_m": null,
+        "prises_connectees": null
+      }
+    },
+    {
+      "id": "t23_etage_nest_pas_un_chantier",
+      "note": "Piège : le technicien ne nomme que des localisations. Un étage, une aile ou un local technique ne sont PAS un chantier — ils vont dans les champs de localisation et `chantier_mentionne` reste null.",
+      "text": "Khdmna f SR3 w f l'aile droite, rakebna 8 prises w testina 8.",
+      "expected": {
+        "chantier_mentionne": null,
+        "locaux_techniques": [
+          "SR3"
+        ],
+        "ailes": [
+          "Droite"
+        ],
+        "prises_connectees": 8,
+        "prises_testees": 8,
+        "etages": null
+      }
+    },
+    {
+      "id": "t24_chantier_avec_article",
+      "note": "Le technicien dit « la DGH ». Le modèle rend ce qu'il entend, sans corriger : c'est `logs.normalize_site_name` qui retire l'article et rapproche de DGH. Un modèle qui « nettoie » le nom masquerait ce que le technicien a réellement dit.",
+      "text": "Aji, l'yum kunna f la DGH, fusionna 24 brins w rakebna tiroir optique 24 wahed.",
+      "expected": {
+        "chantier_mentionne": "la DGH",
+        "connexions_optiques_brins": 24,
+        "tiroir_optique_24_u": 1,
+        "pigtail_sc_u": null,
+        "fibre_m": null
       }
     }
   ]
