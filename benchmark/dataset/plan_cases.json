@@ -1,0 +1,73 @@
+{
+  "_comment": "DRAFT ANSWER KEY — Yassine must confirm/correct before the run is quotable. Three photographs of the SAME floor plan in three annotation states, which is what makes this a controlled experiment: the printed plan is constant, only the marks change. `attendu` is what a model MUST name; `interdit` is a zone that is printed on the plan but NOT marked in THIS photo — naming it is a provable hallucination, not an unverifiable guess. `synonymes` exists because a model may say 'chambres' where the plan prints room numbers, and that is a hit, not a miss.",
+  "_criterion": "Localization accuracy: does the model name the marked zones, and does it invent zones that are not marked. Counting marks is NOT graded — see STT-BENCHMARK-STATUS.md for why a criterion is fixed before the run.",
+  "_plan": {
+    "batiment": "Hôtel — niveau -0.20, plan d'évacuation photographié",
+    "reperes_imprimes": [
+      "chambres 1001 à 1035 (rangée nord)", "RECEPTION", "MAGAZIN",
+      "RESERVOIR A GAZ", "BAR (nord-est)", "BAR (sud)", "Restaurant",
+      "salle de réunion", "RECEP (bloc est)", "DOUCHE (bloc est)", "patio/jardin"
+    ]
+  },
+  "cases": [
+    {
+      "id": "p01_cercle_bloc_est",
+      "image": "WhatsApp Image 2026-07-22 at 3.40.49 AM.jpeg",
+      "note": "Un seul tracé : un grand cercle vert autour du bloc est (RECEP + douches + local hachuré). Rien d'autre n'est marqué. Cas plancher : un modèle qui ne voit pas un cercle de cette taille est inutilisable.",
+      "attendu": [
+        {
+          "zone": "bloc est (RECEP / douches)",
+          "synonymes": ["recep", "réception", "douche", "bloc est", "aile est", "côté droit", "partie droite", "extrémité est"]
+        }
+      ],
+      "interdit": ["chambres", "1017", "1035", "restaurant", "salle de réunion", "magazin", "bar"],
+      "marques": "1 cercle vert"
+    },
+    {
+      "id": "p02_points_bleus_seuls",
+      "image": "WhatsApp Image 2026-07-22 at 3.40.50 AM.jpeg",
+      "note": "Uniquement des points bleus, répartis en trois groupes : le long de la rangée de chambres au nord, sur le couloir sud au-dessus du restaurant / salle de réunion, et deux près du bloc est. Aucun trait vert, aucune route rose. Le piège : le cercle de p01 n'existe PAS ici.",
+      "attendu": [
+        {
+          "zone": "rangée de chambres nord",
+          "synonymes": ["chambres", "1017", "1019", "1021", "1035", "rangée nord", "couloir nord", "haut du plan"]
+        },
+        {
+          "zone": "couloir sud (restaurant / salle de réunion)",
+          "synonymes": ["restaurant", "salle de réunion", "couloir sud", "bas du plan", "sud"]
+        },
+        {
+          "zone": "bloc est (RECEP)",
+          "synonymes": ["recep", "bloc est", "aile est", "côté droit", "extrémité est"]
+        }
+      ],
+      "interdit": ["reception principale", "magazin", "reservoir a gaz", "route", "tracé rose", "cercle"],
+      "marques": "8 points bleus"
+    },
+    {
+      "id": "p03_complet_vert_bleu_rose",
+      "image": "WhatsApp Image 2026-07-23 at 2.34.05 AM.jpeg",
+      "note": "État le plus chargé : traits verts sur la rangée de chambres et près du BAR nord-est, points bleus aux mêmes endroits qu'en p02, et une route rose verticale descendant le long de la façade est, du BAR nord-est jusqu'au bloc RECEP. C'est le cas qui distingue un modèle qui lit les marques d'un modèle qui décrit le plan imprimé.",
+      "attendu": [
+        {
+          "zone": "rangée de chambres nord",
+          "synonymes": ["chambres", "1017", "1019", "1023", "1035", "rangée nord", "haut du plan"]
+        },
+        {
+          "zone": "BAR nord-est",
+          "synonymes": ["bar", "nord-est", "coin haut droit", "angle nord-est"]
+        },
+        {
+          "zone": "liaison verticale façade est",
+          "synonymes": ["rose", "route", "liaison", "façade est", "côté droit", "vertical", "descend", "tracé"]
+        },
+        {
+          "zone": "couloir sud (restaurant / salle de réunion)",
+          "synonymes": ["restaurant", "salle de réunion", "couloir sud", "bas du plan"]
+        }
+      ],
+      "interdit": ["reception principale", "magazin", "reservoir a gaz", "piscine"],
+      "marques": "traits verts + 8 points bleus + 1 route rose"
+    }
+  ]
+}

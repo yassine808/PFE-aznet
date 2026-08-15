@@ -60,3 +60,101 @@ Kept from the investigation: `/process` echoes `correlation_id` and
 `message_id` back in `ProcessResponse` (free, and a real join key if one is
 ever needed).
 - [] new panel for usage that shows usage for gemini, groq, facebook whatsapp
+## Batch 2026-08-15 (2) — bordereau columns, vision benchmark, .docx (grilled and locked with the owner)
+
+Decisions locked in the grill, so nobody re-opens them later:
+**chantier comes from the voice**, not the org chart — unstated falls back to the
+site on that technician's most recent row, with no expiry, and the reply says so
+out loud ("chantier : ACAPS (repris du dernier rapport)") so a wrongly inherited
+site is visible immediately. The Sheet row stays **one wide line per report**
+(the owner's call, twice) rather than long-format movement rows. Synonyms are
+collapsed across the three bordereaux — one field per physical thing, not one
+per contract line. Benchmarks run **before** the build, and the vision criterion
+is **localization accuracy**, fixed before the run as the STT criterion was.
+
+- [x] **1. Bordereau article columns — schema, journal, mirror, seeds.** 25 new
+  `ARTICLE_FIELDS` in `schemas.py`, all counted by `has_data`; `ARTICLE_COLUMNS`
+  folded into `journal.NUMERIC_COLUMNS` so they merge-by-addition for free;
+  identity entries in `RAPPORTS_COLUMNS`; `articles.tache` added for ACAPS's
+  grouping; Extralait (13) and ACAPS (17) bordereaux seeded and DGH's 13
+  previously unmapped articles wired to the new fields. Prompts updated on both
+  the text and image paths. 26 tests in `api/tests/test_bordereau_articles.py`;
+  full suite 299 green. The Rapports tab is live at **61 columns** — appended in
+  place, nothing renamed, nothing deleted.
+  Two traps found on the way, recorded so they are not re-introduced:
+  the article seed sat behind `if chantiers is empty`, so on any box that had
+  already booted (i.e. the live one) Extralait and ACAPS would silently never
+  arrive — the guard is now per chantier *and* per emptiness. And four Rapports
+  columns keep **legacy names** (`goulottes_m`, `cables_m`, `bureaux_termines`,
+  `panneaux_raccordes`): `RAPPORTS_COLUMNS` is where the two vocabularies meet,
+  and renaming a column orphans every historical row in it.
+- [x] **2. Vision benchmark on annotated plans** (`benchmark/run_plan_benchmark.py`,
+  `dataset/plan_cases.json`). One floor plan photographed in three annotation
+  states — circle only, dots only, fully marked — which makes the printed layout
+  a constant and the marks the only variable, so a claim about an unmarked zone
+  is *provably* false rather than merely unverified. Scored on recall of marked
+  zones and on hallucinated zones; mark counting is deliberately **not** graded
+  (counting dots on a phone photo is where vision models fail, and a wrong count
+  becomes a wrong contract total nobody catches).
+  Result — `gemini-3.5-flash-lite` and `gemini-flash-lite-latest`: **92% recall,
+  0 hallucinations, 1.3 s**. `gemini-3.1-flash-lite` reaches 100% recall with
+  **4 hallucinations** — it wins on recall by naming rooms that are not marked,
+  which is exactly why recall alone must not pick the model. Groq's Llama 4
+  Scout and Maverick **404 on this key**, so CLAUDE.md's "no vision model in the
+  free Groq catalogue" still holds.
+  Caveat kept deliberately: `gemini-3.6-flash` scored 0 hallucinations in a
+  warm-up and 1 in the full run on identical input — three cases is a noisy
+  sample and these numbers are directional, not precise.
+- [x] **3. Image-generation reachability survey** (`benchmark/run_imagegen_survey.py`).
+  **0 of 8 endpoints returned pixels.** Gemini's three image models answer
+  `429 RESOURCE_EXHAUSTED`, Pollinations now `403`s anonymous callers, and the
+  HF and Cloudflare paths have no credentials in `.env`. So the deterministic
+  Pillow card is not a fallback in practice — it is the only image path that
+  exists, exactly as `config.py` already claimed. The Gemini rows were probed
+  right after 18 vision calls on the same key, so that verdict deserves one
+  re-run on a cold quota before it is quoted in the report.
+- [ ] **4. Chantier from the voice + sticky fallback.** Add the spoken site to
+  the extraction, resolve it against `chantiers`, fall back to the technician's
+  most recent row when unstated, and say which one was used in the reply text.
+  Not started.
+- [ ] **5. Rewrite `benchmark/dataset/text_cases.json`.** It still grades the
+  pre-2026-08-05 schema (`goulottes_m`, `chantier`, `client`), so the text
+  benchmark currently measures a contract that no longer exists. Port the 10
+  cases, then add cases for the article columns, for a spoken chantier, and for
+  a *silent* chantier so the sticky fallback is graded too. Keep the file's own
+  rule: explicit negation is a stated 0, never-mentioned is `null`.
+- [ ] **6. Port the .docx renderer to Python.** `Dashboard/src/lib/report-export.ts`
+  builds it in the browser today, so the scheduled mail — sent by `jobs.py`
+  inside the container — cannot attach it. Owner's decision: **the backend
+  renders it**, so the document is produced and mailed even with no browser
+  open; the dashboard button then downloads the same bytes instead of building
+  its own. One renderer, or the two drift like the n8n mapping did.
+  Image generation stays inline in the report job, conditional on the model's
+  own `besoin_image` flag, with a per-report timeout — a hung image call must
+  never cost every chef their report.
+
+### Owner actions — blocking the items above
+
+- [ ] **Confirm or correct the vision answer key** in `benchmark/dataset/plan_cases.json`.
+  It is a *draft* written from reading the photos, not ground truth. Specifically
+  `p03_complet_vert_bleu_rose` → "couloir sud (restaurant / salle de réunion)":
+  **3 of 4 models miss it**, which is either a real shared blind spot or a wrong
+  key penalising models for being right. Until this is settled the run is
+  directional and must not be quoted in the PFE writeup.
+- [ ] **More annotated plans, from other buildings.** One plan in three states
+  cannot say whether a model generalises to different handwriting, a different
+  layout or a worse photograph. The harness is reusable — a second round costs
+  only the photos.
+- [ ] **An `HF_TOKEN` or a Cloudflare account (`CF_ACCOUNT_ID` + `CF_API_TOKEN`)**,
+  if generated images are wanted in the .docx at all. Without one of them the
+  image survey has no candidate and the answer stays "Pillow card only".
+- [ ] **Decide on the "illustration générée" caption.** Assumed on for every
+  generated image so a reader cannot mistake one for a site photo; say if it
+  should be off.
+- [ ] **Restart the API** — `docker compose up -d --build api`. The extraction
+  prompts changed and `prompt_loader` is `@lru_cache`d on purpose, so a running
+  container still serves the old ones.
+- [ ] **`benchmark/dataset/images/` and `benchmark/results/` are gitignored**, so
+  the three plan photos and every result file live only on this machine. The
+  benchmark is therefore not reproducible from a fresh clone — decide whether
+  the plans are shareable (they are a client's floor plan) before changing that.
