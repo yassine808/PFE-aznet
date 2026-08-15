@@ -59,3 +59,4 @@ tag, and it is the owner's decision (2026-08-15) to leave it at that.
 Kept from the investigation: `/process` echoes `correlation_id` and
 `message_id` back in `ProcessResponse` (free, and a real join key if one is
 ever needed).
+- [] new panel for usage that shows usage for gemini, groq, facebook whatsapp
