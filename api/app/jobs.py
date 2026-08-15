@@ -82,7 +82,7 @@ def drain_sheet_queue() -> dict:
             # whose day already has a row on the sheet must merge into it, or
             # the retry would create the duplicate the live path avoided.
             filed = journal.file_report(payload)
-            appended_row, appended_tab = filed.get("row"), filed.get("tab")
+            appended_mirror = filed.get("rapports_row")
         except sheets.SheetsError as exc:
             # Left in the queue with the attempt counted, not dropped.
             logs.resolve_write(item["id"], False, str(exc))
@@ -96,13 +96,13 @@ def drain_sheet_queue() -> dict:
             failed.append({"id": item["id"], "error": f"unprocessable: {exc}"})
             continue
         logs.resolve_write(item["id"], True)
-        # Link the parked message to the row it landed on, so a /modify reply
-        # can find it even when the happy path's write is the one that failed.
-        # The tab matters: /modify edits where the row lives, not the flat feed.
+        # Link the parked message to the Rapports row it mirrored to, so the
+        # dashboard can still play its voice note even when the happy path's
+        # write is the one that failed.
         message_id = payload.get("message_id")
-        if message_id and appended_row:
+        if message_id and appended_mirror:
             try:
-                logs.link_message_row(message_id, appended_row, appended_tab)
+                logs.link_message_row(message_id, appended_mirror)
             except logs.LogStoreError:
                 pass  # best-effort like the append itself
         written += 1

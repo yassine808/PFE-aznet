@@ -351,21 +351,19 @@ CREATE TABLE IF NOT EXISTS exchanges (
 );
 CREATE INDEX IF NOT EXISTS exchanges_ts_idx ON exchanges (ts DESC);
 
--- The /modify command: a technician replies to their own message and the row
--- it became has to be found by the id of that message. The claim already
--- stores the canonical message key (`tg:123:456` / `wa:<id>`, the workflow's
--- msg_key); these columns record which Sheet row it landed on, written by
--- whoever performed the append (the API on the happy path, the retry drain
--- after a Sheets outage). `sheet_tab` came with the journal: the row number
--- only means something together with the tab it lives in — Rapports for the
--- old flat append, a chantier's tab for a journal write.
-ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_row BIGINT;
-ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS sheet_tab TEXT;
+-- The journal write mirrors a flat row to the Rapports tab; its row number is
+-- recorded here by whoever performed the append (the API on the happy path,
+-- the retry drain after a Sheets outage). It is the only key that ties a
+-- dashboard feed row back to the message it came from, which is how
+-- `GET /audio/row/{rapports_row}` finds the archived voice note to play.
+-- NULL when the mirror failed. `linked_at` is when the link was recorded.
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ;
--- The journal write also mirrors a flat row to Rapports; its row number lives
--- here so /supprimer can clear both rows instead of leaving the report visible
--- in the dashboard feed. NULL for pre-journal links and mirror failures.
 ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS rapports_row BIGINT;
+-- Dropped 2026-08-15 with the /modify and /supprimer chat commands: the row
+-- and tab a message became were read by nothing else, so keeping them would
+-- have left two write-only columns behind.
+ALTER TABLE processed_messages DROP COLUMN IF EXISTS sheet_row;
+ALTER TABLE processed_messages DROP COLUMN IF EXISTS sheet_tab;
 
 -- Per-account in-app notifications (the dashboard bell). Every row is owned
 -- by exactly one person; pipeline events (a new report for the chef, a row
@@ -875,6 +873,46 @@ def read(
     return out
 
 
+def in_flight(max_age_minutes: int = 15) -> List[dict]:
+    """Messages that arrived and have not been answered yet.
+
+    Derived, not stored: n8n already logs `received` when a message lands and
+    `replied` when the technician gets their summary, both under the same
+    correlation_id, and the API logs its own failures under that id too. A
+    correlation with a `received` row and no terminal row is therefore a
+    message still in the pipeline — which is what the inbox shows a ⏳ for.
+
+    A second table would have to be cleaned up after every crash; these rows
+    already exist and age out on their own. `max_age_minutes` is that ageing:
+    a run that died without ever logging an outcome must stop being "in
+    progress" eventually, and the slowest real path (a cold local STT load)
+    is ~4 minutes, so 15 is generous without being permanent.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT r.correlation_id, r.technicien, r.channel,
+                   MIN(r.ts) AS since
+              FROM pipeline_logs r
+             WHERE r.stage = 'received'
+               AND r.ts > now() - (%s || ' minutes')::interval
+               AND NOT EXISTS (
+                     SELECT 1 FROM pipeline_logs d
+                      WHERE d.correlation_id = r.correlation_id
+                        AND (d.stage = 'replied' OR d.level = 'error')
+                   )
+             GROUP BY r.correlation_id, r.technicien, r.channel
+             ORDER BY since
+            """,
+            (max(1, min(max_age_minutes, 240)),),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    for row in rows:
+        if isinstance(row.get("since"), datetime):
+            row["since"] = row["since"].isoformat()
+    return rows
+
+
 def stats() -> dict:
     """Counters for the dashboard tiles (last 24 h)."""
     with _cursor() as cur:
@@ -1140,54 +1178,26 @@ def list_messages(
     return rows
 
 
-# ── message → Sheet row link (the /modify command) ─────────────────────────
-# The /modify reply has to find the row its report landed on, and the only id
-# it carries is the origin message's — the same canonical message key the
-# claim stores (`tg:123:456` / `wa:<id>`). The link is written by whoever
-# performed the write (the API after a journal write, the retry drain after a
-# Sheets outage). `tab` matters: the row number alone means nothing without the
-# tab it lives in, and /modify must edit the row the technician just reported
-# — which since the journal is a chantier tab, not the Rapports flat feed.
+# ── message → Rapports mirror row link ─────────────────────────────────────
+# The dashboard plays a message's voice note from `GET /audio/row/{row}`, and
+# the only thing tying a Rapports feed row back to the message that produced it
+# is this link. Written by whoever performed the write: the API after a journal
+# write, the retry drain after a Sheets outage.
 
-def link_message_row(message_id: str, row: Optional[int],
-                     tab: Optional[str] = None,
-                     rapports_row: Optional[int] = None) -> bool:
-    """Remember which Sheet row a processed message landed on; None clears it.
+def link_message_row(message_id: str, rapports_row: Optional[int]) -> bool:
+    """Remember which Rapports row a processed message mirrored to.
 
     Upsert-free by design: the row already exists (the claim inserted it), so
-    this is an UPDATE — clearing with None is how /supprimer unlinks a row.
-    `tab` defaults to None: older links predate the journal and always meant
-    the Rapports tab, and `message_row` resolves None the same way.
-    `rapports_row` is the journal write's flat mirror row, cleared with the
-    link so a deleted report stops rendering on the dashboard feed too.
+    this is an UPDATE. None when the mirror failed — the journal row is still
+    written, there is simply nothing on the flat feed to point audio at.
     """
     with _cursor() as cur:
         cur.execute(
-            "UPDATE processed_messages SET sheet_row = %s, sheet_tab = %s, "
-            "rapports_row = %s, linked_at = now() WHERE message_id = %s",
-            (row, tab, rapports_row, message_id),
+            "UPDATE processed_messages SET rapports_row = %s, linked_at = now() "
+            "WHERE message_id = %s",
+            (rapports_row, message_id),
         )
         return cur.rowcount > 0
-
-
-def message_row(message_id: str) -> Optional[Tuple[Optional[str], int, Optional[int]]]:
-    """The (tab, row, rapports_row) a message landed on, if anyone linked it.
-
-    None tab means Rapports — every link written before the journal existed
-    pointed there, and the dashboard editor still writes there. The third
-    element is the flat mirror row the journal write also appended, so
-    /supprimer can clear it as well; None when there is no mirror.
-    """
-    with _cursor() as cur:
-        cur.execute(
-            "SELECT sheet_row, sheet_tab, rapports_row FROM processed_messages "
-            "WHERE message_id = %s",
-            (message_id,),
-        )
-        row = _one(cur)
-    if row is None or row["sheet_row"] is None:
-        return None
-    return row.get("sheet_tab"), int(row["sheet_row"]), row.get("rapports_row")
 
 
 # ── sheet retry queue ──────────────────────────────────────────────────────
@@ -1927,19 +1937,6 @@ def save_manager_report(
             """,
             (manager_id, period, period_type, objet, corps, generated_by),
         )
-
-
-def latest_manager_report(manager_id: int) -> Optional[dict]:
-    """The newest stored report for a manager, whichever period it covers."""
-    with _cursor() as cur:
-        cur.execute(
-            "SELECT manager_id, period, period_type, objet, corps, generated_at, generated_by "
-            "FROM manager_reports WHERE manager_id = %s "
-            "ORDER BY generated_at DESC LIMIT 1",
-            (manager_id,),
-        )
-        row = _one(cur)
-    return _iso(dict(row)) if row else None
 
 
 def list_manager_reports() -> List[dict]:

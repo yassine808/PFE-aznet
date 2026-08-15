@@ -562,7 +562,7 @@ async def process(
     correlation_id: Optional[str] = Form(None, description="Trace id minted by n8n at reception"),
     channel: Optional[str] = Form(None, description="telegram | whatsapp | form"),
     technicien: Optional[str] = Form(None, description="Sender name, for log filtering"),
-    message_id: Optional[str] = Form(None, description="Channel message id (dedupe key, e.g. 'tg:123:456') — links the report to its origin message for /modify"),
+    message_id: Optional[str] = Form(None, description="Channel message id (dedupe key, e.g. 'tg:123:456')"),
     caller: dict = Depends(auth.require_user),
 ) -> ProcessResponse:
     # Same trace id n8n threads through every stage, so the API's own errors
@@ -687,77 +687,6 @@ def list_messages(
         raise HTTPException(502, str(exc)) from exc
 
 
-class LinkIn(BaseModel):
-    message_id: str
-    row: Optional[int] = Field(default=None, description="1-based Sheet row; None clears the link")
-    tab: Optional[str] = Field(
-        default=None, description="Tab the row lives in; None means Rapports (legacy links)"
-    )
-
-
-@app.post("/messages/link", responses={404: {"description": "Unknown message"}, 502: {"description": "Log store unreachable"}})
-def link_message(payload: LinkIn, caller: dict = Depends(auth.require_user)) -> dict:
-    """Record which Sheet row a message became (called by n8n after the append)."""
-    try:
-        linked = logs.link_message_row(payload.message_id, payload.row, payload.tab)
-    except logs.LogStoreError as exc:
-        raise HTTPException(502, str(exc)) from exc
-    if not linked:
-        raise HTTPException(404, "message inconnu (pas encore traité)")
-    return {"linked": True, "message_id": payload.message_id, "row": payload.row}
-
-
-class ModifyIn(BaseModel):
-    message_id: str
-    action: Literal["modify", "supprimer"]
-    fields: Optional[Dict[str, Optional[str]]] = Field(
-        default=None, description="Column → value map; required for modify, ignored for supprimer"
-    )
-
-
-@app.post("/modify-command", responses={404: {"description": "Unknown message"}, 422: {"description": "Missing fields"}, 502: {"description": "Sheets or log store failure"}})
-def modify_command(payload: ModifyIn, caller: dict = Depends(auth.require_user)) -> dict:
-    """Backend of the /modify and /supprimer reply commands.
-
-    The technician replies to their own report message; n8n resolves the reply
-    to its origin message_id and calls here. The row number comes from the link
-    the journal write created (processed_messages.sheet_row + sheet_tab), never
-    from anything the technician typed — same reason /rapport never parses the
-    text. The link's tab is honored, so the edit lands on the journal row the
-    technician just reported, not the flat Rapports feed. A supprimer also
-    clears the Rapports mirror row, or the deleted report would keep
-    rendering on the dashboard feed.
-    """
-    try:
-        location = logs.message_row(payload.message_id)
-    except logs.LogStoreError as exc:
-        raise HTTPException(502, str(exc)) from exc
-    if location is None:
-        raise HTTPException(404, "aucun rapport lié à ce message")
-    tab, row, rapports_row = location
-    tab = tab or sheets.RAPPORTS_TAB  # pre-journal links always meant Rapports
-
-    if payload.action == "supprimer":
-        try:
-            sheets.clear_row(row, tab=tab)
-            if rapports_row:
-                sheets.clear_row(rapports_row, tab=sheets.RAPPORTS_TAB)
-        except sheets.SheetsError as exc:
-            raise HTTPException(502, f"sheets clear failed: {exc}") from exc
-        try:
-            logs.link_message_row(payload.message_id, None)  # unlink: nothing left to edit
-        except logs.LogStoreError:
-            pass  # the Sheet is the source of truth; the link is best-effort
-        return {"action": "supprimer", "row": row, "tab": tab,
-                "rapports_row": rapports_row}
-
-    if not payload.fields:
-        raise HTTPException(422, "des champs sont requis pour /modify")
-    try:
-        sheets.update_report_fields(row, payload.fields, tab=tab)
-    except sheets.SheetsError as exc:
-        raise HTTPException(502, f"sheets write failed: {exc}") from exc
-    return {"action": "modify", "row": row, "tab": tab, "fields": sorted(payload.fields)}
 
 
 # No auth: dashboard + API run only on the admin's machine (localhost), decided 2026-07-23.
@@ -971,55 +900,6 @@ def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(au
     )
 
 
-class RapportResponse(BaseModel):
-    """Answer to the technicians' /rapport command: the last generated report
-    of their site manager. `found: false` carries a short reason so n8n can
-    reply politely instead of parsing an error."""
-
-    found: bool
-    detail: Optional[str] = None
-    period: Optional[str] = None
-    objet: Optional[str] = None
-    corps: Optional[str] = None
-    generated_at: Optional[str] = None
-    generated_by: Optional[str] = None
-    manager_name: Optional[str] = None
-
-
-@app.get("/rapport", responses={500: {"description": "Log store failure"}})
-def latest_rapport(
-    channel: str,
-    external_id: str,
-    caller: dict = Depends(auth.require_user),
-) -> RapportResponse:
-    """A technician asks /rapport → the last generated report of their chef.
-
-    The sender resolves to a person, the person to their manager; the answer
-    comes from `manager_reports`, which the scheduler fills at the same moment
-    it mails — so the chat reply and the inbox show the same text. Machine
-    access (X-API-Key) is deliberate: n8n answers the command on the spot.
-    """
-    person = logs.find_technician(channel, external_id)
-    if person is None:
-        return RapportResponse(found=False, detail="inconnu")
-    manager_id = person.get("manager_id")
-    if not manager_id:
-        return RapportResponse(found=False, detail="pas de responsable")
-    manager = logs.person_by_id(manager_id)
-    report = logs.latest_manager_report(manager_id)
-    if report is None:
-        return RapportResponse(found=False, detail="aucun rapport")
-    return RapportResponse(
-        found=True,
-        period=report.get("period"),
-        objet=report.get("objet"),
-        corps=report.get("corps"),
-        generated_at=report.get("generated_at"),
-        generated_by=report.get("generated_by"),
-        manager_name=manager["name"] if manager else None,
-    )
-
-
 class ImageCardRequest(BaseModel):
     """Rows already extracted, plus what to call the card."""
 
@@ -1102,6 +982,21 @@ def list_logs(
             ),
             "stats": logs.stats(),
         }
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/in-flight", responses={502: {"description": "Log store unreachable"}})
+def messages_in_flight(minutes: int = 15, caller: dict = Depends(auth.require_user)) -> dict:
+    """Messages received and not yet answered — the inbox's ⏳ per sender.
+
+    Read off `pipeline_logs` rather than a table of its own: the rows that say
+    a message arrived and that it was answered are already written on every
+    run, and a dedicated in-flight table would need a sweeper for every crash
+    between the two.
+    """
+    try:
+        return {"in_flight": logs.in_flight(minutes)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
 
@@ -1246,10 +1141,7 @@ async def file_journal_entry(
 
     if entry.message_id and result.get("row"):
         try:
-            logs.link_message_row(
-                entry.message_id, result["row"], result.get("tab"),
-                result.get("rapports_row"),
-            )
+            logs.link_message_row(entry.message_id, result.get("rapports_row"))
         except logs.LogStoreError:
             pass  # best-effort: the row is written, the link is a convenience
     logs.write_safe(
