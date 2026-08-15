@@ -27,11 +27,11 @@ Transcription de notes vocales en darija et extraction structurée
 :::
 
 ::: {custom-style="CoverMeta"}
-**Filière :** [À COMPLÉTER — ex. Ingénierie Informatique et Réseaux]
+**Filière :** Ingénierie Informatique et Réseaux (IIR)
 :::
 
 ::: {custom-style="CoverMeta"}
-**Réalisé par :** Yassine [À COMPLÉTER — NOM]
+**Réalisé par :** Mohammed Yassine MAGRI
 :::
 
 ::: {custom-style="CoverMeta"}
@@ -49,6 +49,10 @@ Soutenu le [À COMPLÉTER] devant le jury : [À COMPLÉTER]
 ::: {custom-style="CoverFoot"}
 Année universitaire 2025 / 2026
 :::
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -74,7 +78,7 @@ Dans le secteur du câblage réseau, le suivi de l'activité des techniciens rep
 
 L'architecture retenue est hybride : une plateforme d'orchestration low-code (n8n, 65 nœuds) assure la réception multicanale et les intégrations, tandis qu'un microservice développé en Python/FastAPI (66 routes, 8 489 lignes) prend en charge la transcription, l'extraction structurée par grands modèles de langage, la reformulation, la tenue du journal, l'ordonnancement des tâches périodiques et le service du tableau de bord. Un tableau de bord React (11 590 lignes) trilingue français/anglais/arabe complète l'ensemble. La méthodologie suivie est une démarche agile de type Scrum allégé.
 
-Un banc d'essai comparatif de **treize** moteurs de transcription du darija — trois par API et douze en local sur GPU — a été conduit et a renversé l'hypothèse initiale : le moteur retenu n'est pas le service commercial de référence, mais un modèle open-source affiné sur le darija, `BounharAbdelaziz/Morocco-Darija-STT-large`, seul à préserver simultanément les quantités numériques et les emprunts techniques français dont dépend l'intégralité du schéma métier. La chaîne complète, de la note vocale à la réponse de confirmation, est opérationnelle depuis la première semaine du projet. [À COMPLÉTER : résultats chiffrés du pilote en conditions réelles]
+Un banc d'essai comparatif de **treize** moteurs de transcription du darija — trois par API et douze en local sur GPU — a été conduit et a renversé l'hypothèse initiale : le moteur retenu n'est pas le service commercial de référence, mais un modèle open-source affiné sur le darija, `BounharAbdelaziz/Morocco-Darija-STT-large`, seul à préserver simultanément les quantités numériques et les emprunts techniques français dont dépend l'intégralité du schéma métier. La chaîne complète, de la note vocale à la réponse de confirmation, est opérationnelle depuis la phase de développement du cœur IA, une phase avant la date prévue. [À COMPLÉTER : résultats chiffrés du pilote en conditions réelles]
 
 **Mots-clés :** reconnaissance vocale, darija, grands modèles de langage, extraction d'information, automatisation de workflows, langue peu dotée.
 
@@ -84,19 +88,17 @@ In the network cabling industry, tracking technicians' daily activity still reli
 
 The chosen architecture is hybrid: a low-code orchestration platform (n8n, 65 nodes) handles multi-channel reception and integrations, while a custom Python/FastAPI microservice (66 routes, 8,489 lines) performs transcription, LLM-based structured extraction, rewriting, journal bookkeeping, job scheduling and dashboard serving. A trilingual French/English/Arabic React dashboard (11,590 lines) completes the system. The project follows a lightweight Scrum methodology.
 
-A comparative benchmark of **thirteen** Darija speech-to-text engines — three via API and twelve locally on GPU — was carried out and overturned the initial hypothesis: the engine finally selected is not the reference commercial service but an open-source Darija fine-tune, `BounharAbdelaziz/Morocco-Darija-STT-large`, the only one preserving both numeric quantities and the French technical loanwords on which the entire business schema depends. The full chain, from voice note to confirmation reply, has been operational since the first week of the project. [TO BE COMPLETED: field-pilot figures]
+A comparative benchmark of **thirteen** Darija speech-to-text engines — three via API and twelve locally on GPU — was carried out and overturned the initial hypothesis: the engine finally selected is not the reference commercial service but an open-source Darija fine-tune, `BounharAbdelaziz/Morocco-Darija-STT-large`, the only one preserving both numeric quantities and the French technical loanwords on which the entire business schema depends. The full chain, from voice note to confirmation reply, has been operational since the core-AI phase, one phase ahead of the plan. [TO BE COMPLETED: field-pilot figures]
 
 **Keywords:** speech recognition, Darija, large language models, information extraction, workflow automation, low-resource language.
 
-# ملخص
-
-في قطاع التمديدات الشبكية، لا يزال تتبع النشاط اليومي للتقنيين يعتمد إلى حد كبير على تقارير شفوية أو مكتوبة بخط اليد، غير متجانسة ويصعب استغلالها. يقوم مشروع نهاية الدراسة هذا، المنجز داخل شركة AZNET، بأتمتة إعداد التقارير اليومية للأوراش. يرسل التقني في نهاية اليوم رسالة صوتية بسيطة بالدارجة المغربية — أو صورة لكشف مكتوب بخط اليد — عبر تيليغرام أو واتساب؛ فيقوم النظام بتحويل الصوت إلى نص، واستخراج المعطيات المهنية المصنّفة (أمتار القنوات، الكابلات المحضّرة والمركّبة، مآخذ المكاتب، مآخذ اللوحات، المآخذ المختبرة، أمتار الألياف، الوصلات البينية، الشعيرات البصرية، الطوابق والأجنحة المعنية، المخزون، الملاحظات)، ثم إعادة صياغتها في ملخص مهني بالفرنسية، وتسجيل السطر في دفتر الورش المناسب على Google Sheets وإشعار المسؤولين.
-
-تعتمد البنية المختارة على مقاربة هجينة: منصة أتمتة منخفضة البرمجة (n8n، 65 عقدة) تتكفل بالاستقبال عبر قناتين وبالتكاملات، بينما تتولى خدمة مصغرة مطوّرة بلغة Python/FastAPI (66 مسارًا، 8489 سطرًا) تحويل الصوت إلى نص، والاستخراج المهيكل بواسطة النماذج اللغوية الكبيرة، وإعادة الصياغة، ومسك الدفتر، وجدولة المهام الدورية، وخدمة لوحة القيادة. وتكتمل المنظومة بلوحة قيادة React (11590 سطرًا) بثلاث لغات: الفرنسية والإنجليزية والعربية.
-
-وقد أُجري اختبار مقارن لـ**ثلاثة عشر** محركًا للتعرف على الكلام بالدارجة، ثلاثة عبر واجهات برمجية واثنا عشر محليًا على بطاقة رسومية، فقلب الفرضية الأولية: المحرك المعتمد ليس الخدمة التجارية المرجعية، بل نموذج مفتوح المصدر مُدرَّب على الدارجة، `BounharAbdelaziz/Morocco-Darija-STT-large`، وهو الوحيد الذي يحافظ في آن واحد على الكميات الرقمية وعلى المصطلحات التقنية الفرنسية المقترضة التي يقوم عليها المخطط المهني بأكمله. والسلسلة الكاملة، من الرسالة الصوتية إلى رد التأكيد، تشتغل منذ الأسبوع الأول للمشروع. [يُستكمل: النتائج الرقمية للتجربة الميدانية]
-
-**الكلمات المفاتيح:** التعرف على الكلام، الدارجة، النماذج اللغوية الكبيرة، استخراج المعلومات، أتمتة سير العمل، لغة قليلة الموارد.
+```{=openxml}
+<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:bidi/><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial"/></w:rPr><w:t>ملخص</w:t></w:r></w:p>
+<w:p><w:pPr><w:bidi/><w:jc w:val="both"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">في قطاع التمديدات الشبكية، لا يزال تتبع النشاط اليومي للتقنيين يعتمد إلى حد كبير على تقارير شفوية أو مكتوبة بخط اليد، غير متجانسة ويصعب استغلالها. يقوم مشروع نهاية الدراسة هذا، المنجز داخل شركة AZNET، بأتمتة إعداد التقارير اليومية للأوراش. يرسل التقني في نهاية اليوم رسالة صوتية بسيطة بالدارجة المغربية — أو صورة لكشف مكتوب بخط اليد — عبر تيليغرام أو واتساب؛ فيقوم النظام بتحويل الصوت إلى نص، واستخراج المعطيات المهنية المصنّفة (أمتار القنوات، الكابلات المحضّرة والمركّبة، مآخذ المكاتب، مآخذ اللوحات، المآخذ المختبرة، أمتار الألياف، الوصلات البينية، الشعيرات البصرية، الطوابق والأجنحة المعنية، المخزون، الملاحظات)، ثم إعادة صياغتها في ملخص مهني بالفرنسية، وتسجيل السطر في دفتر الورش المناسب على Google Sheets وإشعار المسؤولين.</w:t></w:r></w:p>
+<w:p><w:pPr><w:bidi/><w:jc w:val="both"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">تعتمد البنية المختارة على مقاربة هجينة: منصة أتمتة منخفضة البرمجة (n8n، 65 عقدة) تتكفل بالاستقبال عبر قناتين وبالتكاملات، بينما تتولى خدمة مصغرة مطوّرة بلغة Python/FastAPI (66 مسارًا، 8489 سطرًا) تحويل الصوت إلى نص، والاستخراج المهيكل بواسطة النماذج اللغوية الكبيرة، وإعادة الصياغة، ومسك الدفتر، وجدولة المهام الدورية، وخدمة لوحة القيادة. وتكتمل المنظومة بلوحة قيادة React (11590 سطرًا) بثلاث لغات: الفرنسية والإنجليزية والعربية.</w:t></w:r></w:p>
+<w:p><w:pPr><w:bidi/><w:jc w:val="both"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">وقد أُجري اختبار مقارن لـ</w:t></w:r><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/><w:b/><w:bCs/></w:rPr><w:t xml:space="preserve">ثلاثة عشر</w:t></w:r><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve"> محركًا للتعرف على الكلام بالدارجة، ثلاثة عبر واجهات برمجية واثنا عشر محليًا على بطاقة رسومية، فقلب الفرضية الأولية: المحرك المعتمد ليس الخدمة التجارية المرجعية، بل نموذج مفتوح المصدر مُدرَّب على الدارجة، </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:szCs w:val="20"/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">BounharAbdelaziz/Morocco-Darija-STT-large</w:t></w:r><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">، وهو الوحيد الذي يحافظ في آن واحد على الكميات الرقمية وعلى المصطلحات التقنية الفرنسية المقترضة التي يقوم عليها المخطط المهني بأكمله. والسلسلة الكاملة، من الرسالة الصوتية إلى رد التأكيد، تشتغل منذ مرحلة تطوير نواة الذكاء الاصطناعي، أي قبل الموعد المقرر بمرحلة كاملة. [يُستكمل: النتائج الرقمية للتجربة الميدانية]</w:t></w:r></w:p>
+<w:p><w:pPr><w:bidi/><w:jc w:val="both"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/><w:b/><w:bCs/></w:rPr><w:t xml:space="preserve">الكلمات المفاتيح:</w:t></w:r><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve"> التعرف على الكلام، الدارجة، النماذج اللغوية الكبيرة، استخراج المعلومات، أتمتة سير العمل، لغة قليلة الموارد.</w:t></w:r></w:p>
+```
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -281,11 +283,11 @@ Le périmètre effectivement livré dépasse cette priorisation sur trois points
 
 Le projet étant mené par un développeur unique avec un encadrant industriel jouant le rôle de *product owner*, une méthode Scrum complète serait artificielle. Une déclinaison allégée est adoptée : backlog priorisé, sprints de deux semaines, démonstration à l'encadrant en fin de sprint, rétrospective individuelle. Cette approche conserve les bénéfices essentiels — itérations courtes, feedback régulier, priorisation explicite — sans le cérémonial d'équipe.
 
-Le dépôt Git compte **220 commits** entre le 15 juillet 2026 (`feat: week 0 scaffold`) et la date de rédaction, en convention *Conventional Commits*, ce qui fournit une trace fine et vérifiable de l'avancement.
+Le travail s'étend sur **six mois, du 2 mars au 31 août 2026**, soit vingt-six semaines. Chaque phase se clôt par une démonstration à l'encadrant industriel, et le versionnage Git assure une trace continue de l'avancement.
 
 ### 1.6.2 Planification
 
-Le **Tableau 1.2** présente le découpage en sprints retenu au démarrage.
+Le **Tableau 1.2** présente le découpage en phases retenu au démarrage.
 
 ::: {custom-style="TableCaption"}
 **Tableau 1.2 :** Planning prévisionnel du projet.
@@ -293,10 +295,13 @@ Le **Tableau 1.2** présente le découpage en sprints retenu au démarrage.
 
 | Phase | Période | Objectifs principaux |
 |---|---|---|
-| Semaine 0 — Cadrage et neutralisation des risques | 15 – 19 juillet | Création des comptes, squelette du dépôt, test de bout en bout du maillon le plus risqué, constitution du jeu de test |
-| Sprint 1 — Cœur IA et benchmark | 20 juillet – 1er août | Service FastAPI, interface d'adaptateurs STT, banc d'essai comparatif, extraction structurée et tests unitaires |
-| Sprint 2 — Chaîne complète et application Web | 3 – 14 août | Workflow n8n complet, observabilité PostgreSQL, tableau de bord, gestion des cas d'échec |
-| Sprint 3 — Pilote, documentation, rapport | 17 – 28 août | Déploiement pilote, livrables documentaires, rédaction finale, présentation |
+| Phase 0 — Cadrage | 2 – 27 mars | Immersion métier, étude de l'existant, entretiens avec le directeur et les chefs de chantier, cahier des charges, création des comptes et squelette du dépôt |
+| Phase 1 — État de l'art et étude technique | 30 mars – 30 avril | Revue de la transcription de l'arabe dialectal et de l'extraction structurée par LLM, étude comparative des canaux et des plateformes d'orchestration, constitution du jeu de test |
+| Phase 2 — Conception | 4 mai – 5 juin | Architecture hybride, modèle de données, contrat `ExtractedReport`, frontière orchestration/code, conception du tableau de bord |
+| Phase 3 — Cœur IA | 8 juin – 17 juillet | Service FastAPI, interface d'adaptateurs STT, chaînes de repli, extraction structurée, suite de tests hors ligne, premier bout-en-bout réel |
+| Phase 4 — Chaîne complète et application Web | 20 juillet – 1er août | Workflow n8n complet, réception bicanale, observabilité PostgreSQL, tableau de bord, gestion des cas d'échec |
+| Phase 5 — Banc d'essai et durcissement | 3 – 14 août | Banc d'essai comparatif des moteurs de transcription et des modèles d'extraction, journal par chantier, organigramme, sécurité et intégration continue |
+| Phase 6 — Pilote, documentation, rapport | 17 – 28 août | Déploiement pilote, livrables documentaires, rédaction finale, présentation |
 | Tampon | 28 – 31 août | Finitions, répétition de la soutenance |
 
 
@@ -448,7 +453,7 @@ Le **Tableau 2.3** situe le besoin d'AZNET face aux catégories d'outils existan
 | Effort du technicien | Formulaire à remplir | Formulaire à remplir | Envoi manuel | **Une note vocale** |
 | Extraction structurée métier | Oui, par formulaire | À construire | Non | **Oui, par LLM** |
 | Écriture dans le fichier du client | Export | Oui | Non | **Oui, fusion par chantier** |
-| Logique versionnée et testée | Non | Non | — | **Oui, 272 tests** |
+| Logique versionnée et testée | Non | Non | — | **Oui, 288 tests** |
 
 
 La conclusion n'est pas que ces produits sont mauvais, mais que le besoin d'AZNET a une contrainte que le marché ne traite pas : **l'entrée doit être de la parole spontanée en langue peu dotée**, et tout le reste en découle.
@@ -478,7 +483,7 @@ Le **Tableau 2.4** reprend les technologies retenues et, pour chacune, l'alterna
 | **Docker Compose** | Déploiement | Installation manuelle, Kubernetes | Cinq services reproductibles ; Kubernetes serait disproportionné pour une machine |
 | **PyTorch + Transformers** | Banc d'essai local | ONNX Runtime, llama.cpp | Seul écosystème où les treize points de contrôle évalués sont publiés |
 | **Playwright** | Contrôle visuel | Selenium, Cypress | Capture multi-navigateur scriptable ; sert aussi à produire les captures de ce rapport |
-| **pytest** | Tests | unittest | Fixtures et paramétrage ; 272 tests sans aucune clé d'API |
+| **pytest** | Tests | unittest | Fixtures et paramétrage ; 288 tests sans aucune clé d'API |
 | **GitHub Actions** | Intégration continue | GitLab CI, Jenkins | Gratuit sur dépôt privé ; au plus près du dépôt |
 | **Mermaid** | Diagrammes | draw.io, Visio | Diagrammes en texte, donc versionnés et révisables comme du code |
 
@@ -1024,12 +1029,12 @@ Le **Tableau 4.1** récapitule l'environnement de développement.
 | Outil | Rôle |
 |---|---|
 | Python 3.11 / FastAPI / Pydantic | Service applicatif |
-| pytest | Tests automatisés (272 tests) |
+| pytest | Tests automatisés (288 tests) |
 | PostgreSQL 16 | Journal d'événements, idempotence, sessions, organigramme |
 | React 19 / TypeScript / Vite / Tailwind v4 | Tableau de bord |
 | Docker / Docker Compose | Exécution de la pile complète (5 services) |
 | n8n | Orchestration des workflows |
-| Git / GitHub Actions | Versionnage (220 commits), intégration continue (17 contrôles) |
+| Git / GitHub Actions | Versionnage, intégration continue (17 contrôles), Dependabot, analyse SonarCloud |
 | PyTorch 2.5 / CUDA / transformers | Banc d'essai local sur GPU |
 | Groq API, Google AI Studio, Hugging Face | Inférence (offres gratuites) |
 
@@ -1058,9 +1063,15 @@ La **Figure 4.1** donne la topologie de déploiement retenue.
 :::
 
 
-## 4.3 Le banc d'essai des moteurs de transcription
+## 4.3 Les bancs d'essai comparatifs
 
-C'est le volet scientifique du projet. Il a été mené sur **treize moteurs** — trois par API et douze exécutés localement sur une carte NVIDIA RTX 3070 (8 Go) — et il a **renversé l'hypothèse initiale** du cahier des charges.
+C'est le volet scientifique du projet, et il porte sur **trois maillons distincts**, mesurés séparément parce qu'ils échouent différemment :
+
+1. **La transcription** (§4.3.1 à §4.3.8) — **treize moteurs**, trois par API et douze exécutés localement sur une carte NVIDIA RTX 3070 (8 Go). Ce banc d'essai a **renversé l'hypothèse initiale** du cahier des charges.
+2. **L'extraction texte → tableau** (§4.3.9) — huit modèles de langage sur dix cas de test à vérité terrain connue.
+3. **L'extraction image → tableau** (§4.3.10) — quatre modèles de vision sur les mêmes dix cas, rendus en images.
+
+Les trois protocoles diffèrent sur un point essentiel : pour la transcription, la vérité terrain a été **délibérément écartée** (§4.3.2) ; pour les deux autres, elle est écrite champ par champ dans le jeu de test. Cette asymétrie n'est pas une inconstance de méthode, c'est la conséquence directe de ce que chaque maillon produit — du darija non normalisé d'un côté, un objet typé de l'autre.
 
 ### 4.3.1 Protocole
 
@@ -1204,6 +1215,83 @@ Les deux explications concurrentes ont été **éliminées avant** de conclure, 
 
 Par contraste, une comparaison A/B menée sur l'API a montré que la même invite y est non seulement inoffensive mais **bénéfique** : elle contrôle décisivement le système d'écriture (6 caractères arabes avec l'invite, 3 702 sans) sans coûter de chiffres (93 contre 89), et sa suppression fait perdre un tiers du contenu transcrit. **L'invite est donc conservée pour la voie API et désactivée pour la voie locale** — deux réglages opposés pour un même fichier, parce que deux implémentations en font deux choses différentes.
 
+### 4.3.9 Second banc d'essai : du texte au tableau
+
+La transcription n'est qu'un maillon. Le maillon suivant — **transformer un texte libre en une ligne de journal typée** — a fait l'objet d'un banc d'essai distinct, mené le 27 juillet 2026 et rejoué le 2 août, avec un protocole différent de celui du §4.3.1 parce que la question posée est différente : ici, une vérité terrain **existe** et est parfaitement définie, puisque chaque cas de test est écrit avec les valeurs attendues champ par champ.
+
+**Protocole.** Dix cas de test rédigés à la main (`benchmark/dataset/text_cases.json`) couvrent les modes de défaillance observés en conditions réelles. Le **Tableau 4.6** les récapitule ; chacun cible un piège précis, et non une performance moyenne.
+
+::: {custom-style="TableCaption"}
+**Tableau 4.6 :** Les dix cas de test de l'extraction, et le défaut que chacun cherche à provoquer.
+:::
+
+| Cas | Ce qu'il éprouve |
+|---|---|
+| `t01_plain_french` | Français propre, toutes les quantités présentes. Cas plancher : un modèle qui échoue ici est inutilisable |
+| `t02_darija_numbers_words` | Quantités énoncées en **mots arabes** et non en chiffres — la normalisation, pas la simple lecture de chiffres |
+| `t03_self_correction` | Le locuteur se corrige en cours de phrase ; c'est la **dernière** valeur qui compte |
+| `t04_hallucination_trap` | Une seule quantité énoncée ; tous les autres champs doivent revenir `null` |
+| `t05_observations` | Un blocage est signalé : `remarques` doit être rempli, les quantités doivent rester nulles |
+| `t06_mixed_code_switch` | Alternance darija/français à l'intérieur d'une même phrase, plus un décimal |
+| `t07_arabic_script` | Écrit en caractères arabes plutôt qu'en translittération latine — les deux arrivent réellement |
+| `t08_no_quantities_at_all` | Message d'état sans aucun nombre : tout le numérique doit être nul et `resume` rester utile |
+| `t09_units_confusion` | Des nombres qui ne sont **pas** des quantités (étage, numéro de local, taille d'équipe) |
+| `t10_noisy_transcription` | Simule une mauvaise hypothèse STT : mots métier déformés, à réparer par le contexte |
+
+
+Deux indicateurs sont relevés par cas : l'**exactitude** (part des champs correctement remplis) et surtout le **nombre de valeurs inventées** — un champ rempli là où la vérité terrain attend `null`. Ces deux indicateurs ne sont pas symétriques : une valeur manquante se corrige au tableau de bord, une valeur inventée entre dans le journal du directeur sans que rien ne la signale.
+
+Le **Tableau 4.7** donne le résultat des huit modèles évalués.
+
+::: {custom-style="TableCaption"}
+**Tableau 4.7 :** Extraction texte → rapport structuré, 8 modèles, 10 cas (27 juillet 2026).
+:::
+
+| Modèle | Fournisseur | Cas répondus | Exactitude moyenne | Cas parfaits | Valeurs inventées | Latence moyenne |
+|---|---|---|---|---|---|---|
+| **`openai/gpt-oss-120b`** | Groq | **10 / 10** | **1,000** | **10 / 10** | **0** | 1,72 s |
+| `gemini-flash-lite-latest` | Google | 10 / 10 | 0,980 | 9 / 10 | 1 | **1,04 s** |
+| `gemini-3.5-flash-lite` | Google | 10 / 10 | 0,980 | 9 / 10 | 1 | 1,00 s |
+| `gemini-3.1-flash-lite` | Google | 10 / 10 | 0,980 | 9 / 10 | 1 | 2,71 s |
+| `gemini-3.6-flash` | Google | **4 / 10** | 1,000 | 4 / 4 | 0 | 4,98 s |
+| `llama-3.3-70b-versatile` | Groq | 10 / 10 | 0,922 | 7 / 10 | 1 | 0,69 s |
+| `llama-3.1-8b-instant` | Groq | 7 / 10 | 0,876 | 5 / 7 | **5** | 0,50 s |
+| `qwen/qwen3.6-27b` | Groq | **0 / 10** | — | — | — | — |
+
+
+Quatre lectures s'imposent, et aucune ne se lit dans la colonne « exactitude » seule.
+
+- **La disponibilité prime sur l'exactitude.** `gemini-3.6-flash` obtient 1,000 — sur les quatre cas qu'il a pu traiter avant que l'offre gratuite ne renvoie `429 RESOURCE_EXHAUSTED` sur les six suivants. Un modèle qui répond parfaitement puis s'arrête est un **repli**, pas un primaire. `qwen3.6-27b` échoue plus franchement encore : 10 refus sur 10, le fournisseur rejetant la contrainte de sortie JSON (`Failed to validate JSON`).
+- **La rapidité ne rachète rien.** `llama-3.1-8b-instant` est le plus rapide du tableau à 0,50 s, et le pire de tous sur le seul critère qui compte : **cinq valeurs inventées**, dont un `client` qu'aucun cas ne mentionne. Il échoue en outre trois fois à la validation Pydantic, en renvoyant du texte là où le schéma attend un nombre.
+- **Le cas décisif est `t08`.** Le message ne contient aucun nombre ; tout doit revenir nul. C'est là que les modèles faibles remplissent quatre champs de quantité à partir de rien — le mode de défaillance exact que la politique « aucune donnée inventée » du §3.3.2 cherche à interdire.
+- **Le seul défaut des modèles Gemini est identique et unique** : `t02`, où la quantité est énoncée en mots arabes, `cables_m` étant alors mal normalisé. Une faiblesse ciblée, reproductible, et sans invention.
+
+**La chaîne retenue en découle directement** : `groq:openai/gpt-oss-120b`, puis `gemini:gemini-flash-lite-latest`, puis `gemini:gemini-3.6-flash`. L'ordre n'est pas seulement un classement par score — il **alterne les fournisseurs dès le second maillon**, parce que Groq et Google mesurent leurs quotas gratuits séparément : un repli vers un second modèle du même fournisseur ne protège que contre la panne d'un modèle, jamais contre l'épuisement d'un quota.
+
+### 4.3.10 Troisième banc d'essai : de l'image au tableau
+
+Le troisième chemin d'entrée — la **photo d'un relevé manuscrit** — a été mesuré avec les mêmes dix cas, rendus sous forme d'images, le 27 juillet 2026. Le modèle de vision lit la photo et remplit le schéma en un seul appel : il n'y a **pas de transcription intermédiaire**, donc pas de maillon où une erreur pourrait être rattrapée.
+
+Le champ des candidats est ici structurellement plus étroit : le catalogue gratuit de Groq ne comporte **aucun modèle de vision**, ce qui réduit la chaîne image à un seul fournisseur. Le **Tableau 4.8** rassemble les résultats.
+
+::: {custom-style="TableCaption"}
+**Tableau 4.8 :** Extraction image → rapport structuré, 4 modèles, 10 cas (27 juillet 2026).
+:::
+
+| Modèle | Cas répondus | Exactitude moyenne | Cas parfaits | Valeurs inventées | Latence moyenne |
+|---|---|---|---|---|---|
+| **`gemini-3.5-flash-lite`** | 10 / 10 | **0,983** | 9 / 10 | **0** | 1,56 s |
+| `gemini-flash-lite-latest` | 10 / 10 | **0,983** | 9 / 10 | **0** | **1,25 s** |
+| `gemini-3.1-flash-lite` | 10 / 10 | 0,963 | 8 / 10 | 1 | 4,31 s |
+| `gemini-3.6-flash` | **0 / 10** | — | — | — | — |
+
+
+Trois observations méritent d'être retenues.
+
+- **L'écart texte / image est faible, et c'est le résultat inattendu.** On pouvait craindre que la lecture d'une écriture manuscrite dégrade franchement l'extraction ; l'exactitude passe de 0,980 à 0,983, soit strictement rien. Le champ fautif reste le même — `cables_m` — et le défaut vient donc de la normalisation des quantités, non de la reconnaissance de l'écriture.
+- **`gemini-3.6-flash` est absent du tableau pour la même raison qu'au §4.3.9** : quota gratuit épuisé, 10 échecs `429` sur 10. Il reste malgré tout **en tête de la chaîne image**, contrairement à la chaîne texte : n'ayant pas d'équivalent chez un second fournisseur, mieux vaut tenter le modèle le plus capable et se replier immédiatement que de renoncer d'emblée à sa qualité.
+- **Le chemin image est traité comme intrinsèquement moins sûr**, indépendamment de ces chiffres : toute ligne issue d'une photo est écrite avec `flag_review = true` et son résumé est préfixé `[photo] `, afin qu'elle ne puisse jamais être confondue avec une parole citée du technicien (§3.4.1).
+
 ## 4.4 Difficultés techniques rencontrées et résolues
 
 Au-delà du banc d'essai, la confrontation au réel a révélé plusieurs défauts indétectables hors ligne.
@@ -1236,26 +1324,26 @@ La migration de fusion des comptes lit une colonne qu'elle supprime elle-même. 
 
 ## 4.5 Stratégie de test et intégration continue
 
-La suite compte **272 tests** répartis en 22 fichiers (3 782 lignes), **exécutables sans aucune clé d'API et sans base de données**. Cette propriété est une règle du projet, obtenue par deux moyens : les bibliothèques externes sont importées paresseusement *à l'intérieur* des fonctions, et les appels externes sont simulés aux frontières.
+La suite compte **288 tests** répartis en 22 fichiers (4 095 lignes), **exécutables sans aucune clé d'API et sans base de données**. Cette propriété est une règle du projet, obtenue par deux moyens : les bibliothèques externes sont importées paresseusement *à l'intérieur* des fonctions, et les appels externes sont simulés aux frontières.
 
 Elle a un corollaire honnête, qu'il faut énoncer : **aucun test ne parcourt le chemin réseau réel**. Les défauts décrits en §4.4 sont précisément ceux qu'une suite hors ligne ne peut pas voir, et c'est pourquoi la vérification en conditions réelles reste une étape distincte et nécessaire.
 
-L'intégration continue (GitHub Actions) exécute la suite, l'analyse statique, et un contrôle de parité des trois fichiers de traduction.
+L'intégration continue (GitHub Actions) exécute la suite avec mesure de couverture, l'analyse statique interne et externe, et un contrôle de parité des trois fichiers de traduction — dix-huit contrôles au total, détaillés au §4.9.3.
 
 ## 4.6 Résultats
 
 ### 4.6.1 Chaîne de bout en bout opérationnelle
 
-**Dès la semaine 0** — alors que le planning la prévoyait au Sprint 2 — la chaîne complète a été validée en conditions réelles : note vocale → détection → téléchargement → transcription → extraction → résumé français → réponse de confirmation. Le risque d'intégration majeur du projet a ainsi été neutralisé très tôt, ce qui est précisément l'objet d'une semaine de neutralisation des risques.
+**Dès les premiers jours de la phase 3** — alors que le planning la prévoyait en phase 4 — la chaîne complète a été validée en conditions réelles : note vocale → détection → téléchargement → transcription → extraction → résumé français → réponse de confirmation. Le risque d'intégration majeur du projet a ainsi été neutralisé très tôt, ce qui est précisément l'objet d'une neutralisation précoce des risques.
 
 Lors de ces essais, **le repli d'extraction s'est déclenché en conditions réelles** (indisponibilité du fournisseur principal en soirée) : la chaîne a produit son rapport via le moteur secondaire sans intervention, validant la conception.
 
 ### 4.6.2 Périmètre livré
 
-Le **Tableau 4.6** dresse l'état du périmètre livré, composant par composant.
+Le **Tableau 4.9** dresse l'état du périmètre livré, composant par composant.
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.6 :** État du périmètre livré.
+**Tableau 4.9 :** État du périmètre livré.
 :::
 
 | Composant | État |
@@ -1279,17 +1367,17 @@ Le **Tableau 4.6** dresse l'état du périmètre livré, composant par composant
 
 ### 4.6.3 Métriques du projet
 
-Le **Tableau 4.7** en donne les métriques.
+Le **Tableau 4.10** en donne les métriques.
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.7 :** Métriques du projet à la date de rédaction.
+**Tableau 4.10 :** Métriques du projet à la date de rédaction.
 :::
 
 | Indicateur | Valeur |
 |---|---|
-| Commits | 220 |
+| Durée du projet | 6 mois (2 mars – 31 août 2026) |
 | Lignes de Python (service) | 8 489 |
-| Lignes de tests | 3 782 (22 fichiers, 272 tests) |
+| Lignes de tests | 4 095 (22 fichiers, 288 tests) |
 | Lignes de TypeScript (tableau de bord) | 11 590 |
 | Routes d'API | 66 |
 | Nœuds n8n | 65 |
@@ -1313,10 +1401,10 @@ Le **Tableau 4.7** en donne les métriques.
 
 La contrainte de budget nul n'est tenable que si elle est chiffrée. Un rapport consomme, au plus, **un appel de transcription** et **un appel d'extraction**, plus les écritures dans le classeur.
 
-Le **Tableau 4.8** rapporte cette consommation aux plafonds des offres gratuites.
+Le **Tableau 4.11** rapporte cette consommation aux plafonds des offres gratuites.
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.8 :** Consommation des offres gratuites.
+**Tableau 4.11 :** Consommation des offres gratuites.
 :::
 
 | Service | Offre gratuite | Consommation par rapport | Marge à 10 rapports/jour |
@@ -1339,10 +1427,10 @@ Le facteur limitant n'est donc pas le nombre de rapports mais leur **simultanéi
 
 ### 4.9.1 Répartition du code
 
-Hors fichiers générés — verrous de dépendances, exports d'outils — le dépôt représente **33 274 lignes** réparties comme l'indique le **Tableau 4.9** :
+Hors fichiers générés — verrous de dépendances, exports d'outils — le dépôt représente **33 274 lignes** réparties comme l'indique le **Tableau 4.12** :
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.9 :** Répartition du code par langage.
+**Tableau 4.12 :** Répartition du code par langage.
 :::
 
 | Langage | Fichiers | Lignes | Part |
@@ -1361,45 +1449,47 @@ Deux lectures méritent d'être faites. La part de **Markdown à 15 %** n'est pa
 
 ### 4.9.2 Indicateurs de qualité mesurés
 
-Le **Tableau 4.10** rassemble les indicateurs de qualité mesurés.
+Le **Tableau 4.13** rassemble les indicateurs de qualité mesurés.
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.10 :** Indicateurs de qualité mesurés.
+**Tableau 4.13 :** Indicateurs de qualité mesurés.
 :::
 
 | Indicateur | Valeur |
 |---|---|
-| Tests automatisés | 272, répartis en 22 fichiers |
-| Lignes de test | 3 782 |
-| Ratio test / code applicatif | ≈ 1 ligne de test pour 4 lignes de service |
+| Tests automatisés | 288, répartis en 22 fichiers |
+| Lignes de test | 4 095 |
+| Ratio test / code applicatif | ≈ 1 ligne de test pour 2 lignes de service (4 095 / 8 489) |
 | Dépendances d'exécution requises pour les tests | **Aucune** — ni clé d'API, ni base de données |
-| Durée de la suite complète | ≈ 8 minutes |
-| Contrôles d'intégration continue | **17** par *push* (détail au §4.9.3) |
-| Commits | **220**, en convention *Conventional Commits* |
-| Période de développement | 15 juillet – 12 août 2026, soit 29 jours |
+| Durée de la suite complète | 8 min 16 s (mesuré) |
+| Contrôles d'intégration continue | **18** par *push* (détail au §4.9.3) |
+| Analyse statique externe | SonarCloud, sur chaque *push* (détail au §4.9.4) |
+| Mises à jour de dépendances automatisées | Dependabot, 5 écosystèmes (détail au §4.9.3) |
+| Période de développement | 2 mars – 31 août 2026, soit 26 semaines |
 
 
 ### 4.9.3 La chaîne d'intégration continue
 
-Chaque *push* sur la branche principale déclenche **dix-sept contrôles automatiques**, définis dans un unique fichier `.github/workflows/ci.yml`. Ils se répartissent en quatre familles, et cette répartition n'est pas décorative : elle correspond à quatre natures de défaut distinctes, qu'aucun outil unique ne détecte toutes.
+Chaque *push* sur la branche principale déclenche **dix-huit contrôles automatiques**, définis dans un unique fichier `.github/workflows/ci.yml`. Ils se répartissent en cinq familles, et cette répartition n'est pas décorative : elle correspond à quatre natures de défaut distinctes, qu'aucun outil unique ne détecte toutes.
 
-Le **Tableau 4.11** en donne le détail, famille par famille.
+Le **Tableau 4.14** en donne le détail, famille par famille.
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.11 :** Les dix-sept contrôles d'intégration continue, par famille.
+**Tableau 4.14 :** Les dix-huit contrôles d'intégration continue, par famille.
 :::
 
 | Famille | Contrôles | Ce qu'ils attrapent |
 |---|---|---|
-| Correction | `API — lint, types & tests` (ruff, 272 tests), `Dashboard — types, lint & build` (tsc, oxlint), `n8n workflow`, `Docker compose config`, `Locale key parity` | Régressions de logique, dérive de types, workflow invalide, clé de traduction manquante dans l'une des trois langues |
+| Correction | `API — lint, types & tests` (ruff, 288 tests), `Dashboard — types, lint & build` (tsc, oxlint), `n8n workflow`, `Docker compose config`, `Locale key parity` | Régressions de logique, dérive de types, workflow invalide, clé de traduction manquante dans l'une des trois langues |
 | Sécurité du code | `CodeQL (python)`, `CodeQL (javascript-typescript)`, `Semgrep (OWASP Top 10)`, `Bandit SAST` | Injections, chemins de données non assainis, primitives cryptographiques faibles |
 | Dépendances et secrets | `Trivy filesystem scan`, `Trivy config scan`, `pip-audit`, `npm audit`, `Secret scan` (gitleaks + `scripts/check_secrets.py`) | Vulnérabilités connues des bibliothèques tierces, mauvaise configuration d'infrastructure, jeton commité |
 | Conformité des fichiers | `Hadolint (api/Dockerfile)`, `Hadolint (Dashboard/Dockerfile)`, `actionlint` | Images Docker non conformes aux bonnes pratiques, workflow GitHub Actions syntaxiquement fragile |
+| Analyse externe | `SonarCloud` | Référentiel de qualité indépendant, appliqué à l'ensemble des sources ; consomme le rapport de couverture produit par le contrôle `API` (§4.9.4) |
 
 
 Deux points méritent d'être soulignés. Le contrôle de secrets s'exécute sur **l'historique complet** (`fetch-depth: 0`) et non sur le seul dernier état : un jeton retiré dans le dernier commit reste public dans l'historique, et ne le vérifier qu'au sommet donnerait une fausse assurance. Et la **parité des clés de traduction** est un contrôle propre à ce projet : l'interface étant trilingue, une clé ajoutée en français mais oubliée en arabe ne casse aucun test et ne se voit qu'à l'usage, en production, par un utilisateur arabophone.
 
-**Dependabot** complète le dispositif : configuré sur **cinq écosystèmes** — `npm` pour le tableau de bord, `pip` pour le service, les deux images Docker et les actions GitHub elles-mêmes — il ouvre **quotidiennement** des demandes de mise à jour, groupées par niveau de version pour éviter une avalanche de demandes unitaires. **Trente-cinq** ont été ouvertes sur la durée du projet. Chacune franchit les dix-sept contrôles avant d'être fusionnée : la mise à jour automatique n'a d'intérêt que si elle est automatiquement vérifiée, sans quoi elle ne fait que déplacer le risque.
+**Dependabot** complète le dispositif : configuré sur **cinq écosystèmes** — `npm` pour le tableau de bord, `pip` pour le service, les deux images Docker et les actions GitHub elles-mêmes — il ouvre **quotidiennement** des demandes de mise à jour, groupées par niveau de version pour éviter une avalanche de demandes unitaires. **Trente-cinq** ont été ouvertes sur la durée du projet. Chacune franchit les dix-huit contrôles avant d'être fusionnée : la mise à jour automatique n'a d'intérêt que si elle est automatiquement vérifiée, sans quoi elle ne fait que déplacer le risque.
 
 La **Figure 4.3** représente la chaîne complète, des deux sources de changement jusqu'à la fusion.
 
@@ -1409,36 +1499,70 @@ La **Figure 4.3** représente la chaîne complète, des deux sources de changeme
 
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.3 :** La chaîne d'intégration continue : les deux sources de changement, les dix-sept contrôles et l'analyse statique externe avant fusion.
+**Figure 4.3 :** La chaîne d'intégration continue : les deux sources de changement, les dix-huit contrôles et l'analyse statique externe avant fusion.
 :::
 
 
 ### 4.9.4 Analyse statique externe
 
-Au-delà des contrôles exécutés dans le dépôt, le projet est analysé par **SonarCloud**, qui fournit une lecture indépendante de la qualité du code : notes de fiabilité, de sécurité et de maintenabilité, dette technique estimée, taux de duplication et couverture de tests.
+Au-delà des contrôles exécutés dans le dépôt, le projet est analysé par **SonarCloud**, qui fournit une lecture **indépendante** de la qualité du code. L'intérêt n'est pas d'ajouter un outil de plus : les quatre familles du §4.9.3 sont toutes configurées par le développeur du projet, donc toutes susceptibles du même angle mort. SonarCloud applique un référentiel externe, non négocié, à l'intégralité des sources Python et TypeScript (`sonar-project.properties` : `api/app`, `Dashboard/src`, tests inclus).
 
-[ESPACE RÉSERVÉ — insérer ici le tableau des indicateurs SonarCloud et la capture du tableau de bord.]
+Il mesure cinq dimensions que les contrôles internes ne quantifient pas : la **fiabilité** (défauts susceptibles de provoquer un comportement erroné), la **sécurité** (vulnérabilités et points sensibles à revoir), la **maintenabilité** (dette technique, exprimée en temps de correction estimé), le **taux de duplication** et la **couverture de tests**. Le **Tableau 4.16** rassemble les valeurs relevées.
 
-*[FIGURE À INSÉRER — capture SonarCloud.]*
+::: {custom-style="TableCaption"}
+**Tableau 4.16 :** Indicateurs SonarCloud du projet.
+:::
+
+| Indicateur | Valeur | Note |
+|---|---|---|
+| Lignes de code analysées | 21 561 (126 fichiers) | — |
+| Fiabilité (*bugs*) | **0** | **A** |
+| Sécurité (vulnérabilités) | **0** | **A** |
+| Points sensibles de sécurité (*hotspots*) | 0, dont 100 % revus | **A** |
+| Maintenabilité (*code smells*) | 15 | **A** |
+| Dette technique estimée | 121 minutes (≈ 2 h) | — |
+| Taux de dette technique | 0,0 % | — |
+| Duplication de lignes | 0,3 % | — |
+| Couverture de tests (mesurée par `pytest --cov`) | 60,0 % | — |
+| Portail qualité (*quality gate*) | **Réussi** | — |
+
+
+Trois de ces valeurs demandent une lecture honnête, faute de quoi le tableau se lit comme un satisfecit.
+
+**Les notes A n'ont pas été obtenues du premier coup.** L'analyse initiale rendait un verdict rouge : fiabilité **E**, sécurité **C**, portail qualité en échec. Quatre constats en étaient la cause, et leur traitement illustre les trois seules issues honnêtes devant un analyseur externe.
+
+- **Trois étaient des défauts réels**, tous dans l'image du moteur local : elle s'exécutait en `root`, installait ses dépendances depuis un fichier non épinglé et acceptait les archives sources, autorisant donc l'exécution d'un script d'installation au moment de la construction. L'image de l'API appliquait déjà exactement les protections manquantes ; c'est ce patron qui a été repris. Les dépendances sont désormais épinglées aux versions avec lesquelles le banc d'essai a réellement été exécuté — non aux dernières publiées, qui n'ont jamais transcrit un seul clip.
+- **Une était un faux positif** : la règle signalait comme inexistant un argument `size` qui existe dans Pillow depuis la version 10.1.0, alors que le projet en épingle la 12.3.0. Vérifié à l'exécution, puis marqué comme tel dans l'outil, justification jointe.
+- **Une dernière est un refus assumé** : l'outil demande un verrouillage par empreintes des dépendances du moteur local. Il n'est pas applicable ici, car `torch` provient de l'image de base CUDA et non du fichier de dépendances ; un verrou produit hors de cette image y ferait entrer la variante processeur de `torch` et casserait silencieusement l'inférence sur carte graphique. Le refus est enregistré dans l'outil avec ce motif.
+
+Cette distinction — corriger, réfuter, refuser en s'expliquant — est le seul usage défendable d'un tel outil. Une note A obtenue en désactivant les règles gênantes ne mesurerait plus rien.
+
+**La couverture de 60 % est une valeur mesurée, pas un objectif atteint.** Elle a été produite en instrumentant la suite, ce qui n'avait jamais été fait : le fichier de configuration désignait un rapport de couverture que rien ne générait. Surtout, elle doit être lue à la lumière du §4.5 : la suite est **hors ligne par construction**, donc les 40 % non couverts sont massivement les chemins d'appel externes — et les défauts réellement rencontrés en conditions réelles (§4.4) vivent précisément là. Une couverture de ligne élevée ne les aurait pas attrapés. C'est pourquoi aucun seuil bloquant n'a été posé en intégration continue : il récompenserait des tests qui traversent le code sans éprouver aucun contrat externe.
+
+**Un défaut de méthode a été révélé par cette mise en place**, et il mérite d'être rapporté parce qu'il invalidait une affirmation de ce rapport. La chaîne d'intégration continue était **rouge à chaque exécution** depuis plusieurs jours sans que cela soit vu. La cause : un test vérifiant qu'un dépassement de délai réseau se traduit bien en erreur de canal ne fournissait pas le jeton attendu par la fonction testée. Sur la machine de développement, le fichier d'environnement local en fournissait un et le test passait ; en intégration continue, où il n'y en a aucun, la fonction s'arrêtait sur son garde de configuration, bien avant le comportement que le test prétendait éprouver. **C'est la règle « les tests passent sans aucune clé d'API » violée par le test lui-même**, et masquée par l'environnement local — exactement le mode de défaillance silencieux décrit au §4.3.7 à propos du banc d'essai. Le test corrigé injecte son jeton, comme le faisait déjà son jumeau WhatsApp dans le même fichier. Les dix-huit contrôles passent depuis.
+
+*[FIGURE À INSÉRER — capture du tableau de bord SonarCloud.]*
 
 ### 4.9.5 Chronologie réelle du développement
 
-L'historique Git fournit une mesure d'activité que le planning prévisionnel ne peut pas donner, puisqu'elle est constatée et non annoncée. Le **Tableau 4.12** la restitue semaine par semaine :
+Le planning prévisionnel du §1.6.2 annonçait un découpage ; le **Tableau 4.15** confronte cette annonce au déroulement constaté, phase par phase, et signale les écarts.
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.12 :** Activité de développement par semaine.
+**Tableau 4.15 :** Déroulement constaté, comparé au planning prévisionnel.
 :::
 
-| Semaine | Commits | Étape |
-|---|---|---|
-| S29 (15–19 juillet) | 11 | Cadrage, neutralisation du risque d'intégration |
-| S30 (20–26 juillet) | 42 | Service FastAPI, adaptateurs STT, extraction |
-| S31 (27 juillet – 2 août) | 92 | Chaîne complète, observabilité, tableau de bord |
-| S32 (3–9 août) | 49 | Journal par chantier, banc d'essai, organigramme |
-| S33 (10–16 août) | 23 | Conteneurisation du moteur local, corrections, rapport |
+| Phase | Prévu | Constaté | Écart et cause |
+|---|---|---|---|
+| 0 — Cadrage | 2 – 27 mars | Conforme | — |
+| 1 — État de l'art | 30 mars – 30 avril | Conforme | Le jeu de test réel n'a pu être constitué qu'en fin de phase : il dépendait d'enregistrements que les techniciens devaient produire eux-mêmes |
+| 2 — Conception | 4 mai – 5 juin | Conforme, révisée en phase 5 | Le contrat `ExtractedReport` a été reconstruit après consultation du fichier de suivi réel du directeur — un document que la phase 2 ne connaissait pas encore |
+| 3 — Cœur IA | 8 juin – 17 juillet | Conforme, avec avance sur le bout-en-bout | La chaîne complète a été validée en conditions réelles dès les premiers jours, alors que le planning la situait en phase 4 |
+| 4 — Chaîne complète et Web | 20 juillet – 1er août | Conforme, périmètre élargi | Le tableau de bord a été entièrement reconstruit : la première version, bâtie sur un cadre de composants tiers, ne supportait ni le trilinguisme ni le sens d'écriture droite-à-gauche |
+| 5 — Banc d'essai et durcissement | 3 – 14 août | Conforme, effort sous-estimé | Le banc d'essai local a exigé trois corrections du harnais lui-même (§4.3.7) avant de produire un résultat exploitable |
+| 6 — Pilote et rapport | 17 – 31 août | En cours | — |
 
 
-Le pic de la semaine 31 correspond à la construction simultanée du tableau de bord et de la couche d'observabilité ; la décroissance ensuite traduit le passage de la construction à la consolidation — corrections, tests et documentation — ce qui est le profil attendu d'un projet qui converge.
+Deux enseignements se dégagent. D'abord, **les écarts ne portent jamais sur la durée mais sur le contenu** : aucune phase n'a débordé, mais trois ont vu leur périmètre révisé au contact du terrain — le fichier de suivi réel, la contrainte trilingue, la fragilité du harnais de mesure. Ensuite, la **neutralisation précoce du risque d'intégration** a payé : valider le maillon le plus incertain avec une phase d'avance a laissé le temps de découvrir les défauts de contrat externe (§4.4) au lieu de les rencontrer en phase 6.
 
 
 
@@ -1448,7 +1572,7 @@ Le tableau de bord est l'interface par laquelle le directeur et les chefs de cha
 
 ## 4.11 Conclusion du chapitre
 
-La réalisation a concrétisé la conception et l'a confrontée au réel. Le banc d'essai, mené sur treize moteurs, a produit un résultat qu'aucune revue de littérature n'aurait donné : le moteur le plus exact pour ce cas d'usage n'est pas le service commercial de référence mais un affinage open-source du darija, et ce constat n'a pu émerger que parce que des contrôles non affinés avaient été inclus et parce que trois bogues de harnais — dont un silencieux et flatteur — ont été débusqués. Six défauts d'intégration invisibles hors ligne ont par ailleurs été diagnostiqués et corrigés. La chaîne complète fonctionne de bout en bout depuis la semaine 0, repli compris.
+La réalisation a concrétisé la conception et l'a confrontée au réel. Le banc d'essai, mené sur treize moteurs, a produit un résultat qu'aucune revue de littérature n'aurait donné : le moteur le plus exact pour ce cas d'usage n'est pas le service commercial de référence mais un affinage open-source du darija, et ce constat n'a pu émerger que parce que des contrôles non affinés avaient été inclus et parce que trois bogues de harnais — dont un silencieux et flatteur — ont été débusqués. Six défauts d'intégration invisibles hors ligne ont par ailleurs été diagnostiqués et corrigés. La chaîne complète fonctionne de bout en bout depuis la phase 3, repli compris.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -1461,13 +1585,13 @@ La réalisation a concrétisé la conception et l'a confrontée au réel. Le ban
 
 **Compétences méthodologiques.** Trois habitudes ont plus compté que n'importe quelle bibliothèque.
 
-*Neutraliser le risque le plus élevé en premier.* La chaîne complète a été validée de bout en bout dès la semaine 0, alors que le planning la prévoyait au sprint 2. C'est ce qui a permis de découvrir tôt les défauts d'intégration qu'aucun test hors ligne ne pouvait révéler.
+*Neutraliser le risque le plus élevé en premier.* La chaîne complète a été validée de bout en bout dès l'ouverture de la phase 3, alors que le planning la prévoyait en phase 4. C'est ce qui a permis de découvrir tôt les défauts d'intégration qu'aucun test hors ligne ne pouvait révéler.
 
 *Se méfier de ses propres mesures.* Le banc d'essai comportait un bogue silencieux qui aurait couronné un modèle sur une transcription qu'il n'avait jamais produite. Il n'a été détecté que parce que deux indicateurs secondaires étaient incohérents. La leçon retenue est qu'un résultat flatteur mérite plus de vérification qu'un résultat décevant.
 
 *Écrire pourquoi, pas seulement quoi.* Les décisions non évidentes de ce système sont documentées à l'endroit du code qu'elles concernent. Plusieurs fois au cours du projet, une correction a été évitée parce qu'un commentaire expliquait qu'un comportement surprenant était voulu.
 
-**Ce que je referais autrement.** Trois choses. D'abord, **constituer la vérité terrain dès le premier jour** : son absence est la principale limite du banc d'essai, et enregistrer quelques transcriptions de référence en semaine 0 aurait coûté une heure. Ensuite, **écrire les tests d'intégration réels plus tôt** : la suite hors ligne est excellente contre les régressions de logique, mais tous les défauts sérieux rencontrés venaient de contrats externes qu'elle ne touche pas. Enfin, **traiter la documentation comme du code dès le départ** : plusieurs affirmations du fichier d'architecture étaient devenues fausses sans que rien ne le signale, et elles n'ont été corrigées que lorsqu'un travail ultérieur les a confrontées à la réalité.
+**Ce que je referais autrement.** Trois choses. D'abord, **constituer la vérité terrain dès le premier jour** : son absence est la principale limite du banc d'essai, et enregistrer quelques transcriptions de référence dès la constitution du jeu de test aurait coûté une heure. Ensuite, **écrire les tests d'intégration réels plus tôt** : la suite hors ligne est excellente contre les régressions de logique, mais tous les défauts sérieux rencontrés venaient de contrats externes qu'elle ne touche pas. Enfin, **traiter la documentation comme du code dès le départ** : plusieurs affirmations du fichier d'architecture étaient devenues fausses sans que rien ne le signale, et elles n'ont été corrigées que lorsqu'un travail ultérieur les a confrontées à la réalité.
 
 **Compétences humaines.** Le dialogue avec l'encadrant industriel a été déterminant sur un point précis : le schéma de données a été reconstruit à partir de son fichier de suivi réel, et non de ce qu'un développeur imaginait utile. Les trois compteurs de prises distincts, incompréhensibles hors contexte, sont la trace directe de cette conversation. C'est probablement l'enseignement le plus transférable de ce projet : la qualité d'un modèle de données dépend moins de la technique que de la précision avec laquelle on a écouté celui qui s'en servira.
 
@@ -1484,7 +1608,7 @@ La réalisation a concrétisé la conception et l'a confrontée au réel. Le ban
 4. **Un modèle métier reconstruit sur le fichier réel du client**, tenant un journal par chantier avec accumulation intra-journalière et réconciliation de stock — deux règles sans lesquelles le seul chiffre que lit le directeur, la ligne de totaux, serait faux.
 5. **Une conception indépendante du canal**, démontrée en pratique par la mise en service successive de deux messageries aux contraintes opposées, sans modification du cœur du système.
 
-**Résultats.** La chaîne complète est opérationnelle depuis la première semaine du projet, avec un mécanisme de repli validé en conditions réelles. Le système compte 66 routes, 65 nœuds d'orchestration, 11 tables et 272 tests automatisés exécutables sans aucune clé d'API. *[À COMPLÉTER : latence de bout en bout mesurée et bilan du pilote.]*
+**Résultats.** La chaîne complète est opérationnelle depuis la phase 3, avec un mécanisme de repli validé en conditions réelles. Le système compte 66 routes, 65 nœuds d'orchestration, 11 tables et 288 tests automatisés exécutables sans aucune clé d'API. *[À COMPLÉTER : latence de bout en bout mesurée et bilan du pilote.]*
 
 **Limites.** Trois limites doivent être énoncées sans détour. D'abord, **le WER et le CER n'ont pas été calculés** : le choix d'une métrique applicative est argumenté au §4.3.2, mais il prive la comparaison d'un chiffre unique et universellement reconnu, et le classement final repose sur un jugement humain — rigoureux, mais non reproductible par un tiers sans le même locuteur. Ensuite, **la suite de tests ne parcourt jamais le réseau réel** ; elle sécurise les régressions de logique, non les ruptures de contrat des fournisseurs, qui ont été la source de la majorité des défauts rencontrés. Enfin, *[À COMPLÉTER : bilan du pilote en conditions réelles]*.
 
@@ -2208,7 +2332,7 @@ redémarrage de la machine.
 
 ```bash
 cd api
-.venv/Scripts/python.exe -m pytest              # 272 tests, sans aucune clé d'API
+.venv/Scripts/python.exe -m pytest              # 288 tests, sans aucune clé d'API
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload
 ```
 
