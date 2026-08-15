@@ -411,30 +411,107 @@ UNROUTED_TAB = "Non affecté"
 # Warnings that mean "a human should look at this row before it is believed".
 REVIEW_WARNINGS = {
     "low_confidence_transcription", "short_transcription", "image_input",
+    # A site nobody has confirmed yet: the row is filed on it, and the director
+    # is told to look, because "Extralé" heard once is a new paper otherwise.
+    "chantier_cree_non_verifie",
 }
 
 
-def resolve_tab(technicien: str, chantier: Optional[str] = None) -> Tuple[str, str, List[str]]:
-    """Which tab this technician's report belongs to.
+def _sticky_chantier(technicien: str) -> Optional[str]:
+    """The site on this technician's most recent report, or None.
 
-    Routing lives in the org chart: the chef carries the chantier and their
-    technicians inherit it. A technician nobody has assigned lands in a tab
-    named `Non affecté` with a warning — visible and fixable, where dropping
-    the row or guessing a site would be neither.
+    Derived from the Rapports mirror rather than stored on the person: the rows
+    already are the record, and a `last_chantier_id` column would be a cache of
+    them with nothing to keep it honest. No expiry — a technician silent for a
+    month is still on the site they were on, and the reply says the site was
+    inherited so a wrong one is visible on the first message.
     """
-    if chantier:
-        return chantier, chantier, []
+    name = technicien.strip().lower()
+    found = None
+    for row in sheets.read_reports():  # append order, so the last match wins
+        if str(row.get("technicien", "")).strip().lower() != name:
+            continue
+        site = str(row.get("chantier", "")).strip()
+        if site and site != UNROUTED_TAB:
+            found = site
+    return found
+
+
+def resolve_site(
+    technicien: str, spoken: Optional[str] = None, create: bool = True
+) -> Tuple[str, str, List[str], str]:
+    """Which chantier (and tab) this report belongs to, and where that came from.
+
+    Order, decided with the owner 2026-08-15: **the voice wins** — the
+    technician standing on the site knows it better than the org chart — then
+    the site on their own most recent row, then the org chart, then
+    `Non affecté`.
+
+    Sticky deliberately outranks the org chart, which reads backwards until you
+    know why: the org chart is only correct while a manager maintains it, and
+    the owner's premise for this whole change is that managers will not open the
+    dashboard. A stale assignment ahead of a live signal would silently misfile
+    a crew that moved, and the "(repris du dernier rapport)" note would almost
+    never appear. The org chart keeps the case sticky cannot answer — a
+    technician's very first message, where there is no history to inherit.
+
+    A spoken name is never trusted as a tab name. That was this function's
+    first branch (`if chantier: return chantier, chantier, []`) and it was safe
+    only because nothing ever reached it; the moment the voice fills it, "la
+    DGH", "d.g.h" and "DGH" become three tabs, three split bordereaux and a
+    totals line scattered across them. So a spoken name is normalized and
+    matched against the `chantiers` table, and a genuine no-match creates the
+    site marked **unverified** — a real new site works on its first message and
+    the director confirms it afterwards.
+
+    `create=False` is the read-only form used on the reply path: it answers the
+    same question without writing a row for a name the journal call has not
+    committed to yet.
+
+    Returns (nom, tab, warnings, source) where source is one of
+    `voix` / `nouveau` / `org` / `repris` / `aucun`.
+    """
     try:
         from app import logs
+
+        if spoken and spoken.strip():
+            match = logs.find_chantier_by_name(spoken)
+            if match:
+                return match["nom"], match["sheet_tab"], [], "voix"
+            nom = spoken.strip()
+            if create:
+                site = logs.create_chantier(nom, verifie=False)
+                nom, tab = site["nom"], site["sheet_tab"]
+            else:
+                tab = nom
+            return nom, tab, ["chantier_cree_non_verifie"], "nouveau"
+
+        sticky = _sticky_chantier(technicien)
+        if sticky:
+            # The row carries the name; the tab it belongs to is still the
+            # table's business, because nom and sheet_tab can differ.
+            match = logs.find_chantier_by_name(sticky)
+            nom = match["nom"] if match else sticky
+            tab = match["sheet_tab"] if match else sticky
+            return nom, tab, ["chantier_repris:%s" % nom], "repris"
 
         person = logs.person_by_name(technicien)
         if person:
             site = logs.resolve_chantier(person["id"])
             if site:
-                return site["nom"], site["sheet_tab"], []
-    except Exception:  # noqa: BLE001 - Postgres down must not cost the row
-        return UNROUTED_TAB, UNROUTED_TAB, ["chantier_non_resolu"]
-    return UNROUTED_TAB, UNROUTED_TAB, ["chantier_non_defini"]
+                return site["nom"], site["sheet_tab"], [], "org"
+    except Exception:  # noqa: BLE001 - Postgres or Sheets down must not cost the row
+        # Note this also swallows a spoken name: with the table unreachable we
+        # cannot tell a known site from a mis-transcription, and writing an
+        # unchecked tab is the exact failure this function exists to prevent.
+        return UNROUTED_TAB, UNROUTED_TAB, ["chantier_non_resolu"], "aucun"
+    return UNROUTED_TAB, UNROUTED_TAB, ["chantier_non_defini"], "aucun"
+
+
+def resolve_tab(technicien: str, chantier: Optional[str] = None) -> Tuple[str, str, List[str]]:
+    """`resolve_site` without the source — the shape the Sheet write needs."""
+    nom, tab, warnings, _source = resolve_site(technicien, chantier)
+    return nom, tab, warnings
 
 
 # --- the Rapports mirror ---------------------------------------------------
@@ -524,7 +601,12 @@ def file_report(payload: Dict) -> Dict:
     technicien = str(payload.get("technicien") or "").strip()
     warnings = list(payload.get("warnings") or [])
 
-    chantier, tab, routing_warnings = resolve_tab(technicien, payload.get("chantier"))
+    # The voice wins: what the technician said beats the org chart. `chantier`
+    # on the payload stays supported (the drain re-files an already-routed row)
+    # and takes precedence over the extraction it was derived from.
+    chantier, tab, routing_warnings = resolve_tab(
+        technicien, payload.get("chantier") or report.chantier_mentionne
+    )
     warnings.extend(routing_warnings)
 
     # Create the tab before reading it. `read_tab` on a tab Google has never

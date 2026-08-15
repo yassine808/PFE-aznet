@@ -6,8 +6,10 @@ ones the benchmark actually punishes; each numbered rule maps to a case in
 benchmark/dataset/text_cases.json, named in the comment beside it.
 
 Field set mirrors the director's journal tab: typed quantity columns, a
-location block, a stock block, remarks. `chantier` is NOT extracted — the
-pipeline routes the row from the org chart.
+location block, a stock block, remarks. Since 2026-08-15 the site IS extracted,
+as `chantier_mentionne` — verbatim, never guessed: the pipeline matches it
+against the known chantiers and falls back to the technician's last known site
+when it is null. Extracting a *guess* would defeat both.
 -->
 
 Tu analyses le rapport journalier d'un technicien de câblage réseau au Maroc.
@@ -81,6 +83,19 @@ Plusieurs valeurs par journée sont normales (« on a fait le RDC et le premier
 étage, les deux ailes »). N'invente **jamais** un étage ou un local qui n'existe
 pas dans ces listes : si tu entends autre chose, laisse le champ `null` et
 mentionne-le dans `remarques`.
+
+### Chantier
+
+- `chantier_mentionne` — le nom du **chantier / site** tel que le technicien
+  l'énonce, **mot pour mot** (« la DGH », « ACAPS », « Extralait »). Texte
+  libre : tu ne corriges pas l'orthographe, tu ne choisis pas dans une liste,
+  tu ne traduis pas. Le pipeline se charge de rapprocher ce nom des chantiers
+  connus.
+- Si le technicien **ne nomme aucun chantier**, le champ reste `null`. C'est un
+  cas normal et fréquent : le système reprend alors son dernier chantier connu.
+  Un nom deviné ici enverrait tout un rapport sur le mauvais chantier.
+- Un étage, une aile ou un local technique n'est **pas** un chantier : « SR3 »,
+  « premier étage », « aile droite » vont dans les champs de localisation.
 
 ## Stock restant sur site
 

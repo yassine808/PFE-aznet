@@ -474,6 +474,7 @@ async def _extract_from_image(
     except logs.LogStoreError as exc:
         await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
     if report.has_data():
+        await _note_inherited_chantier(report, ctx.get("technicien"))
         await run_in_threadpool(_notify_report_event, ctx.get("technicien"),
                                 rapport_complet, warnings, ctx)
     return ProcessResponse(
@@ -529,6 +530,30 @@ async def _audio_input(
             except logs.LogStoreError as exc:
                 await _log("api", "warn", message=f"media link failed: {exc}", **ctx)
     return transcription, rapport_complet, warnings, lien_audio
+
+
+async def _note_inherited_chantier(report, technicien: Optional[str]) -> None:
+    """Say it in the summary when the site was inherited, not stated.
+
+    The reply the technician gets is built by n8n out of `report.resume`, and
+    the routing decision is only taken later, in /journal (reply-first
+    ordering). So the one place this can be said on the reply path is here, on
+    the summary itself — and it must be said: a site reused from an old report
+    with no expiry is exactly the kind of wrong that stays invisible until the
+    director's totals are on the wrong paper. Read-only (`create=False`): the
+    reply path must not write a chantier row for a report that may never be
+    filed.
+    """
+    if not technicien:
+        return
+    try:
+        nom, _tab, _warnings, source = await run_in_threadpool(
+            journal.resolve_site, technicien, report.chantier_mentionne, False
+        )
+    except Exception:  # noqa: BLE001 - a routing hint must never cost the reply
+        return
+    if source == "repris":
+        report.resume = f"{report.resume}\n\n📍 Chantier : {nom} (repris du dernier rapport)"
 
 
 async def _text_input(
@@ -617,6 +642,7 @@ async def process(
     if not report.has_data():
         warnings.append("no_report_content")
     else:
+        await _note_inherited_chantier(report, technicien)
         # psycopg2 is synchronous, like every other DB call on this path: run it
         # off the event loop so one technician's notification does not stall
         # every other request in flight. Same reason as _log() above.

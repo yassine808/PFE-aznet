@@ -40,6 +40,12 @@ blanc, bon de livraison, écran, ou vue du chantier lui-même.
   `locaux_techniques` (`RG`, `SR1`..`SR10`) uniquement si l'étiquette est **écrite**
   sur la photo. Reconnaître un couloir n'est pas lire un étage.
 
+- **Chantier** — `chantier_mentionne` reprend le nom du site **mot pour mot**,
+  et uniquement s'il est **écrit** sur la photo (en-tête de carnet, bon de
+  livraison, panneau, étiquette de baie). Reconnaître un bâtiment n'est pas
+  lire son nom : sans texte, le champ reste `null` et le pipeline reprend le
+  dernier chantier connu du technicien.
+
 - **Blocages et besoins** — `temps_arret_min`, `motif_arret`, `besoins` et
   `prochaines_etapes` uniquement s'ils sont **écrits** (page de carnet, bon de
   livraison, note). Ne déduis jamais un arrêt d'une photo de chantier vide.

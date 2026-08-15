@@ -258,6 +258,18 @@ class ExtractedReport(BaseModel):
     prochaines_etapes: Optional[str] = Field(
         default=None, description="Ce que le technicien prévoit de faire ensuite"
     )
+    # Le chantier tel qu'il a été *prononcé*, verbatim. Deliberately NOT in
+    # DATA_FIELDS: `has_data` answers "is this a report?", and naming a site is
+    # addressing, not work done — "je suis à la DGH" and nothing else must stay
+    # `no_report_content`, or the pipeline would answer "✅ Rapport enregistré"
+    # and open a journal row with every quantity blank. The name is resolved
+    # against the `chantiers` table in journal.resolve_site, never trusted as a
+    # tab name: a mis-transcription must land on the existing site, not create
+    # a fourth spelling of it.
+    chantier_mentionne: Optional[str] = Field(
+        default=None,
+        description="Nom du chantier tel qu'énoncé par le technicien, sinon null",
+    )
     resume: str = Field(
         ..., description="Résumé professionnel en français (2-4 phrases)"
     )

@@ -248,6 +248,11 @@ class FakeSheet:
     def write_row(self, tab, row, values):
         self.written.append((tab, row, values))
 
+    def read_reports(self):
+        """The flat Rapports mirror — read by the sticky-chantier fallback."""
+        self.calls.append(("read_reports", None))
+        return [dict(r) for r in self.mirrored]
+
     def append_report(self, values):
         """The Rapports mirror append — file_report calls this best-effort."""
         self.mirrored.append(values)
@@ -255,11 +260,14 @@ class FakeSheet:
 
 
 @pytest.fixture
-def fake(monkeypatch):
+def fake(monkeypatch, chantier_table):
     from app import journal as mod
 
     sheet = FakeSheet()
     monkeypatch.setattr(mod, "sheets", sheet)
+    # `chantier_table` is not optional: since 2026-08-15 a chantier is resolved
+    # against the table rather than trusted as a tab name, so without it these
+    # rows would all land in `Non affecté` instead of on DGH.
     return sheet
 
 

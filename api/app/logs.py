@@ -14,6 +14,7 @@ with no database and no API keys (see CLAUDE.md).
 """
 import json
 import os
+import unicodedata
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
@@ -690,6 +691,14 @@ CREATE INDEX IF NOT EXISTS articles_chantier_idx ON articles(chantier_id);
 -- DGH and Extralait have no such grouping, so this is nullable: a NULL tache
 -- means the bordereau is a flat list, not that the task is unknown.
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS tache TEXT;
+
+-- A site the pipeline created on its own, because a technician named it in a
+-- voice note and it matched nothing existing. It gets a tab and works on the
+-- first message (the alternative — routing it to `Non affecté` — loses the
+-- site's identity), but the director confirms it afterwards in the dashboard.
+-- Default true so every seeded and hand-created site stays verified: only the
+-- machine-created path passes false.
+ALTER TABLE chantiers ADD COLUMN IF NOT EXISTS verifie BOOLEAN NOT NULL DEFAULT true;
 """
 
 # Seeded from the director's own file so the first boot mirrors what he tracks
@@ -1599,22 +1608,70 @@ def list_chantiers(active_only: bool = False) -> List[dict]:
 
 
 def create_chantier(nom: str, sheet_tab: Optional[str] = None,
-                    client: Optional[str] = None) -> dict:
+                    client: Optional[str] = None, verifie: bool = True) -> dict:
     """Add a site. The tab defaults to the name — that is what the director's
-    own file does, and a tab named after something else is a tab nobody finds."""
+    own file does, and a tab named after something else is a tab nobody finds.
+
+    `verifie=False` is the machine path: a name heard in a voice note that
+    matched nothing. It is written, not dropped, and flagged for the director.
+    The UPDATE branch never *lowers* an existing site's verified state — a
+    confirmed site re-heard on a voice note must not become unverified again.
+    """
     nom = nom.strip()
     if not nom:
         raise LogStoreError("nom is required")
     with _cursor() as cur:
         cur.execute(
             """
-            INSERT INTO chantiers (nom, client, sheet_tab) VALUES (%s, %s, %s)
-            ON CONFLICT (nom) DO UPDATE SET client = EXCLUDED.client
+            INSERT INTO chantiers (nom, client, sheet_tab, verifie)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (nom) DO UPDATE
+               SET client = EXCLUDED.client,
+                   verifie = chantiers.verifie OR EXCLUDED.verifie
             RETURNING *
             """,
-            (nom, (client or None), (sheet_tab or nom).strip()),
+            (nom, (client or None), (sheet_tab or nom).strip(), verifie),
         )
         return _iso(dict(_one(cur) or {}))
+
+
+def normalize_site_name(name: str) -> str:
+    """A spoken site name reduced to what two spellings of it have in common.
+
+    Accents, case, punctuation, spacing and a leading article are all things
+    STT gets wrong (or right in a different way) on the same site, so "la DGH",
+    "d.g.h", " dgh " and "DGH" must all reduce to `dgh`. Spacing is removed
+    last and completely, which is what makes the dotted form match.
+
+    Deliberately NOT fuzzy: no edit distance, no prefix matching. "ACAPS" and
+    "ACAPS 2" stay two sites, because collapsing two real sites into one is a
+    silent wrong row, while failing to match creates a visible unverified one.
+    """
+    text = unicodedata.normalize("NFKD", str(name or ""))
+    text = "".join(c for c in text if not unicodedata.combining(c)).lower()
+    text = "".join(c if c.isalnum() else " " for c in text)
+    words = text.split()
+    # Only *leading* articles: "de"/"du" are not dropped, because they can
+    # carry the name itself ("de la ferme" is not "la ferme").
+    while words and words[0] in {"la", "le", "les", "l", "the", "chantier", "site"}:
+        words.pop(0)
+    return "".join(words)
+
+
+def find_chantier_by_name(nom: str) -> Optional[dict]:
+    """The existing site a spoken name refers to, or None.
+
+    Matching happens in Python over the whole (tiny) table rather than in SQL:
+    the normalization above is the contract, and duplicating it as a Postgres
+    expression is how the two would drift apart.
+    """
+    key = normalize_site_name(nom)
+    if not key:
+        return None
+    for chantier in list_chantiers():
+        if normalize_site_name(chantier.get("nom", "")) == key:
+            return chantier
+    return None
 
 
 def delete_chantier(chantier_id: int) -> bool:
