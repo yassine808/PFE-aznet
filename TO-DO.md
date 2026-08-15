@@ -26,7 +26,7 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
 - [] Add more columns inspired from the given data
 - [] add techs vertically instead of horizentaly to reduce scroll (in TEAM panel)
 ## Batch 2026-08-15 (grilled and locked with the owner before starting)
-- [!] **1. WhatsApp voice notes come back untagged — REVERTED, the fix was the regression.** — fixed 2026-08-15: Text replies carry the grey quote, audio ones do not. Cause: the reply/ack nodes dereference `$('Filtrer accès').item`, and the paired-item chain breaks across the media branch (`WA Get media URL` → `WA Download audio`). Fix: carry `chat_id` + `message_id` in each item's own JSON through the media branch and read `$json` in the reply nodes — hardens the text and image paths too.
+- [x] **1. WhatsApp voice notes come back untagged — CLOSED, not fixable and never was a bug of ours (2026-08-15).** — fixed 2026-08-15: Text replies carry the grey quote, audio ones do not. Cause: the reply/ack nodes dereference `$('Filtrer accès').item`, and the paired-item chain breaks across the media branch (`WA Get media URL` → `WA Download audio`). Fix: carry `chat_id` + `message_id` in each item's own JSON through the media branch and read `$json` in the reply nodes — hardens the text and image paths too.
 - [x] **2. Remove the chat commands** — done 2026-08-15; `rapports_row` stayed, because `GET /audio/row/{row}` plays the inbox's voice notes through it. `/rapport`, `/modify`, `/delete` everywhere: the n8n command nodes and their six reply nodes, `POST /modify-command`, and the now write-only message→row link (`processed_messages.sheet_row` / `sheet_tab` / `rapports_row` plus every `logs.link_message_row` call). `processed_messages` itself stays — WhatsApp idempotency lives there.
 - [x] **3. Moroccan phone numbers: store `2126…`, always show `06…`/`07…`.** One `toMsisdn()` normalizer on the way in (Team form *and* the API, so `find_technician` cannot miss) and one `formatPhone()` on the way out, used by every place a WhatsApp id renders. — done 2026-08-15: the API already canonicalized (`logs.normalize_external_id`), so this was the display half — `toMsisdn`/`formatPhone` in `lib/utils.ts` with a runnable `utils.selfcheck.ts`, wired into the Team form, the identity chips and the inbox address.
 - [x] **4. New settings panel, bottom-left, tabbed full-screen overlay** — Appearance, Pipeline, Automation, Notifications, Account. Mirrors the server settings as well as the local ones, gated by role (the confidence threshold and `/settings` writes stay director-only). — done 2026-08-15 in `components/settings-overlay.tsx`; the gear is now only the trigger. Not verified in a browser — no Chrome on this machine — build, typecheck and locale parity are green.
@@ -37,3 +37,25 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
 - [x] **9. Space the n8n nodes on a grid** — done 2026-08-15: layered left-to-right by longest-path depth, 320 px between columns and 150 px of vertical pitch, branches kept next to the node they fork from. 56 nodes, 26 columns, widest column 6.
 - [ ] **10. `WHATSAPP_ACCESS_TOKEN` is missing from `.env`.** The dashboard's WhatsApp reply answers "Réponse WhatsApp non configurée" because `reply.py` reads that variable and the API container has it unset — the token currently exists only inside n8n's WhatsApp *credential*, which the API cannot read. Add the System User token to `.env` (the API already loads it via `env_file`) and `docker compose up -d api`.
 - [x] **11. Reply quote restored** (2026-08-15). The #1 "fix" caused it. Routing the reply's `chat_id`/`message_id` through `Process output` instead of `$('Filtrer accès')` produced a byte-identical payload in every execution I inspected — and still killed the quoted bubble, so `.item` resolves to something different at send time than the stored run data shows. Known good beats a theory: every message field is back on `$('Filtrer accès')`, and the reply nodes are now byte-identical to commit 047ab64, where it worked. Kept: `/process` still echoes `correlation_id`/`message_id` (free, and a real join key if one is ever needed). **Do not re-route the message fields through `Process output`.**
+
+## WhatsApp quoting of voice notes — settled 2026-08-15, do not re-investigate
+`context.message_id` pointing at a **voice note** is accepted by the Cloud API
+(HTTP 200, a message id comes back) and then **not rendered as a quote** by
+WhatsApp. Proven outside n8n: two messages sent straight to
+`graph.facebook.com`, same code path, same recipient, one quoting an audio
+`wamid` and one quoting a text `wamid` — only the text one showed the grey
+quoted bubble.
+
+So the workflow was never wrong. Three attempts were spent moving the
+reference (`$('Filtrer accès').item` → `$('Process output').item` → `$json`)
+on the theory that `pairedItem` did not survive the media branch; all three
+sent the correct raw id, and none of them could have worked. The expressions
+are back on `$('Filtrer accès')`, byte-identical to 047ab64.
+
+What marks the message instead: the bot already reacts ⏳ on arrival and ✅ on
+success, and a reaction *does* attach to the voice note itself. That is the
+tag, and it is the owner's decision (2026-08-15) to leave it at that.
+
+Kept from the investigation: `/process` echoes `correlation_id` and
+`message_id` back in `ProcessResponse` (free, and a real join key if one is
+ever needed).
