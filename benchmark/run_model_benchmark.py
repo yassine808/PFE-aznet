@@ -303,8 +303,17 @@ def _run_case(engine, model: str, case: dict, image: object, sleep_s: float, csv
 
 
 def _print_leaderboard(models: List[str], rows: List[dict]) -> None:
-    """Accuracy first, then hallucinations, then latency: a fast model that
-    invents quantities is worse than a slow one that says null.
+    """Coverage, then hallucinations, then accuracy, then latency.
+
+    Accuracy alone made llama-3.3-70b-versatile the 2026-08-15 "winner" on
+    100% — of the SEVEN cases out of twenty it answered at all. A model that
+    refuses two thirds of the corpus and is perfect on the rest is not the one
+    to put in front of a technician: in a fallback chain it spends its attempt
+    and falls through. So an errored run counts as coverage lost, and a
+    candidate that cannot answer most of the corpus cannot win however good its
+    answers are. Hallucinations rank above accuracy for the same reason they do
+    in the vision benchmark — a fast model that invents a quantity is worse
+    than a slow one that says null.
     """
     print(f"\n{'model':<32} {'acc':>6} {'invented':>9} {'p50 s':>7} {'fail':>5}")
     print("-" * 64)
@@ -320,12 +329,19 @@ def _print_leaderboard(models: List[str], rows: List[dict]) -> None:
         acc = sum(accs) / len(accs)
         inv = sum(int(r["invented"]) for r in got)
         p50 = lats[len(lats) // 2]
-        summary.append((acc, -inv, -p50, model))
+        coverage = len(got) / max(1, len(got) + failed)
+        summary.append((round(coverage, 2), -inv, round(acc, 3), -p50, model))
         print(f"{model:<32} {acc:>5.0%} {inv:>9} {p50:>7.2f} {failed:>5}")
 
     if summary:
         summary.sort(reverse=True)
-        print(f"\nwinner: {summary[0][3]}")
+        best = summary[0]
+        print(f"\nwinner: {best[4]}  (couverture {best[0]:.0%}, "
+              f"inventés {-best[1]}, exactitude {best[2]:.0%})")
+        weak = [row for row in summary if row[0] < 1.0]
+        if weak:
+            print("couverture incomplète, non comparable au reste: "
+                  + ", ".join(f"{row[4]} {row[0]:.0%}" for row in weak))
 
 
 def main() -> int:

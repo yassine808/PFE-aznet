@@ -163,3 +163,33 @@ def test_process_response_voice_mode():
     )
     assert resp.transcription is not None
     assert resp.transcription.provider == "groq"
+
+
+# --- "null" as a string, inside the list fields -----------------------------
+#
+# Found by the 2026-08-15 text benchmark: both Llama models failed 13 of 20
+# cases with "étage inconnu: 'null'". `_null_strings_to_none` is a wildcard
+# validator, but pydantic runs the field-specific `_wrap_single` first, so the
+# three list fields were never covered by it.
+
+
+def test_null_string_in_a_list_field_is_absence():
+    r = ExtractedReport(resume="x", etages="null", ailes="null",
+                        locaux_techniques="none")
+    assert r.etages is None and r.ailes is None and r.locaux_techniques is None
+
+
+def test_null_string_inside_a_list_is_dropped():
+    assert ExtractedReport(resume="x", etages=["null"]).etages is None
+
+
+def test_a_real_value_beside_a_null_string_survives():
+    """The absent marker is dropped; the floor the technician named is not."""
+    assert ExtractedReport(resume="x", etages=["RDC", "null", "E1"]).etages == ["RDC", "E1"]
+
+
+def test_an_invented_floor_still_raises():
+    """The fix must not turn an unknown value into a silent None — an invented
+    floor is a wrong row and the chain must retry."""
+    with pytest.raises(ValueError):
+        ExtractedReport(resume="x", etages=["E9"])

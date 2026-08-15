@@ -86,6 +86,16 @@ for _i in range(1, 5):
         _ETAGE_ALIASES[(_form % _i)] = "E%d" % _i
 
 
+# The tokens a model emits when it means "absent" but is answering in JSON mode.
+# One definition, used by both the wildcard validator and the list one — two
+# copies would drift the first time a new vendor invents another spelling.
+_NULLISH = {"null", "none", "nan", "n/a", "na", "-", ""}
+
+
+def _is_nullish(value: str) -> bool:
+    return str(value).strip().lower() in _NULLISH
+
+
 def _squash(value: str) -> str:
     return " ".join(str(value).strip().lower().replace("è", "e")
                     .replace("é", "e").replace("ê", "e").split())
@@ -99,7 +109,7 @@ class ExtractedReport(BaseModel):
     def _null_strings_to_none(cls, v):
         # LLM JSON mode (Groq/Llama) sometimes emits the *string* "null"
         # for absent fields; the prompt means None, so normalize before parsing.
-        if isinstance(v, str) and v.strip().lower() in {"null", "none", ""}:
+        if isinstance(v, str) and _is_nullish(v):
             return None
         return v
 
@@ -279,8 +289,24 @@ class ExtractedReport(BaseModel):
     def _wrap_single(cls, v):
         # "RDC, E1, E2" and "RDC" are both things the model emits for a field
         # the file itself writes as a comma-joined string.
+        #
+        # The null-ish check is repeated here on purpose. `_null_strings_to_none`
+        # above is a wildcard validator, but pydantic runs a field-specific
+        # before-validator FIRST, so it never protected these three fields: a
+        # Groq model emitting the *string* "null" for an unmentioned floor got
+        # wrapped into ["null"] and then raised "étage inconnu: 'null'".
+        # Loud rather than silent, so no wrong row — but it burned that model's
+        # attempt on every report that does not name a floor, which is most of
+        # them, and quietly defeated the vendor-alternation the free tiers are
+        # split across. Found by the 2026-08-15 text benchmark, where it failed
+        # 13 of 20 cases on both Llama models.
+        if isinstance(v, str) and _is_nullish(v):
+            return None
         if isinstance(v, str):
-            return [part for part in (p.strip() for p in v.split(",")) if part]
+            v = [part for part in (p.strip() for p in v.split(",")) if part]
+        if isinstance(v, list):
+            kept = [x for x in v if not (isinstance(x, str) and _is_nullish(x))]
+            return kept or None
         return v
 
     @field_validator("etages")
