@@ -481,7 +481,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Stable reference point for downstream nodes regardless of audio/text path,\n// and the join that puts the answer back on its own message.\n//\n// n8n's pairedItem chain does not survive the media branch (WA Get media URL +\n// the binary download), so $('Filtrer accès').item resolved to the wrong item\n// there: a WhatsApp voice note came back without the quoted original while a\n// text reply was quoted correctly. The API echoes correlation_id and message_id\n// straight back, so we join on those instead of trusting item pairing.\n//\n// Spread order matters: the message wins, because the API's `message_id` is the\n// dedupe key ('wa:<id>') while WhatsApp's `context` needs the raw channel id.\nconst src = $('Restore message').all().map((i) => i.json);\nreturn $input.all().map((item, i) => {\n  const r = item.json;\n  const msg =\n    src.find((m) => r.correlation_id && m.correlation_id === r.correlation_id) ??\n    src.find((m) => r.message_id && m.msg_key === r.message_id) ??\n    src[i] ??\n    {};\n  return { json: { ...r, ...msg }, pairedItem: { item: i } };\n});\n"
+        "jsCode": "// Stable reference point for downstream nodes regardless of the\n// audio/text path.\n//\n// It deliberately does NOT re-join the answer to its message. That was\n// tried on 2026-08-15 on the theory that pairedItem did not survive the\n// media branch; it does, and routing the reply's chat_id/message_id\n// through here instead of $('Filtrer accès') is what stopped WhatsApp\n// rendering the quoted original. The message fields have one source.\nreturn $input.all();\n"
       },
       "id": "e1000000-0000-4000-8000-000000000018",
       "name": "Process output",
@@ -663,7 +663,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({date: $now.toFormat('yyyy-MM-dd'), heure: $now.toFormat('HH:mm'), canal: $('Process output').item.json.channel, technicien: $('Process output').item.json.technicien, role: $('Process output').item.json.role, rapport_complet: $('Process output').item.json.rapport_complet, lien_audio: $('Process output').item.json.lien_audio ?? ($('Process output').item.json.file_ref ?? ''), correlation_id: $('Restore message').item.json.correlation_id, message_id: $('Process output').item.json.msg_key, warnings: $('Process output').item.json.warnings ?? [], stt_engine: $('Process output').item.json.transcription?.provider ?? null, report: $('Process output').item.json.report}) }}",
+        "jsonBody": "={{ JSON.stringify({date: $now.toFormat('yyyy-MM-dd'), heure: $now.toFormat('HH:mm'), canal: $('Filtrer accès').item.json.channel, technicien: $('Filtrer accès').item.json.technicien, role: $('Filtrer accès').item.json.role, rapport_complet: $('Process output').item.json.rapport_complet, lien_audio: $('Process output').item.json.lien_audio ?? ($('Filtrer accès').item.json.file_ref ?? ''), correlation_id: $('Restore message').item.json.correlation_id, message_id: $('Filtrer accès').item.json.msg_key, warnings: $('Process output').item.json.warnings ?? [], stt_engine: $('Process output').item.json.transcription?.provider ?? null, report: $('Process output').item.json.report}) }}",
         "options": {
           "timeout": 30000
         }
@@ -688,7 +688,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $('Process output').item.json.channel }}",
+              "leftValue": "={{ $('Filtrer accès').item.json.channel }}",
               "rightValue": "telegram",
               "operator": {
                 "type": "string",
@@ -711,10 +711,10 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $('Process output').item.json.chat_id }}",
+        "chatId": "={{ $('Filtrer accès').item.json.chat_id }}",
         "text": "={{ ($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n' }}{{ $('Process output').item.json.report.resume }}{{ $('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '' }}{{ ($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '' }}{{ $('Process output').item.json.transcription?.provider ? '\\n🤖 Moteur STT: ' + $('Process output').item.json.transcription.provider : '' }}",
         "additionalFields": {
-          "reply_to_message_id": "={{ $('Process output').item.json.message_id }}"
+          "reply_to_message_id": "={{ $('Filtrer accès').item.json.message_id }}"
         }
       },
       "id": "e1000000-0000-4000-8000-000000000027",
@@ -740,7 +740,7 @@
         "nodeCredentialType": "whatsAppApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Process output').item.json.chat_id, type: 'text', context: { message_id: $('Process output').item.json.message_id }, text: { body: (($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n') + ($('Process output').item.json.report.resume) + ($('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '') + (($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '') + ($('Process output').item.json.transcription?.provider ? '\\n🤖 Moteur STT: ' + $('Process output').item.json.transcription.provider : '') } }) }}",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'text', context: { message_id: $('Filtrer accès').item.json.message_id }, text: { body: (($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n') + ($('Process output').item.json.report.resume) + ($('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '') + (($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '') + ($('Process output').item.json.transcription?.provider ? '\\n🤖 Moteur STT: ' + $('Process output').item.json.transcription.provider : '') } }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-000000000028",
@@ -1291,7 +1291,7 @@
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/setMessageReaction",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Process output').item.json.chat_id, message_id: $('Process output').item.json.message_id, reaction: [{ type: 'emoji', emoji: '👍' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.message_id, reaction: [{ type: 'emoji', emoji: '👍' }] }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-900880000000",
@@ -1315,7 +1315,7 @@
         "nodeCredentialType": "whatsAppApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Process output').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Process output').item.json.message_id, emoji: '✅' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Filtrer accès').item.json.chat_id, type: 'reaction', reaction: { message_id: $('Filtrer accès').item.json.message_id, emoji: '✅' } }) }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-900880000001",
@@ -1436,7 +1436,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({date: $now.toFormat('yyyy-MM-dd'), heure: $now.toFormat('HH:mm'), channel: $('Process output').item.json.channel, external_id: $('Process output').item.json.chat_id, message_id: $('Process output').item.json.msg_key, technicien: $('Process output').item.json.technicien, kind: ($('Process output').item.json.transcription ? 'audio' : $('Process output').item.json.rapport_complet?.startsWith('[photo] ') ? 'image' : 'text'), text: $('Process output').item.json.transcription?.text ?? $('Process output').item.json.text_input ?? $('Process output').item.json.rapport_complet, reply: (($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n') + $('Process output').item.json.report.resume + ($('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '') + (($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '') + ($('Process output').item.json.transcription?.provider ? '\\n🤖 Moteur STT: ' + $('Process output').item.json.transcription.provider : ''), correlation_id: $('Restore message').item.json.correlation_id}) }}",
+        "jsonBody": "={{ JSON.stringify({date: $now.toFormat('yyyy-MM-dd'), heure: $now.toFormat('HH:mm'), channel: $('Filtrer accès').item.json.channel, external_id: $('Filtrer accès').item.json.chat_id, message_id: $('Filtrer accès').item.json.msg_key, technicien: $('Filtrer accès').item.json.technicien, kind: ($('Process output').item.json.transcription ? 'audio' : $('Process output').item.json.rapport_complet?.startsWith('[photo] ') ? 'image' : 'text'), text: $('Process output').item.json.transcription?.text ?? $('Filtrer accès').item.json.text_input ?? $('Process output').item.json.rapport_complet, reply: (($('Process output').item.json.warnings ?? []).includes('no_report_content') ? 'ℹ️ Message reçu — aucun rapport détecté. Envoie tes quantités (chantier, mètres, bureaux…) pour enregistrer un rapport.\\n\\n' : '✅ Rapport enregistré\\n\\n') + $('Process output').item.json.report.resume + ($('Process output').item.json.transcription?.confidence != null ? '\\n\\n🎙️ Confiance transcription: ' + Math.round($('Process output').item.json.transcription.confidence * 100) + '%' : '') + (($('Process output').item.json.warnings ?? []).includes('low_confidence_transcription') ? '\\n⚠️ Confiance faible — à vérifier dans le dashboard' : '') + ($('Process output').item.json.transcription?.provider ? '\\n🤖 Moteur STT: ' + $('Process output').item.json.transcription.provider : ''), correlation_id: $('Restore message').item.json.correlation_id}) }}",
         "options": {
           "timeout": 10000
         }
