@@ -261,3 +261,13 @@ class ProcessResponse(BaseModel):
             "n8n le préfère au file_id de la chaîne, qui expire."
         ),
     )
+    # Echoed straight back so n8n can rejoin this answer to the message that
+    # caused it. Its own `pairedItem` chain does not survive the media branch
+    # (media URL + binary download), which is why a WhatsApp voice note used to
+    # be answered without the quoted original.
+    correlation_id: Optional[str] = Field(
+        default=None, description="Trace id reçu à l'appel, renvoyé tel quel (jointure n8n)"
+    )
+    message_id: Optional[str] = Field(
+        default=None, description="Clé du message reçue à l'appel, renvoyée telle quelle (jointure n8n)"
+    )

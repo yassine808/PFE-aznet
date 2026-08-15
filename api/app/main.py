@@ -478,6 +478,7 @@ async def _extract_from_image(
                                 rapport_complet, warnings, ctx)
     return ProcessResponse(
         rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
+        correlation_id=ctx.get("correlation_id"), message_id=message_id,
     )
 
 
@@ -634,6 +635,8 @@ async def process(
         transcription=transcription,
         warnings=warnings,
         lien_audio=lien_audio,
+        correlation_id=correlation_id,
+        message_id=message_id,
     )
 
 

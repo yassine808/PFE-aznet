@@ -463,3 +463,19 @@ def test_image_card_totals_are_computed_locally():
     assert "Prises: 3" in summary
     assert "Techniciens: 2" in summary
     assert "Chantiers: 1" in summary
+
+
+def test_trace_ids_are_echoed_back(monkeypatch):
+    """n8n joins the answer to its message on these, because item pairing does
+    not survive the media branch — that is what left voice notes unquoted."""
+    monkeypatch.setattr(main, "get_provider", lambda name: FakeProvider())
+    monkeypatch.setattr(main.extraction, "extract_report_with_model", lambda t, profile=None: (REPORT, "test/stub"))
+    r = client.post(
+        "/process",
+        files={"audio": ("note.ogg", b"fake-bytes", "audio/ogg")},
+        data={"correlation_id": "whatsapp-wamid.42", "message_id": "wa:wamid.42"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["correlation_id"] == "whatsapp-wamid.42"
+    assert body["message_id"] == "wa:wamid.42"
