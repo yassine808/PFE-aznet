@@ -18,8 +18,9 @@ def _silence_bell(monkeypatch):
     monkeypatch.setattr(main.logs, "notify_technician_manager", lambda *a, **k: None)
     monkeypatch.setattr(main.logs, "notify_managers", lambda *a, **k: 0)
 
-# /generate-image is gated by require_human. Overriding the dependency rather
-# than logging in keeps the suite free of a database, same as the other modules.
+# The human-only endpoints (settings, report edits) are gated by require_human.
+# Overriding the dependency rather than logging in keeps the suite free of a
+# database, same as the other modules.
 main.app.dependency_overrides[main.auth.require_human] = lambda: {
     "id": 1, "name": "Test", "role": "directeur"
 }
@@ -400,15 +401,14 @@ def test_health_reports_prompts_and_chains():
     body = client.get("/health").json()
     assert "00-soul.md" in body["prompts"]
     assert all(isinstance(v, int) and v > 0 for v in body["prompts"].values()), body["prompts"]
-    assert set(body["chains"]) == {"text", "image", "image_generation"}
+    assert set(body["chains"]) == {"text", "image"}
 
 
 def test_soul_is_prepended_to_model_prompts():
     from app import prompt_loader
 
     soul = prompt_loader.load(prompt_loader.SOUL)
-    for name in (prompt_loader.TEXT_EXTRACTION, prompt_loader.IMAGE_EXTRACTION,
-                 prompt_loader.IMAGE_GENERATION):
+    for name in (prompt_loader.TEXT_EXTRACTION, prompt_loader.IMAGE_EXTRACTION):
         assert prompt_loader.load(name).startswith(soul)
     # Whisper reads its prompt as preceding transcript, so the soul must NOT
     # be there — it would end up echoed into the transcription.
@@ -433,36 +433,6 @@ def test_missing_prompt_raises():
         assert "unreadable" in str(exc)
     else:
         raise AssertionError("a missing prompt must raise, not return empty")
-
-
-def test_generate_image(monkeypatch):
-    monkeypatch.setattr(
-        main.imagegen, "generate_card", lambda rows, title, extra: (b"\x89PNG", "image/png", "gemini/test")
-    )
-    r = client.post("/generate-image", json={"title": "Semaine 30", "rows": [{"goulottes_m": "150"}]})
-    assert r.status_code == 200, r.text
-    assert r.json()["data_uri"].startswith("data:image/png;base64,")
-
-
-def test_generate_image_needs_rows():
-    assert client.post("/generate-image", json={"title": "x", "rows": []}).status_code == 422
-
-
-def test_image_card_totals_are_computed_locally():
-    """Arithmetic stays in Python — a model that sums rows on its way to
-    drawing will eventually draw a total nobody measured."""
-    from app import imagegen
-
-    summary = imagegen.summarise([
-        {"goulotte_m": "150", "cables_installes_m": "800", "chantier": "Marina", "technicien": "Ali"},
-        {"goulotte_m": "50.5", "cables_installes_m": "", "chantier": "Marina", "technicien": "Sara"},
-        {"goulotte_m": "n/a", "prises_connectees": "3", "technicien": "Ali"},
-    ])
-    assert "Goulottes (m): 200.5" in summary
-    assert "Câbles (m): 800" in summary
-    assert "Prises: 3" in summary
-    assert "Techniciens: 2" in summary
-    assert "Chantiers: 1" in summary
 
 
 def test_trace_ids_are_echoed_back(monkeypatch):

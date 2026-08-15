@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from app import auth, daily_report, drive, extraction, imagegen, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets
+from app import auth, daily_report, drive, extraction, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError, TranscriptionInfo
@@ -133,7 +133,6 @@ def health() -> dict:
         "chains": {
             "text": settings.extraction_text_chain,
             "image": settings.extraction_image_chain,
-            "image_generation": settings.image_generation_chain,
         },
         "prompts": prompt_loader.available(),
     }
@@ -924,46 +923,6 @@ def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(au
     return DailyReportResponse(
         objet=content.objet, corps=content.corps, generated_by=caller["name"]
     )
-
-
-class ImageCardRequest(BaseModel):
-    """Rows already extracted, plus what to call the card."""
-
-    title: str = Field(..., description="Titre affiché sur la carte (ex: 'Semaine 30')")
-    rows: List[dict] = Field(..., description="Lignes du Sheet pour la période")
-    extra: Optional[str] = Field(default=None, description="Consigne libre de l'utilisateur")
-
-
-@app.post("/generate-image", responses={422: {"description": "No rows to illustrate"}, 502: {"description": "Image generation failed"}})
-async def generate_image(payload: ImageCardRequest, caller: dict = Depends(auth.require_human)) -> dict:
-    auth.record(caller, "image_generated", target=payload.title)
-    """Illustrated summary card for a day or week.
-
-    Returns the image as a base64 data URI rather than a file: the dashboard
-    only ever displays it, and this is generated content that must never be
-    written to the Sheet or confused with a technician's own photo.
-
-    Only fired by an explicit click — image models burn free-tier quota much
-    faster than the text ones.
-    """
-    if not payload.rows:
-        raise HTTPException(422, "No rows to illustrate")
-    try:
-        data, mime, model = await run_in_threadpool(
-            imagegen.generate_card, payload.rows, payload.title, payload.extra
-        )
-    except imagegen.ImageGenerationError as exc:
-        await _log("image_generated", "error", message=f"image generation failed: {exc}")
-        raise HTTPException(502, f"image generation failed: {exc}") from exc
-
-    await _log("image_generated", "info", message="ok", payload={"model": model, "bytes": len(data)})
-    import base64
-
-    return {
-        "model": model,
-        "mime_type": mime,
-        "data_uri": f"data:{mime};base64,{base64.b64encode(data).decode()}",
-    }
 
 
 # ── Pipeline logs (dashboard "Logs / n8n" panel) ────────────────────────────

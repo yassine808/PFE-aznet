@@ -4,10 +4,8 @@ import { ArrowUUpLeftIcon, FileTextIcon } from '@phosphor-icons/react'
 import {
   api,
   generateDailyReport,
-  generateImage,
   useApi,
   type DailyReportContent,
-  type GeneratedImage,
 } from '@/lib/api'
 import { isFlagged, num, parseISODay, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
@@ -18,7 +16,6 @@ import { GenerateButton } from '@/components/generate-button'
 import { NextRun } from '@/components/next-run'
 import { PeriodPicker } from '@/components/period-picker'
 import { ReportEditor } from '@/components/report-editor'
-import { ReportImageCard } from '@/components/report-image'
 
 export function DailyReportPage({ initialDate }: { readonly initialDate?: string }) {
   const { t, locale } = useI18n()
@@ -35,12 +32,7 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
   // surviving Monday text with a Tuesday `period` would file it under the
   // wrong `report_versions` key on Save and diff it against the wrong history.
   const [contentPeriod, setContentPeriod] = useState<string | null>(null)
-  // The illustrated card, once generated below. Held here rather than inside
-  // the card component because the editor embeds it in the exported .docx and
   // saves it with the version.
-  const [card, setCard] = useState<GeneratedImage | null>(null)
-  const [imageBusy, setImageBusy] = useState(false)
-  const [imageError, setImageError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -120,11 +112,6 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
     try {
       setContent(await generateDailyReport(date, rows))
       setContentPeriod(date)
-      // The card rides along with the report — one gesture, not two buttons
-      // (the old second button was the 2026-08-10 change). It is fired after
-      // the text so the editor is not blocked waiting on the image model, and
-      // it fails alone: a card error never costs the report.
-      void generateCard()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -132,31 +119,10 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
     }
   }
 
-  // A separate busy/error pair from `generate`: the card finishes on its own
-  // clock while the editor is already usable, and its failure is shown in its
-  // own section rather than as a page-level error.
-  const generateCard = async () => {
-    setImageBusy(true)
-    setImageError(null)
-    setCard(null)
-    try {
-      const made = await generateImage(rows, t('image.dayTitle', { date }))
-      setCard(made)
-    } catch (err) {
-      setImageError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setImageBusy(false)
-    }
-  }
-
-  // A different day means a different report: the previous day's card must not
-  // sit under the new one waiting to be mistaken for it. The report text is
-  // deliberately left alone — the draft survives the switch (report-editor's
-  // documented intent) — but the snapshot means it keeps the day it was
-  // generated for. A failed generate for the old day must not either.
+  // A different day means a different report. The text is deliberately left
+  // alone — the draft survives the switch (report-editor's documented intent)
+  // — but a failed generate for the old day must not follow it over.
   useEffect(() => {
-    setCard(null)
-    setImageError(null)
     setError(null)
   }, [date])
 
@@ -272,14 +238,6 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
               ))}
             </ul>
           </section>
-
-          <ReportImageCard
-            title={t('image.dayTitle', { date })}
-            image={card}
-            busy={imageBusy}
-            error={imageError}
-            onRetry={() => void generateCard()}
-          />
         </>
       )}
 
@@ -289,7 +247,6 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
           period={contentPeriod ?? date}
           objet={content.objet}
           corps={content.corps}
-          image={card?.data_uri ?? null}
           generatedBy={content.generated_by}
           figures={{
             rapports: rows.length,

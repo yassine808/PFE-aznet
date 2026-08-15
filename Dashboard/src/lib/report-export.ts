@@ -22,17 +22,6 @@ function slug(title: string) {
   )
 }
 
-/** `data:image/png;base64,iVBO…` -> the bytes, or null if it is not one. */
-function bytesOf(dataUri: string): Uint8Array | null {
-  const comma = dataUri.indexOf(',')
-  if (!dataUri.startsWith('data:') || comma === -1) return null
-  const binary = atob(dataUri.slice(comma + 1))
-  const out = new Uint8Array(binary.length)
-  // atob yields one latin-1 char per byte, so code point === byte value.
-  for (let i = 0; i < binary.length; i += 1) out[i] = binary.codePointAt(i) ?? 0
-  return out
-}
-
 /** The figures printed as a table, so they are not buried in the prose. */
 export interface ReportFigures {
   rapports: number
@@ -55,7 +44,6 @@ export interface ReportMeta {
   figures?: ReportFigures
   /** Name -> what they sent, for the per-technician table. */
   byTech?: { name: string; count: number; goulottes: number; flagged: number }[]
-  image?: string | null
 }
 
 const INK = '0F172A'
@@ -66,10 +54,9 @@ const RULE = 'E2E8F0'
 /**
  * Writes the report as Word.
  *
- * .docx is the only format. txt and markdown were dropped once the illustrated
- * card became part of the report: a plain-text file cannot carry the picture,
- * so exporting one produced a document quietly missing half of what the
- * operator was looking at.
+ * .docx is the only format. txt and markdown were dropped: a plain-text file
+ * carries neither the figures table nor the heading structure, so exporting one
+ * produced a document quietly missing half of what the operator was looking at.
  *
  * The document is assembled here rather than dumped as paragraphs, because the
  * thing that gets forwarded to a client has to survive being printed: a running
@@ -91,7 +78,6 @@ export async function exportReport(title: string, body: string, meta: ReportMeta
     Footer,
     Header,
     HeadingLevel,
-    ImageRun,
     Packer,
     PageNumber,
     Paragraph,
@@ -237,22 +223,6 @@ export async function exportReport(title: string, body: string, meta: ReportMeta
         ]
       : []
 
-  const bytes = meta.image ? bytesOf(meta.image) : null
-  const picture = bytes
-    ? [
-        new Paragraph({
-          heading: HeadingLevel.HEADING_2,
-          spacing: { before: 400, after: 120 },
-          children: [text('Carte de synthèse', { bold: true, size: 24, color: INK })],
-        }),
-        new Paragraph({
-          // 16:9 at a width that fits A4's text column with default margins.
-          children: [
-            new ImageRun({ data: bytes, transformation: { width: 600, height: 338 }, type: 'png' }),
-          ],
-        }),
-      ]
-    : []
 
   const doc = new Document({
     creator: 'aznet',
@@ -321,7 +291,6 @@ export async function exportReport(title: string, body: string, meta: ReportMeta
           ...figures,
           ...bodyBlocks,
           ...perTech,
-          ...picture,
         ],
       },
     ],

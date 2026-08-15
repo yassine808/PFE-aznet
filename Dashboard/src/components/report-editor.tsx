@@ -31,15 +31,14 @@ import { cn } from '@/lib/utils'
  * - **The diff is derived, never stored.** It is a pure function of the draft
  *   and the last saved version, so it cannot go stale the way a cached
  *   "modified" flag does.
- * - **Export is one format.** .docx, with the generated card embedded — see
- *   `lib/report-export.ts` for why txt and markdown were dropped.
+ * - **Export is one format.** .docx — see `lib/report-export.ts` for why txt
+ *   and markdown were dropped.
  */
 export function ReportEditor({
   kind,
   period,
   objet,
   corps,
-  image,
   generatedBy,
   figures,
   byTech,
@@ -48,8 +47,6 @@ export function ReportEditor({
   readonly period: string
   readonly objet: string
   readonly corps: string
-  /** The illustrated card, if one has been generated on this page. */
-  readonly image?: string | null
   readonly generatedBy?: string
   /** The page's own aggregates, printed as a table in the .docx. */
   readonly figures?: ReportFigures
@@ -91,7 +88,7 @@ export function ReportEditor({
     setBusy(true)
     setError(null)
     try {
-      await saveReportVersion({ kind, period, objet: title, corps: draft, image })
+      await saveReportVersion({ kind, period, objet: title, corps: draft })
       history.reload()
       setSaved(true)
       setEditing(false)
@@ -178,7 +175,6 @@ export function ReportEditor({
                 author: generatedBy,
                 figures,
                 byTech,
-                image,
               })
             }
             className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px"
@@ -221,17 +217,6 @@ export function ReportEditor({
             </label>
           ) : (
             <DiffView lines={lines} />
-          )}
-
-          {image && (
-            <figure className="flex flex-col gap-2">
-              <img
-                src={image}
-                alt={title}
-                className="border-line max-h-72 w-auto rounded-lg border"
-              />
-              <figcaption className="text-ink-faint text-xs">{t('editor.imageInDoc')}</figcaption>
-            </figure>
           )}
         </div>
 
@@ -486,13 +471,6 @@ function VersionModal({
       <p className="text-ink mt-4 max-w-[70ch] text-sm leading-relaxed whitespace-pre-wrap">
         {version.corps}
       </p>
-      {version.image && (
-        <img
-          src={version.image}
-          alt={version.objet}
-          className="border-line mt-4 max-h-72 w-auto rounded-lg border"
-        />
-      )}
     </dialog>
   )
 }

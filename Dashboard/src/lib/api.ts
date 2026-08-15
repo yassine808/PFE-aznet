@@ -294,28 +294,6 @@ export interface GeneratedReport {
   generated_by: string
 }
 
-/** An illustrated summary card, returned as a data URI — never written to the Sheet. */
-export interface GeneratedImage {
-  model: string
-  mime_type: string
-  data_uri: string
-}
-
-/**
- * Renders the summary card for a period. A real image-model call against a
- * metered free tier: fired alongside the report's own "Générer" gesture
- * (daily/weekly pages), never by a poll.
- */
-export async function generateImage(rows: ReportRow[], title: string): Promise<GeneratedImage> {
-  const res = await fetch(`${BASE}/generate-image`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rows, title }),
-  })
-  if (!res.ok) await fail(res)
-  return res.json() as Promise<GeneratedImage>
-}
-
 export interface DailyReportContent {
   objet: string
   corps: string
@@ -377,7 +355,7 @@ export interface Technician {
 /**
  * One saved state of an edited report.
  *
- * The index call omits `corps` and `image`, so a version list costs a few
+ * The index call omits `corps`, so a version list costs a few
  * hundred bytes rather than every stored document; ask for `full` only when an
  * old version is actually opened.
  */
@@ -388,7 +366,6 @@ export interface ReportVersion {
   version: number
   objet: string
   corps?: string
-  image?: string | null
   author: string
   note?: string | null
   created_at: string
@@ -410,7 +387,6 @@ export const saveReportVersion = (input: {
   period: string
   objet: string
   corps: string
-  image?: string | null
   note?: string | null
 }) => post<ReportVersion>('/report-versions', input)
 

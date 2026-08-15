@@ -81,20 +81,6 @@ class Settings(BaseSettings):
     # Not gemini-2.5-flash: it is still in the model list but 404s with "no
     # longer available to new users" (benchmark run 2026-07-27). Nor
     # gemini-3.5-flash, which answered 503 "high demand" on 10/10 calls.
-    # Image *generation* (app/imagegen.py) — the summary card, not extraction.
-    # nano-banana-pro first, then the flash image models. All Google: no free
-    # image generator exists on Groq. Metered far more tightly than the text
-    # models, which is why generation is only ever triggered by a user click.
-    #
-    # `local` is last and always succeeds: Google's free tier answers every
-    # image model with `limit: 0` (not a rate that resets — image generation is
-    # simply not on the free tier), so a Google-only chain has no working entry
-    # under the zero-budget constraint. The local renderer draws the same
-    # figures with Pillow and reports itself as `local`, so an operator can
-    # always tell which one they are looking at.
-    image_generation_chain: str = (
-        "gemini:gemini-3.1-flash-image,gemini:nano-banana-pro-preview,gemini:gemini-3-pro-image,local"
-    )
 
     # Nightly technician profiles (app/memory.py). Prose, not JSON, and nobody is
     # waiting on it -- so the cheap/fast text models come first and a slow one is

@@ -4,10 +4,8 @@ import { ArrowUUpLeftIcon, CalendarBlankIcon } from '@phosphor-icons/react'
 import {
   api,
   generateDailyReport,
-  generateImage,
   useApi,
   type DailyReportContent,
-  type GeneratedImage,
 } from '@/lib/api'
 import { isFlagged, num, parseISODay, toISODate } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
@@ -18,7 +16,6 @@ import { GenerateButton } from '@/components/generate-button'
 import { NextRun } from '@/components/next-run'
 import { PeriodPicker } from '@/components/period-picker'
 import { ReportEditor } from '@/components/report-editor'
-import { ReportImageCard } from '@/components/report-image'
 import { cn } from '@/lib/utils'
 
 const DAY_MS = 86_400_000
@@ -42,10 +39,6 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
   const [contentLabel, setContentLabel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
-  // The illustrated card, held here so the editor can embed it in the .docx.
-  const [card, setCard] = useState<GeneratedImage | null>(null)
-  const [imageBusy, setImageBusy] = useState(false)
-  const [imageError, setImageError] = useState<string | null>(null)
 
   const fmt = useMemo(() => new Intl.NumberFormat(intlLocaleOf(locale)), [locale])
   const dayName = useMemo(
@@ -153,10 +146,6 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
     try {
       setContent(await generateDailyReport(label, week.rows))
       setContentLabel(label)
-      // The card rides along with the report — one gesture, not two buttons.
-      // Fired after the text, failing alone: a card error never costs the
-      // report.
-      void generateCard()
     } catch (err) {
       setGenError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -164,30 +153,10 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
     }
   }
 
-  const generateCard = async () => {
-    setImageBusy(true)
-    setImageError(null)
-    setCard(null)
-    try {
-      const made = await generateImage(
-        week.rows,
-        t('image.weekTitle', { start: iso(days[0]), end: iso(days[6]) }),
-      )
-      setCard(made)
-    } catch (err) {
-      setImageError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setImageBusy(false)
-    }
-  }
-
-  // A different week means a different report: the previous week's card must
-  // not sit under the new one waiting to be mistaken for it. The text survives
-  // the switch, but it keeps the week it was generated for, and a failed
-  // generate for the old week must not either.
+  // A different week means a different report. The text survives the switch
+  // (it keeps the week it was generated for), but a failed generate for the
+  // old week must not follow it over.
   useEffect(() => {
-    setCard(null)
-    setImageError(null)
     setGenError(null)
   }, [selected])
 
@@ -262,7 +231,6 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
           period={contentLabel ?? label}
           objet={content.objet}
           corps={content.corps}
-          image={card?.data_uri ?? null}
           generatedBy={content.generated_by}
           figures={{
             rapports: week.rows.length,
@@ -380,14 +348,6 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
               ))}
             </ul>
           </section>
-
-          <ReportImageCard
-            title={t('image.weekTitle', { start: iso(days[0]), end: iso(days[6]) })}
-            image={card}
-            busy={imageBusy}
-            error={imageError}
-            onRetry={() => void generateCard()}
-          />
         </>
       )}
     </motion.div>
