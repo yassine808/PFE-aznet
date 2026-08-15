@@ -27,7 +27,7 @@ import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { ChannelIcon } from '@/components/channel-icon'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { GrantAccessForm, HistBlock } from '@/components/team-activity'
-import { cn } from '@/lib/utils'
+import { cn, formatPhone, toMsisdn } from '@/lib/utils'
 
 /**
  * The org chart: who works for whom, and everything about one colleague.
@@ -1146,7 +1146,10 @@ function Identities({
     if (!externalId.trim()) return
     setBusy(true)
     try {
-      await addTechnician({ channel, external_id: externalId.trim(), name: person.name })
+      // WhatsApp ids are stored as 2126… whatever the operator typed; the API
+      // normalizes too, this only makes the field agree with what gets saved.
+      const id = channel === 'whatsapp' ? toMsisdn(externalId) : externalId.trim()
+      await addTechnician({ channel, external_id: id, name: person.name })
       setExternalId('')
       onReload()
     } catch (err) {
@@ -1175,7 +1178,9 @@ function Identities({
               )}
             >
               <ChannelIcon channel={id.channel} size={12} />
-              <span className="tabular">{id.external_id}</span>
+              <span className="tabular">
+                {id.channel === 'whatsapp' ? formatPhone(id.external_id) : id.external_id}
+              </span>
               <span className="text-ink-faint text-[0.625rem]">
                 {id.channel === 'telegram' ? t('access.chatId') : t('access.phone')}
               </span>
@@ -1445,7 +1450,12 @@ function AddPersonForm({
       // for the same human — the exact split the accounts fold was undoing.
       for (const channel of CHANNELS) {
         const external = ids[channel].trim()
-        if (external) await addTechnician({ channel, external_id: external, name: clean })
+        if (external)
+          await addTechnician({
+            channel,
+            external_id: channel === 'whatsapp' ? toMsisdn(external) : external,
+            name: clean,
+          })
       }
       setName('')
       setIds({ telegram: '', whatsapp: '' })

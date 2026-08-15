@@ -29,7 +29,7 @@ import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ChannelIcon } from '@/components/channel-icon'
 import { ActivityGraphSection } from '@/components/activity-graph-section'
-import { cn } from '@/lib/utils'
+import { cn, formatPhone } from '@/lib/utils'
 
 /**
  * The inbox, as the conversation it actually is.
@@ -659,7 +659,9 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
   const addressFor = (name: string, canal: string): string | undefined => {
     const chan = canal.trim().toLowerCase()
     const ids = byName.get(name.trim().toLowerCase())?.identities ?? []
-    return ids.find((i) => i.channel.trim().toLowerCase() === chan)?.external_id
+    const id = ids.find((i) => i.channel.trim().toLowerCase() === chan)?.external_id
+    // A WhatsApp number is stored as 2126… and read as 06… by everyone here.
+    return chan === 'whatsapp' ? formatPhone(id) || undefined : id
   }
 
   /*
