@@ -113,10 +113,12 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   exists, exactly as `config.py` already claimed. The Gemini rows were probed
   right after 18 vision calls on the same key, so that verdict deserves one
   re-run on a cold quota before it is quoted in the report.
-- [ ] **4. Chantier from the voice + sticky fallback.** Add the spoken site to
-  the extraction, resolve it against `chantiers`, fall back to the technician's
-  most recent row when unstated, and say which one was used in the reply text.
-  Not started.
+- [x] **4. Chantier from the voice + sticky fallback** — done 2026-08-15
+  (`0d8eceb`). `chantier_mentionne` on the schema, `journal.resolve_site`
+  replacing the hazard below, `_sticky_chantier` derived from the Rapports
+  mirror, `chantiers.verifie`, and the `(repris du dernier rapport)` note on the
+  summary. Precedence shipped as voice → sticky → org chart → `Non affecté`.
+  16 tests in `test_chantier_routing.py`; suite 343 green at the time.
 
   **`journal.resolve_tab` is the hazard and must be fixed in the same pass.**
   Its first branch is `if chantier: return chantier, chantier, []` — a passed-in
@@ -149,7 +151,11 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   `chantier["sheet_tab"]` directly, so deleting the tabs would empty the
   bordereau page. `Rapports` is the flat per-message mirror the dashboard
   reads, not a replacement for the journal.
-- [ ] **5. Rewrite `benchmark/dataset/text_cases.json`.** It still grades the
+- [~] **5. Rewrite `benchmark/dataset/text_cases.json`** — mostly done
+  2026-08-15 (`dca386f`): 20 cases on the current schema, all 25 article fields
+  covered, 52 null assertions against 3 zero assertions. **Still missing the
+  chantier cases** (a spoken site, and a silent one so the sticky fallback is
+  graded) — they were blocked on item 4, which has now landed. Original note: It still grades the
   pre-2026-08-05 schema (`goulottes_m`, `chantier`, `client`), so the text
   benchmark currently measures a contract that no longer exists. Port the 10
   cases, then add cases for the article columns, for a spoken chantier, and for
@@ -190,3 +196,37 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   the three plan photos and every result file live only on this machine. The
   benchmark is therefore not reproducible from a fresh clone — decide whether
   the plans are shareable (they are a client's floor plan) before changing that.
+
+## Batch 2026-08-15 (3) — image generation removed, benchmarks widened
+
+- [x] **AI image generation removed from the whole project** (`15a5fd0`).
+  Image *understanding* untouched — it is the half that works (92% zone recall,
+  0 hallucinations). Generation went because it never worked and could not:
+  Google answers every image model with `429` and "check your plan and billing
+  details" — a billing wall, not a rate that resets — reproduced twice on
+  different days including once on a deliberately cold quota, and no other free
+  endpoint returned pixels either (Pollinations now 403s anonymous callers; HF
+  and Cloudflare need keys this project does not have). 0 of 8.
+  Out: `app/imagegen.py`, `POST /generate-image`, `image_generation_chain`,
+  `prompts/image-generation.md`, the survey script, and the whole dashboard
+  surface (9 locale keys per file, now 446 x 3). `report_versions.image` is
+  **kept** — dropping a column is irreversible and old signed-off versions still
+  hold their picture.
+- [x] **Benchmark results filed by date** (`b10fbf1`): `results/<YYYY-MM-DD>/`,
+  with the STT history from 2026-07-27 to 08-08 filed retroactively. A ranking
+  quoted without the day it was measured is not evidence — free catalogues
+  change under you.
+- [x] **Text candidates widened from 8 to 25** — every model the two keys
+  actually serve (16 Gemini + 9 Groq), enumerated from the live catalogues
+  rather than hand-picked. Includes `allam-2-7b`, Arabic-first, the one
+  candidate with a claim to win on a Darija corpus specifically. Also fixed
+  `engine_for`, which guessed the vendor from the model string and would have
+  misrouted `allam-2-7b` and `gemma-4-31b-it` to the wrong API — returning a
+  404 indistinguishable from "this model is dead".
+- [ ] **Add the chantier cases to `text_cases.json`** — unblocked now that item
+  4 has landed. One case stating a site, one silent so the sticky fallback is
+  graded.
+- [ ] **Deploy.** `docker compose up -d --build api`. The extraction prompts
+  changed twice today (bordereau articles, then `chantier_mentionne`) and
+  `prompt_loader` is `@lru_cache`d on purpose, so the running container still
+  serves the old ones. **The features are committed, tested and not live.**

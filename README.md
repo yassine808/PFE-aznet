@@ -61,7 +61,6 @@ flowchart TB
     LOGIN --> DASH[Dashboard React<br/>Vue · Inbox · Rapports · Quotidien · Hebdo<br/>Automatisation · Journaux · Équipe]:::ui
     DASH --> AUDIT[(user_actions<br/>page_visits)]:::db
     DASH --> SHEET & DB
-    DASH --> IMG["**4. Image**<br/>POST /generate-image<br/><i>click only — never a cron</i>"]:::ai
 
     %% ── Logging spine ────────────────────────────────────────────
     CORR & STT & TXT & VIS & JOURNAL -. "one row per stage,<br/>same correlation_id" .-> LOGS[(pipeline_logs)]:::db

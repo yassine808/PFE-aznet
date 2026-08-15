@@ -74,7 +74,6 @@ Telegram (polling)  +  WhatsApp Cloud API (webhook via Tailscale Funnel)
  Dashboard (React, login required — sessions in Postgres, X-API-Key for n8n)
    ├─ GET /reports · PATCH /reports/{row}      → Sheets read/write
    ├─ GET /jobs · POST /jobs/{name}/run        → run + re-run scheduler jobs
-   ├─ POST /generate-image                     → illustrated summary card (click only)
    ├─ GET/PUT /settings · POST /notify/test    → automation + SMTP proof
    ├─ GET/PUT /me/settings                     → per-account UI prefs (clock, density, seuil)
    ├─ GET /messages · GET /media/{id}/file     → archived chat + audio/photo blobs
@@ -120,7 +119,7 @@ Telegram (polling)  +  WhatsApp Cloud API (webhook via Tailscale Funnel)
 - [x] Dashboard v1: report list, filters (technicien/chantier/date), review queue on `flag_review`, confidence %, inline Sheet correction. Backend `/reports` + `/reports/{row}` (`api/app/sheets.py`).
 - [x] Failure path: low-confidence → `flag_review=true` row + confidence column, surfaced in dashboard review queue
 - [x] Dashboard v2 redesign (2026-07-24): neutral Efferd-style framed panels, light/dark, FR/EN/AR (RTL) i18n from JSON, 16 metrics (Activité/Production/Qualité/Cadence incl. WoW, Darija-voice share, API uptime), per-tech summary, recent/health/activity row. Backend `GET /health` now returns uptime for the ops tile.
-- [x] **Five models, not one** (2026-07-27/29): STT, text extraction, vision extraction, image-card generation (`POST /generate-image`), and a nightly technician-profile model (`app/memory.py`). Prompts moved out of Python into versioned Markdown under `api/app/prompts/` with a shared `00-soul.md` identity.
+- [x] **Four models, not one** (2026-07-27/29, image generation dropped 2026-08-15): STT, text extraction, vision extraction, and a nightly technician-profile model (`app/memory.py`). Image *generation* was the fifth and is gone — Google answers every free image model with `429` and "check your plan and billing details", reproduced twice including on a cold quota, and none of the other free endpoints returned pixels either (0 of 8). Image *understanding* stays and is the half that works. Prompts moved out of Python into versioned Markdown under `api/app/prompts/` with a shared `00-soul.md` identity.
 - [x] **One person across channels** (2026-07-29): `persons` / `technicians` split so a colleague's profile follows them rather than their phone number; the n8n allowlist now reads the table instead of a hardcoded JS literal.
 - [x] **Dashboard accounts + audit trail** (2026-07-29): login, bcrypt, revocable sessions, roles, `user_actions` (with before → after on report edits) and `page_visits`, surfaced in the new **Équipe** panel. New **Journaux** panel renders the live pipeline log.
 - [x] **One person, one row** (2026-08-01): the `users` table folded into `persons`; `password_hash IS NOT NULL` is now the whole of "this row is an account", so a chef who also sends voice notes is one box on the org chart instead of two unrelated rows.
