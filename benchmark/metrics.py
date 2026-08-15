@@ -8,8 +8,6 @@ import re
 import unicodedata
 from typing import Any, Dict, Optional, Tuple
 
-import jiwer
-
 # Arabic diacritics (tashkeel) + tatweel
 _DIACRITICS = re.compile(r"[ؐ-ًؚ-ٰٟۖ-ۜ۟-۪ۨ-ۭـ]")
 # Punctuation from both scripts (includes Arabic comma/question mark)
@@ -36,6 +34,14 @@ def normalize_text(text: str) -> str:
 
 def wer_cer(reference: str, hypothesis: str) -> Tuple[float, float]:
     """Word and character error rates on normalized text."""
+    # Lazy, like every optional dependency in this project: `jiwer` is used by
+    # this function alone, and the STT benchmark deliberately never computed
+    # WER/CER (`references.csv` is header-only — the criterion is preservation
+    # of digits and French loanwords). A module-level import made the whole
+    # metrics module — and therefore the text and image benchmarks, which only
+    # need `extraction_accuracy` — unimportable without it.
+    import jiwer
+
     ref = normalize_text(reference)
     hyp = normalize_text(hypothesis)
     if not ref:

@@ -34,6 +34,7 @@ import sys
 import time
 import unicodedata
 from datetime import datetime
+import pathlib
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -46,6 +47,23 @@ from app.config import settings  # noqa: E402
 CASES = BENCH_DIR / "dataset" / "plan_cases.json"
 IMAGE_DIR = BENCH_DIR / "dataset" / "images"
 RESULTS_DIR = BENCH_DIR / "results"
+
+
+def results_path(name: str, ext: str = "json") -> pathlib.Path:
+    """`results/<YYYY-MM-DD>/<name>-<HHMMSS>.<ext>`, parents created.
+
+    Runs are grouped by the day they were taken because a benchmark result is
+    only meaningful next to its date: free-tier catalogues change under you
+    (models 404 that answered last week), and a ranking quoted without the day
+    it was measured is not evidence. The time still lives in the filename, so
+    two runs on the same day never collide.
+    """
+    from datetime import datetime
+
+    now = datetime.now()
+    day = RESULTS_DIR / now.strftime("%Y-%m-%d")
+    day.mkdir(parents=True, exist_ok=True)
+    return day / f"{name}-{now.strftime('%H%M%S')}.{ext}"
 
 # Google first because the image chain is Google-only today. Groq's Llama 4
 # models ARE multimodal, unlike the rest of its free catalogue — the
@@ -305,9 +323,7 @@ def main() -> None:
         suffix = f"  ({len(failed)} échec)" if failed else ""
         print(f"{model:46} {rappel:6.0%} {hallu:6d} {lat:5.1f}s{suffix}")
 
-    RESULTS_DIR.mkdir(exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    out = Path(args.out) if args.out else RESULTS_DIR / f"plan-benchmark-{stamp}.json"
+    out = Path(args.out) if args.out else results_path("plan-benchmark")
     out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nwritten: {out}")
 

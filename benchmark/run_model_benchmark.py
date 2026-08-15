@@ -17,6 +17,7 @@ import json
 import sys
 import time
 from datetime import datetime
+import pathlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -34,24 +35,68 @@ CASES = BENCH_DIR / "dataset" / "text_cases.json"
 IMAGE_DIR = BENCH_DIR / "dataset" / "images"
 RESULTS_DIR = BENCH_DIR / "results"
 
-# Candidates come from the providers' live model lists, filtered to what a free
-# tier actually serves. Groq has no vision model in the free catalogue, which is
-# why the image row is Google-only — that is a finding, not an oversight.
-# Two models were dropped after the 2026-07-27 run and are listed here so nobody
-# re-adds them: gemini-2.5-flash 404s ("no longer available to new users") and
-# gemini-3.5-flash returned 503 "high demand" on 10/10 calls — present in the
-# model list, not actually servable on the free tier.
+
+def results_path(name: str, ext: str = "json") -> pathlib.Path:
+    """`results/<YYYY-MM-DD>/<name>-<HHMMSS>.<ext>`, parents created.
+
+    Runs are grouped by the day they were taken because a benchmark result is
+    only meaningful next to its date: free-tier catalogues change under you
+    (models 404 that answered last week), and a ranking quoted without the day
+    it was measured is not evidence. The time still lives in the filename, so
+    two runs on the same day never collide.
+    """
+    from datetime import datetime
+
+    now = datetime.now()
+    day = RESULTS_DIR / now.strftime("%Y-%m-%d")
+    day.mkdir(parents=True, exist_ok=True)
+    return day / f"{name}-{now.strftime('%H%M%S')}.{ext}"
+
+# Candidates: every model the two keys actually serve that could plausibly do
+# structured extraction, enumerated from the live catalogues on 2026-08-15
+# (`client.models.list()`), not hand-picked. Excluded by kind rather than by
+# taste: TTS, image, video, robotics, music, computer-use, deep-research and
+# the guard classifiers cannot return a filled schema, and Whisper is the STT
+# harness's business.
+#
+# Two entries are deliberately re-tried after being dropped on 2026-07-27:
+# gemini-2.5-flash 404'd ("no longer available to new users") and
+# gemini-3.5-flash answered 503 on 10/10 calls. Both are listed by the API
+# again today, and a free catalogue that changed under us once will change
+# again — so their status is re-measured rather than remembered. That is the
+# whole reason results are filed by date.
 GEMINI_TEXT = [
+    "gemini-3.7-flash",
     "gemini-3.6-flash",
+    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.1-pro-preview",
     "gemini-3.1-flash-lite",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3-flash-preview",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
     "gemini-flash-lite-latest",
+    "gemini-pro-latest",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it",
 ]
+# Groq's whole free text catalogue. `allam-2-7b` earns its place for a reason
+# the others do not have: it is Arabic-first, and the source material is
+# Darija — the one candidate with a claim to beat the rest on this corpus
+# specifically rather than on general benchmarks.
 GROQ_TEXT = [
     "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-safeguard-20b",
     "qwen/qwen3.6-27b",
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
+    "groq/compound",
+    "groq/compound-mini",
+    "allam-2-7b",
 ]
 GEMINI_VISION = [
     "gemini-3.6-flash",
@@ -149,7 +194,19 @@ def call_with_retry(engine, model: str, text: str, image: Optional[bytes]) -> Tu
 
 
 def engine_for(model: str):
-    return call_groq if ("/" in model or model.startswith("llama") or model.startswith("qwen")) else call_gemini
+    """Vendor by membership, not by name.
+
+    This used to guess from the string ("/" in it, or a llama/qwen prefix).
+    That held only while the lists were four names each: `allam-2-7b` and
+    `gemma-4-31b-it` both break it, and the failure is quiet — the call goes to
+    the wrong vendor and comes back as a 404 that reads like a dead model
+    rather than a routing bug in the harness.
+    """
+    if model in GROQ_TEXT:
+        return call_groq
+    if model in GEMINI_TEXT or model in GEMINI_VISION:
+        return call_gemini
+    raise SystemExit(f"unknown model {model!r}: add it to GEMINI_TEXT or GROQ_TEXT")
 
 
 # --------------------------------------------------------------------------- #
@@ -292,9 +349,7 @@ def main() -> int:
 
     images = render_images(cases) if args.mode == "image" else {}
 
-    RESULTS_DIR.mkdir(exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    csv_path = RESULTS_DIR / f"models-{args.mode}-{stamp}.csv"
+    csv_path = results_path(f"models-{args.mode}", "csv")
     rows: List[dict] = []
 
     # Written per row, not at the end: a rate-limited run against a dozen free-tier
