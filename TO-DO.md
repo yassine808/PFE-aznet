@@ -117,6 +117,38 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   the extraction, resolve it against `chantiers`, fall back to the technician's
   most recent row when unstated, and say which one was used in the reply text.
   Not started.
+
+  **`journal.resolve_tab` is the hazard and must be fixed in the same pass.**
+  Its first branch is `if chantier: return chantier, chantier, []` — a passed-in
+  chantier is trusted verbatim *as a tab name*, with no check that it exists in
+  the `chantiers` table. Nothing reaches that branch today because routing comes
+  from the org chart, but the moment the voice supplies the name, whatever the
+  model transcribes becomes a tab: "la DGH", "d.g.h" and "DGH" would be three
+  papers, three split bordereaux, and the director's totals scattered across
+  them. Tab creation is automatic and deliberately so — `file_report` calls
+  `sheets.ensure_tab` before every read because `read_tab` on an unknown tab is
+  a 400, not an empty list, so without it a new site's first message would 502
+  and jam `failed_writes` forever.
+
+  Owner's decision (2026-08-15), in two parts:
+  - **Match first.** Normalize the spoken name (case, accents, articles,
+    punctuation) against the existing `chantiers` rows, so the three spellings
+    above all land on DGH. No new paper for a mis-transcription.
+  - **Create on a genuine no-match**, rather than routing to `Non affecté`: an
+    unmatched name creates the chantier and its tab, marked **unverified** and
+    with `flag_review`, so a real new site works the first time a technician
+    mentions it and the owner confirms it afterwards in the dashboard.
+
+  Also settled the same day: the **per-site journal tabs stay**. They are the
+  director's own `Tableau de Suivi projet` format, and three things live only
+  there — accumulation (a second note the same day merges into one row per
+  (date, technicien), or the JH totals line double-counts), the chef columns
+  (EQUIPE / heures / JH / ordre du jour / taux de réalisation, written by the
+  dashboard and never by a merge), and stock reconciliation with its
+  `stock_ecart` warning. `GET /chantiers/{id}/bordereau` also reads
+  `chantier["sheet_tab"]` directly, so deleting the tabs would empty the
+  bordereau page. `Rapports` is the flat per-message mirror the dashboard
+  reads, not a replacement for the journal.
 - [ ] **5. Rewrite `benchmark/dataset/text_cases.json`.** It still grades the
   pre-2026-08-05 schema (`goulottes_m`, `chantier`, `client`), so the text
   benchmark currently measures a contract that no longer exists. Port the 10
