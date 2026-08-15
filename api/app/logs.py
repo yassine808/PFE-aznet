@@ -684,6 +684,12 @@ CREATE TABLE IF NOT EXISTS articles (
     UNIQUE (chantier_id, designation)
 );
 CREATE INDEX IF NOT EXISTS articles_chantier_idx ON articles(chantier_id);
+
+-- ACAPS groups its bordereau by task ("Aménagement L.T du 1er 2eme Etage",
+-- "Recadres entre 1er et 2eme Etage") and repeats materials across groups.
+-- DGH and Extralait have no such grouping, so this is nullable: a NULL tache
+-- means the bordereau is a flat list, not that the task is unknown.
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS tache TEXT;
 """
 
 # Seeded from the director's own file so the first boot mirrors what he tracks
@@ -700,16 +706,19 @@ _SEED_CHANTIERS = (
 # switch, an onduleur) have no daily counterpart and stay hand-followed —
 # `qte_installee: null` there means "not tracked here", never "none installed".
 _SEED_ARTICLES_DGH = (
-    (1, "Switch fédérateur", "U", 2, None),
-    (2, "Switch d'accès", "U", 11, None),
-    (3, "Modules optiques SFP+", "U", 50, None),
-    (4, "Modules optiques SFP", "U", 10, None),
+    (1, "Switch fédérateur", "U", 2, "switch_federateur_u"),
+    (2, "Switch d'accès", "U", 11, "switch_acces_u"),
+    (3, "Modules optiques SFP+", "U", 50, "module_sfp_plus_u"),
+    (4, "Modules optiques SFP", "U", 10, "module_sfp_u"),
+    # Two DAC articles, one `cable_dac_u` field: a technician saying "câble DAC"
+    # names neither variant, so attributing the count to either line would be a
+    # guess written into a contract total. Both stay hand-followed.
     (5, "Câble DAC SFP56 to SFP56", "U", 2, None),
-    (6, "Modules optiques SFP-RJ45", "U", 10, None),
+    (6, "Modules optiques SFP-RJ45", "U", 10, "module_sfp_rj45_u"),
     (7, "Câble DAC SFP to SFP", "U", 11, None),
-    (8, "Point d'accès AP Aruba IAP 515", "U", 6, None),
-    (9, "Tiroir optique 24", "U", 2, None),
-    (10, "Tiroir optique 12", "U", 11, None),
+    (8, "Point d'accès AP Aruba IAP 515", "U", 6, "point_acces_ap_u"),
+    (9, "Tiroir optique 24", "U", 2, "tiroir_optique_24_u"),
+    (10, "Tiroir optique 12", "U", 11, "tiroir_optique_12_u"),
     (11, "Câble fibre optique", "ML", 2500, "fibre_m"),
     (12, "Jarretière F.O", "U", 70, None),
     (13, "Goulotte", "ML", 800, "goulotte_m"),
@@ -717,9 +726,66 @@ _SEED_ARTICLES_DGH = (
     (15, "Câble CAT.6A", "ML", 5000, "cables_installes_m"),
     (16, "Cordons de brassage Cat6A", "U", 150, None),
     (17, "Panneau de brassage Cat6A", "U", 10, "panneaux_prises_brassees"),
-    (18, "Guide de câble à balais 19''", "U", 10, None),
-    (19, "Onduleur 40kva", "U", 1, None),
+    (18, "Guide de câble à balais 19''", "U", 10, "guide_cable_u"),
+    (19, "Onduleur 40kva", "U", 1, "onduleur_u"),
 )
+
+# Extralait's bordereau. Flat like DGH's, so every `tache` is None. Article 13
+# is the works package ("Travaux : pose du câble FO, fusions optiques…") sold as
+# a lump sum: unit F, no quantity, no `champ` — there is nothing to count, and a
+# 0 there would read as "no work done" rather than "not measured this way".
+_SEED_ARTICLES_EXTRALAIT = (
+    (1, "Coffret 12U 2S IPS", "U", 1, "coffret_12u_u"),
+    (2, "Panneau de brassage 24 ports Catégorie 6 IPS", "U", 1, "panneaux_prises_brassees"),
+    (3, "Prise informatique Catégorie 6 IPS", "U", 11, "prises_connectees"),
+    (4, "Câble informatique Catégorie 6 IPS", "ML", 100, "cables_installes_m"),
+    (5, "Cordons de brassage 1M Catégorie 6 IPS", "U", 20, "cordons_brassage_1m_u"),
+    (6, "Cordons de liaison 3M Catégorie 6 IPS", "U", 21, "cordons_liaison_3m_u"),
+    (7, "Flexible armé D16", "ML", 180, "flexible_arme_d16_m"),
+    (8, "Câble Fibre Optique OM3 12 brins CORNING", "ML", 250, "fibre_m"),
+    (9, "Tiroir optique 24 ports SC CORNING", "U", 2, "tiroir_optique_24_u"),
+    (10, "Jarretières OM3 CORNING", "U", 2, "jarretiere_om3_u"),
+    (11, "Switch HPE Ion 1830 24G + 2 SFP", "U", 1, "switch_acces_u"),
+    (12, "Onduleur Eaton 700 VA", "U", 1, "onduleur_u"),
+    (13, "Travaux (pose FO, fusions, paramétrage, tests)", "F", None, None),
+)
+
+# ACAPS is grouped by task, which is why `articles.tache` exists. Two quantities
+# in the real file are blank in the Besoin column (jarretières, goulotte, borne)
+# — material used but never contracted for. `qte_marche` is None there, not 0:
+# "hors marché" and "zéro prévu" are different facts, and the bordereau view
+# must not display a 100% overrun for an article nobody ever budgeted.
+_ACAPS_LT = "Aménagement L.T du 1er et 2ème étage"
+_ACAPS_RECADRE = "Recadres entre 1er et 2ème étage"
+_SEED_ARTICLES_ACAPS = (
+    (1, "Cordons 1m cat 6A", "U", 144, "cordons_brassage_1m_u", _ACAPS_LT),
+    (2, "Cordons 3m cat 6A", "U", 10, "cordons_liaison_3m_u", _ACAPS_LT),
+    (3, "Cable Elec 3x2,5", "ML", 15, "cable_elec_3x2_5_m", _ACAPS_LT),
+    (4, "Fiche F 2P+T", "U", 2, "fiche_2p_t_u", _ACAPS_LT),
+    (5, "Disjoncteur 2x16A", "U", 2, "disjoncteur_2x16a_u", _ACAPS_LT),
+    (6, "Bandeau Elec 12P", "U", 2, "bandeau_elec_12p_u", _ACAPS_LT),
+    (7, "Passe Cable", "U", 2, "passe_cable_u", _ACAPS_LT),
+    (8, "Jarretier SC/LC", "U", None, "jarretiere_sc_lc_u", _ACAPS_LT),
+    (9, "Jarretière LC/LC", "U", None, "jarretiere_lc_lc_u", _ACAPS_LT),
+    (10, "Goulotte 100*45", "ML", None, "goulotte_m", _ACAPS_LT),
+    (11, "Borne 2,5", "U", None, "borne_2_5_u", _ACAPS_LT),
+    (12, "FO 12 Brins MM", "ML", 60, "fibre_m", _ACAPS_RECADRE),
+    (13, "Tiroir Optique 24P", "U", 2, "tiroir_optique_24_u", _ACAPS_RECADRE),
+    (14, "Pigtail SC", "U", 48, "pigtail_sc_u", _ACAPS_RECADRE),
+    (15, "Fusion", "U", 48, "connexions_optiques_brins", _ACAPS_RECADRE),
+    (16, "Cable UTP", "ML", 720, "cables_installes_m", _ACAPS_RECADRE),
+    (17, "Panneau Brassage Modulaire pleine cat 6A", "U", 2,
+     "panneaux_prises_brassees", _ACAPS_RECADRE),
+)
+
+# Which seed belongs to which site, so the loop below has no site-specific
+# branch. DGH and Extralait rows carry no `tache`, padded here rather than in
+# every literal above.
+_SEEDS_BY_CHANTIER = {
+    "DGH": tuple(row + (None,) for row in _SEED_ARTICLES_DGH),
+    "Extralait": tuple(row + (None,) for row in _SEED_ARTICLES_EXTRALAIT),
+    "ACAPS": _SEED_ARTICLES_ACAPS,
+}
 
 
 def init_schema() -> None:
@@ -736,17 +802,30 @@ def init_schema() -> None:
                 "INSERT INTO chantiers (nom, client, sheet_tab) VALUES (%s, %s, %s)",
                 _SEED_CHANTIERS,
             )
-            cur.execute("SELECT id FROM chantiers WHERE nom = 'DGH'")
-            dgh = _one(cur)
-            if dgh is not None:
-                cur.executemany(
-                    """
-                    INSERT INTO articles (chantier_id, numero, designation, unite, qte_marche, champ)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (chantier_id, designation) DO NOTHING
-                    """,
-                    [(dgh["id"],) + row for row in _SEED_ARTICLES_DGH],
+        # Articles are seeded outside the chantiers-empty guard above: on a box
+        # that already ran the first version, `chantiers` is non-empty and the
+        # Extralait and ACAPS bordereaux would never arrive. The guard is per
+        # chantier and per emptiness instead — a site that already has articles
+        # is left alone, so deleting one by hand does not resurrect it on the
+        # next restart.
+        for nom, rows in _SEEDS_BY_CHANTIER.items():
+            cur.execute("SELECT id FROM chantiers WHERE nom = %s", (nom,))
+            chantier = _one(cur)
+            if chantier is not None:
+                cur.execute(
+                    "SELECT COUNT(*) AS n FROM articles WHERE chantier_id = %s",
+                    (chantier["id"],),
                 )
+                if (_one(cur) or {"n": 1})["n"] == 0:
+                    cur.executemany(
+                        """
+                        INSERT INTO articles
+                            (chantier_id, numero, designation, unite, qte_marche, champ, tache)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (chantier_id, designation) DO NOTHING
+                        """,
+                        [(chantier["id"],) + row for row in rows],
+                    )
 
 
 def write(

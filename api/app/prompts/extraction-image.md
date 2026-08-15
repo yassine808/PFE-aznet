@@ -44,6 +44,14 @@ blanc, bon de livraison, écran, ou vue du chantier lui-même.
   `prochaines_etapes` uniquement s'ils sont **écrits** (page de carnet, bon de
   livraison, note). Ne déduis jamais un arrêt d'une photo de chantier vide.
 
+- **Articles du bordereau** — les champs matériel (`pigtail_sc_u`,
+  `tiroir_optique_24_u`, `cordons_brassage_1m_u`, `disjoncteur_2x16a_u`, …) ne se
+  remplissent que depuis un **nombre écrit** à côté du nom de l'article, sur un
+  bon de livraison ou une page de carnet. Compter des objets sur une photo de
+  baie est une invention. Et un article **livré** n'est pas un article **posé** :
+  un bon de livraison énumère ce qui est arrivé, pas ce qui est installé — il ne
+  remplit donc aucun de ces champs.
+
 Les règles générales d'extraction (nombres en lettres, unités en mètres, absence =
 `null`, nombres qui ne sont pas des quantités, distinction préparé / installé /
 brassé / testé, stock jamais déduit) s'appliquent à l'identique.

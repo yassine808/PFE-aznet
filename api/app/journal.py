@@ -27,7 +27,7 @@ from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 from app import sheets
-from app.schemas import ExtractedReport
+from app.schemas import ARTICLE_FIELDS, ExtractedReport
 
 # --- the director's columns, in his order --------------------------------
 COL_DATE = "Date"
@@ -62,6 +62,39 @@ NUMERIC_COLUMNS = {
     "connexions_optiques_brins": "Connexion optique",
     "temps_arret_min": "Arrêt (min)",
 }
+
+# The bordereau articles, appended after the director's own columns so his part
+# of the tab keeps the order he knows. They merge like every other numeric
+# column — a second message the same day adds — which is what makes the
+# bordereau's `qte_installee` sum correct without storing it anywhere.
+ARTICLE_COLUMNS = {
+    "cordons_brassage_1m_u": "Cordons brassage 1m",
+    "cordons_liaison_3m_u": "Cordons liaison 3m",
+    "flexible_arme_d16_m": "Flexible armé D16 (ml)",
+    "guide_cable_u": "Guide de câble",
+    "tiroir_optique_24_u": "Tiroir optique 24",
+    "tiroir_optique_12_u": "Tiroir optique 12",
+    "pigtail_sc_u": "Pigtail SC",
+    "jarretiere_om3_u": "Jarretière OM3",
+    "jarretiere_sc_lc_u": "Jarretière SC/LC",
+    "jarretiere_lc_lc_u": "Jarretière LC/LC",
+    "switch_federateur_u": "Switch fédérateur",
+    "switch_acces_u": "Switch d'accès",
+    "point_acces_ap_u": "Point d'accès (AP)",
+    "module_sfp_plus_u": "Module SFP+",
+    "module_sfp_u": "Module SFP",
+    "module_sfp_rj45_u": "Module SFP-RJ45",
+    "cable_dac_u": "Câble DAC",
+    "coffret_12u_u": "Coffret 12U",
+    "onduleur_u": "Onduleur",
+    "cable_elec_3x2_5_m": "Câble élec 3x2,5 (ml)",
+    "fiche_2p_t_u": "Fiche F 2P+T",
+    "disjoncteur_2x16a_u": "Disjoncteur 2x16A",
+    "bandeau_elec_12p_u": "Bandeau élec 12P",
+    "passe_cable_u": "Passe-câble",
+    "borne_2_5_u": "Borne 2,5",
+}
+NUMERIC_COLUMNS.update(ARTICLE_COLUMNS)
 
 LIST_COLUMNS = {
     "etages": "ETAGE",
@@ -423,6 +456,11 @@ RAPPORTS_COLUMNS = {
     "motif_arret": "motif_arret",
     "besoins": "besoins",
     "prochaines_etapes": "prochaines_etapes",
+    # The bordereau articles keep their schema name in the flat tab: this
+    # mapping exists to rename the four columns whose Rapports header predates
+    # the 2026-08-05 schema, not to invent a second vocabulary for 25 new
+    # fields that never had an old name to preserve.
+    **{field: field for field in ARTICLE_FIELDS},
 }
 
 

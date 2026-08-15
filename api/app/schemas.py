@@ -23,6 +23,38 @@ ETAGES = ("RDC", "E1", "E2", "E3", "E4")
 AILES = ("Droite", "Gauche")
 LOCAUX_TECHNIQUES = ("RG",) + tuple("SR%d" % i for i in range(1, 11))
 
+# --- articles du bordereau -------------------------------------------------
+#
+# The nine quantity fields above cover the *journal*: what a crew does in a day,
+# measured the way the director's daily tab measures it. They do not cover the
+# *bordereau* — the contract line items each site is delivered against, which
+# until now were followed by hand because no field carried them.
+#
+# These 25 are the union of the three real bordereaux (DGH, Extralait, ACAPS),
+# collapsed so that one physical thing is one field: DGH's "Câble CAT.6A",
+# Extralait's "Câble informatique Catégorie 6 IPS" and ACAPS's "Cable UTP" are
+# all `cables_installes_m`, which already existed. Only what had no field at
+# all is new. Suffixes are the unit the bordereaux themselves use: `_m` for
+# métrage (ML), `_u` for a countable piece (U).
+#
+# They are ordinary optional fields, so a report that mentions none of them is
+# unchanged — and `null` still means "not mentioned", never zero.
+ARTICLE_FIELDS = (
+    # cuivre
+    "cordons_brassage_1m_u", "cordons_liaison_3m_u",
+    "flexible_arme_d16_m", "guide_cable_u",
+    # fibre
+    "tiroir_optique_24_u", "tiroir_optique_12_u", "pigtail_sc_u",
+    "jarretiere_om3_u", "jarretiere_sc_lc_u", "jarretiere_lc_lc_u",
+    # actif / réseau
+    "switch_federateur_u", "switch_acces_u", "point_acces_ap_u",
+    "module_sfp_plus_u", "module_sfp_u", "module_sfp_rj45_u",
+    "cable_dac_u", "coffret_12u_u", "onduleur_u",
+    # électricité
+    "cable_elec_3x2_5_m", "fiche_2p_t_u", "disjoncteur_2x16a_u",
+    "bandeau_elec_12p_u", "passe_cable_u", "borne_2_5_u",
+)
+
 # `resume` is deliberately excluded: the model always writes one, even for
 # "salut". It is the only field that cannot distinguish a report from a
 # greeting, which is exactly the distinction `has_data` answers.
@@ -39,7 +71,7 @@ DATA_FIELDS = (
     "stock_cable_m", "stock_goulotte_m", "stock_fibre_m",
     "remarques", "temps_arret_min", "motif_arret",
     "besoins", "prochaines_etapes",
-)
+) + ARTICLE_FIELDS
 
 # Formatting the model gets wrong without being wrong about the facts:
 # "rdc", "1er étage", "SR 4". Normalizing these is not a fallback — an
@@ -103,6 +135,86 @@ class ExtractedReport(BaseModel):
     )
     connexions_optiques_brins: Optional[int] = Field(
         default=None, ge=0, description="Brins de fibre optique fusionnés/connectés"
+    )
+
+    # --- articles du bordereau ------------------------------------------
+    # Contract line items. See ARTICLE_FIELDS above for why these are one
+    # field per physical thing rather than one per bordereau line. Counts are
+    # ints because half a jarretière is a transcription error, not a quantity.
+    cordons_brassage_1m_u: Optional[int] = Field(
+        default=None, ge=0, description="Cordons de brassage 1 m posés"
+    )
+    cordons_liaison_3m_u: Optional[int] = Field(
+        default=None, ge=0, description="Cordons de liaison 3 m posés"
+    )
+    flexible_arme_d16_m: Optional[float] = Field(
+        default=None, ge=0, description="Mètres de flexible armé D16 posés"
+    )
+    guide_cable_u: Optional[int] = Field(
+        default=None, ge=0, description="Guides de câble à balais 19\" posés"
+    )
+    tiroir_optique_24_u: Optional[int] = Field(
+        default=None, ge=0, description="Tiroirs optiques 24 ports installés"
+    )
+    tiroir_optique_12_u: Optional[int] = Field(
+        default=None, ge=0, description="Tiroirs optiques 12 ports installés"
+    )
+    pigtail_sc_u: Optional[int] = Field(
+        default=None, ge=0, description="Pigtails SC installés"
+    )
+    jarretiere_om3_u: Optional[int] = Field(
+        default=None, ge=0, description="Jarretières OM3 posées"
+    )
+    jarretiere_sc_lc_u: Optional[int] = Field(
+        default=None, ge=0, description="Jarretières SC/LC posées"
+    )
+    jarretiere_lc_lc_u: Optional[int] = Field(
+        default=None, ge=0, description="Jarretières LC/LC posées"
+    )
+    switch_federateur_u: Optional[int] = Field(
+        default=None, ge=0, description="Switchs fédérateurs installés"
+    )
+    switch_acces_u: Optional[int] = Field(
+        default=None, ge=0, description="Switchs d'accès installés"
+    )
+    point_acces_ap_u: Optional[int] = Field(
+        default=None, ge=0, description="Points d'accès WiFi (AP) installés"
+    )
+    module_sfp_plus_u: Optional[int] = Field(
+        default=None, ge=0, description="Modules optiques SFP+ installés"
+    )
+    module_sfp_u: Optional[int] = Field(
+        default=None, ge=0, description="Modules optiques SFP installés"
+    )
+    module_sfp_rj45_u: Optional[int] = Field(
+        default=None, ge=0, description="Modules optiques SFP-RJ45 installés"
+    )
+    cable_dac_u: Optional[int] = Field(
+        default=None, ge=0, description="Câbles DAC installés"
+    )
+    coffret_12u_u: Optional[int] = Field(
+        default=None, ge=0, description="Coffrets/baies 12U installés"
+    )
+    onduleur_u: Optional[int] = Field(
+        default=None, ge=0, description="Onduleurs installés"
+    )
+    cable_elec_3x2_5_m: Optional[float] = Field(
+        default=None, ge=0, description="Mètres de câble électrique 3x2,5 posés"
+    )
+    fiche_2p_t_u: Optional[int] = Field(
+        default=None, ge=0, description="Fiches F 2P+T posées"
+    )
+    disjoncteur_2x16a_u: Optional[int] = Field(
+        default=None, ge=0, description="Disjoncteurs 2x16A posés"
+    )
+    bandeau_elec_12p_u: Optional[int] = Field(
+        default=None, ge=0, description="Bandeaux électriques 12P posés"
+    )
+    passe_cable_u: Optional[int] = Field(
+        default=None, ge=0, description="Passe-câbles posés"
+    )
+    borne_2_5_u: Optional[int] = Field(
+        default=None, ge=0, description="Bornes 2,5 posées"
     )
 
     # --- localisation --------------------------------------------------

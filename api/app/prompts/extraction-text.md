@@ -39,6 +39,38 @@ Une même prise est comptée à trois étapes différentes : la poser côté bur
 brasser côté panneau, la tester. Le technicien peut annoncer trois nombres
 différents le même jour — ce sont trois champs, jamais une moyenne.
 
+## Articles du bordereau
+
+Ces champs comptent le **matériel posé**, article par article, tel qu'il figure
+au bordereau du marché. Ils ne remplacent pas les champs de quantité ci-dessus :
+un mètre de câble reste dans `cables_installes_m`, une prise reste dans
+`prises_connectees`. Ne remplis un article que si le technicien le **nomme**.
+
+Les trois chantiers appellent la même chose de trois façons — « câble UTP »,
+« câble CAT.6A » et « câble informatique cat 6 » sont tous
+`cables_installes_m`. Un seul champ par objet physique :
+
+- Cuivre — `cordons_brassage_1m_u`, `cordons_liaison_3m_u`,
+  `flexible_arme_d16_m` (mètres), `guide_cable_u`.
+- Fibre — `tiroir_optique_24_u`, `tiroir_optique_12_u`, `pigtail_sc_u`,
+  `jarretiere_om3_u`, `jarretiere_sc_lc_u`, `jarretiere_lc_lc_u`.
+  Une **fusion** n'est pas un pigtail : elle va dans
+  `connexions_optiques_brins`.
+- Actif — `switch_federateur_u`, `switch_acces_u`, `point_acces_ap_u`,
+  `module_sfp_plus_u`, `module_sfp_u`, `module_sfp_rj45_u`, `cable_dac_u`,
+  `coffret_12u_u`, `onduleur_u`.
+- Électricité — `cable_elec_3x2_5_m` (mètres), `fiche_2p_t_u`,
+  `disjoncteur_2x16a_u`, `bandeau_elec_12p_u`, `passe_cable_u`, `borne_2_5_u`.
+
+Un article **livré** n'est pas un article **posé** : « on a reçu 48 pigtails »
+ne remplit rien. Seul ce qui est installé compte.
+
+Distingue les variantes : un cordon de brassage 1 m et un cordon de liaison 3 m
+sont deux champs, un tiroir 24 ports et un tiroir 12 ports aussi. Si le
+technicien dit « des jarretières » sans préciser le type, laisse les trois
+champs `null` et écris-le dans `remarques` — un article rangé dans la mauvaise
+ligne du bordereau est pire qu'un article non compté.
+
 ## Localisation
 
 - `etages` — liste parmi : `RDC`, `E1`, `E2`, `E3`, `E4`.
