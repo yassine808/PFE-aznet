@@ -50,6 +50,15 @@ def _field_matches(expected: Any, actual: Any) -> bool:
         return abs(float(expected) - float(actual)) < 1e-6
     if isinstance(expected, str) and isinstance(actual, str):
         return normalize_text(expected) == normalize_text(actual)
+    if isinstance(expected, list) and isinstance(actual, list):
+        # The location fields (etages, ailes, locaux_techniques) are lists, and
+        # `schemas._canon` keeps whatever order the model emitted — the journal
+        # wants that order because it reads as a route through the building.
+        # Grading is a different question: a model answering ["E1", "RDC"] to a
+        # key of ["RDC", "E1"] named the same two floors and is right. Comparing
+        # with `==` marked it wrong and quietly depressed every model's score on
+        # every case with more than one floor.
+        return sorted(map(str, expected)) == sorted(map(str, actual))
     return expected == actual
 
 

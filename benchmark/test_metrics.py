@@ -52,3 +52,28 @@ def test_extraction_resume_never_graded():
 def test_extraction_no_gradable_fields_raises():
     with pytest.raises(ValueError):
         extraction_accuracy({"resume": "only free text"}, {})
+
+
+def test_location_lists_grade_regardless_of_order():
+    """Same floors, different order, is a right answer.
+
+    `schemas._canon` preserves the order the model emitted, so a key written
+    ["RDC", "E1"] used to mark ["E1", "RDC"] wrong — penalising a model for
+    word order on every multi-floor case.
+    """
+    score, detail = extraction_accuracy(
+        {"etages": ["RDC", "E1"]}, {"etages": ["E1", "RDC"]}
+    )
+    assert score == 1.0
+    assert detail["etages"] is True
+
+
+def test_a_different_floor_is_still_wrong():
+    """Order-insensitive must not become content-insensitive."""
+    score, _ = extraction_accuracy({"etages": ["RDC", "E1"]}, {"etages": ["E1", "E2"]})
+    assert score == 0.0
+
+
+def test_a_missing_floor_is_still_wrong():
+    score, _ = extraction_accuracy({"etages": ["RDC", "E1"]}, {"etages": ["RDC"]})
+    assert score == 0.0
