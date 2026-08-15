@@ -230,3 +230,54 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   changed twice today (bordereau articles, then `chantier_mentionne`) and
   `prompt_loader` is `@lru_cache`d on purpose, so the running container still
   serves the old ones. **The features are committed, tested and not live.**
+
+## Batch 2026-08-15 (4) — vérification bout en bout et ce qui reste
+
+- [x] **Un vrai message a traversé le nouveau code** (2026-08-15, 23h). Une note
+  vocale réelle du dataset (`WhatsApp Audio 2026-07-22 at 3.43.06 AM.ogg`)
+  poussée dans le `/process` **en production**, pas dans un test : STT `gemini`
+  en 6,3 s, aller-retour 12,9 s, aucun warning. Elle a rempli
+  `cable_elec_3x2_5_m: 30` — un des 25 champs articles créés le jour même, à
+  partir de « posina 30 m d'le câble 3*2.5 » en darija mélangé — plus
+  `goulotte_m`, `prises_connectees`, `etages: [E4, E2, E1]`, et surtout
+  `chantier_mentionne: "Novick"`. Toute la journée s'exécute en un appel.
+  Note : « Novick » n'existe pas dans `chantiers`, donc le passage par
+  `/journal` créera un site **non vérifié** et marquera la ligne — le chemin
+  prévu, pas encore observé.
+
+- [x] **Quatrième piège de déploiement trouvé en le commettant** (`ac2bb1c`).
+  Le Dashboard est une image construite lui aussi (`build: ./Dashboard`) : rien
+  dans `up -d --build api` ne le touche. Supprimer `POST /generate-image` côté
+  API sans reconstruire `web` a laissé le bundle servi appeler un endpoint
+  disparu — un bouton vivant en apparence qui renvoyait 404, en direct, pendant
+  une heure. La règle est maintenant dans CLAUDE.md : **on retire une
+  fonctionnalité `web` d'abord et `api` en dernier ; on en ajoute une dans
+  l'autre sens.**
+
+### Ce qui reste, par ordre de valeur
+
+- [ ] **Confirmer le corrigé du benchmark vision** (`dataset/plan_cases.json`),
+  en particulier `p03` → « couloir sud (restaurant / salle de réunion) » : 3
+  modèles sur 4 la manquent. Soit c'est un angle mort réel, soit le corrigé est
+  faux et les modèles sont punis d'avoir raison. **Tant que ce n'est pas tranché,
+  ces chiffres ne peuvent pas être cités dans le rapport de PFE.**
+- [ ] **Refaire la comparaison à 25 modèles un matin calme.** Celle du soir a été
+  abandonnée à 2 modèles sur 25 : 13 appels sur 23 en 503 « high demand » et le
+  reste en 429 sur le quota déjà consommé par les runs de la journée — le
+  benchmark entrait en concurrence avec le pipeline en production pour le même
+  quota gratuit. Ne pas relancer un jour où d'autres runs tournent.
+- [ ] **Cas chantier dans `text_cases.json`** : un cas où le technicien nomme le
+  site, un où il ne le nomme pas pour que le repli « dernier chantier connu »
+  soit noté. Débloqué depuis que la fonctionnalité existe.
+- [ ] **Porter le générateur .docx en Python** (voir batch (2) item 6). Le
+  travail a rétréci : le retrait de la génération d'images a déjà sorti la
+  plomberie `ImageRun` de `report-export.ts`.
+- [ ] **Aucune interface pour confirmer un chantier non vérifié.** Un site créé
+  par la voix arrive avec `verifie = false` et marque sa ligne, mais rien ne
+  montre au directeur la liste de ceux qui attendent. Le contournement existe
+  (le ré-ajouter par son nom dans le dashboard passe par la branche
+  `ON CONFLICT` et le repasse à `true`), il n'est simplement pas visible.
+- [ ] **Plus de plans annotés, d'autres bâtiments.** Un seul plan en trois états
+  ne dit rien sur une autre écriture, un autre bâtiment ou une photo plus
+  mauvaise. Le harnais est réutilisable : un second tour ne coûte que les
+  photos.
