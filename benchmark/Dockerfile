@@ -39,7 +39,10 @@ RUN pip install --no-cache-dir --only-binary :all: -r requirements-local.txt \
 # load_audio from run_local, which imports nothing else local). Copying all of
 # benchmark/ would drag the dataset and results into the build context for no
 # reason.
-COPY --chown=appuser:appuser stt_server.py run_local.py ./
+# NOT --chown=appuser: the process only ever reads its own source, so leaving
+# these owned by root means a compromised sidecar cannot rewrite the code it is
+# about to execute on the next restart.
+COPY stt_server.py run_local.py ./
 
 # Unprivileged from here on: port 8100 needs no privilege, the weights are
 # mounted read-only, and the only path the process writes is a temp file per
