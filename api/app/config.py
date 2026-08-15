@@ -68,15 +68,33 @@ class Settings(BaseSettings):
     # Image is Google-only because the free Groq catalogue has no vision model
     # (verified against GET /models), so the fallbacks buy resilience against a
     # single model 404ing or overloading, not against Google being down.
-    # Ranked 2026-07-27 over the ten cases in benchmark/dataset/text_cases.json:
-    #   gpt-oss-120b      100%, 0 invented, 1.6s, 0/10 failures  <- primary
-    #   flash-lite-latest  98%, 1 invented, 1.0s, 0/10 failures  <- other vendor
-    #   gemini-3.6-flash  100%, 0 invented, 4.9s, 6/10 quota failures
-    # 3.6-flash is accurate but ran out of free quota after four calls, so it
-    # sits last: a model that answers perfectly and then stops is a fallback,
-    # not a primary.
+    # Re-ranked 2026-08-15 over the twenty cases in text_cases.json — the file
+    # was rewritten that day for the current schema, so the July ranking below
+    # was measured against a contract that no longer exists:
+    #   gemini-3.5-flash-lite     100% couverture, 0 inventés, 99%,  2.3s
+    #   gemini-flash-lite-latest  100% couverture, 0 inventés, 99%,  2.3s
+    #   gemini-3.1-flash-lite     100% couverture, 0 inventés, 96%,  1.8s
+    #   openai/gpt-oss-120b        85% couverture, 2 inventés, 94%, 30.4s
+    #   gemini-3.6-flash           80% couverture, 0 inventés, 99%,  8.7s
+    #
+    # Ranked on coverage, then hallucinations, then accuracy, then latency.
+    # (July, for comparison, put gpt-oss-120b first on 100%/0 invented/1.6s
+    # over ten cases. It is the same criterion on a harder corpus: the article
+    # and blocker cases are new, and it is the only text model that invented
+    # anything at all this time.)
+    #
+    # Why not simply "the three fastest": the second entry is Groq **on
+    # purpose**. Gemini and Groq meter their free tiers separately, so an
+    # all-Google chain has one meter and three names on it — the fallback buys
+    # nothing at the exact moment it is needed. Vendor alternation is the point
+    # of the second slot, and gpt-oss-120b keeps it despite ranking fourth.
+    #
+    # Why the pinned name first and the `-latest` alias last, when they scored
+    # identically: an alias silently becomes a different model. A benchmark
+    # result is about the model it measured, so the evidence pins the primary,
+    # and the floating name sits where a surprise costs the least.
     extraction_text_chain: str = (
-        "groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest,gemini:gemini-3.6-flash"
+        "gemini:gemini-3.5-flash-lite,groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest"
     )
     # Not gemini-2.5-flash: it is still in the model list but 404s with "no
     # longer available to new users" (benchmark run 2026-07-27). Nor
@@ -89,8 +107,30 @@ class Settings(BaseSettings):
         "groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest,gemini:gemini-3.6-flash"
     )
 
+    # Re-ranked 2026-08-15 against the plan photos in dataset/plan_cases.json —
+    # the first real image data this project has had. Criterion fixed before
+    # the run, as for STT: localization accuracy (does it name the marked
+    # zones) and hallucination (does it claim zones nobody marked).
+    #   gemini-3.5-flash-lite     92% rappel, 0 hallucinations,  1.3s
+    #   gemini-flash-lite-latest  92% rappel, 0 hallucinations,  1.4s
+    #   gemini-3.6-flash          92% rappel, 1 hallucination,  13.4s
+    #   gemini-3.1-flash-lite    100% rappel, 4 hallucinations,  1.5s  <- NOT used
+    #
+    # 3.1-flash-lite is the reason recall alone must not pick the model: it
+    # tops recall by naming rooms nobody marked, which is how an invented floor
+    # reaches `etages`. It is excluded, not merely ranked last — on the image
+    # path there is no transcription behind the answer to contradict it.
+    #
+    # Google-only, and that is a real fragility rather than a preference: the
+    # free Groq catalogue has no multimodal model (re-verified 2026-08-15 by
+    # enumerating it — 15 models, none vision — and by Llama 4 Scout/Maverick
+    # answering 404). So these three names share one meter, and the fallbacks
+    # buy resilience against a single model overloading, never against Google
+    # being unavailable. On the evening of 2026-08-15 gemini-3.7-flash answered
+    # 503 "high demand" on 13 of 20 calls, which is exactly what taking out the
+    # whole image path would look like.
     extraction_image_chain: str = (
-        "gemini:gemini-3.6-flash,gemini:gemini-3.5-flash-lite,gemini:gemini-flash-lite-latest"
+        "gemini:gemini-3.5-flash-lite,gemini:gemini-flash-lite-latest,gemini:gemini-3.6-flash"
     )
 
     # Dashboard auth. Both optional so the API still boots on a machine that has
