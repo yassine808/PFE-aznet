@@ -33,6 +33,19 @@ const KIND_TONE: Record<NotificationItem['kind'], ToastTone> = {
 }
 
 /**
+ * The technician a 'report' notification is about.
+ *
+ * The API writes the title as `Nouveau rapport — <nom>`, and the name is the
+ * only part a "message received" toast needs. Falls back to the whole title
+ * when the em dash is absent, so a wording change degrades to something true
+ * rather than to an empty name.
+ */
+function senderOf(n: NotificationItem): string {
+  const [, name] = n.title.split('—')
+  return (name ?? n.title).trim()
+}
+
+/**
  * Highest notification id already announced, shared by every Bell on the page.
  *
  * The shell mounts two — one in the mobile bar, one in the rail — and CSS
@@ -76,8 +89,26 @@ export function Bell({
   const list = useApi('notifications', api.notifications, settings.refreshMs)
 
   const items = list.data?.items ?? []
-  const unread = list.data?.unread ?? 0
   const up = placement === 'up'
+
+  /*
+    Messages and alerts are two different jobs.
+
+    'report' means a technician wrote in — it is a fact, and its permanent
+    record is the inbox. The other three mean something needs a person: a row
+    flagged for review, a Sheet write that failed, a task falling due. Mixed in
+    one list the second kind drowns in the first on a busy morning, which is
+    how a notification centre teaches people to ignore it.
+
+    So: two tabs, and the badge counts alerts only. A badge that means "someone
+    said hello" is a badge nobody clears.
+  */
+  const [tab, setTab] = useState<'alerts' | 'messages'>('alerts')
+  const messages = items.filter((n) => n.kind === 'report')
+  const alerts = items.filter((n) => n.kind !== 'report')
+  const shown = tab === 'messages' ? messages : alerts
+  const unread = alerts.filter((n) => !n.read_at).length
+  const unreadMessages = messages.filter((n) => !n.read_at).length
 
   // `announced` outlives a sign-out, and notification ids are one global
   // sequence — so the next account to use this browser would start behind a
@@ -102,17 +133,29 @@ export function Bell({
     chime()
     for (const n of fresh) {
       const route = n.route?.replace(/^#\//, '')
+      const open =
+        route && (ROUTES as readonly string[]).includes(route)
+          ? () => onNavigate(route as Route)
+          : undefined
+      if (n.kind === 'report') {
+        // A received message is a one-line notice, not a briefing: the summary,
+        // the confidence and the engine are all one click away in the thread,
+        // and repeating them in a toast that disappears helps nobody.
+        toast({
+          tone: 'info',
+          title: t('bell.messageFrom', { name: senderOf(n) }),
+          onOpen: open ?? (() => onNavigate('inbox')),
+        })
+        continue
+      }
       toast({
         tone: KIND_TONE[n.kind] ?? 'info',
         title: n.title,
         body: n.body ?? undefined,
-        onOpen:
-          route && (ROUTES as readonly string[]).includes(route)
-            ? () => onNavigate(route as Route)
-            : undefined,
+        onOpen: open,
       })
     }
-  }, [list.data, items, toast, onNavigate])
+  }, [list.data, items, toast, onNavigate, t])
 
   // Click outside and Escape both close the panel, so one gesture or one key
   // backs out — same contract as the mobile drawer.
@@ -193,7 +236,30 @@ export function Bell({
             )}
           >
             <div className="border-line flex items-center justify-between gap-2 border-b px-3 py-2">
-              <p className="text-ink text-sm font-medium">{t('bell.title')}</p>
+              <div role="tablist" aria-label={t('bell.title')} className="flex items-center gap-1">
+                {(['alerts', 'messages'] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === k}
+                    onClick={() => setTab(k)}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors',
+                      tab === k
+                        ? 'bg-slate-100 text-ink dark:bg-slate-850'
+                        : 'text-ink-faint hover:text-ink',
+                    )}
+                  >
+                    {k === 'alerts' ? t('bell.tab.alerts') : t('bell.tab.messages')}
+                    {(k === 'alerts' ? unread : unreadMessages) > 0 && (
+                      <span className="text-ink-faint text-[0.625rem] tabular">
+                        {k === 'alerts' ? unread : unreadMessages}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
               {unread > 0 && (
                 <button
                   type="button"
@@ -207,13 +273,13 @@ export function Bell({
               )}
             </div>
 
-            {items.length === 0 && (
+            {shown.length === 0 && (
               <p className="text-ink-faint px-3 py-6 text-center text-xs">{t('bell.empty')}</p>
             )}
 
-            {items.length > 0 && (
+            {shown.length > 0 && (
               <ul className="max-h-80 overflow-y-auto">
-                {items.map((n) => (
+                {shown.map((n) => (
                   <li key={n.id}>
                     <button
                       type="button"

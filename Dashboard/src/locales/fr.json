@@ -434,5 +434,8 @@
   "notfound.title": "Cette page n'existe pas",
   "notfound.body": "Le lien est peut-être périmé ou mal saisi. Rien n'a été perdu — retour au tableau de bord.",
   "notfound.back": "Retour à la vue d'ensemble",
-  "settings.sttReset": "Réinitialiser ({order})"
+  "settings.sttReset": "Réinitialiser ({order})",
+  "bell.tab.alerts": "Alertes",
+  "bell.tab.messages": "Messages",
+  "bell.messageFrom": "Message reçu de {name}"
 }

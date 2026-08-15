@@ -157,3 +157,28 @@ def test_whatsapp_connection_error_is_a_reply_error(monkeypatch):
     monkeypatch.setattr(main.reply.requests, "post", boom)
     with pytest.raises(main.reply.ReplyError, match="injoignable"):
         main.reply._whatsapp("21261234567", "Bonjour")
+
+
+def test_reply_to_one_identity_only(monkeypatch):
+    """The inbox picker: a private answer goes where the operator pointed it,
+    not to every number the technician owns."""
+    monkeypatch.setattr(main.logs, "person_by_name", lambda name: PERSON)
+    sent = []
+
+    def fake_send(identities, text):
+        sent.extend(i["channel"] for i in identities)
+        return {"delivered": [{"channel": i["channel"]} for i in identities]}
+
+    monkeypatch.setattr(main.reply, "reply_to_identities", fake_send)
+    r = client.post("/reply", json={"name": "Tech 1", "text": "ok", "identity_id": 2})
+    assert r.status_code == 200
+    assert sent == ["whatsapp"]
+
+
+def test_reply_to_an_identity_that_is_not_theirs_404s(monkeypatch):
+    """Never fall back to broadcasting: a stale pick must fail loudly."""
+    monkeypatch.setattr(main.logs, "person_by_name", lambda name: PERSON)
+    monkeypatch.setattr(main.reply, "reply_to_identities",
+                        lambda i, t: pytest.fail("must not send"))
+    r = client.post("/reply", json={"name": "Tech 1", "text": "ok", "identity_id": 99})
+    assert r.status_code == 404

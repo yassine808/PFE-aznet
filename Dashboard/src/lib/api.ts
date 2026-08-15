@@ -263,11 +263,17 @@ export interface ReplyResult {
   delivered: { channel: string }[]
 }
 
-export async function sendReply(name: string, text: string): Promise<ReplyResult> {
+export async function sendReply(
+  name: string,
+  text: string,
+  /** One of the person's channel identities. Omitted, the API answers on all
+   *  of them — the behaviour every caller had before the picker existed. */
+  identityId?: number,
+): Promise<ReplyResult> {
   const res = await fetch(`${BASE}/reply`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, text }),
+    body: JSON.stringify({ name, text, identity_id: identityId ?? null }),
   })
   if (!res.ok) await fail(res)
   return (await res.json()) as ReplyResult
@@ -716,6 +722,20 @@ export interface NotificationItem {
   read_at?: string | null
 }
 
+/**
+ * A message that arrived and has not been answered yet.
+ *
+ * Derived by the API from `pipeline_logs` (a `received` row with no terminal
+ * row), so it needs no store of its own and no cleanup after a crash.
+ */
+export interface InFlight {
+  correlation_id: string
+  technicien?: string | null
+  channel?: string | null
+  /** When the message arrived, ISO. */
+  since: string
+}
+
 export type TaskRepeat = 'none' | 'daily' | 'weekly' | 'monthly'
 export type TaskUnit = 'day' | 'week' | 'month'
 
@@ -793,6 +813,7 @@ export const api = {
   n8nExecutions,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
   exchanges: (s?: AbortSignal) => get<{ exchanges: Exchange[] }>('/exchanges', s),
+  inFlight: (s?: AbortSignal) => get<{ in_flight: InFlight[] }>('/in-flight', s),
   generatedReports: (s?: AbortSignal) =>
     get<{ reports: GeneratedReport[] }>('/reports/generated', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),

@@ -434,5 +434,8 @@
   "notfound.title": "هذه الصفحة غير موجودة",
   "notfound.body": "قد يكون الرابط قديمًا أو مكتوبًا بشكل خاطئ. لم يُفقد شيء — عُد إلى لوحة التحكم.",
   "notfound.back": "العودة إلى النظرة العامة",
-  "settings.sttReset": "إعادة الضبط ({order})"
+  "settings.sttReset": "إعادة الضبط ({order})",
+  "bell.tab.alerts": "تنبيهات",
+  "bell.tab.messages": "رسائل",
+  "bell.messageFrom": "رسالة من {name}"
 }

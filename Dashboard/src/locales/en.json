@@ -434,5 +434,8 @@
   "notfound.title": "This page does not exist",
   "notfound.body": "The link may be outdated or mistyped. Nothing was lost — head back to the dashboard.",
   "notfound.back": "Back to overview",
-  "settings.sttReset": "Reset ({order})"
+  "settings.sttReset": "Reset ({order})",
+  "bell.tab.alerts": "Alerts",
+  "bell.tab.messages": "Messages",
+  "bell.messageFrom": "Message received from {name}"
 }

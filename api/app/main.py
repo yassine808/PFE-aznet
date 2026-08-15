@@ -1865,6 +1865,13 @@ def lookup_technician(channel: str, external_id: str, caller: dict = Depends(aut
 class ReplyIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="Technician name as written in the Sheet")
     text: str = Field(..., min_length=1, max_length=4000, description="Reply text")
+    identity_id: Optional[int] = Field(
+        default=None,
+        description=(
+            "Send on this channel identity only. Omitted, the reply goes to every "
+            "active identity of the person — the behaviour before the inbox had a picker."
+        ),
+    )
 
 
 @app.post("/reply", responses={404: {"description": "No person with that name or no active channel"}, 422: {"description": "Invalid input"}, 501: {"description": "Channel tokens not configured"}, 502: {"description": "Channel refused the message"}})
@@ -1880,6 +1887,13 @@ def send_reply(payload: ReplyIn, caller: dict = Depends(auth.require_human)) -> 
     if person is None:
         raise HTTPException(404, f"no technician named {payload.name!r}")
     identities = [t for t in person.get("identities", []) if t.get("active")]
+    if payload.identity_id is not None:
+        # Narrowed to the one the operator picked. A 404 rather than a silent
+        # broadcast: sending a private answer to every number a technician owns
+        # because the chosen one went inactive is worse than not sending it.
+        identities = [t for t in identities if t.get("id") == payload.identity_id]
+        if not identities:
+            raise HTTPException(404, f"identity {payload.identity_id} is not an active channel of {payload.name}")
     if not identities:
         raise HTTPException(404, f"{payload.name} has no active channel")
     try:
