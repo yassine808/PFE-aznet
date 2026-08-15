@@ -74,7 +74,7 @@ export function SttOrder() {
     return <p className="text-status-fail text-xs">{error}</p>
   }
   if (!status) {
-    return <p className="text-ink-faint text-xs">{t('common.loading')}</p>
+    return <p className="text-ink-faint text-xs">{t('state.loading')}</p>
   }
 
   const usageOf = (engine: string) =>

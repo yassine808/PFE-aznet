@@ -619,3 +619,27 @@ def test_totals_never_count_arret_minutes():
                   {"Câble installé": "", "Arrêt (min)": "40"}])
     assert out["cables_installes_m"] == 120
     assert "temps_arret_min" not in out
+
+
+def test_flag_review_merges_as_a_state_not_as_prose():
+    """Once any message of the day needs checking, the row does.
+
+    Merging the flag through the text branch produced `FALSE\nTrue` in the one
+    column the director filters on. The sheet hands the cell back as the string
+    `TRUE`, so both shapes have to mean the same thing.
+    """
+    from app.journal import COL_FLAG, merge_rows
+
+    assert merge_rows({COL_FLAG: "FALSE"}, {COL_FLAG: "TRUE"})[COL_FLAG] == "TRUE"
+    # A flag already set is never cleared by a clean second message.
+    assert merge_rows({COL_FLAG: "TRUE"}, {COL_FLAG: "FALSE"})[COL_FLAG] == "TRUE"
+    assert merge_rows({COL_FLAG: "FALSE"}, {COL_FLAG: "FALSE"})[COL_FLAG] == "FALSE"
+
+
+def test_stt_engine_merges_to_the_latest_engine():
+    """Which engine answered last, not a transcript of the chain's history."""
+    from app.journal import COL_STT, merge_rows
+
+    assert merge_rows({COL_STT: "gemini"}, {COL_STT: "local"})[COL_STT] == "local"
+    # A text report carries no engine and must not blank the audio one.
+    assert merge_rows({COL_STT: "gemini"}, {COL_STT: ""})[COL_STT] == "gemini"

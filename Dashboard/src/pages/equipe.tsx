@@ -45,30 +45,6 @@ import { cn } from '@/lib/utils'
 const CHANNELS = ['telegram', 'whatsapp'] as const
 
 /**
- * Technicians shown side by side before a crew wraps to the next row.
- *
- * Three, because four 10rem boxes plus their gaps already push a chart with two
- * chefs past a 1440px viewport — and the page body scrolling sideways is the
- * thing DESIGN.md rules out.
- */
-const CREW_PER_ROW = 3
-
-/**
- * Chefs: always one row.
- *
- * Wrapping them to a second line used to leave a lone chef stranded under
- * empty space rather than under the directeur's line, which read as broken
- * rather than as "ran out of room". The chart already scrolls horizontally
- * (`overflow-x-auto` + `min-w-max`) for a wide crew row, so the same trade is
- * made here: more chefs widen the chart instead of wrapping it.
- */
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
-}
-
-/**
  * Everything one person's rows say about them.
  *
  * Computed once, in one place, because the chart card and the detail panel were
@@ -413,12 +389,12 @@ function Chart({
           </div>
         )}
 
-        <div className="org-crew">
-          <ul className="org-branch flex flex-nowrap items-start justify-center gap-6">
+        {chefs.length > 0 && (
+          <ul className="org-crew org-tier flex flex-nowrap items-start justify-center gap-6">
             {chefs.map((chef) => {
               const crew = techs.filter((p) => p.manager_id === chef.id)
               return (
-                <li key={chef.id} className="org-node flex flex-col items-center">
+                <li key={chef.id} className="flex flex-col items-center">
                   <div className={cn(crew.length > 0 && 'org-stem')}>
                     <Box
                       person={chef}
@@ -432,34 +408,34 @@ function Chart({
                       dropTarget
                     />
                   </div>
-                  <div className="org-crew">
-                    {chunk(crew, CREW_PER_ROW).map((row) => (
-                      <ul
-                        key={row.map((p) => p.id).join('-')}
-                        className="org-branch flex items-start justify-center gap-3"
-                      >
-                        {row.map((p) => (
-                          <li key={p.id} className="org-node">
-                            <Box
-                              person={p}
-                              selected={selected === p.id}
-                              onSelect={onSelect}
-                              onMove={onMove}
-                              canEdit={canEdit}
-                              stat={load.get(p.name.trim().toLowerCase())}
-                              peak={peak}
-                              draggable
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    ))}
-                  </div>
+                  {crew.length > 0 && (
+                    /*
+                      Capped at three cards wide (3 × 11rem + 2 × 0.75rem gap)
+                      so a big crew wraps inside its own panel instead of
+                      pushing the chart past the viewport.
+                    */
+                    <ul className="org-crew flex max-w-[34.5rem] flex-wrap justify-center gap-3">
+                      {crew.map((p) => (
+                        <li key={p.id}>
+                          <Box
+                            person={p}
+                            selected={selected === p.id}
+                            onSelect={onSelect}
+                            onMove={onMove}
+                            canEdit={canEdit}
+                            stat={load.get(p.name.trim().toLowerCase())}
+                            peak={peak}
+                            draggable
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               )
             })}
           </ul>
-        </div>
+        )}
 
         {orphans.length > 0 && (
           <section className="mt-10 flex w-full flex-col items-center gap-3">

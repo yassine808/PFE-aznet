@@ -79,13 +79,20 @@ def test_drain_does_not_stall_on_an_unprocessable_payload(monkeypatch):
 
     monkeypatch.setattr(jobs.logs, "pending_writes", lambda n: [QUEUED])
     monkeypatch.setattr(jobs.journal, "file_report", boom)
-    monkeypatch.setattr(jobs.logs, "resolve_write", lambda i, ok, err=None: resolved.append((i, ok, err)))
+    monkeypatch.setattr(
+        jobs.logs, "resolve_write",
+        lambda i, ok, err=None, retry=True: resolved.append((i, ok, err, retry)),
+    )
 
     out = jobs.drain_sheet_queue()
 
     assert out["written"] == 0
     assert "unprocessable" in out["failed"][0]["error"]
     assert resolved[0][1] is False
+    # Retired, not counted: `pending_writes` is oldest-first, so a payload that
+    # can never parse used to sit at the head of every batch for ten more
+    # drains — the starvation MAX_WRITE_ATTEMPTS exists to prevent.
+    assert resolved[0][3] is False
 
 
 def test_daily_report_without_rows_sends_nothing(monkeypatch):

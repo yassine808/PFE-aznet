@@ -6,6 +6,41 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  */
 const BASE = '/api'
 
+/**
+ * A `lien_audio` turned into something an `<audio>` element can actually play.
+ *
+ * A Drive share link is not a media source: Drive answers `/uc?export=…` with a
+ * redirect chain, `Content-Disposition: attachment` and no Range support, so
+ * the element gets a response it cannot decode and plays nothing — silently, no
+ * error, which is why the Inbox looked like it simply had no sound. `GET
+ * /audio/{id}` streams the bytes with a real audio content type instead.
+ *
+ * Anything that is not a Drive link is handed back untouched: the fallback path
+ * stores the channel's own file id, and a caller that gets a URL back can at
+ * least offer it as a link rather than being told there is no audio.
+ */
+export function audioSrc(link: string | undefined | null, row?: number): string | null {
+  const raw = (link ?? '').trim()
+  if (!raw) return null
+  // Both shapes Drive hands out: `/uc?…id=FILE` and `/file/d/FILE/view`.
+  const id = /[?&]id=([\w-]+)/.exec(raw)?.[1] ?? /\/file\/d\/([\w-]+)/.exec(raw)?.[1]
+  if (id) return `${BASE}/audio/${id}`
+  // Not a Drive link, so it is the fallback n8n stores when the upload failed:
+  // the channel's own file ticket, which no browser can play and which has
+  // usually expired anyway. The archived copy is the only real source.
+  return row === undefined ? null : audioByRow(row)
+}
+
+/**
+ * The archived voice note for a Rapports row, straight out of Postgres.
+ *
+ * Used as the fallback when the Drive copy cannot answer — the upload is
+ * best-effort, so the blob is the durable one of the two.
+ */
+export function audioByRow(row: number): string {
+  return `${BASE}/audio/row/${row}`
+}
+
 /** One row of the `Rapports` tab. Sheets returns every cell as a string. */
 export interface ReportRow {
   _row: number
@@ -779,10 +814,26 @@ const inflight = new Map<string, Promise<unknown>>()
 // new one's key after the clear, and the next mount repaints them.
 let generation = 0
 
-function runDedupe<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+// Per-key revision, bumped by `reload()`. Deduping is right for two mounts
+// asking the same question at the same time, and wrong after a mutation: a
+// save that landed while a poll was in flight used to be handed that poll's
+// pre-edit rows, which went into the shared cache and repainted — the edit
+// visibly snapped back until the next tick. A response computed before the
+// bump is stale by definition, so it is dropped rather than cached.
+const revisions = new Map<string, number>()
+
+function revisionOf(key: string): number {
+  return revisions.get(key) ?? 0
+}
+
+function runDedupe<T>(key: string, fetcher: () => Promise<T>, fresh = false): Promise<T> {
+  if (fresh) inflight.delete(key)
   const existing = inflight.get(key)
   if (existing) return existing as Promise<T>
-  const p = fetcher().finally(() => inflight.delete(key))
+  const p = fetcher().finally(() => {
+    // Only clear the slot if it is still ours: a `fresh` run replaced it.
+    if (inflight.get(key) === p) inflight.delete(key)
+  })
   inflight.set(key, p)
   return p
 }
@@ -837,15 +888,41 @@ export function useApi<T>(
   const fetcherRef = useRef(fetcher)
   fetcherRef.current = fetcher
 
+  // A changed key is a different question, so the previous answer has to go.
+  // Without this the effect refetches but `data` keeps the old key's payload
+  // and `loading` stays false: clicking a second colleague in the org chart
+  // showed the first one's history under the second one's name, with no
+  // skeleton to say it was stale — and a "restore" click on a version list
+  // that still belonged to the previous period acted on the wrong rows.
+  // A render-phase reset rather than an effect, so the wrong data is never
+  // painted at all.
+  const nonceRef = useRef(nonce)
+  const keyRef = useRef(key)
+  if (keyRef.current !== key) {
+    keyRef.current = key
+    setData(cached ?? null)
+    setError(null)
+    setLoading(cached === undefined)
+  }
+
   useEffect(() => {
     const controller = new AbortController()
     let timer: number | undefined
 
+    // Only the first run after a `reload()` skips the in-flight request; the
+    // polls that follow dedupe as before.
+    const reloaded = nonceRef.current !== nonce
+    nonceRef.current = nonce
+
     const run = async (first: boolean) => {
       if (first && cache.get(key) === undefined) setLoading(true)
       const gen = generation
+      const rev = revisionOf(key)
       try {
-        const next = await runDedupe(key, () => fetcherRef.current(undefined))
+        const next = await runDedupe(key, () => fetcherRef.current(undefined), first && reloaded)
+        // Stale by revision: a reload was requested after this request left,
+        // so its answer predates the mutation that triggered the reload.
+        if (rev !== revisionOf(key)) return
         // A clearCache() happened while the request was in flight: the response
         // belongs to the previous account, so it must not repaint this hook or
         // the shared cache. The next poll/mount fetches fresh under the new
@@ -894,6 +971,9 @@ export function useApi<T>(
     })
   }, [key])
 
-  const reload = useCallback(() => setNonce((n) => n + 1), [])
+  const reload = useCallback(() => {
+    revisions.set(key, revisionOf(key) + 1)
+    setNonce((n) => n + 1)
+  }, [key])
   return { data, error, loading, reload }
 }

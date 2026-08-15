@@ -1,4 +1,5 @@
 """FastAPI entrypoint — the single endpoint n8n and the web form call."""
+import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -7,7 +8,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app import auth, daily_report, drive, extraction, imagegen, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
@@ -499,9 +500,10 @@ async def _audio_input(
     # Both are best-effort: a log store outage or a Drive hiccup must never
     # cost the technician their summary — the fallback is the previous
     # behavior where n8n stored the channel's own file ticket.
+    media_id = None
     try:
-        await run_in_threadpool(logs.save_media, ctx.get("channel"), None, message_id,
-                                "audio", audio.content_type, blob)
+        media_id = await run_in_threadpool(logs.save_media, ctx.get("channel"), None, message_id,
+                                           "audio", audio.content_type, blob)
     except logs.LogStoreError as exc:
         await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
     lien_audio = None
@@ -514,6 +516,17 @@ async def _audio_input(
             )
     except drive.DriveError as exc:
         await _log("api", "warn", message=f"drive upload failed: {exc}", **ctx)
+    # Tie the two copies together while we still hold both ids. This is the
+    # only moment they are both in scope, and without it the Sheet's
+    # `lien_audio` can never be resolved back to the blob we just stored — the
+    # dashboard would be stuck playing through Drive, which does not work.
+    if media_id and lien_audio:
+        drive_id = drive.file_id_of(lien_audio)
+        if drive_id:
+            try:
+                await run_in_threadpool(logs.link_media_drive, media_id, drive_id)
+            except logs.LogStoreError as exc:
+                await _log("api", "warn", message=f"media link failed: {exc}", **ctx)
     return transcription, rapport_complet, warnings, lien_audio
 
 
@@ -638,19 +651,25 @@ def list_media(
 
 
 @app.get("/media/{media_id}/file", responses={404: {"description": "Not found"}, 502: {"description": "Log store unreachable"}})
-def get_media_file(media_id: int, caller: dict = Depends(auth.require_human)) -> Response:
-    """One archived voice note / photo, for the dashboard's <audio>/<img> tags."""
+def get_media_file(
+    media_id: int, request: Request, caller: dict = Depends(auth.require_human)
+) -> Response:
+    """One archived voice note / photo, for the dashboard's <audio>/<img> tags.
+
+    Shares `_media_response` with `/audio/{drive_id}`: this route used to hand
+    back the stored `mime_type` as-is and no Range header, which is silent
+    death for a voice note — Telegram labels them `application/octet-stream`
+    often enough that the player had nothing to decode, and without Range
+    Safari refuses to start at all.
+    """
     try:
         row = logs.get_media(media_id)
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     if row is None:
         raise HTTPException(404, "media not found")
-    return Response(
-        content=row["data"],
-        media_type=row["mime_type"] or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="media-{row["id"]}"'},
-    )
+    return _media_response(row["data"], row["mime_type"] or "", request,
+                           filename=f"media-{row['id']}")
 
 
 @app.get("/messages", responses={502: {"description": "Log store unreachable"}})
@@ -1160,6 +1179,17 @@ async def file_journal_entry(
     payload = entry.model_dump()
     try:
         result = await run_in_threadpool(journal.file_report, payload)
+    except ValidationError as exc:
+        # `report` is an unvalidated dict here on purpose (its schema is
+        # journal.file_report's business), so an unrecognized étage or aile
+        # raises out of ExtractedReport rather than out of FastAPI's own
+        # parsing. Deliberately *not* parked: no amount of retrying makes a
+        # payload parse, and reply-first means the technician has already been
+        # told it landed — so it has to be visible in the log instead of a 500
+        # with nothing behind it. 422, not 502: the input is the problem.
+        logs.write_safe("sheet", "error", message=f"journal payload rejected: {exc}",
+                        correlation_id=entry.correlation_id)
+        raise HTTPException(422, f"journal payload rejected: {exc}") from exc
     except sheets.SheetsError as exc:
         try:
             logs.queue_failed_write(payload, str(exc), entry.correlation_id)
@@ -1184,6 +1214,136 @@ async def file_journal_entry(
         correlation_id=entry.correlation_id,
     )
     return result
+
+
+# ── Audio playback ─────────────────────────────────────────────────────────
+
+
+def _media_response(data: bytes, mime: str, request: Request,
+                    filename: Optional[str] = None) -> Response:
+    """Bytes a media element can actually play, Range included.
+
+    Two things kill a voice note silently, and both are handled here so no
+    route can forget one:
+
+    * The stored MIME. Telegram voice notes are labelled
+      `application/octet-stream` often enough that trusting it leaves the
+      element with nothing to decode — and a media element that cannot decode
+      raises no error, it simply never plays. Sniffed from the magic bytes
+      instead, falling back to mpeg.
+    * Range. Without `accept-ranges` and a real 206, Chrome plays but will not
+      seek, and Safari does not start at all. The whole file is already in
+      memory, so a range is a slice rather than a second fetch.
+    """
+    total = len(data)
+    if not mime.startswith(("audio/", "image/")):
+        if data[:4] == b"OggS":
+            mime = "audio/ogg"
+        elif data[:3] == b"ID3" or data[:2] == b"\xff\xfb":
+            mime = "audio/mpeg"
+        elif data[4:8] == b"ftyp":
+            mime = "audio/mp4"
+        elif data[:8] == b"\x89PNG\r\n\x1a\n":
+            mime = "image/png"
+        elif data[:2] == b"\xff\xd8":
+            mime = "image/jpeg"
+        else:
+            mime = "audio/mpeg"
+
+    headers = {"accept-ranges": "bytes", "cache-control": "private, max-age=3600"}
+    if filename:
+        headers["content-disposition"] = f'inline; filename="{filename}"'
+
+    rng = request.headers.get("range", "")
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", rng.strip()) if rng else None
+    if match and (match.group(1) or match.group(2)):
+        if match.group(1):
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else total - 1
+        else:
+            # `bytes=-N` is the *last* N bytes, not "from N".
+            start = max(0, total - int(match.group(2)))
+            end = total - 1
+        if start >= total:
+            # 416 must advertise the real length or the player retries forever.
+            return Response(
+                status_code=416, headers={**headers, "content-range": f"bytes */{total}"}
+            )
+        end = min(end, total - 1)
+        headers["content-range"] = f"bytes {start}-{end}/{total}"
+        return Response(data[start : end + 1], status_code=206, media_type=mime,
+                        headers=headers)
+
+    return Response(data, media_type=mime, headers=headers)
+
+
+@app.get("/audio/row/{rapports_row}", responses={404: {"description": "No audio archived"}})
+async def stream_audio_for_row(
+    rapports_row: int, request: Request, caller: dict = Depends(auth.require_user)
+) -> Response:
+    """Play the voice note behind a Rapports row, straight from Postgres.
+
+    The route for the rows `/audio/{drive_id}` cannot serve: the Drive upload
+    is best-effort, so an outage leaves the Sheet row with no `lien_audio` and
+    the dashboard with nothing to point at — while the blob has been sitting in
+    `media_files` since the message arrived. A 404 here means we genuinely do
+    not hold one, which is the honest answer and lets the Inbox render the
+    message as text rather than an audio player that will never sound.
+    """
+    try:
+        row = await run_in_threadpool(logs.find_media_by_rapports_row, rapports_row)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if row is None:
+        raise HTTPException(404, "no audio archived for this row")
+    return _media_response(row["data"], row["mime_type"] or "", request)
+
+
+@app.get("/audio/{file_id}", responses={502: {"description": "Drive unreachable"}})
+async def stream_audio(
+    file_id: str, request: Request, caller: dict = Depends(auth.require_user)
+) -> Response:
+    """Play one voice note from Drive.
+
+    The Inbox used to point `<audio src>` straight at the `lien_audio` share
+    link and nothing ever played: Drive answers that URL with a redirect chain,
+    `Content-Disposition: attachment` and no Range support, so the media
+    element gets something it cannot decode and fails silently — no error, no
+    sound. This hands the browser the actual bytes with an audio content type.
+
+    Range is answered properly rather than ignored: without it Chrome will
+    play a voice note but refuse to seek in it, and Safari will not play it at
+    all. The whole file is already in memory (see `drive.download`), so a range
+    is a slice, not a second fetch.
+
+    Gated like everything else — `require_user`, so the bytes are not public
+    even though the Drive file's own permission still is.
+
+    Postgres first, Drive second. `/process` archives every voice note into
+    `media_files` as it arrives and records the Drive id it was published
+    under, so the copy we already hold is the one that answers — no network
+    call, no dependency on Drive being reachable or the file still existing.
+    Drive stays as the fallback for rows archived before the link column
+    existed, and for the case where the blob was pruned by retention but the
+    Sheet link lives on.
+    """
+    data: Optional[bytes] = None
+    mime = ""
+    try:
+        row = await run_in_threadpool(logs.find_media_by_drive_id, file_id)
+        if row:
+            data, mime = row["data"], row["mime_type"] or ""
+    except logs.LogStoreError as exc:
+        # Not fatal: the Drive path below is exactly the fallback for this.
+        logs.write_safe("api", "warn", message=f"media lookup failed: {exc}")
+
+    if data is None:
+        try:
+            data, mime = await run_in_threadpool(drive.download, file_id)
+        except drive.DriveError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    return _media_response(data, mime, request)
 
 
 # ── Sheet retry queue ──────────────────────────────────────────────────────

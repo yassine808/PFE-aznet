@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { createUser, type Async, type History } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
-import { daysAgoISO } from '@/lib/metrics'
+import { daysAgoISO, parseISODay } from '@/lib/metrics'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +20,18 @@ import { cn } from '@/lib/utils'
 /** Actions the director asked to count, in the order they matter. */
 const HEADLINE = ['flag_cleared', 'report_edited', 'settings_saved', 'report_generated'] as const
 
+/**
+ * Actions shown before the panel asks whether you want the rest.
+ *
+ * The endpoint returns the whole audit trail, and rendering it made the detail
+ * drawer several screens long for anyone who has used the dashboard for a
+ * week — the profile and channel blocks under it became unreachable without a
+ * long scroll past rows nobody was reading. Eight covers "what did they just
+ * do", which is the question the panel is opened with; the rest is one click
+ * away and never leaves the page.
+ */
+const RECENT_SHOWN = 8
+
 function hhmm(seconds: number) {
   const h = Math.floor(seconds / 3600)
   const m = Math.round((seconds % 3600) / 60)
@@ -36,6 +48,7 @@ export function HistBlock({ hist }: { readonly hist: Async<History> }) {
 export function Activity({ data }: { readonly data: History }) {
   const { t, locale } = useI18n()
   const { settings } = useSettings()
+  const [expanded, setExpanded] = useState(false)
 
   // 14 days, zero-filled here rather than in SQL: a day with no activity has to
   // show as a gap in the bars, not vanish and make the fortnight look shorter.
@@ -88,7 +101,12 @@ export function Activity({ data }: { readonly data: History }) {
         </div>
         <div className="text-ink-faint flex justify-between text-[0.625rem]">
           <span>
-            {new Date(days[0].key).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}
+            {/* parseISODay, not `new Date(iso)`: the bare form parses as UTC and
+                labels the first bar with the wrong day west of the meridian. */}
+            {parseISODay(days[0].key).toLocaleDateString(locale, {
+              day: 'numeric',
+              month: 'short',
+            })}
           </span>
           <span>{t('team.today')}</span>
         </div>
@@ -128,7 +146,7 @@ export function Activity({ data }: { readonly data: History }) {
           <EmptyState body={t('team.noActions')} />
         ) : (
           <ul className="flex flex-col">
-            {data.actions.map((a) => (
+            {(expanded ? data.actions : data.actions.slice(0, RECENT_SHOWN)).map((a) => (
               <li
                 key={a.id}
                 className="border-line flex flex-wrap items-baseline gap-x-3 border-b py-2 text-xs last:border-b-0"
@@ -153,6 +171,18 @@ export function Activity({ data }: { readonly data: History }) {
               </li>
             ))}
           </ul>
+        )}
+        {data.actions.length > RECENT_SHOWN && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="text-accent focus-visible:ring-accent cursor-pointer self-start rounded-md py-1 text-xs outline-none focus-visible:ring-2"
+          >
+            {expanded
+              ? t('team.showLess')
+              : t('team.showMore', { count: data.actions.length - RECENT_SHOWN })}
+          </button>
         )}
       </section>
     </div>

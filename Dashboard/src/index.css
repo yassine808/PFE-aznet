@@ -217,61 +217,25 @@
   }
 
   /*
-    Org-chart connectors (pages/equipe.tsx).
+    Org chart (pages/equipe.tsx): one stem down, then containment.
 
-    Pure CSS rather than an SVG overlay: the boxes are flex children whose widths
-    depend on the longest name, so an SVG would need a ResizeObserver and a
-    re-measure on every reflow, RTL flip and font swap. Pseudo-elements are laid
-    out by the same pass that positions the boxes, so they simply cannot
-    disagree with them.
+    The tree used to draw a horizontal rule across each row out of per-node
+    half-rules — ::before the inline-start half, ::after the inline-end half
+    plus a vertical stub. It could not be made to work. Each half stops at its
+    own node's edge, so the flex `gap` between two nodes was covered by nothing
+    and the "rule" was a row of segments with a hole at every gap; and once a
+    node became as wide as the crew panel under it, those halves were huge,
+    uneven, and no longer anywhere near the cards they were meant to join.
 
-    Each node draws the half-rules above itself: ::before the inline-start half,
-    ::after the inline-end half plus the vertical stub down into the box. The
-    first node suppresses its start half and the last its end half, so the
-    horizontal rule spans centre-to-centre rather than overhanging the row. All
-    logical properties, so RTL is the same code and not a mirrored copy.
+    So the chart draws exactly one kind of line — a short vertical stem from a
+    parent — and expresses the rest by nesting: a parent's children live in a
+    panel underneath it. Nothing has to span a gap, nothing depends on a
+    sibling's width, first/last needs no trimming, and RTL is the same code
+    rather than a mirrored copy. The two levels are told apart by fill, not by
+    more borders: the outer tier is transparent, a crew is a recessed well.
   */
-  .org-branch > .org-node {
-    position: relative;
-    padding-block-start: 1.5rem;
-  }
 
-  .org-branch > .org-node::before,
-  .org-branch > .org-node::after {
-    content: '';
-    position: absolute;
-    inset-block-start: 0;
-    inline-size: 50%;
-    block-size: 1.5rem;
-    /* line-strong, not line: at 1px on a tinted canvas the connectors read as
-       a rendering artefact rather than as structure. Still one pixel — the
-       Hairline Rule is about weight, and this is a contrast fix. */
-    border-block-start: 1px solid var(--line-strong);
-  }
-
-  .org-branch > .org-node::before {
-    inset-inline-start: 0;
-  }
-
-  .org-branch > .org-node::after {
-    inset-inline-start: 50%;
-    border-inline-start: 1px solid var(--line-strong);
-  }
-
-  /* The overhang trim. `:only-child` keeps a lone child's vertical stub while
-     dropping both horizontals — otherwise a chef with one technician gets a
-     rule stretching out to nothing on both sides. */
-  .org-branch > .org-node:first-child::before,
-  .org-branch > .org-node:only-child::before {
-    border-block-start-color: transparent;
-  }
-
-  .org-branch > .org-node:last-child::after,
-  .org-branch > .org-node:only-child::after {
-    border-block-start-color: transparent;
-  }
-
-  /* The stub leaving a parent on its way down to the rule above its children. */
+  /* The stem leaving a parent on its way down into its children's panel. */
   .org-stem {
     position: relative;
     padding-block-end: 1.5rem;
@@ -287,36 +251,41 @@
   }
 
   /*
-    A crew wider than three wraps instead of scrolling.
+    A group of children: the panel that carries "these report to the box above".
 
-    The page used to put a whole crew on one row, so six technicians pushed the
-    chart past the viewport and the org could only be read by scrolling
-    sideways — the one thing DESIGN.md says the page body must never do.
-    Rows are chunked in the component; this connects them.
-
-    Each row already draws its own centre-to-centre rule (.org-node above). A
-    row that follows another gets one short vertical link up through the gap,
-    so the crew reads as one continuous branch rather than as separate teams.
-    The gap is a fixed row-gap, which is the only reason this height is
-    knowable in CSS at all.
+    A crew wider than three has to wrap or the chart scrolls sideways, and
+    wrapped rows cannot be connected honestly either — rows two and up hang
+    from a stub in mid-air. Containment has no such limit: it says the same
+    thing at any headcount, and there is no geometry to get wrong.
   */
   .org-crew {
-    display: flex;
-    flex-direction: column;
-    row-gap: 1.5rem;
-  }
-
-  .org-crew > .org-branch + .org-branch {
     position: relative;
+    border-radius: 0.75rem;
+    border: 1px solid var(--line);
+    background: var(--canvas);
+    padding: 0.75rem;
   }
 
-  .org-crew > .org-branch + .org-branch::before {
+  /*
+    The chefs' tier. Same panel, no fill: a filled tier holding filled crew
+    wells reads as a box in a box, and the nesting stops being legible at
+    exactly the moment it has to carry the whole chart. Roomier padding so the
+    crew wells inside it are not pressed against its edge.
+  */
+  .org-crew.org-tier {
+    background: transparent;
+    padding: 1.25rem;
+  }
+
+  /* The stem lands on the panel's edge, so the notch marks where it arrives —
+     the join is drawn by the panel, not by a line crossing into it. */
+  .org-crew::before {
     content: '';
     position: absolute;
-    inset-block-start: -1.5rem;
-    inset-inline-start: 50%;
-    block-size: 1.5rem;
-    border-inline-start: 1px solid var(--line-strong);
+    inset-block-start: -1px;
+    inset-inline-start: calc(50% - 0.5rem);
+    inline-size: 1rem;
+    border-block-start: 1px solid var(--line-strong);
   }
 
   /*

@@ -92,7 +92,7 @@ def drain_sheet_queue() -> dict:
             # A payload the schema cannot parse will never parse: retrying it
             # forever blocks the batch behind it, so it is resolved as failed
             # and stays visible in the dashboard instead of stalling the drain.
-            logs.resolve_write(item["id"], False, f"unprocessable: {exc}")
+            logs.resolve_write(item["id"], False, f"unprocessable: {exc}", retry=False)
             failed.append({"id": item["id"], "error": f"unprocessable: {exc}"})
             continue
         logs.resolve_write(item["id"], True)
@@ -358,6 +358,35 @@ def _next_occurrence(due: Optional[datetime], repeat: str,
     return logs.shift_months(due, 1)
 
 
+def _catch_up(due: Optional[datetime], repeat: str,
+              repeat_every: Optional[int] = None,
+              repeat_unit: Optional[str] = None) -> Optional[datetime]:
+    """The next occurrence that is actually still ahead of us.
+
+    Stamping one period forward re-stamped a missed task to a date still in the
+    past, and `due_tasks` matched it again on the very next tick: a daily
+    reminder missed over a two-week outage sent fourteen bells and fourteen
+    mails in fourteen minutes rather than one. Repeated stepping, because the
+    rule is not always a fixed length — monthly clamps to the month, so the
+    only way to land on a real occurrence is to walk them.
+
+    Every step moves strictly forward, so this terminates; the cap is there
+    only so a corrupt row cannot spin the scheduler thread.
+    """
+    nxt = _next_occurrence(due, repeat, repeat_every, repeat_unit)
+    if nxt is None:
+        return None
+    now = datetime.now(nxt.tzinfo)
+    for _ in range(1000):
+        if nxt > now:
+            break
+        stepped = _next_occurrence(nxt, repeat, repeat_every, repeat_unit)
+        if stepped is None or stepped <= nxt:
+            break
+        nxt = stepped
+    return nxt
+
+
 def _reminder_body(task: dict) -> str:
     """The French body shared by the bell row and the reminder mail.
 
@@ -451,7 +480,7 @@ def send_reminders() -> dict:
         try:
             logs.stamp_task_notified(
                 task["id"],
-                _next_occurrence(
+                _catch_up(
                     task.get("due_at"),
                     task.get("repeat") or "none",
                     task.get("repeat_every"),

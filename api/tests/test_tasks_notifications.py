@@ -446,8 +446,11 @@ def test_send_reminders_fires_bell_and_mail(monkeypatch):
 
 
 def test_send_reminders_advances_recurring_task(monkeypatch):
+    # Dated relative to today: the stamp is the next occurrence still ahead of
+    # us, so a fixed literal would have started failing the day it went stale.
+    last = datetime.now().replace(microsecond=0) - timedelta(days=7) + timedelta(hours=1)
     due = [{"id": 2, "title": "Point hebdo", "notes": None,
-            "due_at": datetime(2026, 8, 2, 9, 0), "repeat": "weekly"}]
+            "due_at": last, "repeat": "weekly"}]
     stamped = []
     monkeypatch.setattr(jobs.logs, "due_tasks", lambda now: due)
     monkeypatch.setattr(jobs.logs, "manager_emails", lambda: [])
@@ -458,7 +461,7 @@ def test_send_reminders_advances_recurring_task(monkeypatch):
     )
     out = jobs.send_reminders()
     assert out["emailed"] == 0  # no emails configured → nothing to send
-    assert stamped == [(2, datetime(2026, 8, 9, 9, 0))]
+    assert stamped == [(2, last + timedelta(days=7))]
 
 
 def test_mail_failure_never_blocks_the_bell(monkeypatch):
@@ -536,8 +539,9 @@ def test_send_reminders_fires_early_for_lead_time(monkeypatch):
 
 
 def test_send_reminders_advances_custom_interval(monkeypatch):
+    last = datetime.now().replace(microsecond=0) - timedelta(days=3) + timedelta(hours=1)
     due = [{"id": 5, "title": "Contrôle stock", "notes": None,
-            "due_at": datetime(2026, 8, 2, 9, 0), "repeat": "none",
+            "due_at": last, "repeat": "none",
             "remind_before_value": None, "remind_before_unit": None,
             "repeat_every": 3, "repeat_unit": "day"}]
     stamped = []
@@ -549,4 +553,20 @@ def test_send_reminders_advances_custom_interval(monkeypatch):
         lambda tid, nxt: stamped.append((tid, nxt)),
     )
     jobs.send_reminders()
-    assert stamped == [(5, datetime(2026, 8, 5, 9, 0))]
+    assert stamped == [(5, last + timedelta(days=3))]
+
+
+def test_catch_up_skips_a_missed_backlog_in_one_step():
+    """A daily reminder missed over a two-week outage fires once, not fourteen
+    times: stamping one period forward left the task still overdue, so the very
+    next 60 s tick matched it again."""
+    from datetime import timedelta as _td
+
+    stale = datetime.now() - _td(days=14)
+    nxt = jobs._catch_up(stale, "daily")
+    assert nxt is not None and nxt > datetime.now()
+    assert nxt - datetime.now() <= _td(days=1)
+    # The step rule itself is unchanged: a future task advances by exactly one.
+    future = datetime.now() + _td(days=3)
+    assert jobs._catch_up(future, "daily") == future + _td(days=1)
+    assert jobs._catch_up(stale, "none") is None

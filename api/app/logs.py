@@ -296,6 +296,24 @@ CREATE TABLE IF NOT EXISTS media_files (
 );
 CREATE INDEX IF NOT EXISTS media_files_ts_idx ON media_files (created_at DESC);
 
+-- The Drive file id of the copy minted for the Sheet, when there is one.
+--
+-- This is the join the Inbox needs and had no way to make: a Sheet row carries
+-- `lien_audio` and nothing else, so "play this row's voice note" could only ever
+-- be answered by Drive — and a Drive share link is not a media source (see
+-- app/drive.download). With the id recorded here, the share link in the Sheet
+-- resolves back to the blob we already hold, and Drive becomes the fallback
+-- rather than the only path.
+--
+-- Nullable on purpose: the Drive upload is best-effort and runs *after* the
+-- archive, so a Drive outage leaves a perfectly good blob with no id. Those
+-- rows are still reachable by message_id.
+DO $$ BEGIN
+    ALTER TABLE media_files ADD COLUMN IF NOT EXISTS drive_file_id TEXT;
+END $$;
+CREATE INDEX IF NOT EXISTS media_files_drive_idx ON media_files (drive_file_id)
+    WHERE drive_file_id IS NOT NULL;
+
 -- Raw chat archive: every typed message, so the conversation survives the
 -- Sheet (the Sheet only ever holds extracted reports).
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -949,6 +967,71 @@ def list_media(limit: int = 50) -> List[dict]:
     return rows
 
 
+def link_media_drive(media_id: int, drive_file_id: str) -> None:
+    """Record which Drive copy a stored blob was published as.
+
+    Called after the upload, because the id does not exist before it. Failing
+    here costs the fast playback path, never the archive.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "UPDATE media_files SET drive_file_id = %s WHERE id = %s",
+            (drive_file_id, media_id),
+        )
+
+
+def find_media_by_drive_id(drive_file_id: str) -> Optional[dict]:
+    """The archived blob behind a Sheet row's `lien_audio`, if we still hold it.
+
+    `created_at DESC` because the same file could in principle be uploaded
+    twice; the newest row is the one the current Sheet link points at.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT * FROM media_files WHERE drive_file_id = %s "
+            "ORDER BY created_at DESC LIMIT 1",
+            (drive_file_id,),
+        )
+        row = _one(cur)
+    if row is None:
+        return None
+    out = _iso(dict(row))
+    out["data"] = bytes(out["data"])
+    return out
+
+
+def find_media_by_rapports_row(rapports_row: int, kind: str = "audio") -> Optional[dict]:
+    """The archived blob behind a row of the Rapports tab.
+
+    The other half of playback, for the rows `find_media_by_drive_id` cannot
+    answer: the Drive upload is best-effort, so a Drive outage leaves a Sheet
+    row with no `lien_audio` at all — and the voice note is sitting in
+    `media_files` the whole time with no way to ask for it.
+
+    `processed_messages` already records which Sheet row a message produced
+    (that is what `/modify` navigates by), and `media_files` records the
+    message a blob arrived with, so the two join on `message_id` and no new
+    bookkeeping is needed. Newest first, because a message that was re-processed
+    has more than one blob and the current row reflects the last run.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.* FROM media_files m
+            JOIN processed_messages p ON p.message_id = m.message_id
+            WHERE p.rapports_row = %s AND m.kind = %s
+            ORDER BY m.created_at DESC LIMIT 1
+            """,
+            (rapports_row, kind),
+        )
+        row = _one(cur)
+    if row is None:
+        return None
+    out = _iso(dict(row))
+    out["data"] = bytes(out["data"])
+    return out
+
+
 def get_media(media_id: int) -> Optional[dict]:
     """One archived file, blob included, for GET /media/{id}/file."""
     with _cursor() as cur:
@@ -1070,15 +1153,29 @@ def pending_writes(limit: int = 20) -> List[dict]:
     return rows
 
 
-def resolve_write(write_id: int, ok: bool, error: Optional[str] = None) -> None:
-    """Drop the row on success, otherwise bump attempts so the cron can back off."""
+def resolve_write(write_id: int, ok: bool, error: Optional[str] = None,
+                  retry: bool = True) -> None:
+    """Drop the row on success, otherwise bump attempts so the cron can back off.
+
+    `retry=False` retires the row instead of counting one more attempt: a
+    payload the schema cannot parse will never parse, and `pending_writes`
+    orders oldest-first, so counting attempts left it at the head of every
+    batch for ten more drains — the starvation `MAX_WRITE_ATTEMPTS` exists to
+    prevent, delayed rather than avoided. The row stays in the table with its
+    error, so the dashboard still shows what was dropped and why.
+    """
     with _cursor() as cur:
         if ok:
             cur.execute("DELETE FROM failed_writes WHERE id = %s", (write_id,))
-        else:
+        elif retry:
             cur.execute(
                 "UPDATE failed_writes SET attempts = attempts + 1, last_error = %s WHERE id = %s",
                 (error, write_id),
+            )
+        else:
+            cur.execute(
+                "UPDATE failed_writes SET attempts = %s, last_error = %s WHERE id = %s",
+                (MAX_WRITE_ATTEMPTS, error, write_id),
             )
 
 

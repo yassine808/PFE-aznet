@@ -407,7 +407,7 @@ def test_append_report_extends_headers_for_new_columns(monkeypatch):
     svc = _fake_service()
     monkeypatch.setattr(main.sheets, "_service", lambda: svc)
     main.sheets.append_report({"chantier": "Tour Atlas", "besoins": "connecteurs"})
-    assert svc.updated["range"] == "Rapports!I1:I1"
+    assert svc.updated["range"] == "'Rapports'!I1:I1"
     assert svc.updated["body"]["values"] == [["besoins"]]
     assert svc.appended["values"][0][8] == "connecteurs"
 
@@ -419,12 +419,12 @@ def test_update_report_fields_places_cells_by_header(monkeypatch):
     monkeypatch.setattr(main.sheets, "_service", lambda: svc)
     main.sheets.update_report_fields(5, {"chantier": "Tour Yasmine", "goulottes_m": "200"})
     ranges = {d["range"] for d in svc.batched["data"]}
-    assert "Rapports!E5" in ranges  # chantier is column E in HEADERS
-    assert "Rapports!F5" in ranges
+    assert "'Rapports'!E5" in ranges  # chantier is column E in HEADERS
+    assert "'Rapports'!F5" in ranges
 
 
 def test_clear_row_empties_header_width(monkeypatch):
     svc = _fake_service()
     monkeypatch.setattr(main.sheets, "_service", lambda: svc)
     main.sheets.clear_row(9)
-    assert svc.cleared == "Rapports!A9:H9"  # 8 columns in HEADERS
+    assert svc.cleared == "'Rapports'!A9:H9"  # 8 columns in HEADERS

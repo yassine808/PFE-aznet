@@ -50,30 +50,14 @@ const JOB_ICONS: Record<string, typeof BroomIcon> = {
 }
 
 // Order shown to the operator: the two mails they care about first, plumbing last.
-const JOB_ORDER = ['daily_report', 'weekly_report', 'reminders', 'sheet_queue', 'profiles', 'prune_logs']
-
-
-function Band({
-  title,
-  hint,
-  children,
-}: {
-  readonly title: string
-  readonly hint?: string
-  readonly children: React.ReactNode
-}) {
-  return (
-    <section className="flex min-w-0 flex-col gap-4">
-      <div className="border-line flex flex-col gap-1 border-b pb-2">
-        <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
-          {title}
-        </h2>
-        {hint && <p className="text-ink-faint max-w-[75ch] text-xs">{hint}</p>}
-      </div>
-      {children}
-    </section>
-  )
-}
+const JOB_ORDER = [
+  'daily_report',
+  'weekly_report',
+  'reminders',
+  'sheet_queue',
+  'profiles',
+  'prune_logs',
+]
 
 const PLAN_HOURS = [0, 6, 12, 18, 24]
 
@@ -232,8 +216,7 @@ function DayPlan({ jobs }: { readonly jobs: JobStatus[] }) {
                   isNext ? 'text-ink-muted' : 'text-ink-faint',
                 )}
               >
-                {String(Math.floor(at / 60)).padStart(2, '0')}:
-                {String(at % 60).padStart(2, '0')}
+                {String(Math.floor(at / 60)).padStart(2, '0')}:{String(at % 60).padStart(2, '0')}
               </span>
               <span className="sr-only">{label}</span>
             </span>
@@ -320,7 +303,9 @@ function useOutcome() {
       case 'reminders':
         if (!n('due')) return t('automation.out.remindersNone')
         return t('automation.out.reminders', {
-          due: n('due'), notified: n('notified'), emailed: n('emailed'),
+          due: n('due'),
+          notified: n('notified'),
+          emailed: n('emailed'),
         })
       case 'profiles':
         return t('automation.out.profiles', { refreshed: n('refreshed'), total: n('persons') })
@@ -371,82 +356,76 @@ function JobRow({
   const Icon = JOB_ICONS[job.name] ?? ArrowClockwiseIcon
   const last = job.last
   const text = outcome(job)
+  const what = t(`automation.job.${job.name}.what`)
 
   return (
-    <li className="border-line hover:bg-canvas/60 -mx-4 flex flex-col gap-2 border-b px-4 py-4 transition-colors last:border-b-0">
-      <div className="flex items-baseline gap-3">
-        <Icon size={15} className="text-ink-faint shrink-0 translate-y-0.5" />
+    /*
+      One line per job.
 
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-ink text-sm font-medium text-balance">
-            {t(`automation.job.${job.name}`)}
-          </span>
-          {/* `pretty` rather than `balance`: these are one-line explanations, and
-              the thing worth avoiding is a single orphaned word on line two. */}
-          <span className="text-ink-faint text-xs text-pretty">
-            {t(`automation.job.${job.name}.what`)}
-          </span>
-        </div>
+      Each row used to be a two-line description plus a status line plus, for
+      the two mail jobs, a schedule form — around 110px each, so six jobs alone
+      filled a screen and the recipient list was permanently below the fold.
+      The explanation is a `title`, not a second line: it answers a question
+      asked once, when you first meet the job, and then costs a line forever.
+      What is read every visit — when it runs, whether it worked, and the way
+      to run it now — stays on the surface.
+    */
+    <li className="border-line hover:bg-canvas/60 flex flex-col border-b transition-colors last:border-b-0">
+      <div className="flex items-center gap-3 py-2">
+        <Icon size={15} className="text-ink-faint shrink-0" />
 
-        {/* 36px tall and 40px of touch target with the inline padding — the
-            row's only control should not need aiming at. `transition-colors`
-            plus a transform on press, never `transition: all`. */}
+        <span className="text-ink min-w-0 flex-1 truncate text-sm" title={what}>
+          {t(`automation.job.${job.name}`)}
+        </span>
+
+        <span className="text-ink-faint hidden shrink-0 text-[0.6875rem] sm:block">
+          {job.schedule}
+        </span>
+
+        {/* The outcome as a pill: it is the one thing scanned down a column, and
+            a shape is findable at a glance in a way a tinted sentence is not.
+            The dot stays, so the state never rests on hue alone. The run's own
+            output is the pill's tooltip rather than a fourth line of text. */}
+        {last ? (
+          <span
+            title={text ?? undefined}
+            className={cn(
+              'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.6875rem]',
+              last.ok ? 'text-status-ok bg-status-ok/10' : 'text-status-fail bg-status-fail/10',
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn('size-1.5 rounded-full', last.ok ? 'bg-status-ok' : 'bg-status-fail')}
+            />
+            {ago(last.at)}
+          </span>
+        ) : (
+          <span className="text-ink-faint shrink-0 text-[0.6875rem]">—</span>
+        )}
+
+        {/* Icon-only: the label was the widest thing on the row and said the
+            same thing six times. 32px with the padding, still a real target. */}
         <button
           type="button"
           onClick={trigger}
           disabled={busy}
           aria-busy={busy}
-          className="border-line text-ink-muted hover:text-ink hover:border-ink-faint focus-visible:ring-accent flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border px-3.5 text-xs transition-[color,border-color,transform] duration-150 outline-none focus-visible:ring-2 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
+          title={t('automation.job.run')}
+          aria-label={`${t('automation.job.run')} — ${t(`automation.job.${job.name}`)}`}
+          className="border-line text-ink-muted hover:text-ink hover:border-ink-faint focus-visible:ring-accent flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border transition-[color,border-color,transform] duration-150 outline-none focus-visible:ring-2 active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <ArrowClockwiseIcon size={13} className={busy ? 'animate-spin' : undefined} />
-          {busy ? t('automation.job.running') : t('automation.job.run')}
+          <ArrowClockwiseIcon size={14} className={busy ? 'animate-spin' : undefined} />
         </button>
       </div>
 
-      {/* One status line, indented under the name. It used to be three separate
-          health signals per card — a 4px coloured rail, a tinted icon badge and
-          this dot — which is two more than the reading needs, and the rail broke
-          DESIGN.md's Hairline Rule outright. */}
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 ps-6 text-xs">
-        <span className="text-ink-faint">{job.schedule}</span>
-        <span aria-hidden className="text-ink-faint">
-          ·
-        </span>
-        {last ? (
-          <>
-            {/* The outcome as a pill rather than loose coloured text: it is the
-                one thing on the row that is scanned down a column, and a shape
-                is findable at a glance in a way a tinted sentence is not. The
-                dot stays, so the state never rests on hue alone. */}
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5',
-                last.ok
-                  ? 'text-status-ok bg-status-ok/10'
-                  : 'text-status-fail bg-status-fail/10',
-              )}
-            >
-              <span
-                aria-hidden
-                className={cn('size-1.5 rounded-full', last.ok ? 'bg-status-ok' : 'bg-status-fail')}
-              />
-              {t('automation.job.lastRun', { when: ago(last.at) })}
-            </span>
-            {text && (
-              <span className="text-ink-muted min-w-0 flex-1 truncate" title={text}>
-                {text}
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-ink-faint">{t('automation.job.never')}</span>
-        )}
-      </p>
-
-      {children && <div className="ps-6 pt-1">{children}</div>}
+      {children}
 
       {failure && (
-        <p role="alert" className="text-status-fail flex items-start gap-1.5 ps-6 text-xs break-all">
+        <p
+          role="alert"
+          className="text-status-fail flex items-start gap-1.5 pb-2 text-xs break-all"
+        >
           <WarningCircleIcon size={14} className="mt-px shrink-0" />
           {failure}
         </p>
@@ -542,7 +521,7 @@ function JobsBand({
   return (
     <div className="flex flex-col gap-4">
       <Panel title={t('automation.plan.title')} index={0}>
-        <div className="py-4">
+        <div className="py-3">
           <DayPlan jobs={ordered} />
         </div>
       </Panel>
@@ -653,9 +632,15 @@ export function AutomationPage() {
   const field =
     'border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors'
 
-  // Schedule controls, mounted inside the card of the job they drive.
-  const CONTROLS: Record<string, React.ReactNode> = {
-    daily_report: (
+  /*
+    Schedule controls used to be mounted inside the two mail job rows, which
+    made those rows three times the height of the other four and put a form in
+    the middle of a status list. They are three inputs that are edited together
+    and saved together, so they are one card in the settings column now — and
+    the job list is six rows of the same shape again.
+  */
+  const scheduleCard = (
+    <div className="flex flex-wrap items-end gap-3 py-3">
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="daily-time"
@@ -668,50 +653,48 @@ export function AutomationPage() {
           type="time"
           value={values.daily_time}
           onChange={(e) => set('daily_time', e.target.value)}
-          className={cn(field, 'tabular w-36')}
+          className={cn(field, 'tabular w-32')}
         />
       </div>
-    ),
-    weekly_report: (
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="weekly-day"
-            className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
-          >
-            {t('automation.weeklyOn')}
-          </label>
-          <select
-            id="weekly-day"
-            value={values.weekly_day}
-            onChange={(e) => set('weekly_day', Number(e.target.value))}
-            className={cn(field, 'capitalize')}
-          >
-            {days.map((d, i) => (
-              <option key={d} value={i}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="weekly-time"
-            className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
-          >
-            {t('automation.at')}
-          </label>
-          <input
-            id="weekly-time"
-            type="time"
-            value={values.weekly_time}
-            onChange={(e) => set('weekly_time', e.target.value)}
-            className={cn(field, 'tabular w-36')}
-          />
-        </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <label
+          htmlFor="weekly-day"
+          className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+        >
+          {t('automation.weeklyOn')}
+        </label>
+        <select
+          id="weekly-day"
+          value={values.weekly_day}
+          onChange={(e) => set('weekly_day', Number(e.target.value))}
+          className={cn(field, 'w-full capitalize')}
+        >
+          {days.map((d, i) => (
+            <option key={d} value={i}>
+              {d}
+            </option>
+          ))}
+        </select>
       </div>
-    ),
-  }
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor="weekly-time"
+          className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+        >
+          {t('automation.at')}
+        </label>
+        <input
+          id="weekly-time"
+          type="time"
+          value={values.weekly_time}
+          onChange={(e) => set('weekly_time', e.target.value)}
+          className={cn(field, 'tabular w-32')}
+        />
+      </div>
+    </div>
+  )
+
+  const CONTROLS: Record<string, React.ReactNode> = {}
 
   const ordered = (jobs.data?.jobs ?? [])
     .slice()
@@ -722,135 +705,150 @@ export function AutomationPage() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      className="flex flex-col gap-8 pt-8"
+      className="flex flex-col gap-5 pt-6"
     >
-      <p className="text-ink-faint max-w-[70ch] text-sm">{t('automation.intro')}</p>
+      {/*
+        Two columns from `xl` up.
 
-      <Band title={t('automation.jobs')} hint={t('automation.jobsHint')}>
+        The page was one stack: intro paragraph, timeline, six tall job rows,
+        then the recipient list — so the two halves of the same question ("what
+        runs" and "where does it go") were a screen and a half apart, and
+        checking whether tonight's mail had a recipient meant scrolling past
+        every housekeeping job. They are side by side now, and the whole page
+        fits one screen at 1440.
+      */}
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,1fr)]">
         <JobsBand jobs={jobs} ordered={ordered} controls={CONTROLS} />
-      </Band>
 
-      <Band
-        title={t('automation.recipients')}
-        hint={t('automation.recipientsHint')}
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex min-w-64 flex-1 flex-col gap-1.5">
-              <label
-                htmlFor="new-email"
-                className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
-              >
-                {t('automation.addEmail')}
-              </label>
-              <input
-                id="new-email"
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    addEmail()
-                  }
-                }}
-                placeholder="directeur@aznet.ma"
-                className={cn(field, 'placeholder:text-ink-faint')}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={addEmail}
-              disabled={!newEmail.trim() || !newEmail.includes('@')}
-              className={cn(
-                'flex items-center gap-2 rounded-md px-3.5 py-2 text-sm transition-transform active:translate-y-px',
-                !newEmail.trim() || !newEmail.includes('@')
-                  ? 'border-line text-ink-faint cursor-not-allowed border'
-                  : 'bg-accent text-white',
-              )}
-            >
-              <PlusIcon size={14} weight="bold" />
-              {t('access.add')}
-            </button>
-          </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          <Panel title={t('automation.schedule')} index={1}>
+            {scheduleCard}
+          </Panel>
 
-          {values.emails.length === 0 ? (
-            /* A red sentence, not the neutral empty state: an automation with
-               no recipients runs every night and reaches nobody, which is a
-               fault the page has to look like it is reporting. */
-            <p className="text-status-fail flex items-start gap-2 text-sm">
-              <WarningCircleIcon size={16} weight="fill" className="mt-px shrink-0" />
-              {t('automation.noEmails')}
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {values.emails.map((address) => {
-                const result = testResult?.to === address ? testResult : null
-                return (
-                  <li
-                    key={address}
-                    className="border-line bg-surface flex flex-wrap items-center gap-3 rounded-md border px-3 py-2.5"
-                  >
-                    {/* The initial stands in for an avatar the app does not have
-                        and should not invent — it makes a list of addresses
-                        scannable by shape instead of by reading each one. */}
-                    <span className="border-line text-ink-muted flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium uppercase">
-                      {address.trim().charAt(0) || '@'}
-                    </span>
+          <Panel
+            title={t('automation.recipients')}
+            aside={values.emails.length || undefined}
+            index={2}
+          >
+            <div className="flex flex-col gap-3 py-3">
+              <div className="flex items-center gap-2">
+                <input
+                  id="new-email"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addEmail()
+                    }
+                  }}
+                  placeholder="directeur@aznet.ma"
+                  aria-label={t('automation.addEmail')}
+                  className={cn(field, 'placeholder:text-ink-faint min-w-0 flex-1')}
+                />
+                <button
+                  type="button"
+                  onClick={addEmail}
+                  disabled={!newEmail.trim() || !newEmail.includes('@')}
+                  title={t('access.add')}
+                  aria-label={t('access.add')}
+                  className={cn(
+                    'flex size-9 shrink-0 items-center justify-center rounded-md transition-transform active:translate-y-px',
+                    !newEmail.trim() || !newEmail.includes('@')
+                      ? 'border-line text-ink-faint cursor-not-allowed border'
+                      : 'bg-accent cursor-pointer text-white',
+                  )}
+                >
+                  <PlusIcon size={15} weight="bold" />
+                </button>
+              </div>
 
-                    <span className="text-ink min-w-0 flex-1 truncate text-sm">{address}</span>
-
-                    {result && (
-                      <span
-                        className={cn(
-                          'flex items-center gap-1.5 text-xs',
-                          result.ok ? 'text-status-ok' : 'text-status-fail',
-                        )}
+              {values.emails.length === 0 ? (
+                /* A red sentence, not the neutral empty state: an automation
+                   with no recipients runs every night and reaches nobody, which
+                   is a fault the page has to look like it is reporting. */
+                <p className="text-status-fail flex items-start gap-2 text-xs">
+                  <WarningCircleIcon size={15} weight="fill" className="mt-px shrink-0" />
+                  {t('automation.noEmails')}
+                </p>
+              ) : (
+                /* Rows, not bordered cards, and both controls are icons: the
+                   list is short, every entry is the same shape, and the
+                   addresses are the only thing worth reading in it. */
+                <ul className="flex flex-col">
+                  {values.emails.map((address) => {
+                    const result = testResult?.to === address ? testResult : null
+                    return (
+                      <li
+                        key={address}
+                        className="border-line flex items-center gap-2 border-b py-1.5 last:border-b-0"
                       >
-                        {result.ok ? (
-                          <CheckIcon size={13} weight="bold" />
-                        ) : (
-                          <WarningCircleIcon size={13} weight="fill" />
+                        <span className="text-ink min-w-0 flex-1 truncate text-sm">{address}</span>
+
+                        {result && (
+                          <span
+                            title={
+                              result.ok ? t('automation.testSent') : t('automation.testFailed')
+                            }
+                            className={cn(
+                              'shrink-0',
+                              result.ok ? 'text-status-ok' : 'text-status-fail',
+                            )}
+                          >
+                            {result.ok ? (
+                              <CheckIcon size={14} weight="bold" />
+                            ) : (
+                              <WarningCircleIcon size={14} weight="fill" />
+                            )}
+                            <span className="sr-only">
+                              {result.ok ? t('automation.testSent') : t('automation.testFailed')}
+                            </span>
+                          </span>
                         )}
-                        {result.ok ? t('automation.testSent') : t('automation.testFailed')}
-                      </span>
-                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => test(address)}
-                      disabled={testing === address}
-                      className="border-line text-ink-muted hover:text-ink flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors active:translate-y-px disabled:opacity-50"
-                    >
-                      <PaperPlaneTiltIcon size={13} />
-                      {testing === address ? t('automation.testing') : t('automation.test')}
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => test(address)}
+                          disabled={testing === address}
+                          title={
+                            testing === address ? t('automation.testing') : t('automation.test')
+                          }
+                          aria-label={`${t('automation.test')} ${address}`}
+                          className="border-line text-ink-muted hover:text-ink flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border transition-colors active:translate-y-px disabled:opacity-50"
+                        >
+                          <PaperPlaneTiltIcon size={12} />
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        set(
-                          'emails',
-                          values.emails.filter((e) => e !== address),
-                        )
-                      }
-                      aria-label={`${t('access.remove')} ${address}`}
-                      className="text-ink-faint hover:text-status-fail transition-colors"
-                    >
-                      <TrashIcon size={15} />
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            set(
+                              'emails',
+                              values.emails.filter((e) => e !== address),
+                            )
+                          }
+                          aria-label={`${t('access.remove')} ${address}`}
+                          className="text-ink-faint hover:text-status-fail shrink-0 cursor-pointer transition-colors"
+                        >
+                          <TrashIcon size={14} />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
 
-          {/* The API names the missing env vars verbatim on a 422. */}
-          {testResult?.ok === false && testResult.message && (
-            <p className="text-status-fail max-w-[70ch] text-xs break-all">{testResult.message}</p>
-          )}
+              {/* The API names the missing env vars verbatim on a 422. */}
+              {testResult?.ok === false && testResult.message && (
+                <p className="text-status-fail text-xs break-all">{testResult.message}</p>
+              )}
+
+              <p className="text-ink-faint text-[0.6875rem]">{t('automation.recipientsHint')}</p>
+            </div>
+          </Panel>
         </div>
-      </Band>
+      </div>
 
       {error && <ErrorState message={error} onRetry={save} />}
 

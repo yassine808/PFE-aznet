@@ -216,6 +216,18 @@ def merge_rows(existing: Dict[str, str], incoming: Dict[str, str]) -> Dict[str, 
     return merged
 
 
+def _truthy(value) -> bool:
+    """Whether a flag cell reads as set, in any of the shapes it arrives in.
+
+    A fresh write hands us a Python bool; the sheet hands the same cell back as
+    the string `TRUE`. Both have to mean the same thing or a re-read would
+    clear a flag that was set an hour earlier.
+    """
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"true", "vrai", "1", "oui", "yes"}
+
+
 def _union_csv(old, value) -> str:
     """The two comma-separated lists, first-seen order kept, no duplicates."""
     seen = [p.strip() for p in str(old).split(",") if p.strip()]
@@ -227,6 +239,16 @@ def _union_csv(old, value) -> str:
 
 def _merge_cell(column: str, old, value) -> str:
     """One cell's new content, by what the column measures."""
+    if column == COL_FLAG:
+        # A flag is a state, not prose: once any message of the day needs
+        # checking the row needs checking. Merging it through the text branch
+        # wrote `FALSE\nTrue` into the one column the director filters on —
+        # unreadable for exactly the rows that matter. Sheets' own literals,
+        # so the cell stays a boolean rather than becoming a string.
+        return "TRUE" if (_truthy(old) or _truthy(value)) else "FALSE"
+    if column == COL_STT:
+        # Which engine answered last, not a transcript of the chain's history.
+        return str(value).strip() or str(old)
     if not str(old).strip():
         return value
     if column in _NUMERIC_COLS:
@@ -505,7 +527,7 @@ def file_report(payload: Dict) -> Dict:
         COL_STT: payload.get("stt_engine"),
         COL_LIEN_AUDIO: payload.get("lien_audio"),
         COL_CORRELATION: payload.get("correlation_id"),
-        COL_FLAG: bool(REVIEW_WARNINGS & set(warnings)),
+        COL_FLAG: "TRUE" if REVIEW_WARNINGS & set(warnings) else "FALSE",
     }
     row, stock_warnings = write_report(
         tab, payload.get("date") or "", technicien, chantier, report,

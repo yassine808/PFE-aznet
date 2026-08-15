@@ -16,8 +16,9 @@ The `drive.file` scope is enough: files this account creates belong to it,
 and the reader permission is granted on its own file.
 """
 import io
+import re
 from functools import lru_cache
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from app.config import settings
 
@@ -61,6 +62,47 @@ def _cached_service():
 
 def _service():
     return _cached_service()
+
+
+def file_id_of(link: str) -> Optional[str]:
+    """The file id inside a Drive URL, in either shape Drive hands out.
+
+    Kept here rather than at the two call sites so the API and the dashboard's
+    `audioSrc` cannot drift into disagreeing about what a Drive link looks like.
+    """
+    m = re.search(r"[?&]id=([\w-]+)", link) or re.search(r"/file/d/([\w-]+)", link)
+    return m.group(1) if m else None
+
+
+def download(file_id: str) -> tuple[bytes, str]:
+    """One file's bytes and its MIME type, fetched with the service account.
+
+    Exists because a Drive share link is not a media source. `/uc?export=
+    download&id=…` answers with a redirect chain to `drive.usercontent…`,
+    serves `Content-Disposition: attachment`, throws an HTML interstitial at
+    anything it considers large, and does not honour Range — so an `<audio>`
+    element pointed at one silently plays nothing, which is exactly what the
+    Inbox did. The API streams the bytes itself instead, with a real audio
+    content type.
+
+    A side effect worth keeping: reading through the service account means the
+    file no longer has to be world-readable for the dashboard to play it.
+
+    ponytail: whole file into memory. A voice note is seconds long — a
+    handful of MB at worst. Switch to `MediaIoBaseDownload` chunking if
+    something big ever lands in the same folder.
+    """
+    svc = _service()
+    try:
+        meta = (
+            svc.files()
+            .get(fileId=file_id, fields="mimeType")
+            .execute(num_retries=_RETRIES)
+        )
+        data = svc.files().get_media(fileId=file_id).execute(num_retries=_RETRIES)
+    except Exception as exc:  # noqa: BLE001 - one error type for callers
+        raise DriveError(f"drive download failed: {exc}") from exc
+    return data, meta.get("mimeType") or "application/octet-stream"
 
 
 def upload_audio(filename: str, mime_type: str, data: bytes) -> str:

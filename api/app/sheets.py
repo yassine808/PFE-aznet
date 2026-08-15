@@ -97,7 +97,7 @@ def read_reports() -> List[dict]:
             _service()
             .spreadsheets()
             .values()
-            .get(spreadsheetId=settings.sheet_id, range=RAPPORTS_TAB)
+            .get(spreadsheetId=settings.sheet_id, range=_a1(RAPPORTS_TAB))
             .execute(num_retries=_RETRIES)
         )
     except SheetsError:
@@ -150,7 +150,7 @@ def _headers(svc, tab: str = RAPPORTS_TAB) -> List[str]:
         resp = (
             svc.spreadsheets()
             .values()
-            .get(spreadsheetId=settings.sheet_id, range=f"{tab}!1:1")
+            .get(spreadsheetId=settings.sheet_id, range=_a1(tab, "1:1"))
             .execute(num_retries=_RETRIES)
         )
         return resp.get("values", [[]])[0]
@@ -161,7 +161,7 @@ def _headers(svc, tab: str = RAPPORTS_TAB) -> List[str]:
     resp = (
         svc.spreadsheets()
         .values()
-        .get(spreadsheetId=settings.sheet_id, range=f"{RAPPORTS_TAB}!1:1")
+        .get(spreadsheetId=settings.sheet_id, range=_a1(RAPPORTS_TAB, "1:1"))
         .execute(num_retries=_RETRIES)
     )
     headers = resp.get("values", [[]])[0]
@@ -182,7 +182,7 @@ def _extend_headers(svc, names: List[str]) -> None:
     end = _col_letter(len(_headers(svc)) + len(names))
     svc.spreadsheets().values().update(
         spreadsheetId=settings.sheet_id,
-        range=f"{RAPPORTS_TAB}!{start}1:{end}1",
+        range=_a1(RAPPORTS_TAB, f"{start}1:{end}1"),
         valueInputOption="USER_ENTERED",
         body={"values": [names]},
     ).execute(num_retries=_RETRIES)
@@ -212,7 +212,7 @@ def update_report_fields(row: int, values: dict, tab: str = RAPPORTS_TAB) -> Non
             col = _col_letter(headers.index(field) + 1)
             data.append(
                 {
-                    "range": f"{tab}!{col}{row}",
+                    "range": _a1(tab, f"{col}{row}"),
                     "values": [[value if value is not None else ""]],
                 }
             )
@@ -242,7 +242,7 @@ def clear_row(row: int, tab: str = RAPPORTS_TAB) -> None:
         ncols = max(1, len(_headers(svc, tab)))
         svc.spreadsheets().values().clear(
             spreadsheetId=settings.sheet_id,
-            range=f"{tab}!A{row}:{_col_letter(ncols)}{row}",
+            range=_a1(tab, f"A{row}:{_col_letter(ncols)}{row}"),
             body={},
         ).execute(num_retries=_RETRIES)
         invalidate_reports()
@@ -283,7 +283,7 @@ def append_report(values: dict) -> Optional[int]:
             .values()
             .append(
                 spreadsheetId=settings.sheet_id,
-                range=RAPPORTS_TAB,
+                range=_a1(RAPPORTS_TAB),
                 valueInputOption="USER_ENTERED",
                 insertDataOption="INSERT_ROWS",
                 body={"values": [row]},
@@ -320,7 +320,7 @@ def read_tab(tab: str) -> List[dict]:
             _service()
             .spreadsheets()
             .values()
-            .get(spreadsheetId=settings.sheet_id, range=tab)
+            .get(spreadsheetId=settings.sheet_id, range=_a1(tab))
             .execute(num_retries=_RETRIES)
         )
     except SheetsError:
@@ -359,14 +359,14 @@ def ensure_tab(tab: str, headers: List[str]) -> None:
         existing = (
             svc.spreadsheets()
             .values()
-            .get(spreadsheetId=settings.sheet_id, range=f"{tab}!1:1")
+            .get(spreadsheetId=settings.sheet_id, range=_a1(tab, "1:1"))
             .execute(num_retries=_RETRIES)
             .get("values", [[]])
         )
         if not existing or not existing[0]:
             svc.spreadsheets().values().update(
                 spreadsheetId=settings.sheet_id,
-                range=f"{tab}!A1",
+                range=_a1(tab, "A1"),
                 valueInputOption="RAW",
                 body={"values": [list(headers)]},
             ).execute(num_retries=_RETRIES)
@@ -384,7 +384,7 @@ def write_row(tab: str, row: int, values: dict) -> None:
         headers = (
             svc.spreadsheets()
             .values()
-            .get(spreadsheetId=settings.sheet_id, range=f"{tab}!1:1")
+            .get(spreadsheetId=settings.sheet_id, range=_a1(tab, "1:1"))
             .execute(num_retries=_RETRIES)
             .get("values", [[]])
         )[0]
@@ -393,7 +393,7 @@ def write_row(tab: str, row: int, values: dict) -> None:
             if field not in headers:
                 continue
             col = _col_letter(headers.index(field) + 1)
-            data.append({"range": f"{tab}!{col}{row}", "values": [[_cell(value)]]})
+            data.append({"range": _a1(tab, f"{col}{row}"), "values": [[_cell(value)]]})
         if not data:
             return
         svc.spreadsheets().values().batchUpdate(
@@ -416,7 +416,7 @@ def append_row(tab: str, values: dict, headers: List[str]) -> Optional[int]:
             .values()
             .append(
                 spreadsheetId=settings.sheet_id,
-                range=tab,
+                range=_a1(tab),
                 valueInputOption="USER_ENTERED",
                 insertDataOption="INSERT_ROWS",
                 body={"values": [row]},
@@ -445,6 +445,20 @@ def _cell(value) -> str:
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
     return str(value)
+
+
+def _a1(tab: str, ref: str = "") -> str:
+    """An A1 range with the tab name quoted.
+
+    Google rejects an unquoted tab name that contains a space — and the
+    unrouted fallback tab is literally `Non affecté`, so every write for a
+    technician with no chef used to 400 out, park in `failed_writes` and fail
+    identically on every drain. Quoting is always valid, so it is applied
+    unconditionally rather than only when a space is spotted; an apostrophe
+    inside the name is escaped by doubling it, which is the A1 rule.
+    """
+    quoted = "'" + tab.replace("'", "''") + "'"
+    return f"{quoted}!{ref}" if ref else quoted
 
 
 def _col_letter(n: int) -> str:
