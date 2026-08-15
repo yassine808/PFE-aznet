@@ -440,5 +440,18 @@
   "bell.messageFrom": "Message received from {name}",
   "inbox.sendTo": "Send to",
   "inbox.processing": "Processing",
-  "inbox.delivered": "Delivered"
+  "inbox.delivered": "Delivered",
+  "settings.tab.appearance": "Appearance",
+  "settings.tab.pipeline": "Pipeline",
+  "settings.tab.automation": "Automation",
+  "settings.tab.notifications": "Notifications",
+  "settings.tab.account": "Account",
+  "settings.themeLabel": "Theme",
+  "settings.readOnly": "Only the director can change these.",
+  "settings.noEmail": "No recipient",
+  "settings.addEmail": "Add",
+  "settings.apply": "Save",
+  "settings.applied": "Saved",
+  "equipe.roleLabel": "Role",
+  "settings.accountName": "Name"
 }

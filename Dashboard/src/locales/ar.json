@@ -440,5 +440,18 @@
   "bell.messageFrom": "رسالة من {name}",
   "inbox.sendTo": "إرسال إلى",
   "inbox.processing": "قيد المعالجة",
-  "inbox.delivered": "تم الإرسال"
+  "inbox.delivered": "تم الإرسال",
+  "settings.tab.appearance": "المظهر",
+  "settings.tab.pipeline": "سلسلة المعالجة",
+  "settings.tab.automation": "الأتمتة",
+  "settings.tab.notifications": "الإشعارات",
+  "settings.tab.account": "الحساب",
+  "settings.themeLabel": "السمة",
+  "settings.readOnly": "المدير وحده يمكنه التعديل.",
+  "settings.noEmail": "لا يوجد مستلم",
+  "settings.addEmail": "إضافة",
+  "settings.apply": "حفظ",
+  "settings.applied": "تم الحفظ",
+  "equipe.roleLabel": "الدور",
+  "settings.accountName": "الاسم"
 }
