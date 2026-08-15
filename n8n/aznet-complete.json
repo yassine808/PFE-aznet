@@ -8,7 +8,7 @@
       "typeVersion": 1,
       "position": [
         0,
-        -220
+        -75
       ],
       "parameters": {
         "content": "## 1 — Réception (Telegram + WhatsApp)\nPoll TG toutes les 15s + webhooks WA → contrôle d'accès → dédup → /process →\n**réponse au technicien D'ABORD**, puis POST /journal (l'API écrit le journal\ndu chantier ET le miroir Rapports du dashboard; échec = file d'attente côté\nAPI, drain toutes les 5 min).\nLes nœuds `Log *` en bas sont des feuilles : ils n'altèrent jamais le flux.",
@@ -33,8 +33,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        80,
-        175
+        0,
+        -225
       ]
     },
     {
@@ -46,8 +46,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        440,
-        175
+        320,
+        -75
       ]
     },
     {
@@ -60,8 +60,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        800,
-        365
+        640,
+        75
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -76,8 +76,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1160,
-        365
+        960,
+        0
       ]
     },
     {
@@ -89,8 +89,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        440,
-        555
+        320,
+        75
       ]
     },
     {
@@ -102,8 +102,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1520,
-        365
+        1280,
+        0
       ]
     },
     {
@@ -134,8 +134,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4040,
-        365
+        3520,
+        -75
       ]
     },
     {
@@ -165,8 +165,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4400,
-        270
+        3840,
+        150
       ]
     },
     {
@@ -183,8 +183,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4760,
-        80
+        4160,
+        75
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -207,8 +207,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4760,
-        270
+        4160,
+        225
       ],
       "credentials": {
         "whatsAppApi": {
@@ -248,8 +248,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        5120,
-        365
+        4480,
+        0
       ]
     },
     {
@@ -279,8 +279,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        5480,
-        270
+        4800,
+        75
       ]
     },
     {
@@ -293,8 +293,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        5840,
-        270
+        5120,
+        -75
       ],
       "credentials": {
         "telegramApi": {
@@ -317,8 +317,8 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        5840,
-        460
+        5120,
+        75
       ],
       "credentials": {
         "whatsAppApi": {
@@ -349,8 +349,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6200,
-        365
+        5440,
+        0
       ],
       "credentials": {
         "whatsAppApi": {
@@ -415,8 +415,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6920,
-        365
+        6080,
+        -75
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -471,8 +471,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5480,
-        460
+        4800,
+        -75
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -488,8 +488,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        7280,
-        270
+        6400,
+        0
       ]
     },
     {
@@ -519,8 +519,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        7280,
-        460
+        6400,
+        150
       ]
     },
     {
@@ -536,8 +536,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        7640,
-        365
+        6720,
+        0
       ],
       "credentials": {
         "telegramApi": {
@@ -562,8 +562,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        7640,
-        555
+        6720,
+        150
       ],
       "credentials": {
         "whatsAppApi": {
@@ -599,8 +599,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4400,
-        460
+        3840,
+        0
       ]
     },
     {
@@ -614,8 +614,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        4760,
-        460
+        4160,
+        -225
       ],
       "credentials": {
         "telegramApi": {
@@ -638,8 +638,8 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
       "position": [
-        4760,
-        650
+        4160,
+        -75
       ],
       "credentials": {
         "whatsAppApi": {
@@ -673,8 +673,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8360,
-        365
+        7680,
+        -75
       ],
       "onError": "continueErrorOutput"
     },
@@ -705,8 +705,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        7640,
-        175
+        6720,
+        -150
       ]
     },
     {
@@ -722,8 +722,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
-        8000,
-        270
+        7040,
+        -225
       ],
       "credentials": {
         "telegramApi": {
@@ -748,8 +748,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8000,
-        460
+        7040,
+        -75
       ],
       "credentials": {
         "whatsAppApi": {
@@ -770,8 +770,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        80,
-        365
+        0,
+        375
       ],
       "webhookId": "wa-unified-verify"
     },
@@ -786,8 +786,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        440,
-        365
+        320,
+        225
       ]
     },
     {
@@ -801,8 +801,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        80,
-        555
+        0,
+        225
       ],
       "webhookId": "wa-unified-messages"
     },
@@ -812,8 +812,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2600,
-        365
+        2240,
+        0
       ],
       "parameters": {
         "jsCode": "// One trace id per message, threaded through every stage so the six\n// per-message log rows (and the API's own errors, logged from a\n// different process) join into one story in the dashboard.\nreturn $input.all().map(item => ({\n  json: {\n    ...item.json,\n    correlation_id: item.json.correlation_id\n      ?? `${item.json.channel}-${item.json.message_id ?? Date.now()}`,\n  },\n}));"
@@ -825,8 +825,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2960,
-        365
+        2560,
+        -75
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -855,8 +855,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3680,
-        365
+        3200,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -888,8 +888,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3320,
-        365
+        2880,
+        0
       ],
       "parameters": {
         "jsCode": "// The claim call replaced each payload with {fresh}; re-attach the original\n// message index-wise (an HTTP node emits one output per input, in order) and\n// carry the flag forward so the IF filters real messages, not bare booleans.\n// Explicit pairedItem keeps $('Filtrer accès').item resolvable for batches.\nconst src = $('Correlate').all();\nreturn $input.all().map((item, i) => ({\n  json: { ...src[i].json, fresh: item.json.fresh !== false },\n  pairedItem: { item: i },\n}));"
@@ -901,8 +901,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4040,
-        885
+        3520,
+        75
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -931,8 +931,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2960,
-        885
+        2560,
+        75
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -961,8 +961,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4400,
-        885
+        3840,
+        -150
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -991,8 +991,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8360,
-        885
+        7360,
+        -225
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1021,8 +1021,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        9080,
-        885
+        8000,
+        0
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1051,8 +1051,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        7280,
-        885
+        6400,
+        -150
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1081,8 +1081,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        6560,
-        365
+        5760,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -1159,8 +1159,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6920,
-        555
+        6080,
+        75
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -1197,8 +1197,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1880,
-        365
+        1600,
+        0
       ],
       "id": "lookup-technicien-0001",
       "name": "Lookup technicien"
@@ -1210,8 +1210,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2240,
-        365
+        1920,
+        0
       ],
       "id": "filtrer-acces-000001",
       "name": "Filtrer accès"
@@ -1223,8 +1223,8 @@
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        80,
-        1180
+        0,
+        -375
       ]
     },
     {
@@ -1236,8 +1236,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        440,
-        1180
+        320,
+        -225
       ]
     },
     {
@@ -1264,8 +1264,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        800,
-        1180
+        640,
+        -75
       ],
       "onError": "continueRegularOutput"
     },
@@ -1276,7 +1276,7 @@
       "typeVersion": 1,
       "position": [
         0,
-        980
+        75
       ],
       "parameters": {
         "content": "## 2 — Erreurs du workflow\nPoint d'entrée séparé : ne se déclenche que si la bande 1 lève une erreur.\nÉcrit dans `pipeline_logs` (Postgres), **jamais** dans le Sheet — un handler\nqui écrit chez Google ne peut pas signaler une panne de Google.\n⚠ À activer : Settings → Error Workflow → *ce même workflow*.",
@@ -1299,8 +1299,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8240,
-        270
+        7360,
+        75
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -1323,8 +1323,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8240,
-        460
+        7360,
+        225
       ],
       "credentials": {
         "whatsAppApi": {
@@ -1351,8 +1351,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        7960,
-        365
+        7040,
+        75
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -1375,8 +1375,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        7960,
-        555
+        7040,
+        225
       ],
       "credentials": {
         "whatsAppApi": {
@@ -1417,8 +1417,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        8320,
-        175
+        7360,
+        -75
       ]
     },
     {
@@ -1446,8 +1446,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        8320,
-        555
+        7680,
+        75
       ],
       "onError": "continueRegularOutput"
     }
