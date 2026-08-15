@@ -437,5 +437,8 @@
   "settings.sttReset": "Reset ({order})",
   "bell.tab.alerts": "Alerts",
   "bell.tab.messages": "Messages",
-  "bell.messageFrom": "Message received from {name}"
+  "bell.messageFrom": "Message received from {name}",
+  "inbox.sendTo": "Send to",
+  "inbox.processing": "Processing",
+  "inbox.delivered": "Delivered"
 }

@@ -437,5 +437,8 @@
   "settings.sttReset": "إعادة الضبط ({order})",
   "bell.tab.alerts": "تنبيهات",
   "bell.tab.messages": "رسائل",
-  "bell.messageFrom": "رسالة من {name}"
+  "bell.messageFrom": "رسالة من {name}",
+  "inbox.sendTo": "إرسال إلى",
+  "inbox.processing": "قيد المعالجة",
+  "inbox.delivered": "تم الإرسال"
 }

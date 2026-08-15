@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
   CalendarBlankIcon,
   CaretDownIcon,
   CheckIcon,
+  ChecksIcon,
   FlagIcon,
+  HourglassMediumIcon,
   PaperPlaneRightIcon,
   PencilSimpleIcon,
   SpeakerHighIcon,
@@ -21,6 +23,7 @@ import {
   sendReply,
   useApi,
   type ReportRow,
+  type Identity,
   type Technician,
 } from '@/lib/api'
 import { isFlagged, num, toISODate, todayISO, daysAgoISO, parseISODay, clock } from '@/lib/metrics'
@@ -153,13 +156,20 @@ function DaySeparator({ iso }: { readonly iso: string }) {
   )
 }
 
-/** One bubble's timestamp, in the corner the platform puts it. */
-function Stamp({ heure }: { readonly heure?: string }) {
+/**
+ * One bubble's timestamp, in the corner the platform puts it.
+ *
+ * `sent` adds the double tick every messaging app uses for "it left here".
+ * It is deliberately not a read receipt — the channel never tells us that, and
+ * a tick that claims more than we know is worse than no tick.
+ */
+function Stamp({ heure, sent = false }: { readonly heure?: string; readonly sent?: boolean }) {
   const { t } = useI18n()
   const { settings } = useSettings()
   return (
-    <span className="tabular text-ink-faint text-[0.625rem]">
+    <span className="tabular text-ink-faint flex items-center gap-1 text-[0.625rem]">
       {clock(heure, settings.timeFormat, t('time.am'), t('time.pm'))}
+      {sent && <ChecksIcon size={12} className="text-accent" aria-label={t('inbox.delivered')} />}
     </span>
   )
 }
@@ -189,7 +199,7 @@ function IncomingBubble({ r, address }: { readonly r: ReportRow; readonly addres
 
   return (
     <div className="flex justify-start">
-      <div className="border-line bg-surface-raised flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-ss-sm border px-4 py-3">
+      <div className="bubble bubble-in border-line bg-surface-raised flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-ss-sm border px-4 py-3">
         <div className="text-ink-faint flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.625rem]">
           <ChannelIcon channel={(r.canal ?? '').trim().toLowerCase()} size={12} />
           {/* The WhatsApp number or Telegram chat id this arrived on. One person
@@ -246,7 +256,7 @@ function ExchangeIncoming({
 
   return (
     <div className="flex justify-start">
-      <div className="border-line bg-surface-raised flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-ss-sm border px-4 py-3">
+      <div className="bubble bubble-in border-line bg-surface-raised flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-ss-sm border px-4 py-3">
         <div className="text-ink-faint flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.625rem]">
           <ChannelIcon channel={(r.canal ?? '').trim().toLowerCase()} size={12} />
           {address && <span className="tabular select-all">{address}</span>}
@@ -286,7 +296,7 @@ function ExchangeReply({ r }: { readonly r: ThreadExchange }) {
   const { t } = useI18n()
   return (
     <div className="flex justify-end">
-      <div className="border-accent/20 bg-accent/5 flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-se-sm border px-4 py-3">
+      <div className="bubble bubble-out border-accent/20 bg-accent/5 flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-se-sm border px-4 py-3">
         <div className="text-ink-faint flex items-center gap-2 text-[0.625rem]">
           <span className="tracking-wide uppercase">{t('inbox.bot')}</span>
         </div>
@@ -297,7 +307,7 @@ function ExchangeReply({ r }: { readonly r: ThreadExchange }) {
           <p className="text-ink-faint text-sm italic">{t('inbox.noReply')}</p>
         )}
 
-        <Stamp heure={r.heure} />
+        <Stamp heure={r.heure} sent />
       </div>
     </div>
   )
@@ -362,7 +372,7 @@ function BotBubble({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: ()
     <div className="flex justify-end">
       <div
         className={cn(
-          'flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-se-sm border px-4 py-3',
+          'bubble bubble-out flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-se-sm border px-4 py-3',
           // The accent tint is the outgoing side, the way every chat client
           // marks "this one is from us". Flagged rows take the attention
           // border instead — one signal at a time, per the Ten Percent Rule.
@@ -397,7 +407,7 @@ function BotBubble({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: ()
         )}
 
         <div className="flex items-center gap-3">
-          <Stamp heure={r.heure} />
+          <Stamp heure={r.heure} sent />
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}
@@ -473,13 +483,68 @@ function BotBubble({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: ()
   )
 }
 
-/** The manager's answer, sent by the API on the technician's own channels. */
-function ReplyComposer({ name }: { readonly name: string }) {
+/**
+ * The manager's answer, sent by the API on one of the technician's channels.
+ *
+ * The destination is not a question the operator should have to answer twice:
+ * it defaults to the channel and identity the last message arrived on, shown
+ * as a chip. Someone who owns two numbers, or a phone and a Telegram account,
+ * clicks the chip and picks. The API still broadcasts when no identity is
+ * named, but a private answer sent to every address a technician owns is the
+ * mistake this picker exists to prevent, so the inbox always names one.
+ */
+function ReplyComposer({
+  name,
+  identities,
+  preferred,
+}: {
+  readonly name: string
+  readonly identities: readonly Identity[]
+  /** Identity id of the channel the last message arrived on, when known. */
+  readonly preferred?: number
+}) {
   const { t } = useI18n()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
+  const [pickedId, setPickedId] = useState<number | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+
+  const active = identities.filter((i) => i.active)
+  // The operator's choice wins, then the channel this conversation arrived on,
+  // then the only one there is. Never a silent broadcast.
+  const target =
+    active.find((i) => i.id === pickedId) ??
+    active.find((i) => i.id === preferred) ??
+    active[0]
+
+  // A different technician is a different conversation: a pick made for one
+  // must not follow the operator into the next person's thread.
+  useEffect(() => {
+    setPickedId(null)
+    setPickerOpen(false)
+  }, [name])
+
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [pickerOpen])
+
+  const label = (i: Identity) =>
+    i.channel.trim().toLowerCase() === 'whatsapp' ? formatPhone(i.external_id) : i.external_id
 
   const send = async () => {
     const trimmed = text.trim()
@@ -488,7 +553,7 @@ function ReplyComposer({ name }: { readonly name: string }) {
     setError(null)
     setSent(false)
     try {
-      await sendReply(name, trimmed)
+      await sendReply(name, trimmed, target?.id)
       setText('')
       setSent(true)
       window.setTimeout(() => setSent(false), 2500)
@@ -500,7 +565,64 @@ function ReplyComposer({ name }: { readonly name: string }) {
   }
 
   return (
-    <div className="border-line shrink-0 border-t p-3">
+    <div className="border-line bg-surface shrink-0 border-t p-3">
+      {target && (
+        <div ref={pickerRef} className="relative mb-2 flex items-center gap-2">
+          <span className="text-ink-faint text-[0.625rem]">{t('inbox.sendTo')}</span>
+          <button
+            type="button"
+            onClick={() => active.length > 1 && setPickerOpen((v) => !v)}
+            aria-haspopup={active.length > 1 ? 'listbox' : undefined}
+            aria-expanded={active.length > 1 ? pickerOpen : undefined}
+            disabled={active.length < 2}
+            className={cn(
+              'border-line text-ink-muted flex items-center gap-1.5 rounded-full border px-2 py-1 text-[0.6875rem] transition-colors',
+              active.length > 1 ? 'hover:text-ink cursor-pointer' : 'cursor-default',
+            )}
+          >
+            <ChannelIcon channel={target.channel.trim().toLowerCase()} size={12} />
+            <span className="tabular">{label(target)}</span>
+            {active.length > 1 && <CaretDownIcon size={10} />}
+          </button>
+
+          <AnimatePresence>
+            {pickerOpen && (
+              <motion.ul
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.12 }}
+                role="listbox"
+                aria-label={t('inbox.sendTo')}
+                className="border-line bg-surface-raised edge absolute bottom-full z-30 mb-1.5 min-w-52 overflow-hidden rounded-xl border shadow-xl shadow-black/5 ltr:start-0 rtl:end-0"
+              >
+                {active.map((i) => (
+                  <li key={i.id}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={i.id === target.id}
+                      onClick={() => {
+                        setPickedId(i.id)
+                        setPickerOpen(false)
+                      }}
+                      className={cn(
+                        'hover:bg-slate-50 dark:hover:bg-slate-850 flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-start text-xs transition-colors',
+                        i.id === target.id && 'text-ink font-medium',
+                      )}
+                    >
+                      <ChannelIcon channel={i.channel.trim().toLowerCase()} size={12} />
+                      <span className="tabular flex-1">{label(i)}</span>
+                      {i.id === target.id && <CheckIcon size={12} weight="bold" />}
+                    </button>
+                  </li>
+                ))}
+              </motion.ul>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
         <textarea
           rows={1}
@@ -548,12 +670,26 @@ function ReplyComposer({ name }: { readonly name: string }) {
 
 export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
   const { t } = useI18n()
-  const { settings } = useSettings()
-  const reports = useApi('reports', api.reports, settings.refreshMs || undefined)
+  /*
+    Cadence.
+
+    An inbox that only updates when the operator says so is not an inbox, so
+    this page does not simply obey `settings.refreshMs` (which can be
+    "manual"). It watches instead: while a message is being processed there is
+    something worth seeing in a few seconds, and the rest of the time there is
+    not. 5 s while anything is in flight, 30 s otherwise.
+
+    The in-flight list itself is polled at the fast rate throughout — it is one
+    small query, and it is the thing that decides the other two.
+  */
+  const flight = useApi('in-flight', api.inFlight, 5000)
+  const pending = flight.data?.in_flight ?? []
+  const pollMs = pending.length > 0 ? 5000 : 30000
+  const reports = useApi('reports', api.reports, pollMs)
   // The messages that never became Sheet rows. Supplementary: the thread must
   // not block on them, so their own failure only silences the archive, never
   // the page.
-  const exchanges = useApi('exchanges', api.exchanges, settings.refreshMs || undefined)
+  const exchanges = useApi('exchanges', api.exchanges, pollMs)
 
   const [channel, setChannel] = useState<string>('')
   // The selected person; the rail is the picker.
@@ -641,6 +777,17 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
   */
   const roster = useApi('technicians', api.technicians)
 
+  /**
+   * Names with a message still in the pipeline.
+   *
+   * Keyed on the name the pipeline logged, which is the same name the Sheet
+   * rows carry, so the rail can mark a sender without another lookup.
+   */
+  const busyNames = useMemo(
+    () => new Set(pending.map((f) => (f.technicien ?? '').trim().toLowerCase()).filter(Boolean)),
+    [pending],
+  )
+
   /** Lower-cased name → their row on the chart. The Sheet's own join key. */
   const byName = useMemo(() => {
     const m = new Map<string, Technician>()
@@ -714,6 +861,22 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
       ),
     [all, active, channel, date],
   )
+
+  /**
+   * The identity the last message in this thread arrived on.
+   *
+   * "Their first identity" would label a person who owns both a phone and a
+   * Telegram account with whichever was stored first, which is not where the
+   * conversation is happening. The newest message knows.
+   */
+  const preferredIdentity = useMemo(() => {
+    const chan = (windowRows[windowRows.length - 1]?.canal ?? windowRows[0]?.canal ?? '')
+      .trim()
+      .toLowerCase()
+    if (!chan) return undefined
+    const ids = byName.get(active.trim().toLowerCase())?.identities ?? []
+    return ids.find((i) => i.active && i.channel.trim().toLowerCase() === chan)?.id
+  }, [windowRows, byName, active])
 
   const days = useMemo(() => groupByDay(windowRows), [windowRows])
   const dayLabel = useDayLabel()
@@ -907,8 +1070,20 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
                           )}
                         >
                           <span className="flex items-baseline gap-2">
-                            <span className="text-ink min-w-0 flex-1 truncate text-sm font-medium">
+                            <span className="text-ink flex min-w-0 flex-1 items-baseline gap-1.5 truncate text-sm font-medium">
                               {p.name}
+                              {/* Still being transcribed and extracted. Title,
+                                  not colour alone: the state has to survive a
+                                  screen reader and a colour-blind reader. */}
+                              {busyNames.has(p.name.trim().toLowerCase()) && (
+                                <HourglassMediumIcon
+                                  size={12}
+                                  className="text-accent shrink-0 animate-pulse"
+                                  aria-label={t('inbox.processing')}
+                                >
+                                  <title>{t('inbox.processing')}</title>
+                                </HourglassMediumIcon>
+                              )}
                             </span>
                             <span className="tabular text-ink-faint shrink-0 text-[0.625rem]">
                               {toISODate(p.last) ?? '—'}
@@ -969,7 +1144,7 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
             <div
               ref={threadRef}
               onScroll={onThreadScroll}
-              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+              className="thread-canvas flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
             >
               {windowRows.length === 0 ? (
                 <EmptyState body={t('reports.noMatch')} />
@@ -1012,7 +1187,11 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
               )}
             </div>
 
-            <ReplyComposer name={active} />
+            <ReplyComposer
+              name={active}
+              identities={byName.get(active.trim().toLowerCase())?.identities ?? []}
+              preferred={preferredIdentity}
+            />
           </section>
 
           {/*

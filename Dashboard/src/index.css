@@ -366,3 +366,51 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/*
+  The chat surface.
+
+  Two things separate a thread from a stack of cards: bubbles that point at
+  their speaker, and a ground that is not the page. Both are CSS here rather
+  than markup — a tail is decoration, and a decorative triangle rendered as an
+  element is one more node per message and one more thing for a screen reader
+  to walk past.
+
+  Logical properties throughout: in Arabic the thread mirrors, and a tail
+  welded to `left` would end up pointing at the wrong speaker.
+*/
+.bubble {
+  position: relative;
+}
+.bubble::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 0.5rem;
+  height: 0.75rem;
+  /* Same paint as the bubble it belongs to, set by the two variants below. */
+  background: inherit;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+.bubble-in::after {
+  inset-inline-start: -0.4375rem;
+  border-inline-start: 1px solid var(--color-line);
+  border-top: 1px solid var(--color-line);
+}
+.bubble-out::after {
+  inset-inline-end: -0.4375rem;
+  transform: scaleX(-1);
+  border-inline-start: 1px solid var(--color-accent);
+  border-top: 1px solid var(--color-accent);
+  opacity: 0.2;
+}
+
+/*
+  The thread's ground: a faint dot grid, not a photographic wallpaper. It has
+  to read as "a different surface from the page" at a glance and disappear
+  behind the text a second later, which a pattern with contrast does not do.
+*/
+.thread-canvas {
+  background-image: radial-gradient(var(--color-line) 0.5px, transparent 0.5px);
+  background-size: 1.25rem 1.25rem;
+}
