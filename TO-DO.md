@@ -24,3 +24,4 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
 - [x] remove image card generating in reports pages (make it auto when generating reports) — 2026-08-10: the card now rides along with the report's "Générer" click on both Daily and Weekly — see FIXED.md (Fourth pass)
 - [] Add charging animation in the website, if things are getting charged from the database
 - [] Add more columns inspired from the given data
+- [] add techs vertically instead of horizentaly to reduce scroll (in TEAM panel)
