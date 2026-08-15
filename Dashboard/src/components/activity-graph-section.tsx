@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { useI18n } from '@/lib/i18n'
-import { ContributionGraph } from '@/components/contribution-graph'
-import type { ReportRow } from '@/lib/api'
+import { ContributionGraph, type GraphRow } from '@/components/contribution-graph'
 
 /**
  * Same graph, same slot, on every panel that browses reports by day (Daily,
@@ -13,7 +12,7 @@ export function ActivityGraphSection({
   date,
   onSelectDay,
 }: {
-  readonly rows: ReportRow[]
+  readonly rows: GraphRow[]
   /** ISO day to outline; also picks which year the heatmap opens on. */
   readonly date: string
   readonly onSelectDay: (iso: string) => void

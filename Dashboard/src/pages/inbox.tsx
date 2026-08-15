@@ -16,6 +16,7 @@ import {
   api,
   audioByRow,
   audioSrc,
+  mediaSrc,
   patchReport,
   sendReply,
   useApi,
@@ -73,11 +74,35 @@ const EDITABLE: { field: keyof ReportRow; labelKey: string; long?: boolean }[] =
  */
 interface Day {
   readonly iso: string
-  readonly rows: ReportRow[]
+  readonly rows: ThreadRow[]
 }
 
-function groupByDay(rows: ReportRow[]): Day[] {
-  const byDay = new Map<string, ReportRow[]>()
+/**
+ * A message in the thread: either a Sheet row (a report that was filed) or a
+ * logged exchange (a message that never became one). The two are the same
+ * conversation — the reply the technician got either lives in the row's
+ * `resume` or in the exchange's `reply` — so they share one timeline.
+ */
+type ThreadRow = ReportRow | ThreadExchange
+
+/** One recorded exchange, shaped like the fields the thread reads. */
+interface ThreadExchange {
+  /** `x<id>` — a string that can never collide with a Sheet row number. */
+  readonly _row: string
+  readonly date: string
+  readonly heure?: string
+  readonly canal?: string
+  readonly technicien?: string
+  readonly kind?: string
+  readonly text?: string
+  /** Required (may hold `undefined`): the thread discriminates with `'reply' in
+   *  r`, and an optional property would keep exchanges in the false branch. */
+  readonly reply: string | undefined
+  readonly media_id?: number | null
+}
+
+function groupByDay(rows: ThreadRow[]): Day[] {
+  const byDay = new Map<string, ThreadRow[]>()
   for (const r of rows) {
     const iso = toISODate(r.date) ?? (r.date ?? '').trim() ?? ''
     const bucket = byDay.get(iso)
@@ -129,12 +154,12 @@ function DaySeparator({ iso }: { readonly iso: string }) {
 }
 
 /** One bubble's timestamp, in the corner the platform puts it. */
-function Stamp({ r }: { readonly r: ReportRow }) {
+function Stamp({ heure }: { readonly heure?: string }) {
   const { t } = useI18n()
   const { settings } = useSettings()
   return (
     <span className="tabular text-ink-faint text-[0.625rem]">
-      {clock(r.heure, settings.timeFormat, t('time.am'), t('time.pm'))}
+      {clock(heure, settings.timeFormat, t('time.am'), t('time.pm'))}
     </span>
   )
 }
@@ -195,7 +220,84 @@ function IncomingBubble({ r, address }: { readonly r: ReportRow; readonly addres
           <p className="text-ink text-sm break-words whitespace-pre-wrap">{r.rapport_complet}</p>
         )}
 
-        <Stamp r={r} />
+        <Stamp heure={r.heure} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What the technician sent, when it never became a Sheet row.
+ *
+ * Same shell as IncomingBubble, but there is no Drive link and no row route —
+ * the media blob in Postgres is the only copy, so the audio plays straight
+ * from it, and the transcript is whatever shape the message took.
+ */
+function ExchangeIncoming({
+  r,
+  address,
+}: {
+  readonly r: ThreadExchange
+  readonly address?: string
+}) {
+  const { t } = useI18n()
+  const src = r.media_id != null ? mediaSrc(r.media_id) : null
+  const voice = src !== null
+
+  return (
+    <div className="flex justify-start">
+      <div className="border-line bg-surface-raised flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-ss-sm border px-4 py-3">
+        <div className="text-ink-faint flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.625rem]">
+          <ChannelIcon channel={(r.canal ?? '').trim().toLowerCase()} size={12} />
+          {address && <span className="tabular select-all">{address}</span>}
+          <span className="flex items-center gap-1">
+            {voice ? <SpeakerHighIcon size={11} /> : <TextAlignLeftIcon size={11} />}
+            {voice ? t('inbox.audio') : t('inbox.text')}
+          </span>
+        </div>
+
+        {src && (
+          <audio
+            controls
+            preload="none"
+            src={src}
+            className="h-9 w-full min-w-[16rem]"
+            aria-label={t('inbox.audio')}
+          >
+            <track kind="captions" />
+          </audio>
+        )}
+
+        {r.text && <p className="text-ink text-sm break-words whitespace-pre-wrap">{r.text}</p>}
+
+        <Stamp heure={r.heure} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What the bot answered, when there is no Sheet row behind it.
+ *
+ * The reply is a fact of the log, not a draft — nothing about it can be
+ * corrected here because there is no row to correct.
+ */
+function ExchangeReply({ r }: { readonly r: ThreadExchange }) {
+  const { t } = useI18n()
+  return (
+    <div className="flex justify-end">
+      <div className="border-accent/20 bg-accent/5 flex max-w-[min(46rem,85%)] flex-col gap-2 rounded-2xl rounded-se-sm border px-4 py-3">
+        <div className="text-ink-faint flex items-center gap-2 text-[0.625rem]">
+          <span className="tracking-wide uppercase">{t('inbox.bot')}</span>
+        </div>
+
+        {r.reply ? (
+          <p className="text-ink text-sm leading-relaxed break-words whitespace-pre-wrap">{r.reply}</p>
+        ) : (
+          <p className="text-ink-faint text-sm italic">{t('inbox.noReply')}</p>
+        )}
+
+        <Stamp heure={r.heure} />
       </div>
     </div>
   )
@@ -295,7 +397,7 @@ function BotBubble({ r, onSaved }: { readonly r: ReportRow; readonly onSaved: ()
         )}
 
         <div className="flex items-center gap-3">
-          <Stamp r={r} />
+          <Stamp heure={r.heure} />
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}
@@ -448,6 +550,10 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
   const { t } = useI18n()
   const { settings } = useSettings()
   const reports = useApi('reports', api.reports, settings.refreshMs || undefined)
+  // The messages that never became Sheet rows. Supplementary: the thread must
+  // not block on them, so their own failure only silences the archive, never
+  // the page.
+  const exchanges = useApi('exchanges', api.exchanges, settings.refreshMs || undefined)
 
   const [channel, setChannel] = useState<string>('')
   // The selected person; the rail is the picker.
@@ -458,7 +564,34 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
   // entered without a day already chosen for it.
   const [calendar, setCalendar] = useState(false)
 
-  const all = useMemo(() => [...(reports.data?.reports ?? [])].reverse(), [reports.data])
+  /*
+    One timeline: Sheet rows and logged exchanges, newest first.
+
+    Reports arrive oldest-first and are reversed; exchanges arrive newest-first
+    from the API. Merging the two streams without a sort would interleave them
+    wrong the moment an exchange is newer than the newest report, so the merged
+    list is ordered by (date, heure) descending — the rail's "first occurrence
+    is the last message" rule then holds for both kinds alike.
+  */
+  const all = useMemo<ThreadRow[]>(() => {
+    const reports_ = [...(reports.data?.reports ?? [])]
+    const exchanges_ = (exchanges.data?.exchanges ?? []).map<ThreadExchange>((e) => ({
+      _row: `x${e.id}`,
+      date: (e.date ?? (e.ts ?? '').slice(0, 10)).trim(),
+      heure: (e.heure ?? (e.ts ?? '').slice(11, 16)).trim(),
+      canal: e.channel ?? undefined,
+      technicien: e.technicien ?? undefined,
+      kind: e.kind ?? undefined,
+      text: e.text ?? undefined,
+      reply: e.reply ?? undefined,
+      media_id: e.media_id ?? null,
+    }))
+    return [...reports_, ...exchanges_].sort((a, b) => {
+      const ka = `${toISODate(a.date) ?? ''} ${a.heure ?? ''}`
+      const kb = `${toISODate(b.date) ?? ''} ${b.heure ?? ''}`
+      return kb < ka ? -1 : kb > ka ? 1 : 0
+    })
+  }, [reports.data, exchanges.data])
 
   const channels = useMemo(
     () => [...new Set(all.map((r) => (r.canal ?? '').trim()).filter(Boolean))],
@@ -485,8 +618,9 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
           count: 0,
           last: `${r.date} ${r.heure ?? ''}`.trim(),
           // The last thing said, the way a conversation list shows it — far
-          // more use than a raw count when picking who to open.
-          preview: (r.resume || r.rapport_complet || '').trim(),
+          // more use than a raw count when picking who to open. An exchange
+          // has no summary, so its own last line stands in.
+          preview: ('reply' in r ? r.reply || r.text || '' : r.resume || r.rapport_complet || '').trim(),
           channels: new Set(),
         }
         byName.set(name, p)
@@ -852,11 +986,23 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
                     <DaySeparator iso={d.iso} />
                     {d.rows.map((r) => (
                       <div key={r._row} className="flex flex-col gap-1.5">
-                        <IncomingBubble
-                          r={r}
-                          address={addressFor(r.technicien ?? '', r.canal ?? '')}
-                        />
-                        <BotBubble r={r} onSaved={reports.reload} />
+                        {'reply' in r ? (
+                          <>
+                            <ExchangeIncoming
+                              r={r}
+                              address={addressFor(r.technicien ?? '', r.canal ?? '')}
+                            />
+                            <ExchangeReply r={r} />
+                          </>
+                        ) : (
+                          <>
+                            <IncomingBubble
+                              r={r}
+                              address={addressFor(r.technicien ?? '', r.canal ?? '')}
+                            />
+                            <BotBubble r={r} onSaved={reports.reload} />
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>

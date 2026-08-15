@@ -1112,6 +1112,48 @@ def prune_logs(days: int = logs.RETENTION_DAYS, caller: dict = Depends(auth.requ
         raise HTTPException(502, str(exc)) from exc
 
 
+class ExchangeInput(BaseModel):
+    date: Optional[str] = None
+    heure: Optional[str] = None
+    channel: Optional[str] = None
+    external_id: Optional[str] = None
+    message_id: Optional[str] = None
+    technicien: Optional[str] = None
+    kind: str = "text"
+    text: Optional[str] = None
+    reply: Optional[str] = None
+    correlation_id: Optional[str] = None
+
+
+@app.post("/exchanges", responses={502: {"description": "Log store unreachable"}})
+def record_exchange(exchange: ExchangeInput, caller: dict = Depends(auth.require_user)) -> dict:
+    """One exchange that produced no Sheet row, written by n8n after the reply.
+
+    Best-effort by design: it runs on the no_report_content branch, so a
+    failure here must never surface to the technician who just got their
+    answer.
+    """
+    try:
+        exchange_id = logs.save_exchange(**exchange.model_dump())
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return {"ok": True, "id": exchange_id}
+
+
+@app.get("/exchanges", responses={502: {"description": "Log store unreachable"}})
+def list_exchanges(
+    limit: int = Query(200, ge=1, le=500),
+    caller: dict = Depends(auth.require_user),
+) -> dict:
+    """The conversation log — exchanges that never became Sheet rows, newest
+    first. The inbox merges these with the Rapports feed to show the complete
+    conversation; `media_id` lets it play the voice note."""
+    try:
+        return {"exchanges": logs.list_exchanges(limit=limit)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 class ClaimRequest(BaseModel):
     message_id: str
     channel: Optional[str] = None

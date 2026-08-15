@@ -41,6 +41,13 @@ export function audioByRow(row: number): string {
   return `${BASE}/audio/row/${row}`
 }
 
+/** The archived blob for an exchange row, straight out of Postgres. An
+ * exchange never became a Sheet row, so it has no Drive link and no row
+ * route — the media id is the only source that exists for it. */
+export function mediaSrc(id: number): string {
+  return `${BASE}/media/${id}/file`
+}
+
 /** One row of the `Rapports` tab. Sheets returns every cell as a string. */
 export interface ReportRow {
   _row: number
@@ -67,6 +74,26 @@ export interface ReportRow {
   confidence?: string
   flag_review?: string
   lien_audio?: string
+}
+
+/** One exchange from the conversation log: a message that never became a Sheet
+ * row (no_report_content) and the reply the technician got. Mirrors the
+ * `exchanges` table row returned by GET /exchanges; `media_id` points at the
+ * archived audio/image blob when the message had one. */
+export interface Exchange {
+  id: number
+  ts?: string
+  date?: string | null
+  heure?: string | null
+  channel?: string | null
+  external_id?: string | null
+  message_id?: string | null
+  technicien?: string | null
+  kind?: string | null
+  text?: string | null
+  reply?: string | null
+  correlation_id?: string | null
+  media_id?: number | null
 }
 
 export interface Health {
@@ -765,6 +792,7 @@ export const api = {
   n8n: n8nStatus,
   n8nExecutions,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
+  exchanges: (s?: AbortSignal) => get<{ exchanges: Exchange[] }>('/exchanges', s),
   generatedReports: (s?: AbortSignal) =>
     get<{ reports: GeneratedReport[] }>('/reports/generated', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),

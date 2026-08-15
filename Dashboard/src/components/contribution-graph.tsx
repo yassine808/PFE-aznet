@@ -1,7 +1,11 @@
 import { useMemo } from 'react'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { toISODate } from '@/lib/metrics'
-import type { ReportRow } from '@/lib/api'
+
+/** The graph only reads `date`; anything with a date participates. */
+export interface GraphRow {
+  date?: string
+}
 
 const DAY_MS = 86_400_000
 
@@ -34,7 +38,7 @@ export function ContributionGraph({
   selectedDay,
   cellHeight,
 }: {
-  readonly rows: ReportRow[]
+  readonly rows: GraphRow[]
   /** Calendar year to render. Defaults to a rolling 53 weeks ending today. */
   readonly year?: number
   readonly onSelectDay?: (iso: string) => void

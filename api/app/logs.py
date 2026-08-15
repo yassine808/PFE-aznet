@@ -326,6 +326,31 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 CREATE INDEX IF NOT EXISTS chat_messages_ts_idx ON chat_messages (created_at DESC);
 
+-- The conversation log: what a technician sent that never became a Sheet row,
+-- and what the bot answered. The Sheet only ever holds extracted reports, so a
+-- "who are you?" or a bare "ok" has no row to appear in the inbox — this is
+-- that record. Written by n8n on the no_report_content branch of the workflow,
+-- after the reply (reply-first ordering: recording an exchange must never cost
+-- the technician their summary). `date`/`heure` are what n8n's $now said at
+-- reply time, so they match the Sheet's calendar rather than the server clock
+-- of whoever inserts the row later. `kind` is derived in the workflow from the
+-- /process output ('text' | 'audio' | 'image').
+CREATE TABLE IF NOT EXISTS exchanges (
+    id             BIGSERIAL PRIMARY KEY,
+    ts             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    date           TEXT,
+    heure          TEXT,
+    channel        TEXT,
+    external_id    TEXT,
+    message_id     TEXT,
+    technicien     TEXT,
+    kind           TEXT,
+    text           TEXT,           -- what the technician sent (transcript for audio)
+    reply          TEXT,           -- what the bot answered
+    correlation_id TEXT
+);
+CREATE INDEX IF NOT EXISTS exchanges_ts_idx ON exchanges (ts DESC);
+
 -- The /modify command: a technician replies to their own message and the row
 -- it became has to be found by the id of that message. The claim already
 -- stores the canonical message key (`tg:123:456` / `wa:<id>`, the workflow's
@@ -949,6 +974,55 @@ def save_message(
             (channel, external_id, message_id, text),
         )
         return (_one(cur) or {})["id"]
+
+
+def save_exchange(
+    date: Optional[str],
+    heure: Optional[str],
+    channel: Optional[str],
+    external_id: Optional[str],
+    message_id: Optional[str],
+    technicien: Optional[str],
+    kind: str,
+    text: Optional[str],
+    reply: Optional[str],
+    correlation_id: Optional[str],
+) -> int:
+    """One exchange that never became a Sheet row (message + the reply the
+    technician actually got). Written by n8n, best-effort, after the reply."""
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO exchanges
+                (date, heure, channel, external_id, message_id, technicien, kind, text, reply, correlation_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (date, heure, channel, external_id, message_id, technicien, kind, text, reply, correlation_id),
+        )
+        return (_one(cur) or {})["id"]
+
+
+def list_exchanges(limit: int = 200) -> List[dict]:
+    """Conversation log, newest first. Each row carries the archived media id
+    (audio/image) when that message had one, so the inbox can play a voice note
+    that never became a Sheet row."""
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT e.id, e.ts, e.date, e.heure, e.channel, e.external_id, e.message_id,
+                   e.technicien, e.kind, e.text, e.reply, e.correlation_id,
+                   (SELECT m.id FROM media_files m
+                     WHERE m.message_id = e.message_id AND m.kind = e.kind
+                     ORDER BY m.created_at DESC LIMIT 1) AS media_id
+            FROM exchanges e
+            ORDER BY e.ts DESC
+            LIMIT %s
+            """,
+            (max(1, min(limit, 500)),),
+        )
+        rows = [_iso(dict(r)) for r in cur.fetchall()]
+    return rows
 
 
 def list_media(limit: int = 50) -> List[dict]:
@@ -1681,7 +1755,7 @@ def prune_meta(days: int = RETENTION_DAYS) -> dict:
     """Retention sweep for the tables that would otherwise grow forever: expired
     sessions, idempotency claims, the audit trail and page visits — plus the
     archive tables on their own clocks (see the constants at module top):
-    `media_files` blobs, `chat_messages` and read `notifications`.
+    `media_files` blobs, `chat_messages`, `exchanges` and read `notifications`.
 
     Sessions prune on expiry (they are dead the moment `expires_at` passes)
     rather than on age: an account that logs in every six days keeps a live
@@ -1718,6 +1792,11 @@ def prune_meta(days: int = RETENTION_DAYS) -> dict:
         )
         chat = cur.rowcount
         cur.execute(
+            "DELETE FROM exchanges WHERE ts < now() - (%s * interval '1 day')",
+            (CHAT_RETENTION_DAYS,),
+        )
+        exchanges = cur.rowcount
+        cur.execute(
             "DELETE FROM notifications "
             "WHERE read_at IS NOT NULL AND read_at < now() - (%s * interval '1 day')",
             (NOTIF_RETENTION_DAYS,),
@@ -1730,6 +1809,7 @@ def prune_meta(days: int = RETENTION_DAYS) -> dict:
         "visits_deleted": visits,
         "media_files_deleted": media,
         "chat_messages_deleted": chat,
+        "exchanges_deleted": exchanges,
         "notifications_deleted": notifs,
     }
 

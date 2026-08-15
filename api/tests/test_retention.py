@@ -1,11 +1,11 @@
 """Retention sweep coverage: the archive tables age out on their own clocks.
 
 `prune_meta` used to cover sessions / idempotency claims / audit / visits only,
-so `media_files`, `chat_messages` and `notifications` grew forever. These tests
-pin the policy decided 2026-08-10 — blobs 30 days (the audio already has a
-durable Drive link), chat 90 days, read notifications 30 days (unread rows are
-never touched) — so a future edit that collapses the clocks back onto the
-pipeline-logs `days` argument fails loudly.
+so `media_files`, `chat_messages`, `exchanges` and `notifications` grew forever.
+These tests pin the policy decided 2026-08-10 — blobs 30 days (the audio already
+has a durable Drive link), chat and exchanges 90 days, read notifications 30
+days (unread rows are never touched) — so a future edit that collapses the
+clocks back onto the pipeline-logs `days` argument fails loudly.
 """
 from contextlib import contextmanager
 
@@ -18,6 +18,7 @@ TABLES = (
     "page_visits",
     "media_files",
     "chat_messages",
+    "exchanges",
     "notifications",
 )
 
@@ -62,6 +63,8 @@ def test_archive_tables_prune_on_their_own_clocks(monkeypatch):
     assert media == (logs.ARCHIVE_RETENTION_DAYS,)
     _, chat = args_for("chat_messages")
     assert chat == (logs.CHAT_RETENTION_DAYS,)
+    _, exchanges = args_for("exchanges")
+    assert exchanges == (logs.CHAT_RETENTION_DAYS,)
     _, notifs = args_for("notifications")
     assert notifs == (logs.NOTIF_RETENTION_DAYS,)
 
@@ -93,5 +96,6 @@ def test_archive_counts_reported_in_result(monkeypatch):
     result, _ = _run(monkeypatch)
     assert result["media_files_deleted"] == 0
     assert result["chat_messages_deleted"] == 0
+    assert result["exchanges_deleted"] == 0
     assert result["notifications_deleted"] == 0
     assert result["sessions_deleted"] == 0
