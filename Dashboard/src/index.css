@@ -253,10 +253,10 @@
   /*
     A group of children: the panel that carries "these report to the box above".
 
-    A crew wider than three has to wrap or the chart scrolls sideways, and
-    wrapped rows cannot be connected honestly either — rows two and up hang
-    from a stub in mid-air. Containment has no such limit: it says the same
-    thing at any headcount, and there is no geometry to get wrong.
+    Drawn as containment, not as lines to each child. A crew is a single
+    stacked column since 2026-08-16, and per-child connectors would have to be
+    re-derived for that layout; containment says the same thing at any
+    headcount and in either direction, with no geometry to get wrong.
   */
   .org-crew {
     position: relative;

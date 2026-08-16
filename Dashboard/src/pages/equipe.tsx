@@ -410,11 +410,17 @@ function Chart({
                   </div>
                   {crew.length > 0 && (
                     /*
-                      Capped at three cards wide (3 × 11rem + 2 × 0.75rem gap)
-                      so a big crew wraps inside its own panel instead of
-                      pushing the chart past the viewport.
+                      One card wide, stacked. It used to wrap at three across
+                      (max-w-34.5rem), which made every chef's column three
+                      cards wide and the chefs' row — flex-nowrap, it cannot
+                      wrap — three times longer than it had to be: four chefs
+                      scrolled sideways on any laptop. A column is 11rem, so
+                      the same four fit without scrolling. The trade is
+                      vertical length, which is the cheaper direction: the page
+                      already scrolls that way, and reading down a crew needs
+                      no scrollbar of its own.
                     */
-                    <ul className="org-crew flex max-w-[34.5rem] flex-wrap justify-center gap-3">
+                    <ul className="org-crew flex flex-col items-center gap-3">
                       {crew.map((p) => (
                         <li key={p.id}>
                           <Box

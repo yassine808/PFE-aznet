@@ -24,7 +24,18 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
 - [x] remove image card generating in reports pages (make it auto when generating reports) — 2026-08-10: the card now rides along with the report's "Générer" click on both Daily and Weekly — see FIXED.md (Fourth pass)
 - [] Add charging animation in the website, if things are getting charged from the database
 - [] Add more columns inspired from the given data
-- [] add techs vertically instead of horizentaly to reduce scroll (in TEAM panel)
+- [x] add techs vertically instead of horizentaly to reduce scroll (in TEAM panel)
+  — fait 2026-08-16, **non vérifié dans un navigateur** (pas de Chrome sur cette
+  machine ; typecheck + build verts). L'équipe d'un chef était sur trois cartes
+  de large (`max-w-[34.5rem]`, retour à la ligne), donc chaque colonne de chef
+  faisait trois fois sa largeur utile — et la rangée des chefs est en
+  `flex-nowrap`, elle ne peut pas se replier : à quatre chefs le graphe défilait
+  latéralement sur un portable. Une colonne fait 11rem, les quatre tiennent.
+  On échange de la hauteur, la direction la moins chère : la page défile déjà
+  verticalement. Les connecteurs sont dessinés par contenance (`.org-crew`), pas
+  par des traits vers chaque enfant, donc rien à recalculer.
+  À vérifier : `docker compose up -d --build web` puis la page Équipe avec
+  plusieurs chefs et un chef à six techniciens.
 ## Batch 2026-08-15 (grilled and locked with the owner before starting)
 - [x] **1. WhatsApp voice notes come back untagged — CLOSED, not fixable and never was a bug of ours (2026-08-15).** — fixed 2026-08-15: Text replies carry the grey quote, audio ones do not. Cause: the reply/ack nodes dereference `$('Filtrer accès').item`, and the paired-item chain breaks across the media branch (`WA Get media URL` → `WA Download audio`). Fix: carry `chat_id` + `message_id` in each item's own JSON through the media branch and read `$json` in the reply nodes — hardens the text and image paths too.
 - [x] **2. Remove the chat commands** — done 2026-08-15; `rapports_row` stayed, because `GET /audio/row/{row}` plays the inbox's voice notes through it. `/rapport`, `/modify`, `/delete` everywhere: the n8n command nodes and their six reply nodes, `POST /modify-command`, and the now write-only message→row link (`processed_messages.sheet_row` / `sheet_tab` / `rapports_row` plus every `logs.link_message_row` call). `processed_messages` itself stays — WhatsApp idempotency lives there.
