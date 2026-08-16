@@ -107,6 +107,7 @@ interface ThreadExchange {
    *  r`, and an optional property would keep exchanges in the false branch. */
   readonly reply: string | undefined
   readonly media_id?: number | null
+  readonly stt_engine?: string | null
 }
 
 function groupByDay(rows: ThreadRow[]): Day[] {
@@ -200,12 +201,20 @@ function Stamp({ heure, sent = false }: { readonly heure?: string; readonly sent
 function TranscriptBubble({
   id,
   text,
+  engine,
   save,
   onSaved,
 }: {
   /** Unique per message — the label/textarea pairing needs a stable id. */
   readonly id: string
   readonly text: string
+  /** Which engine produced this text. It belongs next to the transcript and
+   *  nowhere else: the chain falls through on failure, so `local` here means
+   *  both cloud engines were unavailable at that moment — and reading a wrong
+   *  number is a different judgement depending on which engine heard it. It
+   *  was removed from the technician's reply on purpose (that is operations,
+   *  not site work); this is the operator's screen, where it is the point. */
+  readonly engine?: string
   readonly save: (value: string) => Promise<void>
   readonly onSaved: () => void
 }) {
@@ -236,6 +245,14 @@ function TranscriptBubble({
     <div className="border-line bg-canvas/60 flex flex-col gap-1.5 rounded-lg border px-3 py-2">
       <div className="text-ink-faint flex items-center gap-2 text-[0.625rem] tracking-wide uppercase">
         {t('inbox.transcript')}
+        {engine && (
+          <span
+            className="border-line text-ink-muted rounded-full border px-1.5 py-px normal-case"
+            title={t('inbox.sttEngine')}
+          >
+            {engine}
+          </span>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -353,6 +370,7 @@ function IncomingBubble({
             <TranscriptBubble
               id={`row-${r._row}`}
               text={r.rapport_complet}
+              engine={r.STT_model}
               save={(value) => patchReport(r._row, 'rapport_complet', value)}
               onSaved={onSaved}
             />
@@ -415,6 +433,7 @@ function ExchangeIncoming({
             <TranscriptBubble
               id={`exchange-${r.id}`}
               text={r.text}
+              engine={r.stt_engine ?? undefined}
               save={(value) => patchExchange(r.id, value)}
               onSaved={onSaved}
             />
@@ -864,6 +883,7 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
       text: e.text ?? undefined,
       reply: e.reply ?? undefined,
       media_id: e.media_id ?? null,
+      stt_engine: e.stt_engine ?? null,
     }))
     return [...reports_, ...exchanges_].sort((a, b) => {
       const ka = `${toISODate(a.date) ?? ''} ${a.heure ?? ''}`

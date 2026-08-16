@@ -74,6 +74,11 @@ export interface ReportRow {
   confidence?: string
   flag_review?: string
   lien_audio?: string
+  /** Which STT engine actually heard this note (`gemini` / `local` / `groq`),
+   *  written by `journal._rapports_cells`. The chain falls through on failure,
+   *  so the configured order does not tell you what ran — only this does.
+   *  Absent on typed and photo reports, which never touch STT. */
+  STT_model?: string
 }
 
 /** One exchange from the conversation log: a message that never became a Sheet
@@ -94,6 +99,9 @@ export interface Exchange {
   reply?: string | null
   correlation_id?: string | null
   media_id?: number | null
+  /** Which STT engine heard this note. Null for typed and photo messages, and
+   *  for audio exchanges logged before the column existed (2026-08-16). */
+  stt_engine?: string | null
 }
 
 export interface Health {

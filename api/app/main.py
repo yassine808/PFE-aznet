@@ -1078,6 +1078,10 @@ class ExchangeInput(BaseModel):
     text: Optional[str] = None
     reply: Optional[str] = None
     correlation_id: Optional[str] = None
+    # Which STT engine heard this note, for the audio rows. The Rapports mirror
+    # records it as `STT_model`; an exchange never becomes a Rapports row, so
+    # without this the inbox shows the engine for filed reports only.
+    stt_engine: Optional[str] = None
 
 
 @app.post("/exchanges", responses={502: {"description": "Log store unreachable"}})

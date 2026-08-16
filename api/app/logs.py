@@ -352,6 +352,16 @@ CREATE TABLE IF NOT EXISTS exchanges (
 );
 CREATE INDEX IF NOT EXISTS exchanges_ts_idx ON exchanges (ts DESC);
 
+-- Which STT engine produced `text`, for the audio rows. The Rapports mirror
+-- has carried this since the flat row existed (`STT_model`), but an exchange
+-- is precisely a message that never became a Rapports row — so without this
+-- column the inbox can show the engine for a filed report and not for the
+-- "aucun rapport détecté" note next to it, which is the one an operator is
+-- most likely to be re-reading. NULL for text and photo, which never touch STT.
+DO $$ BEGIN
+    ALTER TABLE exchanges ADD COLUMN IF NOT EXISTS stt_engine TEXT;
+END $$;
+
 -- The journal write mirrors a flat row to the Rapports tab; its row number is
 -- recorded here by whoever performed the append (the API on the happy path,
 -- the retry drain after a Sheets outage). It is the only key that ties a
@@ -1113,6 +1123,7 @@ def save_exchange(
     text: Optional[str],
     reply: Optional[str],
     correlation_id: Optional[str],
+    stt_engine: Optional[str] = None,
 ) -> int:
     """One exchange that never became a Sheet row (message + the reply the
     technician actually got). Written by n8n, best-effort, after the reply."""
@@ -1120,11 +1131,12 @@ def save_exchange(
         cur.execute(
             """
             INSERT INTO exchanges
-                (date, heure, channel, external_id, message_id, technicien, kind, text, reply, correlation_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (date, heure, channel, external_id, message_id, technicien, kind, text, reply, correlation_id, stt_engine)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (date, heure, channel, external_id, message_id, technicien, kind, text, reply, correlation_id),
+            (date, heure, channel, external_id, message_id, technicien, kind, text, reply,
+             correlation_id, stt_engine),
         )
         return (_one(cur) or {})["id"]
 
@@ -1159,7 +1171,7 @@ def list_exchanges(limit: int = 200) -> List[dict]:
         cur.execute(
             """
             SELECT e.id, e.ts, e.date, e.heure, e.channel, e.external_id, e.message_id,
-                   e.technicien, e.kind, e.text, e.reply, e.correlation_id,
+                   e.technicien, e.kind, e.text, e.reply, e.correlation_id, e.stt_engine,
                    (SELECT m.id FROM media_files m
                      WHERE m.message_id = e.message_id AND m.kind = e.kind
                      ORDER BY m.created_at DESC LIMIT 1) AS media_id

@@ -36,6 +36,43 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
   par des traits vers chaque enfant, donc rien à recalculer.
   À vérifier : `docker compose up -d --build web` puis la page Équipe avec
   plusieurs chefs et un chef à six techniciens.
+## Batch 2026-08-16 (4) — la note vocale muette, et le lien audio qui pointe chez nous
+
+- [ ] **Une note vocale dont rien n'est extrait n'apparaît pas dans la feuille —
+  c'est voulu, mais il faut le vérifier avant de le croire.** Quand l'extraction
+  ne trouve aucune donnée (`schemas.has_data` faux), `/process` ajoute
+  `no_report_content`, le nœud `Rapport exploitable ?` saute l'appel à
+  `/journal`, et le message part dans `exchanges` — donc **dans l'inbox, pas
+  dans la feuille**. C'est la règle qui empêche « salam » d'ouvrir une ligne de
+  blancs, et elle ignore délibérément `resume` (le modèle en écrit toujours un)
+  et `chantier_mentionne` (nommer un site n'est pas du travail fait).
+  Ce qui reste à trancher, et qui demande la trace réelle : **est-ce bien ce
+  chemin-là**, ou l'extraction échoue-t-elle vraiment ? Les deux se ressemblent
+  de l'extérieur (rien dans la feuille) et n'ont pas le même remède. À faire
+  côté propriétaire, la machine de dev ne joint pas n8n :
+  `GET /api/v1/executions?limit=100` puis `?includeData=true` sur l'id du
+  message — ~26 nœuds = message réellement traité ; regarder `warnings` dans la
+  sortie de `/process`. Puis l'inbox : si le message y est avec sa transcription,
+  c'est la porte `no_report_content` et non une panne. Si la transcription est
+  correcte et pleine de chiffres alors que `has_data` dit non, **c'est
+  l'extraction qui a échoué et c'est un bug** — garder la transcription.
+- [~] **`lien_audio` doit pointer chez nous, pas sur Drive** — en cours
+  2026-08-16. Aujourd'hui la colonne contient l'URL Drive : elle ouvre un
+  fichier nu, hors contexte, et dépend d'un service tiers pour lire quelque
+  chose qu'on héberge déjà (`media_files` en Postgres). Le lien devient une
+  **adresse du dashboard vers ce message précis** dans l'inbox, où il y a le
+  lecteur, la transcription corrigeable, le résumé et la réponse envoyée.
+  Clé retenue : **`correlation_id`**, pas le numéro de ligne — il existe *avant*
+  l'append (donc pas de second appel Sheets pour réécrire la cellule), il est
+  déjà porté par le message de bout en bout, et il vaut aussi pour un échange
+  qui n'est jamais devenu une ligne. Il faut donc l'ajouter aux colonnes du
+  miroir Rapports.
+  Base d'URL par `DASHBOARD_BASE_URL` ; **non définie, on retombe sur le lien
+  Drive** plutôt que d'écrire une adresse relative que personne ne peut ouvrir
+  depuis la feuille. L'upload Drive reste : c'est la copie durable au-delà de
+  `MEDIA_RETENTION_DAYS` (30 jours), et `media_files.drive_file_id` reste le
+  chemin de repli de la lecture.
+
 ## Batch 2026-08-15 (grilled and locked with the owner before starting)
 - [x] **1. WhatsApp voice notes come back untagged — CLOSED, not fixable and never was a bug of ours (2026-08-15).** — fixed 2026-08-15: Text replies carry the grey quote, audio ones do not. Cause: the reply/ack nodes dereference `$('Filtrer accès').item`, and the paired-item chain breaks across the media branch (`WA Get media URL` → `WA Download audio`). Fix: carry `chat_id` + `message_id` in each item's own JSON through the media branch and read `$json` in the reply nodes — hardens the text and image paths too.
 - [x] **2. Remove the chat commands** — done 2026-08-15; `rapports_row` stayed, because `GET /audio/row/{row}` plays the inbox's voice notes through it. `/rapport`, `/modify`, `/delete` everywhere: the n8n command nodes and their six reply nodes, `POST /modify-command`, and the now write-only message→row link (`processed_messages.sheet_row` / `sheet_tab` / `rapports_row` plus every `logs.link_message_row` call). `processed_messages` itself stays — WhatsApp idempotency lives there.
@@ -71,6 +108,34 @@ Kept from the investigation: `/process` echoes `correlation_id` and
 `message_id` back in `ProcessResponse` (free, and a real join key if one is
 ever needed).
 - [] new panel for usage that shows usage for gemini, groq, facebook whatsapp
+- [x] **Retirer « 🤖 Moteur STT » de la réponse au technicien** — fait
+  2026-08-16 dans `n8n/aznet-complete.json`, **pas déployé** : n8n est
+  injoignable depuis cette machine (`getaddrinfo failed`), donc
+  `python n8n/push_and_archive.py --push` reste à faire par le propriétaire —
+  tant qu'il n'est pas passé, n8n sert sa propre copie et la ligne est toujours
+  envoyée. Trois nœuds nettoyés : `TG reply summary`, `WA reply summary`, et
+  `Record exchange` — ce dernier archive le texte de la réponse et doit rester
+  identique à ce qui est parti, sinon l'inbox montre une conversation qui n'a
+  pas eu lieu. Le nom du moteur reste dans `/journal` (`stt_engine`), dans les
+  logs et dans le dashboard : c'est une information d'exploitation, pas une
+  information de chantier. La confiance de transcription, elle, reste dans la
+  réponse — elle dit au technicien de relire, ce que le nom du moteur ne fait
+  pas.
+- [x] **Le moteur STT s'affiche dans l'inbox** — fait 2026-08-16, **non vérifié
+  dans un navigateur** (typecheck, build, parité des locales et suite API
+  verts). Une puce à côté du titre « Transcription », donc collée au texte
+  qu'elle qualifie : la chaîne se replie en cas d'échec, donc l'ordre configuré
+  ne dit pas ce qui a tourné — `local` ici signifie que les deux moteurs cloud
+  étaient indisponibles à cet instant, et un chiffre douteux ne se juge pas
+  pareil selon le moteur qui l'a entendu. Deux sources, parce qu'un message
+  peut ne jamais devenir une ligne : `STT_model` de la feuille Rapports pour un
+  rapport déposé, et une **nouvelle colonne `exchanges.stt_engine`** pour les
+  messages « aucun rapport détecté » — ce sont justement ceux qu'on relit.
+  Migration `ADD COLUMN IF NOT EXISTS`, donc les échanges antérieurs restent
+  sans puce plutôt que de mentir. Le nœud n8n `Record exchange` envoie le champ,
+  donc **cette moitié attend le même push n8n** que le retrait de la ligne
+  ci-dessus. Déploiement : `up -d --build api` puis `--build web` (ajout de
+  fonctionnalité), plus le push n8n.
 ## Batch 2026-08-15 (2) — bordereau columns, vision benchmark, .docx (grilled and locked with the owner)
 
 Decisions locked in the grill, so nobody re-opens them later:
@@ -499,3 +564,6 @@ Chacun passait la suite de tests au moment où il a été trouvé.
 | 4 | Refaire la comparaison à 25 modèles un matin calme, hors production | assistant |
 | 5 | Trancher le désaccord Gemini (`cable_elec_3x2_5_m: 30`) vs local (`cables_installes_m: 3`) sur la même note | propriétaire (darijophone) |
 | 6 | Plus de plans annotés, d'autres bâtiments — l'encombrement attentionnel se reproduit-il ? | propriétaire |
+
+
+- [] fix this in frontend "Generated by automatique"

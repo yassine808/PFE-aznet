@@ -73,9 +73,29 @@ def test_save_exchange_inserts_all_columns(monkeypatch):
     sql, args = _statement(cur, "INSERT INTO exchanges")
     assert all(needle in sql for needle in ("date", "heure", "channel", "external_id",
                                             "message_id", "technicien", "kind", "text",
-                                            "reply", "correlation_id"))
+                                            "reply", "correlation_id", "stt_engine"))
+    # A typed message never touched STT, so the engine is NULL rather than a
+    # placeholder: the inbox shows the chip only when one actually ran.
     assert args == ("2026-08-15", "10:30", "telegram", "123", "tg:123:456",
-                    "Karim", "text", "ok", "ℹ️ aucun rapport", "corr-1")
+                    "Karim", "text", "ok", "ℹ️ aucun rapport", "corr-1", None)
+
+
+def test_save_exchange_records_the_engine_for_audio(monkeypatch):
+    """An exchange never becomes a Rapports row, so this column is the only
+    place the engine that heard a no-report voice note is written down."""
+    cur = _RecordingCursor()
+    cur._rows = [{"id": 8}]
+    monkeypatch.setattr(logs, "_cursor", lambda: _fake_cursor(cur))
+
+    logs.save_exchange(
+        date="2026-08-16", heure="11:00", channel="whatsapp",
+        external_id="212600000000", message_id="wamid.x", technicien="Karim",
+        kind="audio", text="salam", reply="ℹ️ aucun rapport",
+        correlation_id="corr-2", stt_engine="local",
+    )
+
+    _, args = _statement(cur, "INSERT INTO exchanges")
+    assert args[-1] == "local"
 
 
 def test_list_exchanges_returns_iso_ts_and_media_id(monkeypatch):
