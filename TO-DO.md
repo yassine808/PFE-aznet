@@ -416,6 +416,26 @@ c'est un ajout de fonctionnalité — voir CLAUDE.md, piège n°3).
 - [ ] Corriger une transcription dans l'inbox, puis vérifier dans la page
   Historique que l'ancien texte figure bien en `before`.
 
+- [ ] **Placer `docs/pipeline-voix-vers-sheets.png` dans le rapport — mais
+  trancher d'abord le doublon.** Le schéma (1720×2436, dessiné avec Pillow, le
+  script est dans le scratchpad) raconte le même trajet que la **Figure 3.3**
+  déjà présente (`diagrams/02-lifecycle-voice.png`, « Cycle de vie complet
+  d'une note vocale, de l'émission à la ligne du journal »). Deux figures pour
+  un même parcours, c'est une de trop : un lecteur cherche la différence, n'en
+  trouve pas, et doute des deux. Trois issues, au choix du propriétaire :
+  1. **Remplacer** la 3.3 — le nouveau schéma porte le raisonnement dans la
+     marge (ordre de la chaîne STT établi par mesure, null vs 0, pas de
+     correspondance approximative), ce que le diagramme mermaid ne fait pas.
+  2. **Le mettre ailleurs** — en ouverture du chapitre 4 (Réalisation) ou en
+     synthèse du chapitre 1, là où il n'entre pas en concurrence avec la 3.3.
+  3. **Le garder hors du rapport**, pour la soutenance et le README seulement.
+  Quelle que soit l'issue : il faut un numéro et une légende au format EMSI
+  (bloc `FigureImage` + `FigureCaption`, légende **au-dessus** pour les
+  tableaux, en dessous pour les figures), une largeur en cm — il est en portrait
+  très allongé, viser `width=12cm` maximum pour qu'il tienne sur une page — et
+  la renumérotation de toutes les figures qui suivent, plus les renvois
+  « **Figure X.Y** » dans le texte.
+
 ## Bilan des 15–16 août 2026 — 18 commits, suite à 355 vert
 
 ### Livré
