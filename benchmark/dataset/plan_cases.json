@@ -1,12 +1,20 @@
 {
-  "_comment": "DRAFT ANSWER KEY — Yassine must confirm/correct before the run is quotable. Three photographs of the SAME floor plan in three annotation states, which is what makes this a controlled experiment: the printed plan is constant, only the marks change. `attendu` is what a model MUST name; `interdit` is a zone that is printed on the plan but NOT marked in THIS photo — naming it is a provable hallucination, not an unverifiable guess. `synonymes` exists because a model may say 'chambres' where the plan prints room numbers, and that is a hit, not a miss.",
+  "_comment": "CORRIGÉ CONFIRMÉ par le propriétaire le 2026-08-16 : les trois cas ont été vérifiés photo par photo contre le plan réel. Ce n'est plus une lecture de l'assistant, c'est la vérité terrain — les chiffres du benchmark vision sont donc citables. Trois photographies du MÊME plan dans trois états d'annotation, ce qui en fait une expérience contrôlée : le plan imprimé est constant, seules les marques changent. `attendu` = ce qu'un modèle DOIT nommer ; `interdit` = une zone imprimée sur le plan mais NON marquée sur cette photo-là, donc la citer est une hallucination démontrable et non une simple invérifiable. `synonymes` existe parce qu'un modèle peut dire « chambres » là où le plan imprime des numéros : c'est un succès, pas un échec.",
   "_criterion": "Localization accuracy: does the model name the marked zones, and does it invent zones that are not marked. Counting marks is NOT graded — see STT-BENCHMARK-STATUS.md for why a criterion is fixed before the run.",
   "_plan": {
     "batiment": "Hôtel — niveau -0.20, plan d'évacuation photographié",
     "reperes_imprimes": [
-      "chambres 1001 à 1035 (rangée nord)", "RECEPTION", "MAGAZIN",
-      "RESERVOIR A GAZ", "BAR (nord-est)", "BAR (sud)", "Restaurant",
-      "salle de réunion", "RECEP (bloc est)", "DOUCHE (bloc est)", "patio/jardin"
+      "chambres 1001 à 1035 (rangée nord)",
+      "RECEPTION",
+      "MAGAZIN",
+      "RESERVOIR A GAZ",
+      "BAR (nord-est)",
+      "BAR (sud)",
+      "Restaurant",
+      "salle de réunion",
+      "RECEP (bloc est)",
+      "DOUCHE (bloc est)",
+      "patio/jardin"
     ]
   },
   "cases": [
@@ -17,10 +25,27 @@
       "attendu": [
         {
           "zone": "bloc est (RECEP / douches)",
-          "synonymes": ["recep", "réception", "douche", "bloc est", "aile est", "côté droit", "partie droite", "extrémité est"]
+          "synonymes": [
+            "recep",
+            "réception",
+            "douche",
+            "bloc est",
+            "aile est",
+            "côté droit",
+            "partie droite",
+            "extrémité est"
+          ]
         }
       ],
-      "interdit": ["chambres", "1017", "1035", "restaurant", "salle de réunion", "magazin", "bar"],
+      "interdit": [
+        "chambres",
+        "1017",
+        "1035",
+        "restaurant",
+        "salle de réunion",
+        "magazin",
+        "bar"
+      ],
       "marques": "1 cercle vert"
     },
     {
@@ -30,18 +55,46 @@
       "attendu": [
         {
           "zone": "rangée de chambres nord",
-          "synonymes": ["chambres", "1017", "1019", "1021", "1035", "rangée nord", "couloir nord", "haut du plan"]
+          "synonymes": [
+            "chambres",
+            "1017",
+            "1019",
+            "1021",
+            "1035",
+            "rangée nord",
+            "couloir nord",
+            "haut du plan"
+          ]
         },
         {
           "zone": "couloir sud (restaurant / salle de réunion)",
-          "synonymes": ["restaurant", "salle de réunion", "couloir sud", "bas du plan", "sud"]
+          "synonymes": [
+            "restaurant",
+            "salle de réunion",
+            "couloir sud",
+            "bas du plan",
+            "sud"
+          ]
         },
         {
           "zone": "bloc est (RECEP)",
-          "synonymes": ["recep", "bloc est", "aile est", "côté droit", "extrémité est"]
+          "synonymes": [
+            "recep",
+            "bloc est",
+            "aile est",
+            "côté droit",
+            "extrémité est"
+          ]
         }
       ],
-      "interdit": ["reception principale", "magazin", "reservoir a gaz", "route", "tracé rose", "cercle"],
+      "interdit": [
+        "reception principale",
+        "magazin",
+        "reservoir a gaz",
+        "route",
+        "tracé rose",
+        "cercle"
+      ],
       "marques": "8 points bleus"
     },
     {
@@ -51,23 +104,56 @@
       "attendu": [
         {
           "zone": "rangée de chambres nord",
-          "synonymes": ["chambres", "1017", "1019", "1023", "1035", "rangée nord", "haut du plan"]
+          "synonymes": [
+            "chambres",
+            "1017",
+            "1019",
+            "1023",
+            "1035",
+            "rangée nord",
+            "haut du plan"
+          ]
         },
         {
           "zone": "BAR nord-est",
-          "synonymes": ["bar", "nord-est", "coin haut droit", "angle nord-est"]
+          "synonymes": [
+            "bar",
+            "nord-est",
+            "coin haut droit",
+            "angle nord-est"
+          ]
         },
         {
           "zone": "liaison verticale façade est",
-          "synonymes": ["rose", "route", "liaison", "façade est", "côté droit", "vertical", "descend", "tracé"]
+          "synonymes": [
+            "rose",
+            "route",
+            "liaison",
+            "façade est",
+            "côté droit",
+            "vertical",
+            "descend",
+            "tracé"
+          ]
         },
         {
           "zone": "couloir sud (restaurant / salle de réunion)",
-          "synonymes": ["restaurant", "salle de réunion", "couloir sud", "bas du plan"]
+          "synonymes": [
+            "restaurant",
+            "salle de réunion",
+            "couloir sud",
+            "bas du plan"
+          ]
         }
       ],
-      "interdit": ["reception principale", "magazin", "reservoir a gaz", "piscine"],
+      "interdit": [
+        "reception principale",
+        "magazin",
+        "reservoir a gaz",
+        "piscine"
+      ],
       "marques": "traits verts + 8 points bleus + 1 route rose"
     }
-  ]
+  ],
+  "_finding_2026_08_16": "Encombrement attentionnel, démontré sous contrôle. Les points bleus du couloir sud sont IDENTIQUES en p02 et p03 — mêmes marques, même endroit. p03 ajoute seulement des traits verts et une route rose AILLEURS sur l'image. Les 4 modèles trouvent le couloir en p02 ; 3 sur 4 le perdent en p03. Ajouter des marques bruyantes dans une région fait donc chuter la détection de marques discrètes dans une autre, sans que rien n'ait changé pour celles-ci. Le seul modèle qui le garde (gemini-3.1-flash-lite) n'y arrive pas en voyant mieux : il nomme presque tout, d'où ses 4 hallucinations. Il gagne cette case par manque de précision, pas par acuité. Ce résultat n'est possible QUE parce que le jeu de données est un seul plan en trois états ; trois bâtiments différents auraient donné « il rate parfois des couloirs » et rien de plus."
 }
