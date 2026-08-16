@@ -295,3 +295,36 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   ne dit rien sur une autre écriture, un autre bâtiment ou une photo plus
   mauvaise. Le harnais est réutilisable : un second tour ne coûte que les
   photos.
+
+## Batch 2026-08-16 (2) — le repli local n'avait jamais répondu du premier coup
+
+- [x] **`local` expirait systématiquement à son premier appel.** Le sidecar
+  charge son modèle au **premier** `/transcribe` (pour ne pas immobiliser 4 Go
+  d'une carte de 8 Go en permanence), et ce chargement se paie **dans la requête
+  elle-même**. Mesuré le 2026-08-16 sur la 3070 : `load_seconds = 280,4`, puis
+  ~32 s de transcription. Le budget client était de 300 s : il couvrait le
+  chargement et ne laissait rien pour le travail. Donc **chaque premier appel
+  après un redémarrage échouait — et en échouant il chauffait le modèle, si bien
+  que le suivant réussissait.** Vu de l'extérieur cela ressemble à « c'est lent
+  la première fois », et c'est exactement pour cela que personne ne l'a vu :
+  ce moteur n'avait jamais répondu à sa première requête.
+  Corrigé : `COLD_START_BUDGET_S = 420` (chargement + transcription + marge) et
+  `proxy_read_timeout 460s` côté nginx, qui doit rester **au-dessus** du client
+  sinon le proxy plafonne en silence un budget que l'API croit maîtriser.
+  Le chiffre « ~235 s » de CLAUDE.md était faux et a été remplacé par la mesure.
+
+- [x] **Le « 18 prises » n'était pas une hallucination.** Vérifié en
+  re-transcrivant la même note avec le **moteur local** — autre fournisseur,
+  autre architecture, autres modes d'échec. Les deux chaînes produisent `18`.
+  Technique réutilisable : la chaîne existe pour la disponibilité, mais elle
+  sert aussi de vérification croisée gratuite sur le GPU de la maison dès qu'un
+  chiffre est contesté.
+
+- [ ] **Les deux moteurs ne sont PAS d'accord sur le reste de cette note.**
+  Gemini : `cable_elec_3x2_5_m = 30`. Local : `cables_installes_m = 3`. Même
+  audio, champ différent ET valeur différente — l'un des deux s'est trompé de
+  matériau, ce qui n'est pas une nuance : l'un remplit une ligne du bordereau
+  électricité, l'autre une ligne cuivre. C'est précisément ce que
+  `benchmark/dataset/references.csv` (aujourd'hui vide, en-tête seul) doit
+  trancher : une transcription de référence écrite par un humain qui parle
+  darija, pour cette note au moins.

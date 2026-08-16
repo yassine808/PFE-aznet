@@ -256,12 +256,42 @@ def _fake_service(updated_range="Rapports!A17:Q17"):
             return _Resp({})
 
     class Spreadsheets:
+        """The sheet-level surface, not just its cell values.
+
+        `_extend_headers` grows the tab's grid before writing into it, because
+        Sheets answers a write past the allocated width with 400 "exceeds grid
+        limits" rather than auto-extending — and that turned the one function
+        whose job is to stop a new schema field being dropped into the thing
+        that raised. The fake models a grid so the widening is actually
+        exercised here instead of only against the live sheet.
+        """
+
         def __init__(self, svc):
             self.values = lambda: Values(svc)
+            self._svc = svc
+
+        def get(self, spreadsheetId=None):
+            svc = self._svc
+            return _Resp({"sheets": [{"properties": {
+                "title": "Rapports", "sheetId": 0,
+                "gridProperties": {"columnCount": svc.columns},
+            }}]})
+
+        def batchUpdate(self, spreadsheetId=None, body=None):
+            svc = self._svc
+            svc.grown = body
+            for req in body.get("requests", []):
+                append = req.get("appendDimension")
+                if append and append.get("dimension") == "COLUMNS":
+                    svc.columns += append["length"]
+            return _Resp({})
 
     class Svc:
         spreadsheets = lambda self: Spreadsheets(self)
-        appended = batched = cleared = updated = None
+        appended = batched = cleared = updated = grown = None
+        # Exactly as wide as the header row, so any new column forces a widen —
+        # which is the state the live Rapports tab was in on 2026-08-16.
+        columns = len(HEADERS)
 
     class _Resp:
         def __init__(self, body):
@@ -290,6 +320,27 @@ def test_append_report_extends_headers_for_new_columns(monkeypatch):
     assert svc.updated["range"] == "'Rapports'!I1:I1"
     assert svc.updated["body"]["values"] == [["besoins"]]
     assert svc.appended["values"][0][8] == "connecteurs"
+    # The grid had to be widened first. Writing past a tab's allocated width is
+    # a 400 "exceeds grid limits", not an auto-extend, so without this the
+    # append raises, the row parks in `failed_writes`, and every retry fails
+    # identically — forever. Hit for real on 2026-08-16.
+    assert svc.grown is not None, "the tab was never widened"
+    assert svc.grown["requests"][0]["appendDimension"]["dimension"] == "COLUMNS"
+    assert svc.columns == len(HEADERS) + 1
+
+
+def test_headers_are_not_widened_when_there_is_already_room(monkeypatch):
+    """Only ever add columns, and only when short.
+
+    `_grow_columns` uses appendDimension rather than an absolute resize for the
+    same reason: a resize computed from a stale count could SHRINK the tab and
+    take real data with it."""
+    svc = _fake_service()
+    svc.columns = len(HEADERS) + 5
+    monkeypatch.setattr(main.sheets, "_service", lambda: svc)
+    main.sheets.append_report({"chantier": "Tour Atlas", "besoins": "connecteurs"})
+    assert svc.grown is None
+    assert svc.columns == len(HEADERS) + 5
 
 
 def test_update_report_fields_places_cells_by_header(monkeypatch):

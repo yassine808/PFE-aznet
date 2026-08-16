@@ -26,8 +26,13 @@ knowing:
   live from `app_settings`.
 - **Loaded lazily.** The sidecar holds no VRAM until its first call
   (`stt_server._ensure_loaded`), so the first request after a container start
-  pays ~235 s of model load on top of transcription — which is why the timeout
-  below is 300 s and not merely generous.
+  pays the model load ON TOP OF transcription. Measured 2026-08-16 on the 3070:
+  `load_seconds = 280.4`, then ~32 s to transcribe. The old 300 s timeout
+  covered the load and left nothing for the work, so **the first call after a
+  restart always failed** — and failing warmed the model, so the retry
+  succeeded. From the outside that reads as "slow the first time", which is why
+  it went unnoticed; in reality this engine had never once answered its first
+  request. The budget below is now load + transcribe + headroom.
 """
 import time
 from functools import lru_cache
@@ -38,6 +43,9 @@ from app.schemas import TranscriptionInfo
 from . import register
 from .base import TranscriptionError, TranscriptionProvider
 
+# Load + transcribe + headroom. See `_http` for the measurement behind it.
+COLD_START_BUDGET_S = 420
+
 
 @lru_cache(maxsize=1)
 def _http():
@@ -47,10 +55,17 @@ def _http():
     The timeout is generous on purpose: this engine is the last resort, and a
     long voice note on a busy GPU legitimately takes a while. Cutting it off at
     the usual 30 s would turn a slow success into a failure precisely when the
-    faster engines have already failed."""
+    faster engines have already failed.
+
+    420 s = 280 s measured cold start + ~32 s transcription + headroom for a
+    longer note and a busier card. Sized on measurement, not taste: at 300 s the
+    arithmetic did not close and every first call timed out. Anything in front
+    of this — nginx `proxy_read_timeout` in `Dashboard/nginx.conf` — must stay
+    ABOVE it, or the proxy silently caps a budget this client thinks it owns.
+    """
     import httpx
 
-    return httpx.Client(timeout=300)
+    return httpx.Client(timeout=COLD_START_BUDGET_S)
 
 
 @register("local")
