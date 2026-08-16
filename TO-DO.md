@@ -136,11 +136,11 @@ Kept from the investigation: `/process` echoes `correlation_id` and
 ever needed).
 - [] new panel for usage that shows usage for gemini, groq, facebook whatsapp
 - [x] **Retirer « 🤖 Moteur STT » de la réponse au technicien** — fait
-  2026-08-16 dans `n8n/aznet-complete.json`, **pas déployé** : n8n est
-  injoignable depuis cette machine (`getaddrinfo failed`), donc
-  `python n8n/push_and_archive.py --push` reste à faire par le propriétaire —
-  tant qu'il n'est pas passé, n8n sert sa propre copie et la ligne est toujours
-  envoyée. Trois nœuds nettoyés : `TG reply summary`, `WA reply summary`, et
+  2026-08-16 **et poussé en direct** (`--push`, workflow toujours actif,
+  0 occurrence de « Moteur STT » dans la copie vivante). Le premier essai avait
+  échoué en `getaddrinfo` : `N8N_URL` du `.env` est le nom Tailscale, que cette
+  machine ne résout pas — `N8N_URL=http://127.0.0.1:5678` devant la commande
+  suffit, le conteneur écoute bien. Trois nœuds nettoyés : `TG reply summary`, `WA reply summary`, et
   `Record exchange` — ce dernier archive le texte de la réponse et doit rester
   identique à ce qui est parti, sinon l'inbox montre une conversation qui n'a
   pas eu lieu. Le nom du moteur reste dans `/journal` (`stt_engine`), dans les
@@ -160,9 +160,10 @@ ever needed).
   messages « aucun rapport détecté » — ce sont justement ceux qu'on relit.
   Migration `ADD COLUMN IF NOT EXISTS`, donc les échanges antérieurs restent
   sans puce plutôt que de mentir. Le nœud n8n `Record exchange` envoie le champ,
-  donc **cette moitié attend le même push n8n** que le retrait de la ligne
-  ci-dessus. Déploiement : `up -d --build api` puis `--build web` (ajout de
-  fonctionnalité), plus le push n8n.
+  et il est **poussé** : `stt_engine` est présent dans le nœud vivant. `api` et
+  `web` ont été reconstruits et redémarrés le 2026-08-16. Reste à voir la puce
+  sur une **nouvelle** note vocale — les échanges antérieurs à la colonne
+  n'affichent rien, ce qui est le comportement voulu.
 ## Batch 2026-08-15 (2) — bordereau columns, vision benchmark, .docx (grilled and locked with the owner)
 
 Decisions locked in the grill, so nobody re-opens them later:
