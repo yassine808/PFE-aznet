@@ -614,14 +614,10 @@ def quantity_columns() -> List[Tuple[str, str, str]]:
     then the bordereau articles.
     """
     out: List[Tuple[str, str, str]] = []
-    for field, label in NUMERIC_COLUMNS.items():
+    for field in NUMERIC_COLUMNS:
         column = RAPPORTS_COLUMNS.get(field)
-        if not column:
-            continue
-        unit = next((u for suffix, u in _UNIT_SUFFIXES if field.endswith(suffix)), "")
-        if re.search(r"\((?:ml|min)\)\s*$", label):
-            unit = ""
-        out.append((column, label, unit))
+        if column:
+            out.append((column, *article_label(field)))
     return out
 
 
@@ -743,12 +739,99 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str]) -> Optio
         return None
 
 
+LIVRAISONS_TAB = "Livraisons"
+LIVRAISONS_HEADERS: Tuple[str, ...] = (
+    "Date", "Chantier", "Technicien", "Article", "Quantité", "Unité",
+    "Canal", "Correlation id",
+)
+
+
+def article_label(field: str) -> Tuple[str, str]:
+    """A quantity field as (the director's label, its unit)."""
+    label = NUMERIC_COLUMNS.get(field, field)
+    unit = next((u for suffix, u in _UNIT_SUFFIXES if field.endswith(suffix)), "")
+    if re.search(r"\((?:ml|min)\)\s*$", label):
+        unit = ""
+    return label, unit
+
+
+def file_livraison(payload: Dict, report: ExtractedReport) -> Dict:
+    """A bon de livraison: ledger the quantities, write no journal row.
+
+    A delivery is not a day's work. Merged into the journal it would add to the
+    installed columns — the exact number the bordereau's `avancement` and every
+    stock figure are computed from — so 500 m delivered would read as 500 m
+    posed, and the site would look finished while the cable sat on a pallet.
+
+    Postgres is the ledger and is written first; the `Livraisons` tab mirrors it
+    best-effort, the same contract as the Rapports mirror. A tab that Google
+    refuses must not cost the reception, because the balance is computed from
+    the ledger and not from the sheet.
+    """
+    from app import logs
+
+    technicien = str(payload.get("technicien") or "").strip()
+    chantier, _tab, warnings, _source = resolve_site(
+        technicien, payload.get("chantier") or report.chantier_mentionne
+    )
+    date = str(payload.get("date") or "")
+    lignes = report.livraisons or {}
+    recorded = logs.record_receptions(
+        chantier, lignes, date,
+        technicien=technicien,
+        canal=payload.get("canal"),
+        correlation_id=payload.get("correlation_id"),
+    )
+    try:
+        sheets.ensure_tab(LIVRAISONS_TAB, list(LIVRAISONS_HEADERS))
+        for field, qte in lignes.items():
+            label, unit = article_label(field)
+            sheets.append_row(LIVRAISONS_TAB, {
+                "Date": date,
+                "Chantier": chantier,
+                "Technicien": technicien,
+                "Article": label,
+                "Quantité": _fmt(float(qte)),
+                "Unité": unit,
+                "Canal": payload.get("canal"),
+                "Correlation id": payload.get("correlation_id"),
+            }, list(LIVRAISONS_HEADERS))
+    except Exception as exc:  # noqa: BLE001 - the ledger already holds it
+        logs.write_safe(
+            "sheet", "error",
+            message=f"livraisons mirror failed: {exc}",
+            correlation_id=payload.get("correlation_id"),
+        )
+    return {
+        "chantier": chantier,
+        "tab": LIVRAISONS_TAB,
+        "lignes": len(lignes),
+        "enregistrees": recorded,
+        "warnings": warnings,
+    }
+
+
 def file_report(payload: Dict) -> Dict:
     """File one report into the right journal tab. Raises SheetsError on failure
     so the caller can park it in the retry queue — never a silent loss."""
     report = payload.get("report")
     if not isinstance(report, ExtractedReport):
         report = ExtractedReport(**(report or {}))
+    # A delivery is ledgered whatever else the message carried: « on a reçu
+    # 500 m et on a posé 80 » is two different facts and dropping either one
+    # loses real work. Only `nature` decides whether a journal row follows.
+    #
+    # Both entrances — the live `/journal` call and the retry drain — come
+    # through here, so a parked delivery can never be replayed as installed
+    # quantities.
+    livraison = file_livraison(payload, report) if report.livraisons else None
+    if report.nature == "livraison":
+        return {
+            **(livraison or {"chantier": None, "lignes": 0, "warnings": []}),
+            "livraison": True,
+            "row": None,
+            "rapports_row": None,
+        }
     technicien = str(payload.get("technicien") or "").strip()
     warnings = list(payload.get("warnings") or [])
 
@@ -817,6 +900,9 @@ def file_report(payload: Dict) -> Dict:
         "warnings": warnings,
         "rapports_row": mirror_row,
         "duplicate": False,
+        # Present only when the same message also declared a reception, so the
+        # caller can say so without having to re-read the extraction.
+        **({"livraison": livraison} if livraison else {}),
     }
 
 

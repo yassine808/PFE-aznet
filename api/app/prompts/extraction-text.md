@@ -103,6 +103,23 @@ mentionne-le dans `remarques`.
   ce qui a été posé. Uniquement si le technicien l'énonce. Ne le déduis jamais
   d'une soustraction : une livraison a pu arriver, du câble a pu être coupé.
 
+## Réception de matériel
+
+Un technicien qui annonce une **livraison** ne déclare pas un travail fait :
+« on a reçu cinq cents mètres de câble », « le camion a livré 24 pigtails ».
+
+- `nature` = `"livraison"`, et les quantités vont dans **`livraisons`**, un objet
+  `{champ: quantité}` utilisant exactement les mêmes noms de champs que les
+  quantités posées : `{"cables_installes_m": 500, "pigtail_sc_u": 24}`.
+- **Aucun champ de quantité posée n'est rempli** dans ce cas. Confondre les deux
+  ferait compter comme installé du matériel qui est encore sur palette.
+- Un article que tu ne peux rattacher à aucun champ connu se décrit dans
+  `besoins` (« reçu : 3 cartons de colliers »), jamais sous un champ inventé.
+- `resume` annonce la réception : c'est ce que le technicien reçoit en réponse.
+- Un même message peut annoncer une pose **et** une livraison : dans ce cas
+  `nature` reste `null`, les quantités posées sont remplies normalement, et
+  seules les quantités explicitement **reçues** vont dans `livraisons`.
+
 ## Blocages, besoins et suite
 
 Une journée arrêtée est un rapport, et un message qui ne demande que du

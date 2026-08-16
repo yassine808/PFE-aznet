@@ -62,6 +62,33 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
      (`daily_report._payload`), donc le corps du mail et la pièce jointe ne
      peuvent plus annoncer deux chiffres différents pour la même journée.
 
+- [~] **Alertes matériel — PR1 fait, PR2 à faire.** Décidé avec le propriétaire
+  le 2026-08-16 (entretien `/grill-me`). Le but : que le rapport signale ce qui
+  manque, ce qui va manquer, et ce qui a été livré en trop.
+  **PR1 — livré et déployé, pas encore prouvé de bout en bout :** `nature` /
+  `livraisons` au schéma, les deux prompts corrigés, la table `receptions`, la
+  feuille `Livraisons`, `GET /receptions`, 9 tests. **Reste à prouver :**
+  photographier un vrai bon de livraison et vérifier que les quantités
+  atterrissent dans `receptions` et **pas** dans les colonnes posées.
+  **PR2 — à faire** (`app/stock.py`) :
+  - `resolve_stock(chantier, champ) -> (qte, source)` avec la précédence
+    arrêtée : stock déclaré par le technicien > `Σ receptions − Σ posé` >
+    `qte_marche − installé` > inconnu. **La source est toujours nommée** dans
+    l'alerte, comme « (repris du dernier rapport) » l'est déjà dans le résumé ;
+    un chiffre dont on ne peut pas dire d'où il vient ne se conteste pas.
+  - `assess()` : jours de couverture = reste ÷ moyenne posée **par jour actif**
+    (pas par jour calendaire, sinon le week-end dilue le rythme). CRITIQUE ≤ 2
+    jours ou ≤ 5 % du marché, BAS ≤ 5 jours ou ≤ 10 %, seuils dans
+    `app_settings`. Moins de 2 jours actifs d'historique : on retombe sur le
+    pourcentage. Dépassement (> 100 %) toujours signalé.
+  - Python décide les chiffres, le modèle les rédige — et peut ajouter des
+    risques **non chiffrés** lus dans `besoins` / `remarques` / les photos, à
+    condition de citer sa source. Jamais un nombre qu'il a calculé lui-même.
+  - Diffusion : section `## Alertes matériel` dans le mail, tableau dans le
+    .docx, `GET /alerts` + panneau du tableau de bord (rebuild `web`).
+  - Un chantier sans bordereau (`مولاي الحسن`) ne produit aucune alerte :
+    silence, pas des zéros.
+
 - [ ] **Une note vocale dont rien n'est extrait n'apparaît pas dans la feuille —
   c'est voulu, mais il faut le vérifier avant de le croire.** Quand l'extraction
   ne trouve aucune donnée (`schemas.has_data` faux), `/process` ajoute

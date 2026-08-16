@@ -26,7 +26,7 @@ from app.journal import (
     report_cells,
 )
 from app.logs import _SEEDS_BY_CHANTIER
-from app.schemas import ARTICLE_FIELDS, DATA_FIELDS, ExtractedReport
+from app.schemas import ARTICLE_FIELDS, DATA_FIELDS, QUANTITY_FIELDS, ExtractedReport
 
 
 def rep(**kw):
@@ -103,6 +103,13 @@ def test_location_lists_reach_the_mirror_as_text():
     # An empty list is absence. Written through, it puts a literal "[]" in the
     # cell, which reads as data to anyone scanning the column.
     assert "ailes" not in cells
+
+
+def test_quantity_fields_match_the_journal_columns():
+    """`schemas.QUANTITY_FIELDS` exists because `journal` imports `schemas` and
+    not the other way round. Two lists of the same 35 names drift; this pins
+    them, so an article added to one and forgotten in the other fails here."""
+    assert tuple(QUANTITY_FIELDS) == tuple(NUMERIC_COLUMNS)
 
 
 def test_quantity_catalogue_is_one_row_per_column_with_its_unit():

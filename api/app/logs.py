@@ -709,6 +709,38 @@ ALTER TABLE articles ADD COLUMN IF NOT EXISTS tache TEXT;
 -- Default true so every seeded and hand-created site stays verified: only the
 -- machine-created path passes false.
 ALTER TABLE chantiers ADD COLUMN IF NOT EXISTS verifie BOOLEAN NOT NULL DEFAULT true;
+
+-- Material *received* on a site, one row per article per delivery. Deliberately
+-- not the journal: a bon de livraison is not a day's work, and adding it to the
+-- installed columns is what made 500 m delivered read as 500 m posed.
+--
+-- With this, stock stops being guessable and becomes arithmetic:
+--   reste = SUM(receptions.qte) - SUM(journal installed)
+-- which is why `qte` is signed — a return to the depot is a negative reception,
+-- not a row someone has to remember to delete.
+--
+-- Never pruned. It is a ledger, the same rule `manager_reports` follows: a
+-- balance computed from a partially retained history is wrong in a way nobody
+-- can see. `correlation_id` ties the line back to the message that declared it,
+-- so a wrong figure can always be traced to the photo it came from.
+CREATE TABLE IF NOT EXISTS receptions (
+    id             BIGSERIAL PRIMARY KEY,
+    chantier_id    BIGINT REFERENCES chantiers(id) ON DELETE SET NULL,
+    chantier       TEXT NOT NULL,
+    champ          TEXT NOT NULL,
+    qte            NUMERIC NOT NULL,
+    date           TEXT NOT NULL,
+    technicien     TEXT,
+    canal          TEXT,
+    correlation_id TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS receptions_chantier_idx ON receptions(chantier, champ);
+-- One delivery message must not be ledgered twice. n8n retries, the drain
+-- replays a parked payload, and an operator can re-run a job: without this a
+-- retried reception silently doubles the stock it reports.
+CREATE UNIQUE INDEX IF NOT EXISTS receptions_once_idx
+    ON receptions(correlation_id, champ) WHERE correlation_id IS NOT NULL;
 """
 
 # Seeded from the director's own file so the first boot mirrors what he tracks
@@ -1769,6 +1801,62 @@ def resolve_chantier(person_id: int) -> Optional[dict]:
     if row is None or row["id"] is None:
         return None
     return dict(row)
+
+
+def record_receptions(chantier: str, champs: Dict[str, float], date: str,
+                      technicien: Optional[str] = None, canal: Optional[str] = None,
+                      correlation_id: Optional[str] = None,
+                      chantier_id: Optional[int] = None) -> int:
+    """Ledger one delivery. Returns how many lines were newly recorded.
+
+    `ON CONFLICT DO NOTHING` against the per-message unique index: replaying the
+    same message — an n8n retry, a drained parked payload, an operator re-run —
+    must leave the balance where it was. A silently doubled reception is the one
+    error that makes every stock figure downstream wrong without looking wrong.
+    """
+    if not champs:
+        return 0
+    with _cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO receptions
+                (chantier_id, chantier, champ, qte, date, technicien, canal, correlation_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            [
+                (chantier_id, chantier, champ, qte, date, technicien, canal, correlation_id)
+                for champ, qte in champs.items()
+            ],
+        )
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+
+def list_receptions(chantier: Optional[str] = None) -> List[dict]:
+    """The ledger, newest first — one site's or every site's."""
+    with _cursor() as cur:
+        if chantier:
+            cur.execute(
+                "SELECT * FROM receptions WHERE chantier = %s ORDER BY date DESC, id DESC",
+                (chantier,),
+            )
+        else:
+            cur.execute("SELECT * FROM receptions ORDER BY date DESC, id DESC")
+        return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def received_totals(chantier: str) -> Dict[str, float]:
+    """Total received per article on one site — half of `reçu − posé`.
+
+    Summed on read like the bordereau's `qte_installee`: the ledger is where a
+    reception is entered, so a stored total could only drift from it.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT champ, SUM(qte) AS total FROM receptions WHERE chantier = %s GROUP BY champ",
+            (chantier,),
+        )
+        return {r["champ"]: float(r["total"]) for r in cur.fetchall()}
 
 
 def list_articles(chantier_id: int) -> List[dict]:

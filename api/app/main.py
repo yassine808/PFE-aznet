@@ -1934,6 +1934,22 @@ def get_bordereau(chantier_id: int, caller: dict = Depends(auth.require_user)) -
     return {"chantier": chantier, "articles": out, "totaux": totals}
 
 
+@app.get("/receptions", responses={502: {"description": "Log store unreachable"}})
+def list_receptions(chantier: Optional[str] = None,
+                    caller: dict = Depends(auth.require_user)) -> dict:
+    """Material received, newest first — one site's or every site's.
+
+    Read-only and deliberately so: a reception is declared by the message that
+    carried the bon de livraison, and a second way to enter one is a second way
+    for the ledger and the messages to disagree. The `Livraisons` tab mirrors
+    this, and the tab is a mirror — this is the record.
+    """
+    try:
+        return {"receptions": logs.list_receptions(chantier)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 @app.post("/chantiers/{chantier_id}/articles", responses={422: {"description": "Invalid input"}, 502: {"description": "Log store unreachable"}})
 def add_article(chantier_id: int, payload: NewArticle,
                 caller: dict = Depends(auth.require_director)) -> dict:

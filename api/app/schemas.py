@@ -14,7 +14,7 @@ Two things deliberately absent from `ExtractedReport`:
   the day or judged after it. A technician does not dictate them; the chef
   fills them in the dashboard.
 """
-from typing import List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -70,8 +70,23 @@ DATA_FIELDS = (
     "etages", "ailes", "locaux_techniques",
     "stock_cable_m", "stock_goulotte_m", "stock_fibre_m",
     "remarques", "temps_arret_min", "motif_arret",
-    "besoins", "prochaines_etapes",
+    "besoins", "prochaines_etapes", "livraisons",
 ) + ARTICLE_FIELDS
+
+# Every quantity the journal counts, in the director's own order.
+# `journal.NUMERIC_COLUMNS` maps exactly these to their Sheet columns, and a
+# test pins the two together — the list lives here because `journal` imports
+# `schemas` and not the other way round.
+QUANTITY_FIELDS = (
+    "cables_prepares_m", "cables_installes_m", "goulotte_m",
+    "prises_connectees", "panneaux_prises_brassees", "prises_testees",
+    "fibre_m", "interconnexions", "connexions_optiques_brins",
+    "temps_arret_min",
+) + ARTICLE_FIELDS
+
+# What a supplier can deliver. An arrêt is minutes lost, not merchandise, so it
+# is the one quantity that can never appear on a bon de livraison.
+DELIVERABLE_FIELDS = tuple(f for f in QUANTITY_FIELDS if f != "temps_arret_min")
 
 # Formatting the model gets wrong without being wrong about the facts:
 # "rdc", "1er étage", "SR 4". Normalizing these is not a fallback — an
@@ -280,9 +295,50 @@ class ExtractedReport(BaseModel):
         default=None,
         description="Nom du chantier tel qu'énoncé par le technicien, sinon null",
     )
+    # --- réception de matériel ---------------------------------------------
+    #
+    # A bon de livraison is not a day's work, and until 2026-08-16 the image
+    # prompt told the model to read one into the *installed* article columns —
+    # so 500 m of cable delivered was booked as 500 m posed, inflating the very
+    # number the bordereau's avancement and every stock warning are computed
+    # from. Latent only because no article column had a value yet.
+    #
+    # `nature` must be set positively: absent means `pose`, so every existing
+    # row, every voice note and every photo of a wall keeps behaving exactly as
+    # before. A delivery is only ever a delivery because the model said so.
+    nature: Optional[Literal["pose", "livraison"]] = Field(
+        default=None,
+        description="'livraison' uniquement pour un bon de livraison / une réception de matériel ; sinon null",
+    )
+    # Quantities *received*, keyed by the same field names as the quantities
+    # installed — one vocabulary, already in both prompts, already validated.
+    # A key the schema does not know raises rather than being dropped, the same
+    # rule `etages` follows: the extraction chain then retries instead of
+    # writing an invented article into the ledger.
+    livraisons: Optional[Dict[str, float]] = Field(
+        default=None,
+        description="Quantités reçues par champ (cables_installes_m, pigtail_sc_u, …), pour un bon de livraison",
+    )
     resume: str = Field(
         ..., description="Résumé professionnel en français (2-4 phrases)"
     )
+
+    @field_validator("livraisons", mode="after")
+    @classmethod
+    def _known_articles(cls, v):
+        """Every delivered line must name a quantity field this schema tracks.
+
+        Unknown key raises, like an unrecognized étage: a ledger entry against
+        an article nobody can join to a contract line is worse than a visible
+        failure, because it silently under-reports what is on site.
+        """
+        if not v:
+            return None
+        unknown = sorted(k for k in v if k not in DELIVERABLE_FIELDS)
+        if unknown:
+            raise ValueError(f"article inconnu dans livraisons: {', '.join(unknown)}")
+        kept = {k: float(q) for k, q in v.items() if q is not None and float(q) > 0}
+        return kept or None
 
     @field_validator("etages", "ailes", "locaux_techniques", mode="before")
     @classmethod

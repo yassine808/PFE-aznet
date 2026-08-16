@@ -33,6 +33,7 @@ from __future__ import annotations
 import io
 import re
 import unicodedata
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from app import journal
@@ -44,8 +45,17 @@ MUTED = "64748B"
 BODY = "334155"
 ACCENT = "2563EB"
 RULE = "E2E8F0"
+# Anything needing a human eye. One colour, used nowhere else in the document,
+# so a reader scanning for problems finds them without reading a word.
+ALERT = "DC2626"
 
 FONT = "Calibri"
+
+# A red triangle, as the owner asked for. `▲` rather than `⚠`: U+25B2 is in
+# Calibri's own Geometric Shapes range, so it draws everywhere, while U+26A0
+# is not and depends on Word finding a fallback font — a warning marker that
+# renders as an empty box is worse than no marker.
+ALERT_MARK = "▲"
 
 
 def _is_flagged(value: Any) -> bool:
@@ -114,6 +124,31 @@ def group_rows(rows: Sequence[dict], key: str, companion: str) -> List[dict]:
 
 def by_technician(rows: Sequence[dict]) -> List[dict]:
     return group_rows(rows, "technicien", "chantier")
+
+
+def flagged(rows: Sequence[dict]) -> List[dict]:
+    """The rows a human still has to look at, with the reason they were flagged.
+
+    `motif_flag` has been written on every flagged row since 2026-08-09 and no
+    report has ever shown it, so "À vérifier : 2" told the reader a number and
+    nothing they could act on — and the cheapest thing to do with a flag you
+    cannot explain is believe it. The reason is the whole point of the column.
+    """
+    return [
+        {
+            "heure": (r.get("heure") or "—").strip(),
+            "technicien": (r.get("technicien") or "—").strip() or "—",
+            "chantier": (r.get("chantier") or "—").strip() or "—",
+            "motif": (r.get("motif_flag") or "non précisé").strip() or "non précisé",
+        }
+        for r in rows
+        if _is_flagged(r.get("flag_review"))
+    ]
+
+
+def _count(n: int) -> str:
+    """A flag count as a table cell: marked and red when there is one."""
+    return f"{ALERT_MARK} {n}" if n else "—"
 
 
 def _split(groups: Sequence[dict], column: str) -> str:
@@ -225,13 +260,13 @@ def _body_blocks(document, body: str) -> None:
             _run(paragraph, line, size=10.5)
 
 
-def _heading(document, text: str) -> None:
+def _heading(document, text: str, color: str = INK) -> None:
     from docx.shared import Pt
 
     paragraph = document.add_paragraph(style="Heading 2")
     paragraph.paragraph_format.space_before = Pt(16)
     paragraph.paragraph_format.space_after = Pt(6)
-    _run(paragraph, text, size=12, bold=True, color=INK)
+    _run(paragraph, text, size=12, bold=True, color=color)
 
 
 def _table(document, headers: Sequence[str], body: Sequence[Sequence[str]],
@@ -253,8 +288,13 @@ def _table(document, headers: Sequence[str], body: Sequence[Sequence[str]],
             paragraph = cell.paragraphs[0]
             if column in right:
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            _run(paragraph, value, size=9.5, bold=index == 0,
-                 color=INK if index == 0 else BODY)
+            # A cell the caller marked with the triangle is drawn in the alert
+            # colour. Carried on the value rather than as a per-cell colour
+            # argument because the callers build their rows as plain tuples,
+            # and a parallel grid of colours is a second thing to keep aligned.
+            alert = value.startswith(ALERT_MARK)
+            _run(paragraph, value, size=9.5, bold=index == 0 or alert,
+                 color=ALERT if alert else (INK if index == 0 else BODY))
 
 
 def build(
@@ -300,13 +340,26 @@ def build(
     heading.paragraph_format.space_after = Pt(3)
     _run(heading, title, size=20, bold=True, color=INK)
 
+    # Two different facts, and a report that conflates them cannot be audited:
+    # *who* the content came from (a person pressed Générer, or the 18:00 job
+    # ran) and *when this file* was produced. The export button can render a
+    # document days after the text was written, so one timestamp cannot honestly
+    # stand for both.
     provenance = document.add_paragraph()
-    provenance.paragraph_format.space_after = Pt(16)
+    provenance.paragraph_format.space_after = Pt(4)
+    by_hand = bool(author) and author != "automatique"
+    _run(provenance, period, size=9, bold=True, color=BODY)
+    _run(provenance, "   ·   ", size=9, color=RULE)
     _run(
         provenance,
-        f"{period} · établi par {author}"
-        if author and author != "automatique"
-        else f"{period} · rapport automatique",
+        f"établi par {author}" if by_hand else "rapport automatique",
+        size=9,
+        color=ACCENT if by_hand else MUTED,
+    )
+    _run(provenance, "   ·   ", size=9, color=RULE)
+    _run(
+        provenance,
+        f"document généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}",
         size=9,
         color=MUTED,
     )
@@ -326,8 +379,14 @@ def build(
             _borders(cell)
             top = cell.paragraphs[0]
             top.paragraph_format.space_after = Pt(2)
-            _run(top, value, size=15, bold=True, color=ACCENT)
-            _run(cell.add_paragraph(), label, size=8, color=MUTED, caps=True)
+            # The one tile that means "someone has to do something" is drawn in
+            # the alert colour, and only when it is not zero — a permanent red
+            # tile reading 0 is exactly how a warning colour stops being read.
+            alert = label == "À vérifier" and value != "0"
+            _run(top, f"{ALERT_MARK} {value}" if alert else value,
+                 size=15, bold=True, color=ALERT if alert else ACCENT)
+            _run(cell.add_paragraph(), label, size=8,
+                 color=ALERT if alert else MUTED, caps=True)
         document.add_paragraph().paragraph_format.space_after = Pt(12)
 
     _body_blocks(document, body)
@@ -361,7 +420,7 @@ def build(
             ("Technicien", "Rapports", "Chantiers", "À vérifier"),
             [
                 (e["name"], str(e["count"]), ", ".join(sorted(e["others"])) or "—",
-                 str(e["flagged"]) if e["flagged"] else "—")
+                 _count(e["flagged"]))
                 for e in tech_rows
             ],
             right=(1, 3),
@@ -377,10 +436,22 @@ def build(
             ("Chantier", "Rapports", "Techniciens", "À vérifier"),
             [
                 (e["name"], str(e["count"]), ", ".join(sorted(e["others"])) or "—",
-                 str(e["flagged"]) if e["flagged"] else "—")
+                 _count(e["flagged"]))
                 for e in site_rows
             ],
             right=(1, 3),
+        )
+
+    # Last, and only when there is something: the reader reaches it having
+    # already seen what was done, so an empty section here reads as "nothing to
+    # check" rather than as a heading with no content.
+    review = flagged(rows)
+    if review:
+        _heading(document, f"{ALERT_MARK} Points à vérifier", color=ALERT)
+        _table(
+            document,
+            ("Heure", "Technicien", "Chantier", "Motif du flag"),
+            [(r["heure"], r["technicien"], r["chantier"], r["motif"]) for r in review],
         )
 
     document.core_properties.author = "aznet"

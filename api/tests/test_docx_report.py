@@ -7,6 +7,7 @@ line of the renderer names — and that the bytes are a real .docx rather than a
 plausible-looking blob.
 """
 import io
+import re
 import zipfile
 
 import pytest
@@ -131,6 +132,53 @@ def test_build_without_rows_still_writes_the_report():
     assert "Synthèse" in document
     assert "Activité par technicien" not in document
     assert "Quantités déclarées" not in document
+
+
+def test_flagged_rows_carry_their_reason_and_are_marked_red():
+    """`motif_flag` has been written since 2026-08-09 and never shown anywhere.
+
+    A count with no reason is a number the reader can only believe or ignore.
+    """
+    rows = [{**ROWS[0], "heure": "08:12", "motif_flag": "transcription courte"},
+            ROWS[1], ROWS[2]]
+    review = docx_report.flagged(rows)
+    assert [r["motif"] for r in review] == ["transcription courte", "non précisé"]
+    assert review[0]["heure"] == "08:12"
+
+    blob = docx_report.build("R", BODY, "Rapport journalier", "2026-08-16", rows)
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+    assert "Points à vérifier" in document
+    assert "transcription courte" in document
+    # A flag is marked and drawn in the alert colour wherever it appears; the
+    # marker is U+25B2, which Calibri itself carries, so it can never render as
+    # an empty box the way a fallback-dependent glyph can.
+    reds = re.findall(r"<w:r>(?:(?!</w:r>).)*DC2626(?:(?!</w:r>).)*</w:r>", document, re.S)
+    assert reds, "no alert-coloured run in a report with two flagged rows"
+    assert docx_report.ALERT_MARK in document
+
+
+def test_provenance_separates_who_wrote_it_from_when_it_was_rendered():
+    """The export button can render a document days after the text was written,
+    so one timestamp cannot honestly stand for both facts."""
+    auto = docx_report.build("R", BODY, "Rapport journalier", "2026-08-16", ROWS)
+    hand = docx_report.build("R", BODY, "Rapport journalier", "2026-08-16", ROWS,
+                             author="Yassine")
+    read = lambda b: zipfile.ZipFile(io.BytesIO(b)).read("word/document.xml").decode()
+    assert "rapport automatique" in read(auto)
+    assert "établi par Yassine" in read(hand)
+    for blob in (auto, hand):
+        assert "document généré le" in read(blob)
+
+
+def test_no_flags_means_no_review_section():
+    """An empty heading reads as an unanswered question, not as 'nothing to do'."""
+    clean = [{**r, "flag_review": ""} for r in ROWS]
+    blob = docx_report.build("R", BODY, "Rapport journalier", "2026-08-16", clean)
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+    assert "Points à vérifier" not in document
+    assert "DC2626" not in document  # and no stray alert colour anywhere
 
 
 def test_single_site_skips_the_per_chantier_table():
