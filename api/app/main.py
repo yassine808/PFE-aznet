@@ -1808,6 +1808,33 @@ class NewArticle(BaseModel):
     champ: Optional[str] = None
 
 
+@app.post("/sheets/format", responses={502: {"description": "Sheets unreachable"}})
+async def format_sheets(caller: dict = Depends(auth.require_director)) -> dict:
+    """Re-apply the readable layout to every tab that already exists.
+
+    New tabs are styled when they are created (`sheets.ensure_tab`), so this
+    exists for the ones that predate the styling — and as the one honest way
+    back if a tab is ever left looking wrong. Formatting only: it sets widths,
+    freezes the header and bands the rows; it never writes, moves or reads a
+    value, so running it twice is the same as running it once.
+
+    Director-only, because it changes what the whole company sees when they
+    open the file.
+    """
+    tabs = [sheets.RAPPORTS_TAB]
+    try:
+        tabs += [c["sheet_tab"] for c in logs.list_chantiers() if c.get("sheet_tab")]
+    except logs.LogStoreError:
+        # No chantier list is not a reason to leave Rapports unstyled.
+        pass
+    styled = []
+    for tab in dict.fromkeys(tabs):  # de-duplicated, order kept
+        await run_in_threadpool(sheets.style_tab, tab)
+        styled.append(tab)
+    auth.record(caller, "sheets_formatted", target=", ".join(styled))
+    return {"ok": True, "tabs": styled}
+
+
 @app.get("/chantiers", responses={502: {"description": "Log store unreachable"}})
 def get_chantiers(active_only: bool = False, caller: dict = Depends(auth.require_user)) -> dict:
     try:

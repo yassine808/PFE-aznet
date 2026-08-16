@@ -617,7 +617,14 @@ def audio_link(payload: Dict) -> Optional[str]:
     correlation = str(payload.get("correlation_id") or "").strip()
     if not base or not correlation:
         return drive_link
-    return f"{base}/#/inbox?msg={quote(correlation, safe='')}"
+    url = f"{base}/#/inbox?msg={quote(correlation, safe='')}"
+    # A HYPERLINK formula rather than the bare URL: the cell then reads
+    # "▶ Écouter" instead of 120 characters of base64 wamid, and the column can
+    # be narrow. Written with valueInputOption=USER_ENTERED everywhere in
+    # sheets.py, which is what makes a leading `=` a formula and not text.
+    # Quotes are doubled because a `"` inside a Sheets string literal escapes
+    # that way; the id is percent-encoded above, so this is belt and braces.
+    return f'=HYPERLINK("{url.replace(chr(34), chr(34) * 2)}"; "▶ Écouter")'
 
 
 def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:

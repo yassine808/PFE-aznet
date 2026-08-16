@@ -660,7 +660,11 @@ def test_audio_link_points_at_the_inbox_when_the_dashboard_has_an_origin(monkeyp
     monkeypatch.setattr(journal.settings, "dashboard_base_url", "https://aznet.example.com/")
     link = journal.audio_link({"lien_audio": "https://drive.google.com/uc?id=abc",
                                "correlation_id": "tg:1:2"})
-    assert link == "https://aznet.example.com/#/inbox?msg=tg%3A1%3A2"
+    # A HYPERLINK formula, not a bare URL: the cell shows a label instead of
+    # 120 characters of encoded id, and USER_ENTERED turns the leading `=`
+    # into a live link.
+    assert link == ('=HYPERLINK("https://aznet.example.com/#/inbox?msg=tg%3A1%3A2"; '
+                    '"▶ Écouter")')
 
 
 def test_audio_link_falls_back_to_drive_without_an_origin(monkeypatch):

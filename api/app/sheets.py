@@ -403,6 +403,10 @@ def ensure_tab(tab: str, headers: List[str]) -> None:
                 valueInputOption="RAW",
                 body={"values": [list(headers)]},
             ).execute(num_retries=_RETRIES)
+            # A tab is styled once, when it is born. Re-styling on every write
+            # would spend a batchUpdate per message to change nothing, and
+            # would undo a column width the director had widened himself.
+            style_tab(tab, list(headers))
     except SheetsError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -500,3 +504,127 @@ def _col_letter(n: int) -> str:
         n, rem = divmod(n - 1, 26)
         letters = chr(65 + rem) + letters
     return letters
+
+
+# ── presentation: what the director actually opens ─────────────────────────
+#
+# The sheet is the deliverable for the one person who never opens the
+# dashboard, and unstyled it is 62 columns of identical grey text where the
+# header scrolls out of sight on the first row you read. Everything below is
+# formatting only — it never writes, moves or reinterprets a value.
+#
+# Kept deliberately narrow: no conditional formatting rules per column (they
+# multiply on every re-run and Google gives no clean way to tell ours from a
+# human's), no merged cells (they break every range write in this module).
+
+# Long-form columns get room and wrapping; everything else stays narrow enough
+# that a whole day fits on one screen. Matched on the header text, because
+# both vocabularies (journal and Rapports) name the same things differently.
+_WIDE_COLUMNS = (
+    "résumé", "resume", "rapport", "remarques", "observations", "besoins",
+    "prochaines étapes", "prochaines_etapes", "ordre du jour", "motif",
+    "autres", "lien", "audio", "equipe", "équipe",
+)
+_NARROW_COLUMNS = ("date", "heure", "jh", "flag", "canal", "role", "taux")
+
+_HEADER_BG = {"red": 0.12, "green": 0.16, "blue": 0.22}
+_BAND_BG = {"red": 0.96, "green": 0.97, "blue": 0.98}
+
+
+def _sheet_id(svc, tab: str) -> Optional[int]:
+    meta = svc.spreadsheets().get(spreadsheetId=settings.sheet_id).execute(
+        num_retries=_RETRIES
+    )
+    for s in meta.get("sheets", []):
+        if s["properties"]["title"] == tab:
+            return s["properties"]["sheetId"]
+    return None
+
+
+def _width_for(header: str) -> int:
+    h = (header or "").strip().lower()
+    if any(k in h for k in _WIDE_COLUMNS):
+        return 320
+    if any(h.startswith(k) for k in _NARROW_COLUMNS):
+        return 90
+    return 150
+
+
+def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
+    """Make one tab readable: frozen bold header, column widths, banding.
+
+    Idempotent by construction — every request here *sets* a property rather
+    than adding one, except the banding, which is added only when the tab has
+    none. Re-running it on a styled tab changes nothing.
+
+    Never raises into a caller: this is presentation. A report that files
+    correctly into an ugly sheet is a working pipeline; a report lost because
+    the header could not be tinted is not.
+    """
+    try:
+        svc = _service()
+        sid = _sheet_id(svc, tab)
+        if sid is None:
+            return
+        if headers is None:
+            headers = _headers(svc, tab)
+        cols = max(1, len(headers))
+
+        requests: List[dict] = [
+            # The header stays on screen. Without this, reading row 40 means
+            # counting columns by hand to know what a number is.
+            {"updateSheetProperties": {
+                "properties": {"sheetId": sid,
+                               "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": 2}},
+                "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount"}},
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": _HEADER_BG,
+                    "horizontalAlignment": "CENTER",
+                    "verticalAlignment": "MIDDLE",
+                    "wrapStrategy": "WRAP",
+                    "textFormat": {"bold": True, "fontSize": 10,
+                                   "foregroundColor": {"red": 1, "green": 1, "blue": 1}}}},
+                "fields": "userEnteredFormat(backgroundColor,horizontalAlignment,"
+                          "verticalAlignment,wrapStrategy,textFormat)"}},
+            {"updateDimensionProperties": {
+                "range": {"sheetId": sid, "dimension": "ROWS",
+                          "startIndex": 0, "endIndex": 1},
+                "properties": {"pixelSize": 46}, "fields": "pixelSize"}},
+            # Body: wrapped and top-aligned. A 300-character transcript in a
+            # clipped cell reads as an empty cell with a stray word in it.
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 1},
+                "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP",
+                                               "verticalAlignment": "TOP"}},
+                "fields": "userEnteredFormat(wrapStrategy,verticalAlignment)"}},
+        ]
+        for i, name in enumerate(headers[:cols]):
+            requests.append({"updateDimensionProperties": {
+                "range": {"sheetId": sid, "dimension": "COLUMNS",
+                          "startIndex": i, "endIndex": i + 1},
+                "properties": {"pixelSize": _width_for(name)}, "fields": "pixelSize"}})
+
+        meta = svc.spreadsheets().get(spreadsheetId=settings.sheet_id).execute(
+            num_retries=_RETRIES
+        )
+        banded = any(
+            b.get("range", {}).get("sheetId") == sid
+            for s in meta.get("sheets", []) for b in s.get("bandedRanges", [])
+        )
+        if not banded:
+            # Alternating rows, added once. Banding is the one request here
+            # that appends rather than sets, so a second copy would stack.
+            requests.append({"addBanding": {"bandedRange": {
+                "range": {"sheetId": sid, "startRowIndex": 0},
+                "rowProperties": {
+                    "headerColor": _HEADER_BG,
+                    "firstBandColor": {"red": 1, "green": 1, "blue": 1},
+                    "secondBandColor": _BAND_BG}}}})
+
+        svc.spreadsheets().batchUpdate(
+            spreadsheetId=settings.sheet_id, body={"requests": requests},
+        ).execute(num_retries=_RETRIES)
+    except Exception as exc:  # noqa: BLE001 — presentation is never fatal
+        print(f"[sheets] style_tab({tab}) skipped: {type(exc).__name__}: {exc}", flush=True)
