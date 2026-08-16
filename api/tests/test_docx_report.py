@@ -1,16 +1,17 @@
 """The Word renderer that replaced the browser one.
 
-The point of these tests is parity and survivability, not layout: the document
+The point of these tests is coverage and survivability, not layout: the document
 is now produced by the scheduler, where nobody is watching, so what has to hold
-is that the figures match the arithmetic the dashboard shows and that the bytes
-are a real .docx rather than a plausible-looking blob.
+is that every column the period carries reaches the page — including the ones no
+line of the renderer names — and that the bytes are a real .docx rather than a
+plausible-looking blob.
 """
 import io
 import zipfile
 
 import pytest
 
-from app import docx_report
+from app import docx_report, journal
 
 
 ROWS = [
@@ -18,6 +19,9 @@ ROWS = [
         "date": "2026-08-16", "technicien": "Yassine", "chantier": "DGH",
         "goulottes_m": "40", "cables_m": "120,5", "bureaux_termines": "3",
         "panneaux_raccordes": "1", "flag_review": "TRUE",
+        # Two columns the pre-2026-08-16 renderer could not name, and so could
+        # never print however much of them was installed.
+        "fibre_m": "210", "pigtail_sc_u": "12",
     },
     {
         "date": "2026-08-16", "technicien": "Yassine", "chantier": "DGH",
@@ -25,9 +29,9 @@ ROWS = [
         "panneaux_raccordes": "", "flag_review": "",
     },
     {
-        "date": "2026-08-16", "technicien": "", "chantier": "",
+        "date": "2026-08-16", "technicien": "", "chantier": "ACAPS",
         "goulottes_m": "abc", "cables_m": "60", "bureaux_termines": "2",
-        "panneaux_raccordes": "0", "flag_review": "oui",
+        "panneaux_raccordes": "0", "flag_review": "oui", "fibre_m": "40",
     },
 ]
 
@@ -38,25 +42,47 @@ BODY = (
 )
 
 
-def test_figures_match_the_dashboards_arithmetic():
+def test_headline_tiles_are_meta_only():
+    """The tiles count what came in; the quantities have their own table.
+
+    They used to name four Sheet columns, which fixed the report's vocabulary
+    at the four quantities that existed in July.
+    """
     figures = docx_report.compute_figures(ROWS)
-    # A comma decimal is a number (the Sheet writes both forms); "abc" is 0,
-    # not a crash — a malformed cell must not cost the whole report.
-    assert figures["Goulottes"] == "50 m"
-    assert figures["Câbles"] == "180.5 m"
     assert figures["Rapports"] == "3"
-    # A blank technicien/chantier is not a person or a site, so it is not
-    # counted as one — the same rule `metrics.ts` applies on the page.
+    # A blank technicien is not a person, so it is not counted as one — the
+    # same rule `metrics.ts` applies on the page.
     assert figures["Techniciens"] == "1"
-    assert figures["Chantiers"] == "1"
+    assert figures["Chantiers"] == "2"
     # "TRUE" and "oui" both mean flagged; an empty cell does not.
     assert figures["À vérifier"] == "2"
+    assert not any("m" == v[-1:] for v in figures.values())
 
 
-def test_by_technician_groups_and_sorts_by_volume():
+def test_totals_cover_every_column_the_period_carries():
+    """Including the ones no line of this renderer names."""
+    totals = {label: (unit, total) for _c, label, unit, total in journal.rapports_totals(ROWS)}
+    # A comma decimal is a number (the Sheet writes both forms); "abc" is
+    # skipped rather than crashing or counting as zero.
+    assert totals["Goulotte installée"] == ("m", 50.0)
+    assert totals["Câble installé"] == ("m", 180.5)
+    # Neither of these could appear in the document before 2026-08-16.
+    assert totals["Fibre installée"] == ("m", 250.0)
+    assert totals["Pigtail SC"] == ("u", 12.0)
+    # A quantity nobody reported is absent, not a row of "0".
+    assert "Onduleur" not in totals
+
+
+def test_by_technician_groups_and_carries_its_own_totals():
     rows = docx_report.by_technician(ROWS)
     assert [r["name"] for r in rows] == ["Yassine", "—"]
-    assert rows[0] == {"name": "Yassine", "count": 2, "goulottes": 50.0, "flagged": 1}
+    assert rows[0]["count"] == 2
+    assert rows[0]["flagged"] == 1
+    assert rows[0]["others"] == {"DGH"}
+    # The split under a total is computed by the same call as the total, so the
+    # two can never come from two different sums.
+    assert rows[0]["totals"]["goulottes_m"] == 50.0
+    assert rows[0]["totals"]["fibre_m"] == 210.0
     # An unattributed row keeps its own line rather than being dropped: it is
     # still work that was reported, and hiding it would make the table's
     # rapport count disagree with the figure above it.
@@ -77,6 +103,13 @@ def test_build_produces_a_real_docx_carrying_the_report():
         footer = archive.read("word/footer1.xml").decode("utf-8")
     assert "Synthèse" in document
     assert "Activité par technicien" in document
+    # The quantity table, with the director's own labels — and specifically the
+    # ones the four hardcoded columns could never have produced.
+    assert "Quantités déclarées" in document
+    assert "Fibre installée" in document and "Pigtail SC" in document
+    assert "Yassine 210" in document  # the per-technician split of that total
+    # Two sites in ROWS, so the per-site rollup earns its place.
+    assert "Activité par chantier" in document
     # A live field, not a frozen page count: the footer stays right after the
     # document is edited or printed to another paper size.
     assert "NUMPAGES" in footer and "2026-08-16" in footer
@@ -97,6 +130,17 @@ def test_build_without_rows_still_writes_the_report():
         document = archive.read("word/document.xml").decode("utf-8")
     assert "Synthèse" in document
     assert "Activité par technicien" not in document
+    assert "Quantités déclarées" not in document
+
+
+def test_single_site_skips_the_per_chantier_table():
+    """One row restating the tile above it is not worth a heading."""
+    one_site = [r for r in ROWS if r["chantier"] == "DGH"]
+    blob = docx_report.build("R", BODY, "Rapport journalier", "2026-08-16", one_site)
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+    assert "Activité par technicien" in document
+    assert "Activité par chantier" not in document
 
 
 @pytest.mark.parametrize(

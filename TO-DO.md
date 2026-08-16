@@ -38,19 +38,29 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
   plusieurs chefs et un chef à six techniciens.
 ## Batch 2026-08-16 (4) — la note vocale muette, et le lien audio qui pointe chez nous
 
-- [~] **Le .docx doit partir avec le mail de chaque rapport automatique.**
-  **Écrit, pas prouvé.** `jobs._report_mail` joint le document à *chaque*
-  rapport envoyé — le digest entreprise et celui de chaque chef — et le rendu
-  vit dans l'API (`app/docx_report.py`) précisément pour que le courrier
-  programmé, envoyé par un fil dans le conteneur sans navigateur, puisse
-  attacher quelque chose. L'échec du rendu est non fatal et imprimé : un
-  document qui ne se construit pas ne doit pas coûter le rapport, qui reste
-  lisible dans le corps du mail. **Personne n'a encore reçu un de ces mails et
-  ouvert la pièce jointe** — et tant que ce n'est pas fait, « c'est écrit » ne
-  vaut pas « ça marche ». Reste donc : déployer (`docker compose up -d --build
-  api`), déclencher un rapport depuis la page Automatisation
-  (`POST /jobs/{name}/run`), et vérifier que le mail arrive **avec** le .docx
-  et que la pièce jointe dit la même chose que le corps.
+- [x] **Le .docx doit partir avec le mail de chaque rapport automatique.**
+  **Prouvé le 2026-08-16** : `jobs.run("daily_report")` exécuté dans le
+  conteneur, mail reçu à `ysmagri@gmail.com` avec la pièce jointe ouverte par
+  le propriétaire. `jobs._report_mail` joint le document à *chaque* rapport —
+  le digest entreprise et celui de chaque chef — et le rendu vit dans l'API
+  (`app/docx_report.py`) précisément pour que le courrier programmé, envoyé
+  par un fil dans le conteneur sans navigateur, puisse attacher quelque chose.
+  L'échec du rendu reste non fatal et imprimé : un document qui ne se construit
+  pas ne doit pas coûter le rapport, qui reste lisible dans le corps du mail.
+  **Le même passage a révélé deux vrais défauts, corrigés dans la foulée** :
+  1. **Le miroir Rapports perdait huit champs.** `journal.RAPPORTS_COLUMNS`
+     était une liste tenue à la main : `fibre_m`, `prises_testees`,
+     `cables_prepares_m`, `interconnexions`, `connexions_optiques_brins`, les
+     trois listes de localisation et les trois colonnes de stock n'atteignaient
+     jamais l'onglet plat. Leurs colonnes existent dans la feuille et étaient
+     **toutes vides**. La carte est maintenant dérivée de `schemas.DATA_FIELDS`,
+     donc un champ ajouté au schéma arrive dans le miroir par construction.
+  2. **Le .docx nommait quatre colonnes sur trente-cinq.** Les tuiles ne
+     portent plus de quantité, et les trois tableaux (Quantités déclarées,
+     Activité par technicien, Activité par chantier) sont construits depuis
+     `journal.quantity_columns()`. Les mêmes totaux sont passés au modèle
+     (`daily_report._payload`), donc le corps du mail et la pièce jointe ne
+     peuvent plus annoncer deux chiffres différents pour la même journée.
 
 - [ ] **Une note vocale dont rien n'est extrait n'apparaît pas dans la feuille —
   c'est voulu, mais il faut le vérifier avant de le croire.** Quand l'extraction

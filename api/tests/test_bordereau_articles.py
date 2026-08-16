@@ -20,7 +20,9 @@ from app.journal import (
     HEADERS,
     NUMERIC_COLUMNS,
     RAPPORTS_COLUMNS,
+    _rapports_cells,
     merge_rows,
+    quantity_columns,
     report_cells,
 )
 from app.logs import _SEEDS_BY_CHANTIER
@@ -80,6 +82,43 @@ def test_every_article_field_has_a_journal_column():
 
 def test_every_article_field_reaches_the_rapports_mirror():
     assert set(ARTICLE_FIELDS) <= set(RAPPORTS_COLUMNS)
+
+
+def test_every_data_field_reaches_the_rapports_mirror():
+    """The mirror map is derived from the schema, so nothing can be left out.
+
+    Kept by hand it silently dropped eight fields — fibre, tested sockets,
+    prepared cable, interconnections, optical strands, the three location lists
+    and the three stock columns. Their columns exist in the live Rapports tab
+    and every one of them was empty, so the dashboard and every report built on
+    it were structurally blind to that work.
+    """
+    assert set(DATA_FIELDS) == set(RAPPORTS_COLUMNS)
+
+
+def test_location_lists_reach_the_mirror_as_text():
+    cells = _rapports_cells({"report": rep(etages=["E1", "E2"], fibre_m=120)}, "DGH", [])
+    assert cells["etages"] == "E1, E2"
+    assert cells["fibre_m"] == 120
+    # An empty list is absence. Written through, it puts a literal "[]" in the
+    # cell, which reads as data to anyone scanning the column.
+    assert "ailes" not in cells
+
+
+def test_quantity_catalogue_is_one_row_per_column_with_its_unit():
+    catalogue = quantity_columns()
+    columns = [column for column, _label, _unit in catalogue]
+    assert len(columns) == len(set(columns)) == len(NUMERIC_COLUMNS)
+    units = {label: unit for _column, label, unit in catalogue}
+    assert units["Fibre installée"] == "m"
+    assert units["Pigtail SC"] == "u"
+    # A label that already carries its unit gets none appended, or the cell
+    # would read "8 (ml) m". `_min` is matched before `_m`, so an arrêt in
+    # minutes is not reported in metres.
+    assert units["Câble élec 3x2,5 (ml)"] == ""
+    assert units["Arrêt (min)"] == ""
+    # A count has no unit at all.
+    assert units["Connexion des prises informatiques"] == ""
 
 
 def test_article_quantity_lands_in_its_column():

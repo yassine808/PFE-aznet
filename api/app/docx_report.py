@@ -11,9 +11,18 @@ did before it moved into `journal.py`.
 
 The figures are recomputed here from the Sheet rows rather than posted by the
 caller: the browser already derives them for the screen, and a second
-transmitted copy is a second thing that can be stale or forged. The arithmetic
-mirrors `Dashboard/src/lib/metrics.ts` (`num`, `isFlagged`) exactly, because the
-table in the document and the tiles on the page have to agree.
+transmitted copy is a second thing that can be stale or forged. The parsing
+rules are `Dashboard/src/lib/metrics.ts` (`num`, `isFlagged`) exactly, so a cell
+reads the same on the page and in the document.
+
+*Which* columns are read is not decided here (2026-08-16). It comes from
+`journal.quantity_columns()`, the same catalogue the journal tab and the
+bordereau are built from. Before that this file named four Sheet columns in
+Python literals, and the Rapports tab had grown to thirty-five quantity
+columns — so the report was structurally incapable of mentioning fibre, tested
+sockets or any of the twenty-five bordereau articles, however much of them the
+crew installed. A hardcoded table cannot be kept in sync; a derived one has
+nothing to keep in sync.
 
 `python-docx` builds it — a .docx is a ZIP of several XML parts and genuinely
 cannot be hand-rolled — and is imported inside the function so the test suite
@@ -26,6 +35,8 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Sequence
 
+from app import journal
+
 # Same four colours as the TypeScript renderer it replaces, so a document
 # produced by the scheduler is indistinguishable from one exported by hand.
 INK = "0F172A"
@@ -35,16 +46,6 @@ ACCENT = "2563EB"
 RULE = "E2E8F0"
 
 FONT = "Calibri"
-
-
-def _num(value: Any) -> float:
-    """A Sheet cell as a number. `metrics.ts:num` — comma decimals included."""
-    if value is None:
-        return 0.0
-    try:
-        return float(str(value).strip().replace(",", "."))
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _is_flagged(value: Any) -> bool:
@@ -66,17 +67,14 @@ def slug(title: str) -> str:
 
 
 def compute_figures(rows: Sequence[dict]) -> Dict[str, str]:
-    """The eight headline numbers, in the order the grid prints them.
+    """The headline tiles: what was reported, by whom, where, and what to check.
 
-    Reads the Sheet's own header names (`goulottes_m`, `cables_m`,
-    `bureaux_termines`, `panneaux_raccordes`) — the four that kept their
-    pre-2026-08-05 spelling, because renaming a column orphans every historical
-    row in it. See `journal.RAPPORTS_COLUMNS`.
+    Deliberately no quantities. There are thirty-five quantity columns and this
+    grid held four of them, named in Python literals — so every column added
+    after 2026-07 was invisible in the report no matter what the crew installed.
+    The quantities now have their own table below, with the director's own
+    labels and no ceiling on how many there can be.
     """
-    goulottes = sum(_num(r.get("goulottes_m")) for r in rows)
-    cables = sum(_num(r.get("cables_m")) for r in rows)
-    bureaux = sum(_num(r.get("bureaux_termines")) for r in rows)
-    panneaux = sum(_num(r.get("panneaux_raccordes")) for r in rows)
     techs = {(r.get("technicien") or "").strip() for r in rows}
     sites = {(r.get("chantier") or "").strip() for r in rows}
     return {
@@ -84,23 +82,52 @@ def compute_figures(rows: Sequence[dict]) -> Dict[str, str]:
         "Techniciens": str(len(techs - {""})),
         "Chantiers": str(len(sites - {""})),
         "À vérifier": str(sum(1 for r in rows if _is_flagged(r.get("flag_review")))),
-        "Goulottes": f"{_int(goulottes)} m",
-        "Câbles": f"{_int(cables)} m",
-        "Bureaux": _int(bureaux),
-        "Panneaux": _int(panneaux),
     }
 
 
-def by_technician(rows: Sequence[dict]) -> List[dict]:
-    """Per-sender activity, busiest first — the second table in the document."""
-    acc: Dict[str, dict] = {}
+def group_rows(rows: Sequence[dict], key: str, companion: str) -> List[dict]:
+    """Rows bucketed by one column, busiest first.
+
+    `companion` is the other axis printed on the line — the sites a technician
+    worked, or the technicians who worked a site. Names, not a count: "2" tells
+    the director nothing he can act on, "DGH, ACAPS" does.
+
+    Each bucket's quantities come from `journal.rapports_totals` on its own
+    rows, the same call the whole-period table uses, so a column total and the
+    split under it can never be produced by two different sums.
+    """
+    buckets: Dict[str, List[dict]] = {}
     for row in rows:
-        name = (row.get("technicien") or "").strip() or "—"
-        entry = acc.setdefault(name, {"name": name, "count": 0, "goulottes": 0.0, "flagged": 0})
-        entry["count"] += 1
-        entry["goulottes"] += _num(row.get("goulottes_m"))
-        entry["flagged"] += 1 if _is_flagged(row.get("flag_review")) else 0
-    return sorted(acc.values(), key=lambda e: (-e["count"], e["name"]))
+        buckets.setdefault((row.get(key) or "").strip() or "—", []).append(row)
+    groups = [
+        {
+            "name": name,
+            "count": len(bucket),
+            "others": {(r.get(companion) or "").strip() for r in bucket} - {""},
+            "flagged": sum(1 for r in bucket if _is_flagged(r.get("flag_review"))),
+            "totals": {c: total for c, _l, _u, total in journal.rapports_totals(bucket)},
+        }
+        for name, bucket in buckets.items()
+    ]
+    return sorted(groups, key=lambda e: (-e["count"], e["name"]))
+
+
+def by_technician(rows: Sequence[dict]) -> List[dict]:
+    return group_rows(rows, "technicien", "chantier")
+
+
+def _split(groups: Sequence[dict], column: str) -> str:
+    """Who contributed to one quantity: `Yassine 40 · Ahmed 10`.
+
+    This is the column that replaces a per-technician quantity table: the table
+    would need one column per quantity and overflow the page at four of them,
+    while a wrapping cell holds any number of contributors.
+    """
+    return " · ".join(
+        f"{g['name']} {_int(g['totals'][column])}"
+        for g in groups
+        if g["totals"].get(column)
+    )
 
 
 def _run(paragraph, text: str, *, size: float = 10, bold: bool = False,
@@ -198,6 +225,38 @@ def _body_blocks(document, body: str) -> None:
             _run(paragraph, line, size=10.5)
 
 
+def _heading(document, text: str) -> None:
+    from docx.shared import Pt
+
+    paragraph = document.add_paragraph(style="Heading 2")
+    paragraph.paragraph_format.space_before = Pt(16)
+    paragraph.paragraph_format.space_after = Pt(6)
+    _run(paragraph, text, size=12, bold=True, color=INK)
+
+
+def _table(document, headers: Sequence[str], body: Sequence[Sequence[str]],
+           right: Sequence[int] = ()) -> None:
+    """A hairline table. `right` is the indices of the numeric columns.
+
+    Three tables share this now — quantities, technicians, sites — which is
+    what earns the helper: the same fourteen lines written three times is
+    three places to fix a border or a font size.
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    table = document.add_table(rows=1 + len(body), cols=len(headers))
+    for index, line in enumerate(((*headers,), *body)):
+        for column, value in enumerate(line):
+            cell = table.cell(index, column)
+            cell.text = ""
+            _borders(cell, sides=("bottom",))
+            paragraph = cell.paragraphs[0]
+            if column in right:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            _run(paragraph, value, size=9.5, bold=index == 0,
+                 color=INK if index == 0 else BODY)
+
+
 def build(
     title: str,
     body: str,
@@ -254,10 +313,12 @@ def build(
 
     figures = compute_figures(rows)
     if rows:
-        # Four per line rather than eight: at eight the labels wrap and the grid
-        # stops being scannable, which is the only thing it is for.
+        # Four per line: past that the labels wrap and the grid stops being
+        # scannable, which is the only thing it is for. The row count follows
+        # the number of tiles rather than assuming eight, so the grid survives
+        # a tile being added or dropped.
         items = list(figures.items())
-        grid = document.add_table(rows=2, cols=4)
+        grid = document.add_table(rows=-(-len(items) // 4), cols=4)
         grid.alignment = WD_TABLE_ALIGNMENT.CENTER
         for index, (label, value) in enumerate(items):
             cell = grid.cell(index // 4, index % 4)
@@ -272,37 +333,55 @@ def build(
     _body_blocks(document, body)
 
     tech_rows = by_technician(rows)
-    if tech_rows:
-        title_paragraph = document.add_paragraph(style="Heading 2")
-        title_paragraph.paragraph_format.space_before = Pt(16)
-        title_paragraph.paragraph_format.space_after = Pt(6)
-        _run(title_paragraph, "Activité par technicien", size=12, bold=True, color=INK)
+    site_rows = group_rows(rows, "chantier", "technicien")
 
-        table = document.add_table(rows=1 + len(tech_rows), cols=4)
-        headers = ("Technicien", "Rapports", "Goulottes (m)", "À vérifier")
-        for column, label in enumerate(headers):
-            cell = table.cell(0, column)
-            cell.text = ""
-            _borders(cell, sides=("bottom",))
-            paragraph = cell.paragraphs[0]
-            if column:
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            _run(paragraph, label, size=9.5, bold=True, color=INK)
-        for index, entry in enumerate(tech_rows, start=1):
-            values = (
-                entry["name"],
-                str(entry["count"]),
-                _int(entry["goulottes"]),
-                str(entry["flagged"]) if entry["flagged"] else "—",
-            )
-            for column, value in enumerate(values):
-                cell = table.cell(index, column)
-                cell.text = ""
-                _borders(cell, sides=("bottom",))
-                paragraph = cell.paragraphs[0]
-                if column:
-                    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                _run(paragraph, value, size=9.5)
+    # Every quantity the period actually carries, in the director's own column
+    # order and with his own labels, plus who contributed to each. This is the
+    # table that used to be four columns of Python literals.
+    totals = journal.rapports_totals(rows)
+    if totals:
+        # "déclarées", not "réalisées": `temps_arret_min` belongs in this table —
+        # a crew stopped 90 minutes is exactly what the director needs — and an
+        # arrêt is the opposite of work realised.
+        _heading(document, "Quantités déclarées")
+        _table(
+            document,
+            ("Désignation", "Quantité", "Répartition par technicien"),
+            [
+                (label, f"{_int(total)} {unit}".strip(), _split(tech_rows, column) or "—")
+                for column, label, unit, total in totals
+            ],
+            right=(1,),
+        )
+
+    if tech_rows:
+        _heading(document, "Activité par technicien")
+        _table(
+            document,
+            ("Technicien", "Rapports", "Chantiers", "À vérifier"),
+            [
+                (e["name"], str(e["count"]), ", ".join(sorted(e["others"])) or "—",
+                 str(e["flagged"]) if e["flagged"] else "—")
+                for e in tech_rows
+            ],
+            right=(1, 3),
+        )
+
+    # Only when there is more than one: on a single-site day this table is one
+    # row restating the tile above it, and a report earns nothing by repeating
+    # itself in a different shape.
+    if len(site_rows) > 1:
+        _heading(document, "Activité par chantier")
+        _table(
+            document,
+            ("Chantier", "Rapports", "Techniciens", "À vérifier"),
+            [
+                (e["name"], str(e["count"]), ", ".join(sorted(e["others"])) or "—",
+                 str(e["flagged"]) if e["flagged"] else "—")
+                for e in site_rows
+            ],
+            right=(1, 3),
+        )
 
     document.core_properties.author = "aznet"
     document.core_properties.title = title

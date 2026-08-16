@@ -23,13 +23,14 @@ remarks prose today.
 Everything here is pure: `merge_rows` and `reconcile_stock` take dicts and
 return dicts. The Sheets round trip lives in `sheets.py`.
 """
+import re
 from datetime import date, datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 
 from app import sheets
 from app.config import settings
-from app.schemas import ARTICLE_FIELDS, ExtractedReport
+from app.schemas import DATA_FIELDS, ExtractedReport
 
 # --- the director's columns, in his order --------------------------------
 COL_DATE = "Date"
@@ -575,22 +576,75 @@ def resolve_tab(technicien: str, chantier: Optional[str] = None) -> Tuple[str, s
 # schemas meet; the old n8n expressions (report.goulottes_m, ...) were that
 # mapping and could not be tested, which is why this lives in Python now.
 
-RAPPORTS_COLUMNS = {
+# The only columns whose Rapports header predates the 2026-08-05 schema.
+# Renaming one orphans every historical row in it, so the old spelling stays
+# and the mapping records the difference.
+_RAPPORTS_RENAMES = {
     "goulotte_m": "goulottes_m",
     "cables_installes_m": "cables_m",
     "prises_connectees": "bureaux_termines",
     "panneaux_prises_brassees": "panneaux_raccordes",
     "remarques": "observations",
     "temps_arret_min": "arrets_min",
-    "motif_arret": "motif_arret",
-    "besoins": "besoins",
-    "prochaines_etapes": "prochaines_etapes",
-    # The bordereau articles keep their schema name in the flat tab: this
-    # mapping exists to rename the four columns whose Rapports header predates
-    # the 2026-08-05 schema, not to invent a second vocabulary for 25 new
-    # fields that never had an old name to preserve.
-    **{field: field for field in ARTICLE_FIELDS},
 }
+
+# Derived from the schema, not hand-kept: as a hand-kept list this silently
+# dropped eight fields for eleven days — `fibre_m`, `prises_testees`,
+# `cables_prepares_m`, `interconnexions`, `connexions_optiques_brins`, the
+# three location lists and the three stock columns never reached the flat tab,
+# so nothing downstream of it (the dashboard, the daily report, the .docx)
+# could show fibre or tested sockets at all. A field added to `DATA_FIELDS`
+# now reaches the mirror by construction; `sheets.append_report` creates the
+# column on first use, so no migration is needed either.
+RAPPORTS_COLUMNS = {field: _RAPPORTS_RENAMES.get(field, field) for field in DATA_FIELDS}
+
+# `_m` before `_min` would read "Arrêt (min)" as metres, so the suffixes are
+# tried longest-first. A label that already carries its unit — "(ml)", "(min)"
+# — gets none appended, or the cell would read "8 (ml) m".
+_UNIT_SUFFIXES = (("_min", "min"), ("_m", "m"), ("_u", "u"))
+
+
+def quantity_columns() -> List[Tuple[str, str, str]]:
+    """Every quantity as (Rapports column, the director's label, unit).
+
+    The one catalogue anything reporting on quantities reads, so a new article
+    appears in the report the moment it appears in `NUMERIC_COLUMNS` — the
+    .docx used to name four of the thirty-five columns in Python literals and
+    was blind to the other thirty-one. Order is his: his own columns first,
+    then the bordereau articles.
+    """
+    out: List[Tuple[str, str, str]] = []
+    for field, label in NUMERIC_COLUMNS.items():
+        column = RAPPORTS_COLUMNS.get(field)
+        if not column:
+            continue
+        unit = next((u for suffix, u in _UNIT_SUFFIXES if field.endswith(suffix)), "")
+        if re.search(r"\((?:ml|min)\)\s*$", label):
+            unit = ""
+        out.append((column, label, unit))
+    return out
+
+
+def rapports_totals(rows: Sequence[Dict]) -> List[Tuple[str, str, str, float]]:
+    """(column, label, unit, total) for the quantities these flat rows carry.
+
+    The one place a Rapports total is computed. Three things want them — the
+    document's table, the per-group splits inside it, and the totals handed to
+    the report model — and when each added up its own columns the mail body and
+    the document attached to it could state different figures for the same day.
+    A quantity nobody reported is left out entirely rather than printed as 0:
+    absence is not zero here either.
+    """
+    out: List[Tuple[str, str, str, float]] = []
+    for column, label, unit in quantity_columns():
+        running = None
+        for row in rows:
+            value = _num(row.get(column))
+            if value is not None:
+                running = (running or 0.0) + value
+        if running:
+            out.append((column, label, unit, running))
+    return out
 
 
 def audio_link(payload: Dict) -> Optional[str]:
@@ -653,8 +707,14 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
     }
     for field, column in RAPPORTS_COLUMNS.items():
         value = getattr(report, field)
-        if value is not None:
-            cells[column] = value
+        # An empty list is absence, not a value: written through it would put a
+        # literal `[]` in the cell, which reads as data to anyone scanning the
+        # column and to every `num()` in the dashboard.
+        if value is None or value == [] or value == "":
+            continue
+        # `etages` / `ailes` / `locaux_techniques` are lists; the flat tab is
+        # one cell per column, joined the same way the journal tab joins them.
+        cells[column] = ", ".join(value) if isinstance(value, list) else value
     return cells
 
 

@@ -35,21 +35,27 @@ _INSTRUCTIONS = """Tu rédiges le rapport de fin de journée destiné au directe
 de câblage réseau au Maroc, à partir des rapports individuels des techniciens ci-dessous
 (déjà structurés).
 
-STRUCTURE OBLIGATOIRE du champ "corps" — exactement ces trois sections, dans cet
+STRUCTURE OBLIGATOIRE du champ "corps" — exactement ces quatre sections, dans cet
 ordre, chaque titre sur sa propre ligne et préfixé de "## " :
 
 ## Synthèse
 Un paragraphe court : nombre d'interventions, techniciens mobilisés, chantiers
-couverts, et les totaux fournis (goulottes, câbles, bureaux terminés, panneaux
-raccordés). Uniquement des chiffres présents dans les rapports.
+couverts, et les quantités du bloc TOTAUX. Reprends ces totaux tels quels — ils
+sont déjà calculés, ne les recalcule pas et n'en invente aucun autre.
 
 ## Détail par chantier
 Une puce par chantier (ou par technicien si le chantier n'est pas renseigné),
-commençant par "- ", au format : "- <Chantier> — <technicien> : <ce qui a été fait>".
+commençant par "- ", au format : "- <Chantier> — <technicien> : <ce qui a été fait,
+avec les quantités de ce chantier>".
 
 ## Problèmes et besoins
-Une puce par problème ou besoin matériel signalé (champ "observations").
+Une puce par problème, arrêt de chantier ou besoin matériel signalé — champs
+"observations", "motif_arret" (avec "arrets_min" s'il est renseigné) et "besoins".
 S'il n'y en a aucun, écrire exactement : "- Aucun problème signalé."
+
+## Prochaines étapes
+Une puce par suite annoncée (champ "prochaines_etapes"), préfixée du chantier
+concerné. S'il n'y en a aucune, écrire exactement : "- Aucune étape annoncée."
 
 Règles de rédaction :
 - Français professionnel, ton compte rendu, 3e personne.
@@ -57,12 +63,11 @@ Règles de rédaction :
 - Pas de formule de politesse d'ouverture ni de clôture, pas de mots de remplissage
   (« veuillez », « n'hésitez pas », « bien sûr ») : le directeur lit ce rapport
   d'affilée avec d'autres.
-- Aucun autre titre que les trois ci-dessus, et aucun gras Markdown : les titres
+- Aucun autre titre que les quatre ci-dessus, et aucun gras Markdown : les titres
   "## " sont le seul balisage, parce qu'ils sont convertis en vrais styles Word.
 - "objet" : une ligne du type "Rapport journalier — <date> — <n> intervention(s)".
 
 Date du jour : {date}
-Rapports du jour (JSON) :
 """
 
 
@@ -131,9 +136,48 @@ def _generate_groq(date: str, rows_json: str) -> DailyReportContent:
         raise DailyReportError(f"groq: {exc}") from exc
 
 
+# Pipeline plumbing: true of the message, not of the work. Sent to the model it
+# only costs tokens and invites a report that mentions which STT engine heard a
+# voice note. Everything else in a row is kept, empty cells excepted — a Sheet
+# row is ~60 columns and mostly blank, and the blanks are what makes the prompt
+# large enough to push the real fields out of the model's attention.
+_PLUMBING = frozenset({
+    "_row", "lien_audio", "correlation_id", "confidence", "STT_model", "canal", "role",
+})
+
+
+def _payload(rows: List[dict]) -> str:
+    """The rows, trimmed, preceded by the totals already computed from them.
+
+    The model used to be handed raw rows and asked to add them up in prose,
+    which put the arithmetic in the one component that cannot be trusted with
+    it: the mail body said one figure and the .docx table attached to the same
+    mail said another. The totals now come from `journal.quantity_columns()` —
+    the same catalogue the document's table is built from — so the two agree by
+    construction rather than by luck.
+    """
+    from app import journal  # lazy: keeps this module importable without Sheets
+
+    totals = {
+        (f"{label} ({unit})" if unit else label):
+            int(total) if float(total).is_integer() else total
+        for _column, label, unit, total in journal.rapports_totals(rows)
+    }
+    trimmed = [
+        {k: v for k, v in row.items() if k not in _PLUMBING and str(v or "").strip()}
+        for row in rows
+    ]
+    return (
+        "TOTAUX de la période (déjà calculés) :\n"
+        + json.dumps(totals or {"—": "aucune quantité chiffrée"}, ensure_ascii=False)
+        + "\n\nRapports (JSON) :\n"
+        + json.dumps(trimmed, ensure_ascii=False)
+    )
+
+
 def generate_daily_report(date: str, rows: List[dict]) -> DailyReportContent:
     """Primary engine with explicit fallback — never silent (both failures raise)."""
-    rows_json = json.dumps(rows, ensure_ascii=False)
+    rows_json = _payload(rows)
     try:
         return _generate_gemini(date, rows_json)
     except DailyReportError as primary_err:
