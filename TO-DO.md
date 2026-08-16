@@ -266,17 +266,31 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   reste en 429 sur le quota déjà consommé par les runs de la journée — le
   benchmark entrait en concurrence avec le pipeline en production pour le même
   quota gratuit. Ne pas relancer un jour où d'autres runs tournent.
-- [ ] **Cas chantier dans `text_cases.json`** : un cas où le technicien nomme le
-  site, un où il ne le nomme pas pour que le repli « dernier chantier connu »
-  soit noté. Débloqué depuis que la fonctionnalité existe.
-- [ ] **Porter le générateur .docx en Python** (voir batch (2) item 6). Le
-  travail a rétréci : le retrait de la génération d'images a déjà sorti la
-  plomberie `ImageRun` de `report-export.ts`.
-- [ ] **Aucune interface pour confirmer un chantier non vérifié.** Un site créé
-  par la voix arrive avec `verifie = false` et marque sa ligne, mais rien ne
-  montre au directeur la liste de ceux qui attendent. Le contournement existe
-  (le ré-ajouter par son nom dans le dashboard passe par la branche
-  `ON CONFLICT` et le repasse à `true`), il n'est simplement pas visible.
+- [ ] **Porter le générateur .docx en Python** (voir batch (2) item 6) —
+  **toujours pas commencé.** Une tentative du 2026-08-16 s'est arrêtée sur la
+  limite de session après n'avoir ajouté que la dépendance `python-docx`, qui a
+  été annulée : une dépendance inutilisée dans l'image de production, c'est du
+  poids et de la surface d'attaque pour rien, et `pip-compile` la régénère en
+  une commande le jour où le rendu existe vraiment.
+  C'est **le dernier endroit où le système contredit une décision prise à voix
+  haute** : « keep it in the backend, so if no one has the browser opened, the
+  docx will still be auto-generated and sent by email ». Aujourd'hui le
+  document n'existe encore que si quelqu'un clique.
+- [x] **Interface de confirmation des chantiers non vérifiés** — fait
+  2026-08-16 (`76a5757`). `PATCH /chantiers/{id}` confirme, `DELETE` supprime
+  une mauvaise transcription avec son bordereau ; les deux en
+  `require_director` et tracés dans l'audit. La liste vit sur la page Vue
+  d'ensemble — la seule qu'un directeur ouvre sans y être envoyé — et ne
+  s'affiche pas du tout tant qu'il n'y a rien en attente. **La suppression
+  laisse l'onglet du journal en place** : le bordereau est à nous et part avec
+  la ligne, l'onglet est le registre du directeur, et un clic dans un dashboard
+  ne doit jamais effacer des mois de rapports dans son fichier.
+
+- [x] **Cas chantier dans `text_cases.json`** — fait 2026-08-16 (`4627044`).
+  24 cas, dont 6 notent `chantier_mentionne` et 2 exigent qu'il vaille `null` :
+  c'est cette absence qui déclenche la reprise du dernier chantier connu, donc
+  un nom deviné n'y donne pas un champ un peu faux, il envoie une journée
+  entière sur le mauvais onglet.
 - [ ] **Plus de plans annotés, d'autres bâtiments.** Un seul plan en trois états
   ne dit rien sur une autre écriture, un autre bâtiment ou une photo plus
   mauvaise. Le harnais est réutilisable : un second tour ne coûte que les
