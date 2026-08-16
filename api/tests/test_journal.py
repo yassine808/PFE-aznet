@@ -667,12 +667,35 @@ def test_audio_link_points_at_the_inbox_when_the_dashboard_has_an_origin(monkeyp
                     '"▶ Écouter")')
 
 
-def test_audio_link_falls_back_to_drive_without_an_origin(monkeypatch):
-    """A relative path in a spreadsheet cell opens nothing, so an unset base
-    keeps the Drive link rather than writing an address that goes nowhere."""
+def test_audio_link_uses_dashboard_url_when_the_base_is_unset(monkeypatch):
+    """`dashboard_base_url` is optional and on the live install was never set,
+    so this branch had never once run and every cell took the fallback. The
+    origin the report mail already has to get right is the origin here too."""
     monkeypatch.setattr(journal.settings, "dashboard_base_url", None)
+    monkeypatch.setattr(journal.settings, "dashboard_url", "https://aznet.example.com")
+    link = journal.audio_link({"lien_audio": "https://drive.google.com/uc?id=abc",
+                               "correlation_id": "tg:1:2"})
+    assert link.startswith('=HYPERLINK("https://aznet.example.com/#/inbox?msg=')
+
+
+def test_audio_link_falls_back_to_drive_with_no_origin_at_all(monkeypatch):
+    """A relative path in a spreadsheet cell opens nothing, so with no origin
+    anywhere the Drive link is kept rather than an address going nowhere."""
+    monkeypatch.setattr(journal.settings, "dashboard_base_url", None)
+    monkeypatch.setattr(journal.settings, "dashboard_url", "")
     payload = {"lien_audio": "https://drive.google.com/uc?id=abc", "correlation_id": "tg:1:2"}
     assert journal.audio_link(payload) == "https://drive.google.com/uc?id=abc"
     # Same rule when the message has no correlation id to resolve against.
     monkeypatch.setattr(journal.settings, "dashboard_base_url", "https://aznet.example.com")
     assert journal.audio_link({**payload, "correlation_id": ""}) == payload["lien_audio"]
+
+
+def test_audio_link_refuses_to_write_something_that_is_not_a_link(monkeypatch):
+    """The live Sheet had 22 cells in a column called "Lien audio" holding a
+    bare message id — `1115179874166528` — which opens nothing while looking
+    like it should. An empty cell says "no recording"; an id lies."""
+    monkeypatch.setattr(journal.settings, "dashboard_base_url", None)
+    monkeypatch.setattr(journal.settings, "dashboard_url", "")
+    assert journal.audio_link({"lien_audio": "1115179874166528"}) is None
+    assert journal.audio_link({"lien_audio": ""}) is None
+    assert journal.audio_link({}) is None

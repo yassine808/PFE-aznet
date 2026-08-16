@@ -13,11 +13,11 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
 
 ## Open before production (found reviewing the `opencode` merge, 2026-08-04)
 - [x] **Retention for the archive tables.** Done 2026-08-10 with the owner's policy: `media_files` 30 days, `chat_messages` 90 days, read `notifications` 30 days, `manager_reports` kept forever; env-tunable via `MEDIA_RETENTION_DAYS` / `CHAT_RETENTION_DAYS` / `NOTIF_RETENTION_DAYS`, swept by `logs.prune_meta` at 03:00 — see FIXED.md (Fourth pass)
-- [ ] **`INTERNAL_API_KEY` must be set in the deployed n8n environment.** `/process` is auth-gated since this branch, and n8n has no browser, so it authenticates with `X-API-Key`. All 17 n8n HTTP nodes send the header; the key has to exist on *both* sides or every incoming message 401s. Unset on the API means machine access is disabled, never "everyone is a machine" — so the failure is a silent pipeline, not an open door.
+- [x] **`INTERNAL_API_KEY` set on both sides** — vérifié 2026-08-16 dans les deux conteneurs (43 caractères de chaque côté). `/process` est authentifié et n8n n'a pas de navigateur : la clé doit exister des deux côtés ou chaque message entrant renvoie 401.
 - [x] **`SMTP_USER` / `SMTP_PASS` set in `.env`** (2026-08-12) — every mail path is live; remaining action is a real test send via `POST /notify/test`.
 - [x] check email
-- [] check Automated reports.
-- [] check Automated weekly reports
+- [x] check Automated reports — prouvé 2026-08-16, mail reçu avec le .docx en pièce jointe
+- [x] check Automated weekly reports — **n'avait jamais tourné une seule fois** (`pipeline_logs` : aucune ligne `job:weekly_report`). Forcé le 2026-08-16 : 17 rapports, mail reçu. Le passage a révélé que l'objet annonçait « Rapport journalier » pour une période de sept jours — les instructions du modèle codaient le mot en dur. Corrigé, l'objet dépend maintenant de la période.
 - [] check images
 - [x] better sign-in design (profesionnal) — 2026-08-10: rewritten with language switcher, accent glow, AZnet avatar, aria-busy submit — see FIXED.md (Fourth pass)
 - [x] adds 404 page — exists and is captured in the report (Annexe H): an unknown address says so explicitly instead of redirecting silently to the home page, where the user would think their link had worked.
@@ -154,7 +154,7 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
 - [x] **7. WhatsApp-like inbox chat surface** — bubbles with tails, sender right / technician left, date pills, delivery ticks, textured thread background, all in the dashboard's own palette (no WhatsApp green). — done 2026-08-15: tails and the dot-grid ground are CSS (`.bubble`/`.thread-canvas` in `index.css`), the ticks say “sent” and never claim a read receipt the channel never gives us.
 - [x] **8. Choose where a reply is sent.** — done 2026-08-15 The composer defaults to the channel and identity the last message arrived on and shows it as a chip; clicking it lists every identity of that person. `POST /reply` gains an optional `identity_id` — omitted, it still broadcasts, so nothing existing breaks.
 - [x] **9. Space the n8n nodes on a grid** — done 2026-08-15: layered left-to-right by longest-path depth, 320 px between columns and 150 px of vertical pitch, branches kept next to the node they fork from. 56 nodes, 26 columns, widest column 6.
-- [ ] **10. `WHATSAPP_ACCESS_TOKEN` is missing from `.env`.** The dashboard's WhatsApp reply answers "Réponse WhatsApp non configurée" because `reply.py` reads that variable and the API container has it unset — the token currently exists only inside n8n's WhatsApp *credential*, which the API cannot read. Add the System User token to `.env` (the API already loads it via `env_file`) and `docker compose up -d api`.
+- [x] **10. `WHATSAPP_ACCESS_TOKEN`** — présent dans le conteneur API (204 caractères), vérifié 2026-08-16. La réponse WhatsApp depuis le tableau de bord est configurée.
 - [x] **11. Reply quote restored** (2026-08-15). The #1 "fix" caused it. Routing the reply's `chat_id`/`message_id` through `Process output` instead of `$('Filtrer accès')` produced a byte-identical payload in every execution I inspected — and still killed the quoted bubble, so `.item` resolves to something different at send time than the stored run data shows. Known good beats a theory: every message field is back on `$('Filtrer accès')`, and the reply nodes are now byte-identical to commit 047ab64, where it worked. Kept: `/process` still echoes `correlation_id`/`message_id` (free, and a real join key if one is ever needed). **Do not re-route the message fields through `Process output`.**
 
 ## WhatsApp quoting of voice notes — settled 2026-08-15, do not re-investigate
@@ -309,15 +309,7 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   cases, then add cases for the article columns, for a spoken chantier, and for
   a *silent* chantier so the sticky fallback is graded too. Keep the file's own
   rule: explicit negation is a stated 0, never-mentioned is `null`.
-- [ ] **6. Port the .docx renderer to Python.** `Dashboard/src/lib/report-export.ts`
-  builds it in the browser today, so the scheduled mail — sent by `jobs.py`
-  inside the container — cannot attach it. Owner's decision: **the backend
-  renders it**, so the document is produced and mailed even with no browser
-  open; the dashboard button then downloads the same bytes instead of building
-  its own. One renderer, or the two drift like the n8n mapping did.
-  Image generation stays inline in the report job, conditional on the model's
-  own `besoin_image` flag, with a per-report timeout — a hung image call must
-  never cost every chef their report.
+- [x] **6. Port the .docx renderer to Python** — fait 2026-08-16 (`api/app/docx_report.py`). `Dashboard/src/lib/report-export.ts` n'est plus qu'un wrapper de téléchargement autour de `POST /reports/export`, et la dépendance npm `docx` a disparu du `package.json`.
 
 ### Owner actions — blocking the items above
 
@@ -638,4 +630,16 @@ Chacun passait la suite de tests au moment où il a été trouvé.
 | 6 | Plus de plans annotés, d'autres bâtiments — l'encombrement attentionnel se reproduit-il ? | propriétaire |
 
 
+- [x] **Le lien audio de la feuille n'était pas un lien** — trouvé et corrigé
+  2026-08-16. `DASHBOARD_BASE_URL` est optionnel et n'avait jamais été défini,
+  donc la branche « pointer vers l'inbox » n'a jamais tourné une seule fois ;
+  et la valeur de repli n'était pas une URL Drive mais un **identifiant nu**
+  (`1115179874166528`) : 22 cellules d'une colonne intitulée « Lien audio » qui
+  n'ouvrent rien. Deux corrections : l'origine retombe sur `dashboard_url`
+  (celle que le bouton du mail doit déjà avoir juste), et `audio_link` refuse
+  d'écrire ce qui n'est pas une URL — une cellule vide dit « pas
+  d'enregistrement », un identifiant ment.
+  **Reste :** `DASHBOARD_URL` vaut `http://localhost:8080`, qui n'ouvre que sur
+  la machine qui héberge la pile. À pointer sur le Funnel au moment du pilote,
+  sinon le directeur cliquera dans le vide depuis son poste.
 - [] fix this in frontend "Generated by automatique"

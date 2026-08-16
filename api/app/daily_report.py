@@ -65,9 +65,14 @@ Règles de rédaction :
   d'affilée avec d'autres.
 - Aucun autre titre que ceux ci-dessus, et aucun gras Markdown : les titres
   "## " sont le seul balisage, parce qu'ils sont convertis en vrais styles Word.
-- "objet" : une ligne du type "Rapport journalier — <date> — <n> intervention(s)".
+- "objet" : une ligne. **Le mot dépend de la période fournie ci-dessous** —
+  une seule journée donne "Rapport journalier — <date> — <n> intervention(s)",
+  un intervalle (deux dates séparées par une flèche) donne
+  "Rapport hebdomadaire — <début> au <fin> — <n> intervention(s)". Un rapport
+  couvrant sept jours et intitulé « journalier » est lu comme celui de la
+  veille, et le lecteur croit avoir déjà vu le reste.
 
-Date du jour : {date}
+Période couverte : {date}
 """
 
 

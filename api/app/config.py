@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # inbox, at the message it belongs to — instead of a bare Drive file. Unset
     # falls back to the Drive link: a relative path in a spreadsheet cell opens
     # nothing, and a link that goes nowhere is worse than one that goes to Drive.
+    # Optional, and unset it now falls back to `dashboard_url` rather than to
+    # the Drive link (2026-08-16): being optional meant it was never set on the
+    # live install, so the inbox-link branch had never once run and 22 Sheet
+    # cells carried a bare message id instead. Only set this when the Sheet
+    # should point somewhere other than where the report mail's button points.
     dashboard_base_url: Optional[str] = None
     # rolling alias, lite pool — pinned "gemini-2.5-flash" got retired (404, Jul 2026)
     # and the flagship "gemini-flash-latest" pool 503s under free-tier evening load;

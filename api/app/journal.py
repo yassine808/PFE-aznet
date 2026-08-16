@@ -662,15 +662,27 @@ def audio_link(payload: Dict) -> Optional[str]:
     the message, is already the join key between n8n's logs and ours, and also
     identifies a message that never became a row at all.
 
-    Falls back to the Drive link when `DASHBOARD_BASE_URL` is unset or the
-    message has no correlation id — a relative path in a spreadsheet cell opens
-    nothing, and a dead link is worse than one that goes to Drive.
+    **The origin falls back to `dashboard_url`** (2026-08-16). It was
+    `dashboard_base_url` alone, which is optional and was never set — so on the
+    live install this branch never once ran and every cell took the fallback
+    below. Two settings naming the same origin, one of them silently degrading
+    the feature, is one setting too many: `dashboard_url` already has to be
+    right for the report mail's "Ouvrir le rapport" button, so it is right here
+    too, and `DASHBOARD_BASE_URL` remains available to point the Sheet somewhere
+    else if that is ever wanted.
+
+    The last resort is the Drive link **only if it is actually a link**. The
+    payload's `lien_audio` is whatever n8n put there, and on the live install it
+    was a bare message id — 22 cells in a column called "Lien audio" holding
+    `1115179874166528`, which opens nothing. An empty cell says "no recording
+    here"; an id says "here is your link" and lies. Absence over a false claim,
+    the same rule the quantity columns follow.
     """
-    drive_link = payload.get("lien_audio")
-    base = (settings.dashboard_base_url or "").strip().rstrip("/")
+    base = (settings.dashboard_base_url or settings.dashboard_url or "").strip().rstrip("/")
     correlation = str(payload.get("correlation_id") or "").strip()
     if not base or not correlation:
-        return drive_link
+        raw = str(payload.get("lien_audio") or "").strip()
+        return raw if raw.startswith(("http://", "https://", "=")) else None
     url = f"{base}/#/inbox?msg={quote(correlation, safe='')}"
     # A HYPERLINK formula rather than the bare URL: the cell then reads
     # "▶ Écouter" instead of 120 characters of base64 wamid, and the column can
