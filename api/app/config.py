@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # Optional parent folder for the durable audio archive (app/drive.py). Unset
     # = files land in the service account's Drive root.
     google_drive_folder_id: Optional[str] = None
+    # Public origin of the dashboard, e.g. https://aznet.example.com. Used to
+    # write the Sheet's "Lien audio" as an address of *this* application — the
+    # inbox, at the message it belongs to — instead of a bare Drive file. Unset
+    # falls back to the Drive link: a relative path in a spreadsheet cell opens
+    # nothing, and a link that goes nowhere is worse than one that goes to Drive.
+    dashboard_base_url: Optional[str] = None
     # rolling alias, lite pool — pinned "gemini-2.5-flash" got retired (404, Jul 2026)
     # and the flagship "gemini-flash-latest" pool 503s under free-tier evening load;
     # lite is verified live and plenty for structured extraction (benchmark revisits)

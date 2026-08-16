@@ -74,6 +74,10 @@ export interface ReportRow {
   confidence?: string
   flag_review?: string
   lien_audio?: string
+  /** The message's end-to-end id, mirrored into the Rapports tab since
+   *  2026-08-16. It is what the Sheet's `lien_audio` address resolves against
+   *  (`#/inbox?msg=…`), and the join key with n8n's own logs. */
+  correlation_id?: string
   /** Which STT engine actually heard this note (`gemini` / `local` / `groq`),
    *  written by `journal._rapports_cells`. The chain falls through on failure,
    *  so the configured order does not tell you what ran — only this does.

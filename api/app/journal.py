@@ -25,8 +25,10 @@ return dicts. The Sheets round trip lives in `sheets.py`.
 """
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 from app import sheets
+from app.config import settings
 from app.schemas import ARTICLE_FIELDS, ExtractedReport
 
 # --- the director's columns, in his order --------------------------------
@@ -591,6 +593,33 @@ RAPPORTS_COLUMNS = {
 }
 
 
+def audio_link(payload: Dict) -> Optional[str]:
+    """What the Sheet's "Lien audio" cell should hold for this message.
+
+    A Drive URL opens a bare file: no transcript, no summary, no reply, and a
+    dependency on a third party to play something we already host in
+    `media_files`. So when the dashboard has a public origin the cell points at
+    *this* application instead — the inbox, at the message it belongs to, where
+    the player sits above the transcript that can be corrected.
+
+    Keyed on `correlation_id`, not the Rapports row number: the row number only
+    exists after the append, so using it would mean a second Sheets call to
+    rewrite the cell we just wrote. The correlation id is carried end to end by
+    the message, is already the join key between n8n's logs and ours, and also
+    identifies a message that never became a row at all.
+
+    Falls back to the Drive link when `DASHBOARD_BASE_URL` is unset or the
+    message has no correlation id — a relative path in a spreadsheet cell opens
+    nothing, and a dead link is worse than one that goes to Drive.
+    """
+    drive_link = payload.get("lien_audio")
+    base = (settings.dashboard_base_url or "").strip().rstrip("/")
+    correlation = str(payload.get("correlation_id") or "").strip()
+    if not base or not correlation:
+        return drive_link
+    return f"{base}/#/inbox?msg={quote(correlation, safe='')}"
+
+
 def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
     """The flat Rapports row for one message, keyed by its header names."""
     report = payload.get("report")
@@ -608,8 +637,12 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
         "confidence": payload.get("confidence"),
         "flag_review": bool(REVIEW_WARNINGS & set(warnings)),
         "motif_flag": flag_reason(warnings),
-        "lien_audio": payload.get("lien_audio"),
+        "lien_audio": audio_link(payload),
         "STT_model": payload.get("stt_engine"),
+        # The key the "Lien audio" address resolves against, and the join with
+        # n8n's own logs. Mirrored so the inbox can find one message from a
+        # click in the Sheet without a second lookup table.
+        "correlation_id": payload.get("correlation_id"),
     }
     for field, column in RAPPORTS_COLUMNS.items():
         value = getattr(report, field)

@@ -5,6 +5,8 @@ director's file correct, so they get tested where they can fail fast.
 """
 import pytest
 
+from app import journal
+
 from app.journal import (
     HEADERS,
     CHEF_COLUMNS,
@@ -651,3 +653,22 @@ def test_stt_engine_merges_to_the_latest_engine():
     assert merge_rows({COL_STT: "gemini"}, {COL_STT: "local"})[COL_STT] == "local"
     # A text report carries no engine and must not blank the audio one.
     assert merge_rows({COL_STT: "gemini"}, {COL_STT: ""})[COL_STT] == "gemini"
+
+
+def test_audio_link_points_at_the_inbox_when_the_dashboard_has_an_origin(monkeypatch):
+    """The Sheet cell should open the message, not a bare Drive file."""
+    monkeypatch.setattr(journal.settings, "dashboard_base_url", "https://aznet.example.com/")
+    link = journal.audio_link({"lien_audio": "https://drive.google.com/uc?id=abc",
+                               "correlation_id": "tg:1:2"})
+    assert link == "https://aznet.example.com/#/inbox?msg=tg%3A1%3A2"
+
+
+def test_audio_link_falls_back_to_drive_without_an_origin(monkeypatch):
+    """A relative path in a spreadsheet cell opens nothing, so an unset base
+    keeps the Drive link rather than writing an address that goes nowhere."""
+    monkeypatch.setattr(journal.settings, "dashboard_base_url", None)
+    payload = {"lien_audio": "https://drive.google.com/uc?id=abc", "correlation_id": "tg:1:2"}
+    assert journal.audio_link(payload) == "https://drive.google.com/uc?id=abc"
+    # Same rule when the message has no correlation id to resolve against.
+    monkeypatch.setattr(journal.settings, "dashboard_base_url", "https://aznet.example.com")
+    assert journal.audio_link({**payload, "correlation_id": ""}) == payload["lien_audio"]

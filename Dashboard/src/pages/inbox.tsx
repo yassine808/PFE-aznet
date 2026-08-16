@@ -108,6 +108,7 @@ interface ThreadExchange {
   readonly reply: string | undefined
   readonly media_id?: number | null
   readonly stt_engine?: string | null
+  readonly correlation_id?: string | null
 }
 
 function groupByDay(rows: ThreadRow[]): Day[] {
@@ -829,7 +830,16 @@ function ReplyComposer({
   )
 }
 
-export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
+export function InboxPage({
+  initialDate,
+  initialMsg,
+}: {
+  readonly initialDate?: string
+  /** `#/inbox?msg=<correlation_id>` — where the Sheet's "Lien audio" cell
+   *  lands. The cell used to hold a Drive URL, which opened a bare file with
+   *  no transcript, no summary and no reply; this opens the message. */
+  readonly initialMsg?: string
+}) {
   const { t } = useI18n()
   /*
     Cadence.
@@ -884,6 +894,7 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
       reply: e.reply ?? undefined,
       media_id: e.media_id ?? null,
       stt_engine: e.stt_engine ?? null,
+      correlation_id: e.correlation_id ?? null,
     }))
     return [...reports_, ...exchanges_].sort((a, b) => {
       const ka = `${toISODate(a.date) ?? ''} ${a.heure ?? ''}`
@@ -891,6 +902,28 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
       return kb < ka ? -1 : kb > ka ? 1 : 0
     })
   }, [reports.data, exchanges.data])
+
+  /*
+    The deep link, resolved.
+
+    The address names a message, not a person or a day, so both filters have to
+    be set from whatever row carries that correlation id — and then it must not
+    fight the operator: `done` latches, so clicking another day afterwards is
+    not undone on the next poll. A correlation id that matches nothing leaves
+    the page exactly as it was; the message may simply have been pruned, and
+    silently jumping somewhere else would be worse than doing nothing.
+  */
+  const [target, setTarget] = useState<string>(initialMsg ?? '')
+  const seeded = useRef(false)
+  useEffect(() => {
+    if (seeded.current || !target || all.length === 0) return
+    const hit = all.find((r) => (r.correlation_id ?? '').trim() === target)
+    if (!hit) return
+    seeded.current = true
+    setWho((hit.technicien ?? '').trim())
+    setDate(toISODate(hit.date) ?? '')
+    setCalendar(false)
+  }, [all, target])
 
   const channels = useMemo(
     () => [...new Set(all.map((r) => (r.canal ?? '').trim()).filter(Boolean))],
@@ -1325,7 +1358,25 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
                   >
                     <DaySeparator iso={d.iso} />
                     {d.rows.map((r) => (
-                      <div key={r._row} className="flex flex-col gap-1.5">
+                      <div
+                        key={r._row}
+                        /* The landing point of a "Lien audio" click. Scrolled
+                           to and ringed once, then cleared: a highlight that
+                           stayed would read as a status the message does not
+                           have. */
+                        ref={(node) => {
+                          if (node && target && (r.correlation_id ?? '').trim() === target) {
+                            node.scrollIntoView({ block: 'center' })
+                            setTarget('')
+                          }
+                        }}
+                        className={cn(
+                          'flex flex-col gap-1.5',
+                          target &&
+                            (r.correlation_id ?? '').trim() === target &&
+                            'ring-accent rounded-lg ring-2',
+                        )}
+                      >
                         {'reply' in r ? (
                           <>
                             <ExchangeIncoming

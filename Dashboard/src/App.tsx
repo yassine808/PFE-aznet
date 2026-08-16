@@ -110,7 +110,7 @@ function RouteView({
     case 'overview':
       return <OverviewPage onOpenDay={(iso) => navigate('inbox', { date: iso })} />
     case 'inbox':
-      return <InboxPage initialDate={params.date} />
+      return <InboxPage initialDate={params.date} initialMsg={params.msg} />
     case 'reports':
       return <ReportsPage />
     // Both take their period from the URL so the "Ouvrir le rapport" button in
@@ -167,7 +167,7 @@ function Dashboard() {
             `useState(initialDate)` would never re-seed. In-page picker changes
             never touch the URL, so this only remounts on real navigation. */}
           <motion.div
-            key={`${route}:${params.date ?? ''}:${params.week ?? ''}:${params.person ?? ''}`}
+            key={`${route}:${params.date ?? ''}:${params.week ?? ''}:${params.person ?? ''}:${params.msg ?? ''}`}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: 'spring', stiffness: 100, damping: 20 }}

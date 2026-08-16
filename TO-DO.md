@@ -38,6 +38,20 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
   plusieurs chefs et un chef à six techniciens.
 ## Batch 2026-08-16 (4) — la note vocale muette, et le lien audio qui pointe chez nous
 
+- [~] **Le .docx doit partir avec le mail de chaque rapport automatique.**
+  **Écrit, pas prouvé.** `jobs._report_mail` joint le document à *chaque*
+  rapport envoyé — le digest entreprise et celui de chaque chef — et le rendu
+  vit dans l'API (`app/docx_report.py`) précisément pour que le courrier
+  programmé, envoyé par un fil dans le conteneur sans navigateur, puisse
+  attacher quelque chose. L'échec du rendu est non fatal et imprimé : un
+  document qui ne se construit pas ne doit pas coûter le rapport, qui reste
+  lisible dans le corps du mail. **Personne n'a encore reçu un de ces mails et
+  ouvert la pièce jointe** — et tant que ce n'est pas fait, « c'est écrit » ne
+  vaut pas « ça marche ». Reste donc : déployer (`docker compose up -d --build
+  api`), déclencher un rapport depuis la page Automatisation
+  (`POST /jobs/{name}/run`), et vérifier que le mail arrive **avec** le .docx
+  et que la pièce jointe dit la même chose que le corps.
+
 - [ ] **Une note vocale dont rien n'est extrait n'apparaît pas dans la feuille —
   c'est voulu, mais il faut le vérifier avant de le croire.** Quand l'extraction
   ne trouve aucune donnée (`schemas.has_data` faux), `/process` ajoute
@@ -56,8 +70,21 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
   c'est la porte `no_report_content` et non une panne. Si la transcription est
   correcte et pleine de chiffres alors que `has_data` dit non, **c'est
   l'extraction qui a échoué et c'est un bug** — garder la transcription.
-- [~] **`lien_audio` doit pointer chez nous, pas sur Drive** — en cours
-  2026-08-16. Aujourd'hui la colonne contient l'URL Drive : elle ouvre un
+- [x] **`lien_audio` doit pointer chez nous, pas sur Drive** — fait 2026-08-16,
+  **non vérifié** (suite API verte, typecheck et build verts ; ni feuille ni
+  navigateur ouverts ici). `journal.audio_link` écrit
+  `{DASHBOARD_BASE_URL}/#/inbox?msg={correlation_id}` ; `correlation_id` est
+  ajouté aux colonnes du miroir Rapports ; l'inbox lit `?msg=`, sélectionne le
+  technicien et le jour de ce message, y défile et l'entoure une fois (l'anneau
+  s'efface : un surlignage permanent se lirait comme un état que le message
+  n'a pas). Un id qui ne correspond à rien ne déplace rien — le message a pu
+  être purgé, et sauter ailleurs en silence serait pire.
+  **Action propriétaire : ajouter `DASHBOARD_BASE_URL=https://<hôte public>` au
+  `.env`, puis `docker compose up -d api`** (une modification de `.env`
+  n'atteint pas un conteneur réutilisé — piège n°4). Tant qu'elle est absente,
+  la colonne garde le lien Drive : rien ne casse, la nouveauté n'apparaît
+  simplement pas.
+  Détail 2026-08-16 : Aujourd'hui la colonne contient l'URL Drive : elle ouvre un
   fichier nu, hors contexte, et dépend d'un service tiers pour lire quelque
   chose qu'on héberge déjà (`media_files` en Postgres). Le lien devient une
   **adresse du dashboard vers ce message précis** dans l'inbox, où il y a le
