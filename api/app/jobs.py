@@ -22,7 +22,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional
 
-from app import daily_report, journal, logs, mailer, memory, sheets
+from app import daily_report, docx_report, journal, logs, mailer, memory, sheets
 from app.config import settings
 
 # How often the loop wakes to look for due work. Well under the tightest
@@ -190,12 +190,29 @@ def _report_mail(
     content = daily_report.generate_daily_report(period, rows)
     sent: List[str] = []
     mail_error = None
+    kind = "Rapport hebdomadaire" if "→" in period else "Rapport journalier"
+    # Best-effort, and deliberately not fatal: a document that fails to render
+    # must not cost the chef the report itself, which is readable in the mail
+    # body and stored either way. The failure is printed rather than swallowed
+    # so it is visible in the container log.
+    attachments: List[tuple] = []
+    try:
+        blob = docx_report.build(
+            content.objet, content.corps, kind, period, rows, author="automatique"
+        )
+        attachments.append((
+            docx_report.filename(content.objet), blob,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[report] .docx non joint ({exc}) — le corps du mail reste complet")
     try:
         sent = mailer.send(
             recipients,
             content.objet,
             content.corps,
             html_body=_report_html(period, content, len(rows)),
+            attachments=attachments,
         )
     except mailer.MailError as exc:
         mail_error = str(exc)

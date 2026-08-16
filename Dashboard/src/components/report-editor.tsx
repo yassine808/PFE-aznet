@@ -11,7 +11,7 @@ import {
 import { reportVersions, saveReportVersion, useApi, type ReportVersion } from '@/lib/api'
 import { diffCounts, diffLines } from '@/lib/diff'
 import { useI18n } from '@/lib/i18n'
-import { exportReport, type ReportFigures } from '@/lib/report-export'
+import { exportReport } from '@/lib/report-export'
 import { useToast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
@@ -40,17 +40,12 @@ export function ReportEditor({
   objet,
   corps,
   generatedBy,
-  figures,
-  byTech,
 }: {
   readonly kind: 'daily' | 'weekly'
   readonly period: string
   readonly objet: string
   readonly corps: string
   readonly generatedBy?: string
-  /** The page's own aggregates, printed as a table in the .docx. */
-  readonly figures?: ReportFigures
-  readonly byTech?: { name: string; count: number; goulottes: number; flagged: number }[]
 }) {
   const { t } = useI18n()
   const toast = useToast()
@@ -168,15 +163,20 @@ export function ReportEditor({
 
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              // The document is rendered by the API now, so this can fail the
+              // way any request can — the old in-browser build could not, and
+              // a silent no-op on a button labelled "Export" is worse than a
+              // message saying why nothing downloaded.
+              setError(null)
               void exportReport(title, draft, {
                 kind: t(kind === 'daily' ? 'editor.kindDaily' : 'editor.kindWeekly'),
                 period,
                 author: generatedBy,
-                figures,
-                byTech,
-              })
-            }
+              }).catch((err: unknown) =>
+                setError(err instanceof Error ? err.message : String(err)),
+              )
+            }}
             className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px"
           >
             <DownloadSimpleIcon size={13} />

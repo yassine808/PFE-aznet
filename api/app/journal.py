@@ -324,6 +324,12 @@ def _norm_date(value) -> Optional[str]:
     return None
 
 
+# The same normalizer, under a public name: `/reports/export` has to match a
+# period against the Sheet's own date spellings, and reaching into a private
+# helper from another module is how a rename becomes an outage somewhere else.
+norm_date = _norm_date
+
+
 def _same_day(cell, when) -> bool:
     left, right = _norm_date(cell), _norm_date(when)
     return left is not None and left == right

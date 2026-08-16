@@ -232,17 +232,6 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
           objet={content.objet}
           corps={content.corps}
           generatedBy={content.generated_by}
-          figures={{
-            rapports: week.rows.length,
-            techniciens: week.techniciens,
-            chantiers: week.chantiers,
-            flagged: week.flagged,
-            goulottes: week.totals.goulottes,
-            cables: week.totals.cables,
-            bureaux: week.totals.bureaux,
-            panneaux: week.totals.panneaux,
-          }}
-          byTech={week.byTech.map(([name, v]) => ({ name, ...v }))}
         />
       )}
 

@@ -266,8 +266,9 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   reste en 429 sur le quota déjà consommé par les runs de la journée — le
   benchmark entrait en concurrence avec le pipeline en production pour le même
   quota gratuit. Ne pas relancer un jour où d'autres runs tournent.
-- [ ] **Porter le générateur .docx en Python** (voir batch (2) item 6) —
-  **toujours pas commencé.** Une tentative du 2026-08-16 s'est arrêtée sur la
+- [x] **Porter le générateur .docx en Python** — fait 2026-08-16, **à vérifier
+  par le propriétaire** (voir le batch 2026-08-16 (3) plus bas).
+  Ancienne note : **toujours pas commencé.** Une tentative du 2026-08-16 s'est arrêtée sur la
   limite de session après n'avoir ajouté que la dépendance `python-docx`, qui a
   été annulée : une dépendance inutilisée dans l'image de production, c'est du
   poids et de la surface d'attaque pour rien, et `pip-compile` la régénère en
@@ -354,6 +355,67 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   trancher : une transcription de référence écrite par un humain qui parle
   darija, pour cette note au moins.
 
+## Batch 2026-08-16 (3) — le .docx passe au backend, la transcription devient corrigeable
+
+**Écrit, testé, pas encore vérifié en vrai par le propriétaire.** Rien n'est
+déployé : `docker compose up -d --build api` puis `--build web` (dans cet ordre,
+c'est un ajout de fonctionnalité — voir CLAUDE.md, piège n°3).
+
+- [x] **Le rendu .docx vit maintenant dans l'API** (`api/app/docx_report.py`).
+  C'était le dernier endroit où le système contredisait une décision prise à
+  voix haute : le document n'existait que si quelqu'un cliquait, donc le
+  courrier programmé — envoyé par un fil d'exécution dans le conteneur, sans
+  navigateur — ne pouvait rien joindre. Désormais :
+  - `jobs._report_mail` joint le document à **chaque** rapport envoyé, y
+    compris celui de chaque chef. L'échec du rendu est **non fatal** et
+    imprimé : un document qui ne se construit pas ne doit pas coûter le
+    rapport lui-même, qui reste lisible dans le corps du mail.
+  - `POST /reports/export` renvoie **les mêmes octets** ; le bouton du tableau
+    de bord les télécharge au lieu de fabriquer sa copie. Un seul moteur de
+    rendu, sinon les deux dérivent comme l'avait fait le mapping n8n.
+  - **Les chiffres ne voyagent pas.** Le navigateur envoie le titre et le
+    corps (l'opérateur a pu éditer le brouillon — ce texte *est* le rapport) ;
+    l'API recalcule les huit totaux et le tableau par technicien depuis les
+    lignes de la feuille que la période couvre. Un client ne peut donc pas
+    poster ses propres chiffres dans un document signé de l'en-tête maison, et
+    la page et le document ne peuvent pas se contredire. L'arithmétique
+    reproduit `metrics.ts` (`num`, `isFlagged`) à l'identique — une virgule
+    décimale est un nombre, `"abc"` vaut 0, un technicien vide n'est pas
+    quelqu'un.
+  - Dépendance `python-docx` ajoutée à `requirements.in` et recompilée ; la
+    dépendance npm `docx` a été **retirée** du Dashboard, elle n'a plus
+    d'appelant. 7 tests dans `api/tests/test_docx_report.py` (parité des
+    chiffres, le .docx est un vrai ZIP OOXML avec en-tête, pied de page et
+    champ `NUMPAGES` vivant, et un rapport sans lignes s'écrit quand même).
+  - **Non vérifié :** personne n'a encore ouvert le fichier produit dans Word,
+    ni reçu un mail avec la pièce jointe. C'est le contrôle à faire.
+
+- [x] **La transcription d'une note vocale est affichée sous l'audio, et
+  corrigeable** (inbox). Une sous-bulle « Transcription » sous le lecteur, avec
+  un crayon ; l'édition écrit par `PATCH /reports/{row}` (champ
+  `rapport_complet`) pour un message devenu ligne de la feuille, et par le
+  nouveau `PATCH /exchanges/{id}` pour un message qui ne l'est jamais devenu.
+  La règle précédente disait « jamais éditable — c'est la preuve, et une
+  transcription corrigée rendrait l'extraction inauditables ». Elle avait raison
+  sur le risque et tort sur le remède : laisser à la seule personne capable
+  d'entendre l'erreur une transcription qu'elle peut lire sans la corriger ne
+  préserve pas la preuve, cela préserve l'erreur. Les deux chemins d'écriture
+  enregistrent la **valeur précédente** dans la piste d'audit
+  (`transcript_edited` / `report_edited`), donc la sortie brute du moteur reste
+  récupérable. **Ne jamais écrire cette correction autrement.**
+  Un message **tapé** n'a pas de sous-bulle : son texte *est* ce que le
+  technicien a écrit, et proposer de l'éditer inviterait à réécrire ses propos.
+
+### À vérifier par le propriétaire (ce batch)
+
+- [ ] Ouvrir un .docx produit par `POST /reports/export` dans Word : en-tête
+  AZNET, pied de page avec `page / total`, grille de 8 chiffres, titres de
+  niveau 2 réels (volet Navigation), tableau par technicien.
+- [ ] Recevoir un rapport programmé et vérifier que la pièce jointe est là et
+  qu'elle correspond au corps du mail.
+- [ ] Corriger une transcription dans l'inbox, puis vérifier dans la page
+  Historique que l'ancien texte figure bien en `before`.
+
 ## Bilan des 15–16 août 2026 — 18 commits, suite à 355 vert
 
 ### Livré
@@ -391,7 +453,7 @@ Chacun passait la suite de tests au moment où il a été trouvé.
 | # | Tâche | Qui |
 |---|---|---|
 | 1 | **Un vrai message de technicien jusqu'au bout**, y compris `/journal` : création d'onglet, drapeau non vérifié, ligne à 62 colonnes, fusion d'un 2ᵉ message le même jour. **N'a jamais tourné.** | propriétaire |
-| 2 | Porter le générateur .docx en Python (le courrier programmé ne peut toujours pas joindre de document) | assistant |
+| 2 | ~~Porter le générateur .docx en Python~~ — **écrit le 2026-08-16**, reste à ouvrir un fichier produit et à recevoir un mail avec la pièce jointe | propriétaire (vérification) |
 | 3 | Préchauffer ou rendre non bloquant le STT local — 13 s de marge n'est pas une marge | assistant |
 | 4 | Refaire la comparaison à 25 modèles un matin calme, hors production | assistant |
 | 5 | Trancher le désaccord Gemini (`cable_elec_3x2_5_m: 30`) vs local (`cables_installes_m: 3`) sur la même note | propriétaire (darijophone) |

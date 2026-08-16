@@ -458,3 +458,64 @@ def test_a_run_outcome_can_be_claimed_only_once():
         t.join()
 
     assert len(winners) == 1
+
+
+# ── The .docx rides with the mail ──────────────────────────────────────────
+# Added 2026-08-16 with the backend renderer. The whole reason it moved out of
+# the browser is that the *scheduled* mail could not attach one, so that is what
+# is asserted here — and that a renderer failure costs the attachment, never the
+# report.
+
+
+def _one_report_setup(monkeypatch):
+    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: [
+        {"date": "2026-08-16", "technicien": "Tech 1", "resume": "salle 1", "goulottes_m": "40"},
+    ])
+    monkeypatch.setattr(jobs.logs, "list_persons", lambda: [
+        {"id": 1, "name": "Directeur", "role": "directeur", "has_login": True,
+         "email": "d@aznet.ma"},
+    ])
+    monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
+    monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
+    monkeypatch.setattr(
+        jobs.daily_report, "generate_daily_report",
+        lambda label, r: jobs.daily_report.DailyReportContent(
+            objet="Rapport journalier — 2026-08-16", corps="## Synthèse\nUne intervention."
+        ),
+    )
+
+
+def test_scheduled_mail_carries_the_docx(monkeypatch):
+    _one_report_setup(monkeypatch)
+    captured = {}
+    monkeypatch.setattr(
+        jobs.mailer, "send",
+        lambda to, s, b, **k: captured.update(k) or list(to),
+    )
+
+    jobs.send_daily_report("2026-08-16")
+
+    name, blob, mime = captured["attachments"][0]
+    assert name == "rapport-journalier-2026-08-16.docx"
+    assert mime.endswith("wordprocessingml.document")
+    assert blob[:2] == b"PK"
+
+
+def test_a_failed_render_still_sends_the_report(monkeypatch):
+    """The document is the extra; the report is the point."""
+    _one_report_setup(monkeypatch)
+    captured = {}
+
+    def boom(*a, **k):
+        raise RuntimeError("python-docx exploded")
+
+    monkeypatch.setattr(jobs.docx_report, "build", boom)
+    monkeypatch.setattr(
+        jobs.mailer, "send",
+        lambda to, s, b, **k: captured.update(k) or list(to),
+    )
+
+    out = jobs.send_daily_report("2026-08-16")
+
+    assert out["sent_to"] == ["d@aznet.ma"]
+    assert captured["attachments"] == []

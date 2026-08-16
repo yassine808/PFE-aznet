@@ -166,3 +166,64 @@ def test_list_exchanges_rejects_huge_limit(monkeypatch):
 
     response = client.get("/exchanges", params={"limit": 9999})
     assert response.status_code == 422
+
+
+# ── Correcting a transcript ────────────────────────────────────────────────
+# Added 2026-08-16 with the inbox's editable transcript. The behaviour that
+# matters is not that the UPDATE runs — it is that the *previous* text reaches
+# the audit trail, because that is the whole reason a transcript is allowed to
+# be corrected at all.
+
+
+def test_update_exchange_text_returns_the_previous_value(monkeypatch):
+    cur = _RecordingCursor()
+    cur._rows = [{"text": "chi 18 prises"}]
+    monkeypatch.setattr(logs, "_cursor", lambda: _fake_cursor(cur))
+
+    assert logs.update_exchange_text(7, "18 prises") == {"before": "chi 18 prises"}
+    sql, args = _last_statement(cur, "UPDATE exchanges")
+    assert args == ("18 prises", 7)
+
+
+def test_update_exchange_text_none_when_the_row_is_gone(monkeypatch):
+    cur = _RecordingCursor()
+    cur._rows = []
+    monkeypatch.setattr(logs, "_cursor", lambda: _fake_cursor(cur))
+
+    assert logs.update_exchange_text(7, "18 prises") is None
+    # Nothing is written for a row that does not exist — an UPDATE matching no
+    # row would look identical from here and answer 200 to the browser.
+    assert not any("UPDATE" in sql for sql, _ in cur.statements)
+
+
+def test_patch_exchange_records_before_and_after(monkeypatch):
+    main.app.dependency_overrides[main.auth.require_human] = lambda: {
+        "id": 1, "name": "Test", "role": "directeur"
+    }
+    recorded = {}
+    monkeypatch.setattr(
+        main.logs, "update_exchange_text", lambda i, t: {"before": "chi 18 prises"}
+    )
+    monkeypatch.setattr(
+        main.auth, "record",
+        lambda caller, action, **kw: recorded.update({"action": action, **kw}),
+    )
+
+    response = client.patch("/exchanges/7", json={"text": "18 prises"})
+
+    assert response.status_code == 200
+    assert recorded["action"] == "transcript_edited"
+    assert recorded["before"] == "chi 18 prises"
+    assert recorded["after"] == "18 prises"
+    main.app.dependency_overrides.pop(main.auth.require_human, None)
+
+
+def test_patch_exchange_404_when_absent(monkeypatch):
+    main.app.dependency_overrides[main.auth.require_human] = lambda: {
+        "id": 1, "name": "Test", "role": "directeur"
+    }
+    monkeypatch.setattr(main.logs, "update_exchange_text", lambda i, t: None)
+    monkeypatch.setattr(main.auth, "record", lambda *a, **k: None)
+
+    assert client.patch("/exchanges/7", json={"text": "x"}).status_code == 404
+    main.app.dependency_overrides.pop(main.auth.require_human, None)

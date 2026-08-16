@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * Vite proxies /api to the FastAPI service (see vite.config.ts), so the browser
  * stays same-origin and the API needs no CORS configuration.
  */
-const BASE = '/api'
+export const BASE = '/api'
 
 /**
  * A `lien_audio` turned into something an `<audio>` element can actually play.
@@ -254,6 +254,21 @@ export async function patchReport(row: number, field: string, value: string): Pr
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ field, value }),
+  })
+  if (!res.ok) await fail(res)
+}
+
+/**
+ * Correct the transcript of a logged exchange — a voice note that never became
+ * a Sheet row. The Sheet-row equivalent is `patchReport(row, 'rapport_complet')`;
+ * both record the previous text in the audit trail, which is what keeps a
+ * corrected transcript from erasing what the engine actually heard.
+ */
+export async function patchExchange(id: number, text: string): Promise<void> {
+  const res = await fetch(`${BASE}/exchanges/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
   })
   if (!res.ok) await fail(res)
 }
@@ -615,7 +630,7 @@ export interface History {
 /** Turn a non-OK response into a readable Error: our HTTPExceptions carry a
  * string detail, pydantic validation errors an array of { msg } — both must
  * end up as plain text, never "[object Object]". */
-async function fail(res: Response): Promise<never> {
+export async function fail(res: Response): Promise<never> {
   const text = await res.text().catch(() => '')
   let detail = text
   try {

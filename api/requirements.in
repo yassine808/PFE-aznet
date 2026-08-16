@@ -17,3 +17,4 @@ uvloop; sys_platform != "win32"
 # drops win32-only packages entirely, so declare it unconditionally —
 # a tiny pure-python wheel, harmless on Linux
 colorama
+python-docx

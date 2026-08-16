@@ -19,6 +19,7 @@ import {
   audioByRow,
   audioSrc,
   mediaSrc,
+  patchExchange,
   patchReport,
   sendReply,
   useApi,
@@ -92,6 +93,10 @@ type ThreadRow = ReportRow | ThreadExchange
 interface ThreadExchange {
   /** `x<id>` — a string that can never collide with a Sheet row number. */
   readonly _row: string
+  /** The `exchanges` primary key, kept alongside `_row` because a transcript
+   *  correction addresses the row itself (`PATCH /exchanges/{id}`) and parsing
+   *  it back out of the prefixed string would be a second place to get wrong. */
+  readonly id: number
   readonly date: string
   readonly heure?: string
   readonly canal?: string
@@ -175,11 +180,125 @@ function Stamp({ heure, sent = false }: { readonly heure?: string; readonly sent
 }
 
 /**
- * What the technician sent: the transcript, verbatim, plus the audio if there
- * was any. Never editable — it is the evidence, and a corrected transcript
- * would make the extraction impossible to audit.
+ * The transcript of a voice note, under the player it belongs to, correctable.
+ *
+ * It used to be printed as plain text on the rule that a transcript is
+ * evidence and correcting it would make the extraction unauditable. The rule
+ * was right about the risk and wrong about the remedy: Darija through an STT
+ * engine gets names and quantities wrong, and the only person who can say so
+ * is the one listening to the recording — leaving them a wrong transcript they
+ * can read but not fix does not preserve the evidence, it just preserves the
+ * error. Both write paths (`PATCH /reports/{row}` and `PATCH /exchanges/{id}`)
+ * record the previous value against the account that changed it, so the raw
+ * machine output stays recoverable from the audit trail. That is what makes
+ * this safe, and it is why the correction must never be written any other way.
+ *
+ * Shown only for audio. A typed message has no transcript to correct — its
+ * text *is* what the technician wrote, and offering to edit it would invite
+ * rewriting what somebody said.
  */
-function IncomingBubble({ r, address }: { readonly r: ReportRow; readonly address?: string }) {
+function TranscriptBubble({
+  id,
+  text,
+  save,
+  onSaved,
+}: {
+  /** Unique per message — the label/textarea pairing needs a stable id. */
+  readonly id: string
+  readonly text: string
+  readonly save: (value: string) => Promise<void>
+  readonly onSaved: () => void
+}) {
+  const { t } = useI18n()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(text)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const dirty = draft.trim() !== text.trim()
+
+  const commit = async () => {
+    if (!dirty) return setEditing(false)
+    setSaving(true)
+    setError(null)
+    try {
+      await save(draft.trim())
+      setEditing(false)
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="border-line bg-canvas/60 flex flex-col gap-1.5 rounded-lg border px-3 py-2">
+      <div className="text-ink-faint flex items-center gap-2 text-[0.625rem] tracking-wide uppercase">
+        {t('inbox.transcript')}
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(text)
+            setError(null)
+            setEditing((v) => !v)
+          }}
+          aria-expanded={editing}
+          className="text-ink-faint hover:text-ink ms-auto flex cursor-pointer items-center gap-1 normal-case transition-colors"
+        >
+          <PencilSimpleIcon size={11} />
+          {editing ? t('inbox.cancel') : t('inbox.modify')}
+        </button>
+      </div>
+
+      {editing ? (
+        <>
+          <label htmlFor={`transcript-${id}`} className="sr-only">
+            {t('inbox.transcript')}
+          </label>
+          <textarea
+            id={`transcript-${id}`}
+            rows={4}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="border-line focus:border-accent text-ink bg-surface rounded-md border px-3 py-2 text-sm outline-none transition-colors"
+          />
+          {error && <p className="text-status-fail text-xs break-all">{error}</p>}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void commit()}
+              disabled={!dirty || saving}
+              className={cn(
+                'rounded-md px-3 py-1 text-xs transition-colors active:translate-y-px',
+                !dirty || saving
+                  ? 'border-line text-ink-faint cursor-not-allowed border'
+                  : 'bg-accent cursor-pointer text-white',
+              )}
+            >
+              {saving ? t('inbox.saving') : t('inbox.save')}
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="text-ink text-sm break-words whitespace-pre-wrap">{text}</p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * What the technician sent: the audio, and under it the transcript it produced.
+ */
+function IncomingBubble({
+  r,
+  address,
+  onSaved,
+}: {
+  readonly r: ReportRow
+  readonly address?: string
+  readonly onSaved: () => void
+}) {
   const { t } = useI18n()
   /*
     The Drive copy first, the archived blob if it cannot answer.
@@ -226,9 +345,20 @@ function IncomingBubble({ r, address }: { readonly r: ReportRow; readonly addres
           </audio>
         )}
 
-        {r.rapport_complet && (
-          <p className="text-ink text-sm break-words whitespace-pre-wrap">{r.rapport_complet}</p>
-        )}
+        {/* For a voice note the text below the player *is* the transcript, so
+            it gets the correctable treatment; for a typed message it is what
+            the technician wrote, and stays as written. */}
+        {r.rapport_complet &&
+          (voice ? (
+            <TranscriptBubble
+              id={`row-${r._row}`}
+              text={r.rapport_complet}
+              save={(value) => patchReport(r._row, 'rapport_complet', value)}
+              onSaved={onSaved}
+            />
+          ) : (
+            <p className="text-ink text-sm break-words whitespace-pre-wrap">{r.rapport_complet}</p>
+          ))}
 
         <Stamp heure={r.heure} />
       </div>
@@ -246,9 +376,11 @@ function IncomingBubble({ r, address }: { readonly r: ReportRow; readonly addres
 function ExchangeIncoming({
   r,
   address,
+  onSaved,
 }: {
   readonly r: ThreadExchange
   readonly address?: string
+  readonly onSaved: () => void
 }) {
   const { t } = useI18n()
   const src = r.media_id != null ? mediaSrc(r.media_id) : null
@@ -278,7 +410,17 @@ function ExchangeIncoming({
           </audio>
         )}
 
-        {r.text && <p className="text-ink text-sm break-words whitespace-pre-wrap">{r.text}</p>}
+        {r.text &&
+          (voice ? (
+            <TranscriptBubble
+              id={`exchange-${r.id}`}
+              text={r.text}
+              save={(value) => patchExchange(r.id, value)}
+              onSaved={onSaved}
+            />
+          ) : (
+            <p className="text-ink text-sm break-words whitespace-pre-wrap">{r.text}</p>
+          ))}
 
         <Stamp heure={r.heure} />
       </div>
@@ -713,6 +855,7 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
     const reports_ = [...(reports.data?.reports ?? [])]
     const exchanges_ = (exchanges.data?.exchanges ?? []).map<ThreadExchange>((e) => ({
       _row: `x${e.id}`,
+      id: e.id,
       date: (e.date ?? (e.ts ?? '').slice(0, 10)).trim(),
       heure: (e.heure ?? (e.ts ?? '').slice(11, 16)).trim(),
       canal: e.channel ?? undefined,
@@ -1168,6 +1311,7 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
                             <ExchangeIncoming
                               r={r}
                               address={addressFor(r.technicien ?? '', r.canal ?? '')}
+                              onSaved={exchanges.reload}
                             />
                             <ExchangeReply r={r} />
                           </>
@@ -1176,6 +1320,7 @@ export function InboxPage({ initialDate }: { readonly initialDate?: string }) {
                             <IncomingBubble
                               r={r}
                               address={addressFor(r.technicien ?? '', r.canal ?? '')}
+                              onSaved={reports.reload}
                             />
                             <BotBubble r={r} onSaved={reports.reload} />
                           </>

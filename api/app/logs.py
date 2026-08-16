@@ -1129,6 +1129,28 @@ def save_exchange(
         return (_one(cur) or {})["id"]
 
 
+def update_exchange_text(exchange_id: int, text: str) -> Optional[dict]:
+    """Correct the transcript of a logged exchange.
+
+    Returns `{"before": <old text>}`, or None when there is no such exchange —
+    a dict rather than the string itself, because an exchange whose text was
+    NULL is a real row and must not read as "not found".
+
+    The old value comes back so the caller can record `before`/`after`: the
+    column is overwritten, not versioned, and this is the only moment the
+    previous transcript still exists. A per-message version table for a fixed
+    spelling would be a second store to prune and to reason about; the audit
+    trail already answers "what did it say before, and who changed it".
+    """
+    with _cursor() as cur:
+        cur.execute("SELECT text FROM exchanges WHERE id = %s", (exchange_id,))
+        row = _one(cur)
+        if row is None:
+            return None
+        cur.execute("UPDATE exchanges SET text = %s WHERE id = %s", (text, exchange_id))
+        return {"before": row["text"]}
+
+
 def list_exchanges(limit: int = 200) -> List[dict]:
     """Conversation log, newest first. Each row carries the archived media id
     (audio/image) when that message had one, so the inbox can play a voice note

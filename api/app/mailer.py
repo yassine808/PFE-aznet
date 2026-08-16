@@ -402,6 +402,7 @@ def send(
     body: str,
     html: bool = False,
     html_body: Optional[str] = None,
+    attachments: Sequence[Tuple[str, bytes, str]] = (),
 ) -> List[str]:
     """Send one message to every recipient. Returns the addresses served.
 
@@ -409,6 +410,11 @@ def send(
     every spam filter reads. `html_body` is the rendered alternative when there
     is one; `html=True` without it keeps the old behaviour of showing the same
     text with its line breaks preserved.
+
+    `attachments` are `(filename, blob, mime)`. They are added after the
+    alternatives, so a client that shows only the plain part still gets the
+    file — which is the point of attaching the .docx rather than trusting the
+    reader to open the dashboard.
     """
     recipients = [a for a in (x.strip() for x in to) if a]
     if not recipients:
@@ -442,6 +448,13 @@ def send(
                 )
     elif html:
         msg.add_alternative(body.replace("\n", "<br>"), subtype="html")
+
+    for name, blob, mime in attachments:
+        maintype, _, subtype = mime.partition("/")
+        msg.add_attachment(
+            blob, maintype=maintype or "application",
+            subtype=subtype or "octet-stream", filename=name,
+        )
 
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:

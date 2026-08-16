@@ -248,17 +248,6 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
           objet={content.objet}
           corps={content.corps}
           generatedBy={content.generated_by}
-          figures={{
-            rapports: rows.length,
-            techniciens: stats.techniciens,
-            chantiers: stats.chantiers,
-            flagged: stats.flagged,
-            goulottes: stats.totals.goulottes,
-            cables: stats.totals.cables,
-            bureaux: stats.totals.bureaux,
-            panneaux: stats.totals.panneaux,
-          }}
-          byTech={stats.byTech.map(([name, v]) => ({ name, ...v }))}
         />
       )}
     </motion.div>

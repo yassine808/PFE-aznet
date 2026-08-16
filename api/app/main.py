@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from app import auth, daily_report, drive, extraction, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets
+from app import auth, daily_report, docx_report, drive, extraction, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError, TranscriptionInfo
@@ -937,6 +937,66 @@ def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(au
     )
 
 
+class ReportExportRequest(BaseModel):
+    """What the dashboard's Export button sends: the text, not the figures.
+
+    The body travels because the operator may have edited the draft before
+    exporting — that edited text *is* the report. The figures deliberately do
+    not: they are recomputed from the Sheet rows the period covers, so the
+    document and the page cannot disagree and a client cannot post numbers of
+    its own choosing into a document signed with the company header.
+    """
+
+    title: str = Field(..., description="Titre du document (l'objet du rapport)")
+    body: str = Field(..., description="Corps du rapport, avec ses '## ' et ses '- '")
+    period: str = Field(..., description="Jour (2026-08-16) ou plage (2026-08-10 → 2026-08-16)")
+    author: Optional[str] = Field(None, description="Qui l'a établi; absent = automatique")
+
+
+@app.post("/reports/export", responses={502: {"description": "Sheets read failed"}})
+def export_report(payload: ReportExportRequest, caller: dict = Depends(auth.require_human)) -> Response:
+    """The report as a .docx — the same bytes the scheduled mail attaches.
+
+    The renderer lives in the backend (`docx_report.py`) because `jobs.py` sends
+    the scheduled report from a thread with no browser to build a document in.
+    The dashboard therefore downloads this rather than assembling its own copy:
+    two renderers of one document drift, and only one of them is ever the one
+    the director received.
+    """
+    weekly = "→" in payload.period
+    # A weekly label carries its two ends (`2026-08-10 → 2026-08-16`) and every
+    # day between them belongs; a daily one is the single day. Both sides go
+    # through `norm_date` because the Sheet hands back `10/08/2026` once the
+    # column is formatted as a date, and a string compare would drop the week.
+    first, _, last = payload.period.partition("→")
+    start = journal.norm_date(first) or ""
+    end = (journal.norm_date(last) if weekly else start) or start
+
+    try:
+        rows = [
+            r for r in sheets.read_reports()
+            if (day := journal.norm_date(r.get("date"))) and start <= day <= end
+        ]
+    except sheets.SheetsError as exc:
+        raise HTTPException(502, f"lecture du Sheet impossible: {exc}") from exc
+
+    blob = docx_report.build(
+        payload.title,
+        payload.body,
+        "Rapport hebdomadaire" if weekly else "Rapport journalier",
+        payload.period,
+        rows,
+        author=payload.author or caller.get("name"),
+    )
+    auth.record(caller, "report_exported", target=payload.period)
+    name = docx_report.filename(payload.title)
+    return Response(
+        blob,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 # ── Pipeline logs (dashboard "Logs / n8n" panel) ────────────────────────────
 # n8n POSTs one row per stage; the dashboard polls GET /logs every 5s.
 
@@ -1047,6 +1107,39 @@ def list_exchanges(
         return {"exchanges": logs.list_exchanges(limit=limit)}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+class ExchangePatch(BaseModel):
+    """The corrected transcript of a logged exchange."""
+
+    text: str = Field(..., max_length=20_000)
+
+
+@app.patch("/exchanges/{exchange_id}", responses={404: {"description": "Exchange not found"}, 502: {"description": "Log store unreachable"}})
+def patch_exchange(exchange_id: int, payload: ExchangePatch,
+                   caller: dict = Depends(auth.require_human)) -> dict:
+    """Correct what a voice note was heard as.
+
+    The inbox shows the transcript under the audio and lets an operator fix it,
+    for the same reason the Sheet's `rapport_complet` is editable through
+    `PATCH /reports/{row}`: Darija through an STT engine gets names and numbers
+    wrong, and the person listening to the recording is the only one who can
+    say so. The correction is recorded with its previous value, so the raw
+    machine output is still recoverable from the audit trail and the extraction
+    stays auditable — which was the original reason the transcript was
+    read-only.
+    """
+    try:
+        result = logs.update_exchange_text(exchange_id, payload.text)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if result is None:
+        raise HTTPException(404, "exchange introuvable")
+    auth.record(
+        caller, "transcript_edited", target=f"exchange {exchange_id}",
+        before=result["before"], after=payload.text,
+    )
+    return {"ok": True}
 
 
 class ClaimRequest(BaseModel):
