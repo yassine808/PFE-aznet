@@ -353,3 +353,46 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   `benchmark/dataset/references.csv` (aujourd'hui vide, en-tête seul) doit
   trancher : une transcription de référence écrite par un humain qui parle
   darija, pour cette note au moins.
+
+## Bilan des 15–16 août 2026 — 18 commits, suite à 355 vert
+
+### Livré
+
+| Livraison | Commit | État |
+|---|---|---|
+| 25 champs articles du bordereau (union DGH / Extralait / ACAPS) | `ac349cf` | Feuille Rapports à **62 colonnes**, en ligne |
+| Benchmark vision sur plans annotés + relevé de joignabilité génération d'images | `7d9b75a` | Corrigé **confirmé par le propriétaire** le 16-08 → chiffres citables |
+| Chantier dicté par le technicien + reprise du dernier connu | `0d8eceb` | Prouvé sur du darija réel (`chantier_mentionne: "Novick"`) |
+| Jeu de cas du benchmark texte réécrit pour le schéma courant | `dca386f` | 20 cas, les 25 champs articles couverts |
+| Génération d'images retirée du projet (compréhension conservée) | `15a5fd0` | 0/8 points d'accès joignables, mesuré deux fois |
+| Résultats classés par date + 25 modèles candidats | `b10fbf1` | `results/<AAAA-MM-JJ>/`, historique STT reclassé |
+| Les deux chaînes d'extraction reclassées sur les preuves | `70f0ab4` | `gpt-oss-120b` gardé en 2ᵉ pour le compteur indépendant |
+| Cas chantier notés dans le benchmark | `4627044` | 24 cas, 2 exigent `null` |
+| Chantiers non vérifiés : liste + confirmer/supprimer | `76a5757` | En ligne, la suppression épargne l'onglet du journal |
+| Motif du flag + alerte `photo_zones_partielles` | `ec34be9` | Colonne en ligne, alerte issue d'une mesure |
+| Repli STT local : budget de démarrage à froid | `4517469` | **407 s sur modèle froid — premier succès au premier appel** |
+
+### Bugs trouvés en se servant du système, pas en le lisant
+
+Chacun passait la suite de tests au moment où il a été trouvé.
+
+| Bug | Comment il se présentait | Ce qu'il faisait vraiment |
+|---|---|---|
+| `engine_for` devinait le fournisseur d'après le nom du modèle | un 404 | `allam-2-7b` et `gemma-*` envoyés à la mauvaise API — indiscernable d'un modèle mort |
+| Listes comparées avec `==` | rien du tout | `["E1","RDC"]` noté faux contre `["RDC","E1"]` : chaque cas multi-étages sous-noté |
+| La chaîne `"null"` dans les champs liste | « Groq est mauvais » | validateur générique court-circuité → la moitié Groq de la chaîne échouait sur la plupart des rapports |
+| Bundle du dashboard périmé | un bouton normal | appelait `POST /generate-image`, supprimé — 404 en direct pendant une heure |
+| Limite de grille Sheets | un script qui plante | `_extend_headers` aurait bloqué la file de reprise au prochain champ ajouté |
+| Repli STT local jamais joignable au 1ᵉʳ appel | « c'est lent la première fois » | **échouait toujours**, et l'échec chauffait le modèle donc la reprise passait |
+| `ec34be9` poussé sans relancer la suite | vérifié en direct sur la vraie feuille | le faux service Sheets n'avait pas `.get()` — corrigé en `4517469` |
+
+### Reste à faire, par valeur
+
+| # | Tâche | Qui |
+|---|---|---|
+| 1 | **Un vrai message de technicien jusqu'au bout**, y compris `/journal` : création d'onglet, drapeau non vérifié, ligne à 62 colonnes, fusion d'un 2ᵉ message le même jour. **N'a jamais tourné.** | propriétaire |
+| 2 | Porter le générateur .docx en Python (le courrier programmé ne peut toujours pas joindre de document) | assistant |
+| 3 | Préchauffer ou rendre non bloquant le STT local — 13 s de marge n'est pas une marge | assistant |
+| 4 | Refaire la comparaison à 25 modèles un matin calme, hors production | assistant |
+| 5 | Trancher le désaccord Gemini (`cable_elec_3x2_5_m: 30`) vs local (`cables_installes_m: 3`) sur la même note | propriétaire (darijophone) |
+| 6 | Plus de plans annotés, d'autres bâtiments — l'encombrement attentionnel se reproduit-il ? | propriétaire |
