@@ -390,6 +390,33 @@ export const saveReportVersion = (input: {
   note?: string | null
 }) => post<ReportVersion>('/report-versions', input)
 
+/**
+ * One site. `verifie` is false only for a site the pipeline created from a name
+ * heard in a voice note that matched nothing — the row is real and already has
+ * a journal tab, it just has nobody's word that the name is right.
+ */
+export interface Chantier {
+  id: number
+  nom: string
+  client?: string | null
+  sheet_tab?: string | null
+  active?: boolean
+  verifie?: boolean
+}
+
+/** Confirm a site heard in a voice note. Director-only server-side. */
+export async function verifyChantier(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/chantiers/${id}`, { method: 'PATCH' })
+  if (!res.ok) await fail(res)
+}
+
+/** Drop a mis-transcribed site and its bordereau. The journal tab it already
+ *  owns stays in the Sheet — that is the director's record, not ours. */
+export async function deleteChantier(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/chantiers/${id}`, { method: 'DELETE' })
+  if (!res.ok) await fail(res)
+}
+
 /** The org chart's "+": a chef with no channel and no login yet. */
 export const addPerson = (input: { name: string; role?: string }) =>
   post<{ id: number; name: string; role: string }>('/persons', input)
@@ -780,6 +807,7 @@ export async function deleteTask(id: number): Promise<void> {
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
+  chantiers: (s?: AbortSignal) => get<{ chantiers: Chantier[] }>('/chantiers', s),
   settings: (s?: AbortSignal) => get<{ settings: AppSettings }>('/settings', s),
   sttStatus: (s?: AbortSignal) => get<SttStatus>('/stt/status', s),
   users: listUsers,

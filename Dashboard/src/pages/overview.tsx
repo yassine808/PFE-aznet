@@ -1,6 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { api, useApi } from '@/lib/api'
+import { WarningIcon } from '@phosphor-icons/react'
+import { api, deleteChantier, useApi, verifyChantier } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 import { computeMetrics, formatUptime, isFlagged, minutesOf } from '@/lib/metrics'
 import { useOps } from '@/lib/ops-context'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
@@ -55,6 +57,92 @@ function Quantity({
       </p>
       <p className="text-ink-faint mt-1.5 text-[0.6875rem]">{label}</p>
     </div>
+  )
+}
+
+/**
+ * Sites the pipeline invented from a spoken name nobody has confirmed.
+ *
+ * It lives on the Overview because that is the one page a director opens
+ * without being sent there: an unverified site is silent otherwise, and a
+ * mis-transcription left alone becomes a permanent tab in his own file — the
+ * extra sheets he already objected to, arriving by another door. Renders
+ * nothing while the list is clean, so the page is unchanged on a normal day.
+ */
+function UnverifiedSites() {
+  const { t } = useI18n()
+  const { user } = useAuth()
+  const chantiers = useApi('chantiers', api.chantiers)
+  const [busy, setBusy] = useState<number | null>(null)
+  // Deleting drops the bordereau with the site, so it takes a second click.
+  const [armed, setArmed] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const pending = (chantiers.data?.chantiers ?? []).filter((c) => c.verifie === false)
+  if (pending.length === 0) return null
+
+  const act = (id: number, fn: (id: number) => Promise<void>) => async () => {
+    setBusy(id)
+    setError(null)
+    try {
+      await fn(id)
+      chantiers.reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+      setArmed(null)
+    }
+  }
+
+  return (
+    <motion.div variants={rise}>
+      <Band title={t('chantiers.unverified')} aside={String(pending.length)}>
+        <p className="text-ink-muted max-w-[70ch] text-xs leading-relaxed">
+          {t('chantiers.unverifiedIntro')}
+        </p>
+        <ul className="mt-1 flex flex-col gap-2">
+          {pending.map((c) => (
+            <li
+              key={c.id}
+              className="border-line flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2"
+            >
+              <span className="text-ink flex min-w-0 items-center gap-2 text-sm">
+                <WarningIcon size={14} className="text-status-warn shrink-0" />
+                <span className="truncate">{c.nom}</span>
+              </span>
+              {user?.role === 'directeur' && (
+                <span className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={busy === c.id}
+                    onClick={act(c.id, verifyChantier)}
+                    className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 disabled:opacity-50"
+                  >
+                    {t('chantiers.confirm')}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === c.id}
+                    onClick={
+                      armed === c.id ? act(c.id, deleteChantier) : () => setArmed(c.id)
+                    }
+                    className={`focus-visible:ring-accent cursor-pointer rounded-md px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 disabled:opacity-50 ${
+                      armed === c.id
+                        ? 'bg-status-fail text-white'
+                        : 'border-line text-ink-muted hover:text-ink border'
+                    }`}
+                  >
+                    {armed === c.id ? t('chantiers.deleteSure') : t('chantiers.delete')}
+                  </button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+        {error && <p className="text-status-fail text-xs">{error}</p>}
+      </Band>
+    </motion.div>
   )
 }
 
@@ -140,6 +228,8 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
           ]}
         />
       </motion.div>
+
+      <UnverifiedSites />
 
       {/* Ribbon and totals share a row: the same day, read two ways. */}
       <motion.div

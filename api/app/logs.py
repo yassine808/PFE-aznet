@@ -1674,6 +1674,20 @@ def find_chantier_by_name(nom: str) -> Optional[dict]:
     return None
 
 
+def verify_chantier(chantier_id: int) -> bool:
+    """Confirm a site the pipeline created from a spoken name.
+
+    One-way on purpose: un-verifying an existing site would say the record is
+    wrong without saying what is right. A site that should not exist is deleted,
+    not demoted.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "UPDATE chantiers SET verifie = true WHERE id = %s", (chantier_id,)
+        )
+        return cur.rowcount > 0
+
+
 def delete_chantier(chantier_id: int) -> bool:
     with _cursor() as cur:
         cur.execute("DELETE FROM chantiers WHERE id = %s", (chantier_id,))

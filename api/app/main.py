@@ -1702,6 +1702,22 @@ def add_chantier(payload: NewChantier, caller: dict = Depends(auth.require_direc
         raise HTTPException(422 if "required" in str(exc) else 502, str(exc)) from exc
 
 
+@app.patch("/chantiers/{chantier_id}", responses={404: {"description": "Chantier not found"}, 502: {"description": "Log store unreachable"}})
+def verify_chantier(chantier_id: int, caller: dict = Depends(auth.require_director)) -> dict:
+    """Confirm a site the pipeline created from a voice note (`verifie = false`).
+
+    Takes no body: confirming is the only edit here. The opposite of confirming
+    is deleting a mis-transcription, which DELETE already does.
+    """
+    try:
+        if not logs.verify_chantier(chantier_id):
+            raise HTTPException(404, f"no chantier {chantier_id}")
+        auth.record(caller, "chantier_verified", target=str(chantier_id))
+        return {"id": chantier_id, "verifie": True}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 @app.delete("/chantiers/{chantier_id}", responses={502: {"description": "Log store unreachable"}})
 def remove_chantier(chantier_id: int, caller: dict = Depends(auth.require_director)) -> dict:
     """Removes the site and its bordereau. The journal tab is left alone: it is
