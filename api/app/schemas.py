@@ -421,3 +421,18 @@ class ProcessResponse(BaseModel):
     message_id: Optional[str] = Field(
         default=None, description="Clé du message reçue à l'appel, renvoyée telle quelle (jointure n8n)"
     )
+    # Where this report is headed, resolved read-only so the reply can say it.
+    # The write happens later in /journal (reply-first ordering), so without
+    # this the technician is told "Rapport enregistré" and never learns which
+    # site it was filed under — and a wrong site is the one error that silently
+    # moves a whole day onto the director's wrong sheet.
+    chantier: Optional[str] = Field(
+        default=None, description="Chantier retenu pour ce message (résolution en lecture seule)"
+    )
+    chantier_source: Optional[str] = Field(
+        default=None,
+        description=(
+            "D'où vient ce chantier : voix | repris | org | nouveau | aucun. "
+            "n8n s'en sert pour qualifier la ligne « Chantier » de la réponse."
+        ),
+    )

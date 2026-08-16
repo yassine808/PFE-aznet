@@ -485,12 +485,17 @@ async def _extract_from_image(
     except logs.LogStoreError as exc:
         await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
     if report.has_data():
-        await _note_inherited_chantier(report, ctx.get("technicien"))
+        chantier, chantier_source = await _resolve_chantier(report, ctx.get("technicien"))
         await run_in_threadpool(_notify_report_event, ctx.get("technicien"),
                                 rapport_complet, warnings, ctx)
+    else:
+        # Nothing was extracted, so there is nothing to route: naming a site on
+        # a message that filed no report would read as "filed to X".
+        chantier, chantier_source = None, None
     return ProcessResponse(
         rapport_complet=rapport_complet, report=report, transcription=None, warnings=warnings,
         correlation_id=ctx.get("correlation_id"), message_id=message_id,
+        chantier=chantier, chantier_source=chantier_source,
     )
 
 
@@ -543,28 +548,33 @@ async def _audio_input(
     return transcription, rapport_complet, warnings, lien_audio
 
 
-async def _note_inherited_chantier(report, technicien: Optional[str]) -> None:
-    """Say it in the summary when the site was inherited, not stated.
+async def _resolve_chantier(report, technicien: Optional[str]):
+    """Which site this message is headed for, resolved for the reply.
 
-    The reply the technician gets is built by n8n out of `report.resume`, and
-    the routing decision is only taken later, in /journal (reply-first
-    ordering). So the one place this can be said on the reply path is here, on
-    the summary itself — and it must be said: a site reused from an old report
-    with no expiry is exactly the kind of wrong that stays invisible until the
-    director's totals are on the wrong paper. Read-only (`create=False`): the
-    reply path must not write a chantier row for a report that may never be
-    filed.
+    The routing decision is only *taken* later, in /journal (reply-first
+    ordering), so the technician was told "Rapport enregistré" and never learned
+    which site it went to. A wrong site is the one error that silently moves a
+    whole day onto the director's wrong sheet, and the only person who can catch
+    it is the one standing on the site — but only if they are told.
+
+    So this answers the question /journal will answer, from the same inputs and
+    with the same precedence, read-only (`create=False`): the reply path must
+    not write a chantier row for a report that may never be filed. The value is
+    returned rather than glued onto `report.resume` — the Sheet's summary column
+    stays a summary, and the routing line lives only in the reply n8n builds.
+
+    Returns (nom, source), source being voix | repris | org | nouveau | aucun,
+    or (None, None) when it cannot be answered — which must never cost the reply.
     """
     if not technicien:
-        return
+        return None, None
     try:
         nom, _tab, _warnings, source = await run_in_threadpool(
             journal.resolve_site, technicien, report.chantier_mentionne, False
         )
     except Exception:  # noqa: BLE001 - a routing hint must never cost the reply
-        return
-    if source == "repris":
-        report.resume = f"{report.resume}\n\n📍 Chantier : {nom} (repris du dernier rapport)"
+        return None, None
+    return nom, source
 
 
 async def _text_input(
@@ -652,8 +662,11 @@ async def process(
     # an empty Sheet row and answers "✅ Rapport enregistré" for a greeting.
     if not report.has_data():
         warnings.append("no_report_content")
+        # Nothing was extracted, so there is nothing to route: naming a site on
+        # a message that filed no report would read as "filed to X".
+        chantier, chantier_source = None, None
     else:
-        await _note_inherited_chantier(report, technicien)
+        chantier, chantier_source = await _resolve_chantier(report, technicien)
         # psycopg2 is synchronous, like every other DB call on this path: run it
         # off the event loop so one technician's notification does not stall
         # every other request in flight. Same reason as _log() above.
@@ -674,6 +687,8 @@ async def process(
         lien_audio=lien_audio,
         correlation_id=correlation_id,
         message_id=message_id,
+        chantier=chantier,
+        chantier_source=chantier_source,
     )
 
 

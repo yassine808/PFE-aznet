@@ -168,10 +168,10 @@ def test_file_report_flags_a_site_nobody_confirmed(chantier_table, monkeypatch):
 
 # --- the reply says which site was used ------------------------------------
 
-def test_the_reply_says_when_the_site_was_inherited(chantier_table, monkeypatch):
-    """n8n builds the reply out of `report.resume` and the routing decision is
-    only taken later (reply-first ordering), so the note has to be added here
-    or the technician never learns which site their report went to."""
+def test_the_reply_learns_which_site_was_inherited(chantier_table, monkeypatch):
+    """The routing decision is only taken later (reply-first ordering), so the
+    reply has to be told here or the technician never learns which site their
+    report went to — and a wrong site moves a whole day onto the wrong sheet."""
     from app import main
     from app.schemas import ExtractedReport
 
@@ -180,11 +180,14 @@ def test_the_reply_says_when_the_site_was_inherited(chantier_table, monkeypatch)
     monkeypatch.setattr(journal, "sheets", sheet)
 
     report = ExtractedReport(cables_installes_m=120, resume="120 m posés.")
-    asyncio.run(main._note_inherited_chantier(report, "NAROUZE"))
-    assert "ACAPS (repris du dernier rapport)" in report.resume
+    nom, source = asyncio.run(main._resolve_chantier(report, "NAROUZE"))
+    assert (nom, source) == ("ACAPS", "repris")
+    # The summary is a summary: the routing line belongs to the reply n8n
+    # builds, not to the Sheet column.
+    assert report.resume == "120 m posés."
 
 
-def test_a_stated_site_adds_no_note(chantier_table, monkeypatch):
+def test_a_stated_site_is_reported_as_spoken(chantier_table, monkeypatch):
     from app import main
     from app.schemas import ExtractedReport
 
@@ -192,8 +195,25 @@ def test_a_stated_site_adds_no_note(chantier_table, monkeypatch):
     monkeypatch.setattr(journal, "sheets", sheet)
     report = ExtractedReport(cables_installes_m=120, resume="120 m posés.",
                              chantier_mentionne="DGH")
-    asyncio.run(main._note_inherited_chantier(report, "NAROUZE"))
+    nom, source = asyncio.run(main._resolve_chantier(report, "NAROUZE"))
+    assert (nom, source) == ("DGH", "voix")
     assert report.resume == "120 m posés."
+
+
+def test_an_unresolvable_site_never_costs_the_reply(monkeypatch):
+    """A routing hint is worth less than the summary it rides on, so anything
+    going wrong here answers (None, None) instead of raising."""
+    from app import main
+    from app.schemas import ExtractedReport
+
+    def boom(*a, **k):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(journal, "resolve_site", boom)
+    report = ExtractedReport(cables_installes_m=120, resume="120 m posés.")
+    assert asyncio.run(main._resolve_chantier(report, "NAROUZE")) == (None, None)
+    # No technician, no routing question to answer.
+    assert asyncio.run(main._resolve_chantier(report, "")) == (None, None)
 
 
 # --- has_data: naming a site is not a report -------------------------------
