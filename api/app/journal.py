@@ -133,6 +133,9 @@ COL_RESUME = "Résumé"
 COL_CANAL = "Canal"
 COL_LIEN_AUDIO = "Lien audio"
 COL_FLAG = "Flag review"
+# Why the flag is set. A bare TRUE told a reader that something was wrong and
+# not what, so the cheapest thing to do with a flagged row was believe it.
+COL_MOTIF_FLAG = "Motif du flag"
 COL_CORRELATION = "Correlation id"
 # Which STT engine actually heard this voice note. The chain falls through on
 # failure, so the configured order does NOT tell you what ran: a row served by
@@ -149,7 +152,7 @@ HEADERS: Tuple[str, ...] = (
     + tuple(col for col, _ in STOCK_COLUMNS.values())
     + tuple(TEXT_COLUMNS.values())
     + (COL_RESUME, COL_RAPPORT, COL_CANAL, COL_STT, COL_LIEN_AUDIO,
-       COL_FLAG, COL_CORRELATION)
+       COL_FLAG, COL_MOTIF_FLAG, COL_CORRELATION)
 )
 
 
@@ -414,7 +417,48 @@ REVIEW_WARNINGS = {
     # A site nobody has confirmed yet: the row is filed on it, and the director
     # is told to look, because "Extralé" heard once is a new paper otherwise.
     "chantier_cree_non_verifie",
+    # Locations read off a photo. See WARNING_LABELS for why this one exists.
+    "photo_zones_partielles",
 }
+
+# What the flag actually means, in the secretary's language.
+#
+# The flag column was a bare TRUE, which tells a reader that something is wrong
+# and not what — so the cheapest thing to do with a flagged row was believe it
+# anyway. Each warning now writes its reason beside it.
+#
+# `photo_zones_partielles` is the one that came out of a measurement rather than
+# a hunch. The 2026-08-16 vision benchmark showed attentional crowding under
+# control: the same blue dots on the same corridor are found when they are the
+# only marks on the plan and missed by 3 models out of 4 once louder marks are
+# added elsewhere in the image. A dropped zone is invisible — it leaves no empty
+# cell to notice, only a shorter list — so the row has to say so itself.
+WARNING_LABELS = {
+    "image_input": "Lu sur une photo",
+    "photo_zones_partielles": "Zones lues sur une photo : la liste peut être incomplète",
+    "low_confidence_transcription": "Transcription peu sûre",
+    "short_transcription": "Transcription très courte",
+    "chantier_cree_non_verifie": "Chantier non confirmé",
+    "no_report_content": "Aucune donnée exploitable",
+    "stock_ecart": "Écart de stock",
+}
+
+
+def flag_reason(warnings) -> str:
+    """The flag column's reason, in the order the warnings arrived.
+
+    An unknown warning falls through as its own name rather than being dropped:
+    a reason nobody has written a label for is still more use than a blank cell,
+    and a silent omission here would hide exactly what this column exists for.
+    """
+    seen, out = set(), []
+    for w in warnings or ():
+        key = str(w).split(":")[0]
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(WARNING_LABELS.get(key, key))
+    return " · ".join(out)
 
 
 def _sticky_chantier(technicien: str) -> Optional[str]:
@@ -557,6 +601,7 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
         "rapport_complet": payload.get("rapport_complet"),
         "confidence": payload.get("confidence"),
         "flag_review": bool(REVIEW_WARNINGS & set(warnings)),
+        "motif_flag": flag_reason(warnings),
         "lien_audio": payload.get("lien_audio"),
         "STT_model": payload.get("stt_engine"),
     }
@@ -648,6 +693,7 @@ def file_report(payload: Dict) -> Dict:
         COL_LIEN_AUDIO: payload.get("lien_audio"),
         COL_CORRELATION: payload.get("correlation_id"),
         COL_FLAG: "TRUE" if REVIEW_WARNINGS & set(warnings) else "FALSE",
+        COL_MOTIF_FLAG: flag_reason(warnings),
     }
     row, stock_warnings = write_report(
         tab, payload.get("date") or "", technicien, chantier, report,

@@ -147,3 +147,43 @@ def test_unbudgeted_article_has_no_contract_quantity():
     assert acaps["Jarretier SC/LC"] is None
     assert acaps["Goulotte 100*45"] is None
     assert acaps["Cable UTP"] == 720
+
+
+# --- why a row is flagged --------------------------------------------------
+#
+# The flag column was a bare TRUE: it told a reader something was wrong and not
+# what, so the cheapest response to a flagged row was to believe it anyway.
+
+
+def test_flag_reason_is_human_readable():
+    from app.journal import flag_reason
+    assert flag_reason(["chantier_cree_non_verifie"]) == "Chantier non confirmé"
+
+
+def test_flag_reason_keeps_order_and_deduplicates():
+    from app.journal import flag_reason
+    got = flag_reason(["image_input", "image_input", "photo_zones_partielles"])
+    assert got == "Lu sur une photo · Zones lues sur une photo : la liste peut être incomplète"
+
+
+def test_an_unlabelled_warning_falls_through_by_name():
+    """A reason nobody wrote a label for still beats a blank cell — a silent
+    omission here hides exactly what the column exists for."""
+    from app.journal import flag_reason
+    assert flag_reason(["quelque_chose_de_neuf"]) == "quelque_chose_de_neuf"
+
+
+def test_a_warning_with_a_payload_is_labelled_by_its_key():
+    """`stock_ecart:-40` carries its delta; the label is about the kind."""
+    from app.journal import flag_reason
+    assert flag_reason(["stock_ecart:-40"]) == "Écart de stock"
+
+
+def test_a_clean_row_has_no_reason():
+    from app.journal import flag_reason
+    assert flag_reason([]) == ""
+
+
+def test_the_motif_column_sits_next_to_the_flag():
+    from app.journal import COL_FLAG, COL_MOTIF_FLAG, HEADERS
+    assert HEADERS.index(COL_MOTIF_FLAG) == HEADERS.index(COL_FLAG) + 1

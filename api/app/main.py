@@ -458,6 +458,18 @@ async def _extract_from_image(
     # verbatim quote from the technician.
     rapport_complet = f"[photo] {report.resume}"
     warnings = ["image_input"]
+    # Locations read off a photo get their own warning, and only when the model
+    # actually returned some — a warning on every photo would be wallpaper.
+    #
+    # This one is measured, not assumed. The 2026-08-16 vision benchmark showed
+    # attentional crowding under control: the same marks on the same corridor
+    # are found when they are the only annotation on the plan, and missed by 3
+    # models out of 4 once louder marks appear elsewhere in the same image. So
+    # a zone list from a photo is plausibly SHORT, and a missing zone is
+    # invisible downstream — it leaves no empty cell to notice, only a shorter
+    # list. The row has to say so itself, or the reader trusts a partial answer.
+    if any((report.etages, report.ailes, report.locaux_techniques)):
+        warnings.append("photo_zones_partielles")
     if not report.has_data():
         warnings.append("no_report_content")
     await _log(

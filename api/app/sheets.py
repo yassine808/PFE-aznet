@@ -170,6 +170,30 @@ def _headers(svc, tab: str = RAPPORTS_TAB) -> List[str]:
     return list(headers)
 
 
+def _grow_columns(svc, tab: str, needed: int) -> None:
+    """Widen a tab to at least `needed` columns. No-op when it already is.
+
+    Uses appendDimension rather than an absolute resize, so it can only ever add
+    columns — a resize computed from a stale grid size could shrink the tab and
+    take real data with it.
+    """
+    meta = svc.spreadsheets().get(spreadsheetId=settings.sheet_id).execute(num_retries=_RETRIES)
+    sheet = next((s for s in meta["sheets"] if s["properties"]["title"] == tab), None)
+    if sheet is None:
+        raise SheetsError(f"tab {tab!r} not found")
+    current = sheet["properties"].get("gridProperties", {}).get("columnCount", 0)
+    if current >= needed:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=settings.sheet_id,
+        body={"requests": [{"appendDimension": {
+            "sheetId": sheet["properties"]["sheetId"],
+            "dimension": "COLUMNS",
+            "length": needed - current,
+        }}]},
+    ).execute(num_retries=_RETRIES)
+
+
 def _extend_headers(svc, names: List[str]) -> None:
     """Append columns to the Rapports header row.
 
@@ -178,8 +202,17 @@ def _extend_headers(svc, names: List[str]) -> None:
     columns. The header cache dies with the `invalidate_reports()` the write
     already performs, so the next read sees the new layout.
     """
-    start = _col_letter(len(_headers(svc)) + 1)
-    end = _col_letter(len(_headers(svc)) + len(names))
+    existing = len(_headers(svc))
+    # Grow the grid before writing into it. A tab has a fixed column count, and
+    # writing past it is a 400 "exceeds grid limits", not an auto-extend. That
+    # turns this function — whose whole job is to make sure a new schema field
+    # can never be silently dropped — into the thing that raises: the append
+    # fails, the row parks in `failed_writes`, and every retry fails the same
+    # way forever. Hit for real on 2026-08-16 adding `motif_flag` to a Rapports
+    # tab that was exactly 61 columns wide.
+    _grow_columns(svc, RAPPORTS_TAB, existing + len(names))
+    start = _col_letter(existing + 1)
+    end = _col_letter(existing + len(names))
     svc.spreadsheets().values().update(
         spreadsheetId=settings.sheet_id,
         range=_a1(RAPPORTS_TAB, f"{start}1:{end}1"),
