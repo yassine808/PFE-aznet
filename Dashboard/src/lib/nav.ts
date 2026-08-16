@@ -1,5 +1,6 @@
 import {
   BuildingsIcon,
+  GaugeIcon,
   CalendarBlankIcon,
   ChartBarIcon,
   CheckSquareIcon,
@@ -111,6 +112,8 @@ export const NAV: { section: string; items: NavItem[] }[] = [
 export const SYSTEM_NAV: NavItem[] = [
   { route: 'logs', labelKey: 'nav.logs', keywordsKey: 'nav.kw.logs', Icon: PulseIcon },
   { route: 'queue', labelKey: 'nav.queue', keywordsKey: 'nav.kw.queue', Icon: StackIcon },
+  // Instrumentation, not a working page: how much of each free tier is left.
+  { route: 'usage', labelKey: 'nav.usage', keywordsKey: 'nav.kw.usage', Icon: GaugeIcon },
 ]
 
 export const NAV_ITEMS: NavItem[] = [...NAV.flatMap((s) => s.items), ...SYSTEM_NAV]

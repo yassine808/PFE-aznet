@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app import usage
 from app.config import settings
 
 
@@ -107,6 +108,7 @@ def _generate_gemini(date: str, rows_json: str, alertes: str = "") -> DailyRepor
                 "response_schema": DailyReportContent,
             },
         )
+        usage.from_gemini(resp, settings.gemini_model, "report")
         parsed = resp.parsed
     except Exception as exc:  # noqa: BLE001
         raise DailyReportError(f"gemini: {exc}") from exc
@@ -119,7 +121,7 @@ def _generate_groq(date: str, rows_json: str, alertes: str = "") -> DailyReportC
     if not settings.groq_api_key:
         raise DailyReportError("GROQ_API_KEY not configured")
     try:
-        resp = _groq_client().chat.completions.create(
+        resp = usage.from_groq(_groq_client().chat.completions.with_raw_response.create(
             model=settings.groq_llm_model,
             response_format={"type": "json_object"},
             messages=[
@@ -130,7 +132,7 @@ def _generate_groq(date: str, rows_json: str, alertes: str = "") -> DailyReportC
                 },
                 {"role": "user", "content": rows_json},
             ],
-        )
+        ), settings.groq_llm_model, "report")
         raw = resp.choices[0].message.content
         if not raw:
             raise ValueError("empty completion")

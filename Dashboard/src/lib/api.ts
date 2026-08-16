@@ -496,6 +496,36 @@ export const bordereau = (id: number, s?: AbortSignal) =>
     s,
   )
 
+/**
+ * One provider's free-tier position.
+ *
+ * `limit_source` is load-bearing and must be shown: Groq returns real quota
+ * headers on every response, Gemini returns none at all so its ceiling is a
+ * documented constant, and Meta gives a live tier but not our consumption
+ * against it. Presenting the three identically would imply a precision two of
+ * them do not have.
+ */
+export interface ProviderUsage {
+  provider: string
+  limit_source?: 'live' | 'documented' | 'unknown'
+  calls_24h?: number
+  tokens_24h?: number
+  by_model?: { model: string | null; calls: number; tokens: number }[]
+  limit_requests?: number | null
+  remaining_requests?: number | null
+  limit_tokens?: number | null
+  remaining_tokens?: number | null
+  reset_requests?: string | null
+  measured_at?: string | null
+  documented_for?: string | null
+  /** WhatsApp only — Meta's live ceiling, and our own count against it. */
+  tier?: string | null
+  quality?: string | null
+  throughput?: string | null
+  sent_24h?: number
+  error?: string | null
+}
+
 /** The org chart's "+": a chef with no channel and no login yet. */
 export const addPerson = (input: { name: string; role?: string }) =>
   post<{ id: number; name: string; role: string }>('/persons', input)
@@ -888,6 +918,7 @@ export const api = {
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
   chantiers: (s?: AbortSignal) => get<{ chantiers: Chantier[] }>('/chantiers', s),
   alerts: (s?: AbortSignal) => get<{ alerts: MaterialAlert[] }>('/alerts', s),
+  usage: (s?: AbortSignal) => get<{ providers: ProviderUsage[] }>('/usage', s),
   receptions: (s?: AbortSignal) => get<{ receptions: Reception[] }>('/receptions', s),
   settings: (s?: AbortSignal) => get<{ settings: AppSettings }>('/settings', s),
   sttStatus: (s?: AbortSignal) => get<SttStatus>('/stt/status', s),

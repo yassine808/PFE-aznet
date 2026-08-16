@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from app import auth, daily_report, docx_report, drive, extraction, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets, stock
+from app import auth, daily_report, docx_report, drive, extraction, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets, stock, usage
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError, TranscriptionInfo
@@ -1937,6 +1937,18 @@ def get_bordereau(chantier_id: int, caller: dict = Depends(auth.require_user)) -
             ),
         })
     return {"chantier": chantier, "articles": out, "totaux": totals}
+
+
+@app.get("/usage")
+async def api_usage(caller: dict = Depends(auth.require_user)) -> dict:
+    """How much of each free tier is left, and where each number came from.
+
+    Off the event loop: it reads Postgres and makes one Graph API call, both
+    synchronous. Never 502s — one vendor unreachable comes back as that
+    provider's `error` rather than emptying the panel, because a usage page that
+    disappears when Meta is slow is a page nobody trusts.
+    """
+    return await run_in_threadpool(usage.snapshot)
 
 
 @app.get("/alerts")

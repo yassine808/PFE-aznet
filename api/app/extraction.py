@@ -20,6 +20,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 from app import prompt_loader
+from app import usage
 from app.config import settings
 from app.schemas import ExtractedReport
 
@@ -134,6 +135,7 @@ def _call_gemini(
             contents=contents,
             config={"response_mime_type": "application/json", "response_schema": ExtractedReport},
         )
+        usage.from_gemini(resp, model, "extraction")
         parsed = resp.parsed
     except Exception as exc:  # noqa: BLE001
         raise ExtractionError(f"gemini/{model}: {exc}") from exc
@@ -162,7 +164,10 @@ def _call_groq(
         ensure_ascii=False,
     )
     try:
-        resp = client.chat.completions.create(
+        # `with_raw_response` rather than `create`: the parsed body drops the
+        # headers, and Groq's headers are the only live quota reading any vendor
+        # here gives us. `usage.from_groq` unwraps it back to the completion.
+        resp = usage.from_groq(client.chat.completions.with_raw_response.create(
             model=model,
             response_format={"type": "json_object"},
             messages=[
@@ -175,7 +180,7 @@ def _call_groq(
                  + f"\nRéponds en JSON avec exactement ces clés: {schema_hint}"},
                 {"role": "user", "content": text or ""},
             ],
-        )
+        ), model, "extraction")
         raw = resp.choices[0].message.content
         if not raw:
             raise ValueError("empty completion")

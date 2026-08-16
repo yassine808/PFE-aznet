@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import Optional
 
 from app import prompt_loader
+from app import usage
 from app.config import settings
 from app.schemas import TranscriptionInfo
 
@@ -64,7 +65,8 @@ class GroqWhisperProvider(TranscriptionProvider):
         buf = io.BytesIO(audio)
         start = time.perf_counter()
         try:
-            result = client.audio.transcriptions.create(
+            # Raw response so the quota headers survive; see app/usage.py.
+            result = usage.from_groq(client.audio.transcriptions.with_raw_response.create(
                 file=(f"note.{ext}", buf),
                 model=settings.groq_whisper_model,
                 # Darija has no ISO tag Whisper knows; 'ar' beats autodetect
@@ -79,7 +81,7 @@ class GroqWhisperProvider(TranscriptionProvider):
                 # verbose_json (vs plain "text") also returns per-segment
                 # avg_logprob, which we use to derive a confidence score.
                 response_format="verbose_json",
-            )
+            ), settings.groq_whisper_model, "stt")
         except Exception as exc:  # noqa: BLE001 — surface as domain error
             raise TranscriptionError(f"groq: {exc}") from exc
         latency = time.perf_counter() - start

@@ -178,7 +178,19 @@ tag, and it is the owner's decision (2026-08-15) to leave it at that.
 Kept from the investigation: `/process` echoes `correlation_id` and
 `message_id` back in `ProcessResponse` (free, and a real join key if one is
 ever needed).
-- [] new panel for usage that shows usage for gemini, groq, facebook whatsapp
+- [x] **Panneau de consommation des API** — fait 2026-08-16 (`app/usage.py`,
+  `GET /usage`, page **Consommation** dans la bande système). Chiffres réels,
+  vérifiés en direct avant d'écrire une ligne de code, et **chacun annonce sa
+  provenance** parce que les trois fournisseurs ne répondent pas avec la même
+  certitude : Groq renvoie un vrai quota dans ses en-têtes (1000 requêtes,
+  12000 jetons, restant et fenêtres de réinitialisation) ; Gemini ne renvoie
+  **aucun** en-tête de quota — dictionnaire vide, vérifié — donc la consommation
+  est mesurée et le plafond est une constante documentée, affichée comme telle ;
+  Meta donne le plafond en direct (`messaging_limit_tier`, `quality_rating`,
+  `throughput`) mais pas notre consommation face à lui sans un identifiant WABA
+  que le jeton System User ne porte pas, donc le plafond est le sien et le
+  décompte le nôtre. Un en-tête absent enregistre NULL, jamais 0 : zéro se
+  lirait « le fournisseur dit qu'il ne reste rien ».
 - [x] **Retirer « 🤖 Moteur STT » de la réponse au technicien** — fait
   2026-08-16 **et poussé en direct** (`--push`, workflow toujours actif,
   0 occurrence de « Moteur STT » dans la copie vivante). Le premier essai avait

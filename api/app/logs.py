@@ -735,6 +735,34 @@ CREATE TABLE IF NOT EXISTS receptions (
     correlation_id TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- One row per model API call: what it cost us, and what the vendor said was
+-- left. The whole project runs on free tiers and nothing measured how close any
+-- of them was to its ceiling — a quota running out shows up as the chain
+-- falling through to the next vendor, which looks exactly like a working day.
+--
+-- The quota columns are only ever filled from a response header (Groq is the
+-- one vendor that sends them). Gemini leaves them NULL, and `usage.py` reports
+-- its ceiling as documented rather than measured, so a NULL here can never be
+-- mistaken for "the vendor said zero".
+--
+-- Time-series, so it is pruned with the logs and the samples.
+CREATE TABLE IF NOT EXISTS api_usage (
+    id                 BIGSERIAL PRIMARY KEY,
+    ts                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+    provider           TEXT NOT NULL,
+    model              TEXT,
+    kind               TEXT,
+    tokens_in          INT,
+    tokens_out         INT,
+    limit_requests     INT,
+    remaining_requests INT,
+    limit_tokens       BIGINT,
+    remaining_tokens   BIGINT,
+    reset_requests     TEXT,
+    reset_tokens       TEXT
+);
+CREATE INDEX IF NOT EXISTS api_usage_ts_idx ON api_usage(ts);
+
 CREATE INDEX IF NOT EXISTS receptions_chantier_idx ON receptions(chantier, champ);
 -- One delivery message must not be ledgered twice. n8n retries, the drain
 -- replays a parked payload, and an operator can re-run a job: without this a
@@ -1803,6 +1831,62 @@ def resolve_chantier(person_id: int) -> Optional[dict]:
     return dict(row)
 
 
+def record_usage(provider: str, model: Optional[str] = None, kind: Optional[str] = None,
+                 **fields) -> None:
+    """One API call. Called on every model request, so it must stay cheap."""
+    cols = ("tokens_in", "tokens_out", "limit_requests", "remaining_requests",
+            "limit_tokens", "remaining_tokens", "reset_requests", "reset_tokens")
+    with _cursor() as cur:
+        cur.execute(
+            f"INSERT INTO api_usage (provider, model, kind, {', '.join(cols)}) "
+            f"VALUES (%s, %s, %s, {', '.join(['%s'] * len(cols))})",
+            (provider, model, kind, *(fields.get(c) for c in cols)),
+        )
+
+
+def usage_since(since) -> List[dict]:
+    """Calls and tokens per (provider, model) over a window."""
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT provider, model, COUNT(*) AS calls,
+                   COALESCE(SUM(COALESCE(tokens_in,0) + COALESCE(tokens_out,0)), 0) AS tokens
+            FROM api_usage WHERE ts >= %s GROUP BY provider, model
+            """,
+            (since,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def latest_usage_quota() -> Dict[str, dict]:
+    """The most recent row per provider that actually carried a quota header.
+
+    `WHERE limit_requests IS NOT NULL` on purpose: a provider that sends no
+    headers must come back absent, so the caller reports a documented ceiling
+    instead of presenting a NULL as though the vendor had answered.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (provider) provider, ts, limit_requests, remaining_requests,
+                   limit_tokens, remaining_tokens, reset_requests, reset_tokens
+            FROM api_usage WHERE limit_requests IS NOT NULL
+            ORDER BY provider, ts DESC
+            """
+        )
+        return {r["provider"]: _iso(dict(r)) for r in cur.fetchall()}
+
+
+def whatsapp_sent_since(since) -> int:
+    """Our own WhatsApp message count — Meta gives the ceiling, not the usage."""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM pipeline_logs WHERE ts >= %s AND channel = 'whatsapp'",
+            (since,),
+        )
+        return int((_one(cur) or {"n": 0})["n"])
+
+
 def record_receptions(chantier: str, champs: Dict[str, float], date: str,
                       technicien: Optional[str] = None, canal: Optional[str] = None,
                       correlation_id: Optional[str] = None,
@@ -2028,9 +2112,17 @@ def read_samples(hours: int = 1) -> List[dict]:
 
 
 def prune_samples(days: int = RETENTION_DAYS) -> int:
+    """Both per-call time series: uptime samples and API usage.
+
+    `api_usage` gets a row on every model call, so it grows faster than anything
+    else here. It is only ever read over a 24-hour window and for the latest
+    quota header, so nothing is lost by pruning it on the same clock.
+    """
     with _cursor() as cur:
         cur.execute("DELETE FROM service_samples WHERE ts < now() - (%s * interval '1 day')", (days,))
-        return cur.rowcount
+        deleted = cur.rowcount
+        cur.execute("DELETE FROM api_usage WHERE ts < now() - (%s * interval '1 day')", (days,))
+        return deleted + max(0, cur.rowcount)
 
 
 def prune_meta(days: int = RETENTION_DAYS) -> dict:

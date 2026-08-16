@@ -39,6 +39,7 @@ const AutomationPage = lazy(() =>
 )
 const TasksPage = lazy(() => import('@/pages/tasks').then((m) => ({ default: m.TasksPage })))
 const LogsPage = lazy(() => import('@/pages/logs').then((m) => ({ default: m.LogsPage })))
+const UsagePage = lazy(() => import('@/pages/usage').then((m) => ({ default: m.UsagePage })))
 const QueuePage = lazy(() => import('@/pages/queue').then((m) => ({ default: m.QueuePage })))
 const LoginPage = lazy(() => import('@/pages/login').then((m) => ({ default: m.LoginPage })))
 
@@ -52,6 +53,7 @@ const TITLE_KEY: Record<Route, string> = {
   tasks: 'page.tasks.title',
   logs: 'page.logs.title',
   queue: 'page.queue.title',
+  usage: 'page.usage.title',
   equipe: 'page.equipe.title',
   chantiers: 'page.chantiers.title',
   notfound: 'page.notfound.title',
@@ -133,6 +135,8 @@ function RouteView({
       return <LogsPage />
     case 'queue':
       return <QueuePage />
+    case 'usage':
+      return <UsagePage />
     case 'equipe':
       return <EquipePage initialPerson={params.person ? Number(params.person) : undefined} />
     case 'notfound':

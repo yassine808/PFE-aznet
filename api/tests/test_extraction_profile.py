@@ -20,11 +20,24 @@ class _Recorder:
         self.messages = None
 
     def _create(self, model, response_format, messages):
+        """The *raw* response wrapper, because that is what the code now calls.
+
+        `extraction` goes through `.with_raw_response` so `usage.py` can read
+        Groq's rate-limit headers — they are the only live quota reading any
+        vendor here gives us, and the parsed body drops them. A fake that only
+        offers `.create` would pass while the real client raises.
+        """
         self.messages = messages
-        return types.SimpleNamespace(
+        completion = types.SimpleNamespace(
             choices=[types.SimpleNamespace(message=types.SimpleNamespace(
                 content='{"resume": "Pose de goulottes.", "chantier": "Sidi Maarouf"}'
-            ))]
+            ))],
+            usage=types.SimpleNamespace(prompt_tokens=11, completion_tokens=7),
+        )
+        return types.SimpleNamespace(
+            headers={"x-ratelimit-limit-requests": "1000",
+                     "x-ratelimit-remaining-requests": "999"},
+            parse=lambda: completion,
         )
 
 
@@ -36,7 +49,9 @@ def groq_recorder(monkeypatch):
     class FakeGroq:
         def __init__(self, api_key=None):
             self.chat = types.SimpleNamespace(
-                completions=types.SimpleNamespace(create=rec._create)
+                completions=types.SimpleNamespace(
+                    with_raw_response=types.SimpleNamespace(create=rec._create)
+                )
             )
 
     monkeypatch.setitem(sys.modules, "groq", types.SimpleNamespace(Groq=FakeGroq))

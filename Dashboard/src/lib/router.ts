@@ -10,6 +10,7 @@ export const ROUTES = [
   'tasks',
   'logs',
   'queue',
+  'usage',
   'equipe',
   'chantiers',
   // Not a navigable destination: nothing links here and it is absent from the

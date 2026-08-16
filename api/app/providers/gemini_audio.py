@@ -1,6 +1,7 @@
 import time
 from functools import lru_cache
 
+from app import usage
 from app.config import settings
 from app.schemas import TranscriptionInfo
 
@@ -85,6 +86,7 @@ class GeminiAudioProvider(TranscriptionProvider):
             )
         except Exception as exc:  # noqa: BLE001
             raise TranscriptionError(f"gemini: {exc}") from exc
+        usage.from_gemini(resp, settings.gemini_model, "stt")
         latency = time.perf_counter() - start
         if not resp.text:
             raise TranscriptionError("gemini: empty transcription")
