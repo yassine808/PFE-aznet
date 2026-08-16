@@ -1,4 +1,5 @@
 import {
+  BuildingsIcon,
   CalendarBlankIcon,
   ChartBarIcon,
   CheckSquareIcon,
@@ -74,6 +75,16 @@ export const NAV: { section: string; items: NavItem[] }[] = [
         labelKey: 'nav.equipe',
         keywordsKey: 'nav.kw.equipe',
         Icon: UsersThreeIcon,
+      },
+      {
+        // A site is a real entity — a journal tab, a bordereau, a crew — and
+        // until 2026-08-16 it had no page: confirming one was a banner on
+        // Overview, which answers "what is happening today", not "look after
+        // the sites".
+        route: 'chantiers',
+        labelKey: 'nav.chantiers',
+        keywordsKey: 'nav.kw.chantiers',
+        Icon: BuildingsIcon,
       },
       {
         route: 'automation',

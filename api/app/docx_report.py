@@ -151,6 +151,35 @@ def _count(n: int) -> str:
     return f"{ALERT_MARK} {n}" if n else "—"
 
 
+def _quantity(alert: dict) -> str:
+    """The remaining quantity, marked when it is the critical kind.
+
+    A dépassement carries a negative `reste` — it is how much the site is over
+    the contract — so it prints with an explicit sign rather than as a quantity
+    someone might read as stock on hand.
+    """
+    reste = alert.get("reste")
+    if reste is None:
+        return "—"
+    unit = f" {alert['unite']}" if alert.get("unite") else ""
+    if alert.get("niveau") == "depassement":
+        return f"{ALERT_MARK} +{_int(abs(reste))}{unit}"
+    marked = ALERT_MARK + " " if alert.get("niveau") == "critique" else ""
+    return f"{marked}{_int(reste)}{unit}"
+
+
+def _cover(alert: dict) -> str:
+    """Days of cover, or why there are none to give."""
+    if alert.get("niveau") == "depassement":
+        return "dépassement"
+    jours = alert.get("jours")
+    if jours is None:
+        # Fewer than two active days: an average over one day is that day, and
+        # printing it as a rate would give a made-up number an air of trend.
+        return "rythme inconnu"
+    return f"{jours:.1f} j"
+
+
 def _split(groups: Sequence[dict], column: str) -> str:
     """Who contributed to one quantity: `Yassine 40 · Ahmed 10`.
 
@@ -304,6 +333,7 @@ def build(
     period: str,
     rows: Sequence[dict],
     author: Optional[str] = None,
+    alerts: Optional[Sequence[dict]] = None,
 ) -> bytes:
     """The whole document, as the bytes that get attached or downloaded.
 
@@ -440,6 +470,26 @@ def build(
                 for e in site_rows
             ],
             right=(1, 3),
+        )
+
+    # Above the review section and below the work: what has to be ordered is
+    # the one thing in this document with a deadline attached to it.
+    if alerts:
+        _heading(document, f"{ALERT_MARK} Alertes matériel", color=ALERT)
+        _table(
+            document,
+            ("Chantier", "Article", "Reste", "Couverture", "Provenance du chiffre"),
+            [
+                (
+                    a["chantier"],
+                    a["article"],
+                    _quantity(a),
+                    _cover(a),
+                    a.get("source") or "—",
+                )
+                for a in alerts
+            ],
+            right=(2, 3),
         )
 
     # Last, and only when there is something: the reader reaches it having

@@ -452,5 +452,21 @@
   "settings.apply": "حفظ",
   "settings.applied": "تم الحفظ",
   "equipe.roleLabel": "الدور",
-  "settings.accountName": "الاسم"
+  "settings.accountName": "الاسم",
+  "nav.chantiers": "الأوراش",
+  "nav.kw.chantiers": "أوراش جدول الكميات الصفقة مواد مخزون تنبيهات توريد",
+  "page.chantiers.title": "الأوراش",
+  "chantiers.alerts": "تنبيهات المواد",
+  "chantiers.alertsNone": "لا نقص مسجَّل. الكميات المتبقية تغطي الوتيرة الحالية في جميع الأوراش المتابَعة.",
+  "chantiers.alertsIntro": "محسوب من السجل والتوريدات وجدول الكميات. كل سطر يذكر مصدر رقمه.",
+  "chantiers.remaining": "يتبقى {n}",
+  "chantiers.over": "تجاوز بـ {n}",
+  "chantiers.cover": "تغطية {n} ي",
+  "chantiers.all": "جميع الأوراش",
+  "chantiers.none": "لا يوجد ورش مسجَّل.",
+  "chantiers.noBordereau": "لم يُدخَل جدول كميات لهذا الورش.",
+  "chantiers.article": "المادة",
+  "chantiers.marche": "الصفقة",
+  "chantiers.installed": "المنجَز",
+  "chantiers.progress": "التقدّم"
 }

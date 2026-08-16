@@ -31,6 +31,9 @@ const EquipePage = lazy(() => import('@/pages/equipe').then((m) => ({ default: m
 // Not lazy: it is tiny, and a wrong address should not also mean a loading
 // spinner while a chunk downloads.
 import { NotFoundPage } from '@/pages/notfound'
+const ChantiersPage = lazy(() =>
+  import('@/pages/chantiers').then((m) => ({ default: m.ChantiersPage })),
+)
 const AutomationPage = lazy(() =>
   import('@/pages/automation').then((m) => ({ default: m.AutomationPage })),
 )
@@ -50,6 +53,7 @@ const TITLE_KEY: Record<Route, string> = {
   logs: 'page.logs.title',
   queue: 'page.queue.title',
   equipe: 'page.equipe.title',
+  chantiers: 'page.chantiers.title',
   notfound: 'page.notfound.title',
 }
 
@@ -119,6 +123,8 @@ function RouteView({
       return <DailyReportPage initialDate={params.date} />
     case 'weekly':
       return <WeeklyReportPage initialWeek={params.week} />
+    case 'chantiers':
+      return <ChantiersPage />
     case 'automation':
       return <AutomationPage />
     case 'tasks':

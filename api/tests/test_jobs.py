@@ -226,7 +226,7 @@ def test_weekly_report_covers_the_whole_week(monkeypatch):
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": ["chef@aznet.ma"]})
     monkeypatch.setattr(
         jobs.daily_report, "generate_daily_report",
-        lambda label, r: seen.update(label=label, n=len(r))
+        lambda label, r, a=None: seen.update(label=label, n=len(r))
         or jobs.daily_report.DailyReportContent(objet="Hebdo", corps="…"),
     )
     monkeypatch.setattr(jobs.mailer, "send", lambda to, s, b, **k: list(to))
@@ -255,7 +255,7 @@ def test_daily_report_is_per_manager(monkeypatch):
     ]
     generated, sent, stored = [], [], []
 
-    def fake_gen(label, r):
+    def fake_gen(label, r, alerts=None):
         generated.append((label, sorted(row["resume"] for row in r)))
         return jobs.daily_report.DailyReportContent(objet=f"Rapport {label}", corps="corps")
 
@@ -295,7 +295,7 @@ def test_weekly_report_stores_period_type(monkeypatch):
     ]
     stored = []
 
-    def fake_gen(label, r):
+    def fake_gen(label, r, alerts=None):
         return jobs.daily_report.DailyReportContent(objet="Hebdo", corps="…")
 
     monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
@@ -371,7 +371,7 @@ def test_manager_without_email_does_not_abort_the_report_job(monkeypatch):
     monkeypatch.setattr(jobs.logs, "save_manager_report",
                         lambda *a: stored.append(a))
     monkeypatch.setattr(jobs.daily_report, "generate_daily_report",
-                        lambda period, r: jobs.daily_report.DailyReportContent(objet="o", corps="c"))
+                        lambda period, r, a=None: jobs.daily_report.DailyReportContent(objet="o", corps="c"))
 
     def fake_send(to, subject, body, **kwargs):
         addresses = [a for a in to if a]
@@ -479,7 +479,7 @@ def _one_report_setup(monkeypatch):
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
     monkeypatch.setattr(
         jobs.daily_report, "generate_daily_report",
-        lambda label, r: jobs.daily_report.DailyReportContent(
+        lambda label, r, a=None: jobs.daily_report.DailyReportContent(
             objet="Rapport journalier — 2026-08-16", corps="## Synthèse\nUne intervention."
         ),
     )

@@ -331,6 +331,10 @@ def _norm_date(value) -> Optional[str]:
 # period against the Sheet's own date spellings, and reaching into a private
 # helper from another module is how a rename becomes an outage somewhere else.
 norm_date = _norm_date
+# Public because `stock.py` reads the same cells and must read them the same
+# way: "2274 m" is 2274 and an unparseable cell is None, never 0. Two parsers
+# over one column is how a stock figure and the journal stop agreeing.
+parse_number = _num
 
 
 def _same_day(cell, when) -> bool:

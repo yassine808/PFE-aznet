@@ -452,5 +452,21 @@
   "settings.apply": "Save",
   "settings.applied": "Saved",
   "equipe.roleLabel": "Role",
-  "settings.accountName": "Name"
+  "settings.accountName": "Name",
+  "nav.chantiers": "Sites",
+  "nav.kw.chantiers": "sites bill of quantities contract material stock alerts delivery",
+  "page.chantiers.title": "Sites",
+  "chantiers.alerts": "Material alerts",
+  "chantiers.alertsNone": "Nothing running short. Remaining quantities cover the current pace on every tracked site.",
+  "chantiers.alertsIntro": "Computed from the journal, the receptions ledger and the contract. Each line says where its figure came from.",
+  "chantiers.remaining": "{n} left",
+  "chantiers.over": "{n} over",
+  "chantiers.cover": "{n} d of cover",
+  "chantiers.all": "All sites",
+  "chantiers.none": "No site recorded.",
+  "chantiers.noBordereau": "No bill of quantities entered for this site.",
+  "chantiers.article": "Article",
+  "chantiers.marche": "Contract",
+  "chantiers.installed": "Installed",
+  "chantiers.progress": "Progress"
 }

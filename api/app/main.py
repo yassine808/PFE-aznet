@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from app import auth, daily_report, docx_report, drive, extraction, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets
+from app import auth, daily_report, docx_report, drive, extraction, jobs, journal, logs, mailer, memory, prompt_loader, reply, sheets, stock
 from app.config import settings
 from app.providers import available_providers, get_provider
 from app.providers.base import TranscriptionError, TranscriptionInfo
@@ -919,7 +919,9 @@ def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(au
     if not payload.rows:
         raise HTTPException(422, "No rows for the given date")
     try:
-        content = daily_report.generate_daily_report(payload.date, payload.rows)
+        content = daily_report.generate_daily_report(
+            payload.date, payload.rows, stock.alerts_for_rows(payload.rows)
+        )
     except daily_report.DailyReportError as exc:
         raise HTTPException(502, f"daily report failed: {exc}") from exc
     # Store it, exactly as the scheduler does with its own runs.
@@ -1002,6 +1004,9 @@ def export_report(payload: ReportExportRequest, caller: dict = Depends(auth.requ
         payload.period,
         rows,
         author=payload.author or caller.get("name"),
+        # The same assessment the mail carries, so a document exported by
+        # hand and one attached by the scheduler say the same thing.
+        alerts=stock.alerts_for_rows(rows),
     )
     auth.record(caller, "report_exported", target=payload.period)
     name = docx_report.filename(payload.title)
@@ -1932,6 +1937,22 @@ def get_bordereau(chantier_id: int, caller: dict = Depends(auth.require_user)) -
             ),
         })
     return {"chantier": chantier, "articles": out, "totaux": totals}
+
+
+@app.get("/alerts")
+async def list_alerts(caller: dict = Depends(auth.require_user)) -> dict:
+    """What is running out, over the contract, or about to be.
+
+    Off the event loop: each site costs a full journal-tab read, and a
+    synchronous handler would freeze every other request while Google answers.
+    Findings are TTL-cached in `stock` so a dashboard poll does not turn into a
+    Sheets read per site per 30 seconds.
+
+    Never 502s. An unreadable site is skipped and printed, because a panel that
+    disappears when one tab is broken looks exactly like a panel with nothing to
+    report.
+    """
+    return {"alerts": await run_in_threadpool(stock.assess)}
 
 
 @app.get("/receptions", responses={502: {"description": "Log store unreachable"}})

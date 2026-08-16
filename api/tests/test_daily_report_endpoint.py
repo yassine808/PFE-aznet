@@ -28,7 +28,7 @@ CONTENT = DailyReportContent(
 
 
 def test_daily_report_ok(monkeypatch):
-    monkeypatch.setattr(main.daily_report, "generate_daily_report", lambda d, r: CONTENT)
+    monkeypatch.setattr(main.daily_report, "generate_daily_report", lambda d, r, a=None: CONTENT)
     r = client.post("/daily-report", json={"date": "2026-07-23", "rows": ROWS})
     assert r.status_code == 200
     body = r.json()
@@ -60,7 +60,7 @@ def _capture_store(monkeypatch):
         lambda: {"id": 1, "name": "Test", "role": "directeur"},
     )
     calls = []
-    monkeypatch.setattr(main.daily_report, "generate_daily_report", lambda d, r: CONTENT)
+    monkeypatch.setattr(main.daily_report, "generate_daily_report", lambda d, r, a=None: CONTENT)
     monkeypatch.setattr(main.logs, "save_manager_report", lambda *a: calls.append(a))
     return calls
 
@@ -90,7 +90,7 @@ def test_weekly_label_is_stored_as_weekly(monkeypatch):
 
 
 def test_daily_report_engine_failure_is_502(monkeypatch):
-    def boom(d, r):
+    def boom(d, r, a=None):
         raise DailyReportError("both engines down")
 
     monkeypatch.setattr(main.daily_report, "generate_daily_report", boom)

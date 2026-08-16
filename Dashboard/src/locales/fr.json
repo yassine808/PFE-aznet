@@ -452,5 +452,21 @@
   "settings.apply": "Enregistrer",
   "settings.applied": "Enregistré",
   "equipe.roleLabel": "Rôle",
-  "settings.accountName": "Nom"
+  "settings.accountName": "Nom",
+  "nav.chantiers": "Chantiers",
+  "nav.kw.chantiers": "sites bordereau marché matériel stock alertes livraison",
+  "page.chantiers.title": "Chantiers",
+  "chantiers.alerts": "Alertes matériel",
+  "chantiers.alertsNone": "Aucun manque signalé. Les quantités restantes couvrent le rythme actuel sur tous les chantiers suivis.",
+  "chantiers.alertsIntro": "Calculé à partir du journal, des réceptions et du bordereau. Chaque ligne indique d'où vient le chiffre.",
+  "chantiers.remaining": "reste {n}",
+  "chantiers.over": "dépassement de {n}",
+  "chantiers.cover": "{n} j de couverture",
+  "chantiers.all": "Tous les chantiers",
+  "chantiers.none": "Aucun chantier enregistré.",
+  "chantiers.noBordereau": "Aucun bordereau saisi pour ce chantier.",
+  "chantiers.article": "Article",
+  "chantiers.marche": "Marché",
+  "chantiers.installed": "Posé",
+  "chantiers.progress": "Avancement"
 }

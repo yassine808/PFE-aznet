@@ -11,6 +11,7 @@ export const ROUTES = [
   'logs',
   'queue',
   'equipe',
+  'chantiers',
   // Not a navigable destination: nothing links here and it is absent from the
   // sidebar. `read()` returns it for a path that matches no route and no alias,
   // so a mistyped or retired link says so instead of landing on Overview and

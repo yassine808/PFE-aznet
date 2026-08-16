@@ -22,7 +22,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional
 
-from app import daily_report, docx_report, journal, logs, mailer, memory, sheets
+from app import daily_report, docx_report, journal, logs, mailer, memory, sheets, stock
 from app.config import settings
 
 # How often the loop wakes to look for due work. Well under the tightest
@@ -187,7 +187,12 @@ def _report_mail(
     """
     if not rows:
         return {"rows": 0, "sent_to": [], "reason": "aucun rapport"}
-    content = daily_report.generate_daily_report(period, rows)
+    # Computed once per report and passed to both consumers: the model that
+    # writes the mail body and the table in the attached document. Two
+    # assessments of the same day could disagree, and the reader would have
+    # no way to tell which one to act on.
+    alerts = stock.alerts_for_rows(rows)
+    content = daily_report.generate_daily_report(period, rows, alerts)
     sent: List[str] = []
     mail_error = None
     kind = "Rapport hebdomadaire" if "→" in period else "Rapport journalier"
@@ -198,7 +203,8 @@ def _report_mail(
     attachments: List[tuple] = []
     try:
         blob = docx_report.build(
-            content.objet, content.corps, kind, period, rows, author="automatique"
+            content.objet, content.corps, kind, period, rows,
+            author="automatique", alerts=alerts
         )
         attachments.append((
             docx_report.filename(content.objet), blob,

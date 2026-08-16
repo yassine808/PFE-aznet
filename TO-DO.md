@@ -62,7 +62,7 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
      (`daily_report._payload`), donc le corps du mail et la pièce jointe ne
      peuvent plus annoncer deux chiffres différents pour la même journée.
 
-- [~] **Alertes matériel — PR1 fait, PR2 à faire.** Décidé avec le propriétaire
+- [~] **Alertes matériel — PR1 et PR2 faits, pas encore prouvés en vrai.** Décidé avec le propriétaire
   le 2026-08-16 (entretien `/grill-me`). Le but : que le rapport signale ce qui
   manque, ce qui va manquer, et ce qui a été livré en trop.
   **PR1 — livré et déployé, pas encore prouvé de bout en bout :** `nature` /
@@ -70,7 +70,7 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
   feuille `Livraisons`, `GET /receptions`, 9 tests. **Reste à prouver :**
   photographier un vrai bon de livraison et vérifier que les quantités
   atterrissent dans `receptions` et **pas** dans les colonnes posées.
-  **PR2 — à faire** (`app/stock.py`) :
+  **PR2 — livré et déployé le 2026-08-16** (`app/stock.py`, page Chantiers) :
   - `resolve_stock(chantier, champ) -> (qte, source)` avec la précédence
     arrêtée : stock déclaré par le technicien > `Σ receptions − Σ posé` >
     `qte_marche − installé` > inconnu. **La source est toujours nommée** dans
@@ -88,6 +88,13 @@ Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `m
     .docx, `GET /alerts` + panneau du tableau de bord (rebuild `web`).
   - Un chantier sans bordereau (`مولاي الحسن`) ne produit aucune alerte :
     silence, pas des zéros.
+  **Reste à prouver pour les deux :** le système renvoie aujourd'hui `alerts: 0`,
+  et c'est la bonne réponse — DGH est à 47 % du marché sur les prises avec un
+  seul jour actif d'historique, ACAPS et Extralait n'ont aucune ligne de
+  journal, et `مولاي الحسن` n'a pas de bordereau. Rien n'a donc encore franchi
+  un seuil **en vrai**. À vérifier quand le chantier tournera : qu'une alerte
+  apparaît bien dans le mail, dans le .docx et sur la page Chantiers, et que la
+  provenance affichée correspond à la source réellement utilisée.
 
 - [ ] **Une note vocale dont rien n'est extrait n'apparaît pas dans la feuille —
   c'est voulu, mais il faut le vérifier avant de le croire.** Quand l'extraction

@@ -444,6 +444,58 @@ export async function deleteChantier(id: number): Promise<void> {
   if (!res.ok) await fail(res)
 }
 
+/**
+ * One material worth saying something about on one site.
+ *
+ * Every figure is computed server-side in `app/stock.py` — the browser only
+ * renders it. `source` is the sentence saying where `reste` came from (stock
+ * followed on the tab, the receptions ledger, or the contract), and it is shown
+ * rather than hidden: a quantity whose provenance is invisible cannot be
+ * argued with by the person who knows it is wrong.
+ */
+export interface MaterialAlert {
+  chantier: string
+  champ: string
+  article: string
+  unite: string
+  niveau: 'depassement' | 'critique' | 'bas'
+  reste: number | null
+  jours: number | null
+  rythme: number | null
+  installe: number | null
+  marche: number | null
+  source: string | null
+}
+
+/** A contract line, with what the journal says was installed against it. */
+export interface BordereauArticle {
+  id: number
+  numero?: number | null
+  designation: string
+  unite: string
+  qte_marche?: number | null
+  champ?: string | null
+  tache?: string | null
+  qte_installee: number | null
+  avancement: number | null
+}
+
+export interface Reception {
+  id: number
+  chantier: string
+  champ: string
+  qte: number
+  date: string
+  technicien?: string | null
+  canal?: string | null
+}
+
+export const bordereau = (id: number, s?: AbortSignal) =>
+  get<{ chantier: Chantier; articles: BordereauArticle[]; totaux: Record<string, number> }>(
+    `/chantiers/${id}/bordereau`,
+    s,
+  )
+
 /** The org chart's "+": a chef with no channel and no login yet. */
 export const addPerson = (input: { name: string; role?: string }) =>
   post<{ id: number; name: string; role: string }>('/persons', input)
@@ -835,6 +887,8 @@ export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
   chantiers: (s?: AbortSignal) => get<{ chantiers: Chantier[] }>('/chantiers', s),
+  alerts: (s?: AbortSignal) => get<{ alerts: MaterialAlert[] }>('/alerts', s),
+  receptions: (s?: AbortSignal) => get<{ receptions: Reception[] }>('/receptions', s),
   settings: (s?: AbortSignal) => get<{ settings: AppSettings }>('/settings', s),
   sttStatus: (s?: AbortSignal) => get<SttStatus>('/stt/status', s),
   users: listUsers,
