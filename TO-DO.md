@@ -320,6 +320,31 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   sert aussi de vérification croisée gratuite sur le GPU de la maison dès qu'un
   chiffre est contesté.
 
+- [x] **Preuve sur modèle FROID** (2026-08-16, après le correctif) : 407 s au
+  total, dont 394 s de STT, `engine=local`, et `prises_connectees: 18`. C'est
+  la première fois que ce moteur répond à son premier appel. La marge est
+  cependant **de 13 s seulement** sur le budget de 420 s — et 394 s, ce n'est
+  pas les ~312 s attendus (280 de chargement + 32 de transcription) : le
+  chargement n'est pas un coût fixe, il dépend de ce qui occupe la carte, et ici
+  `stt-local` venait de redémarrer en même temps que l'API.
+
+- [ ] **Le chargement paresseux est la mauvaise forme pour un repli.** Ne pas
+  « monter le timeout à 600 s » : poursuivre un nombre qui bouge, c'est finir
+  avec un délai de dix minutes qui masque un vrai blocage. Le coût tombe sur le
+  seul appelant qui le mérite le moins, au moment précis où les deux moteurs
+  cloud ont déjà échoué. Deux vraies options :
+  1. **Préchauffer au démarrage** derrière un drapeau (`STT_LOCAL_PRELOAD`) —
+     on échange 4 Go de VRAM au repos contre un repli réellement présent quand
+     il sert. C'est le compromis que le chargement paresseux avait justement
+     refusé, mais il a été choisi avant qu'on sache que le premier appel
+     échouait toujours.
+  2. **Rendre le premier appel non bloquant** : `/transcribe` répond « en
+     chargement, réessayez » et le déclenche, la chaîne passe au moteur suivant
+     ou la file de reprise repasse plus tard. Le technicien n'attend jamais
+     7 minutes.
+  L'option 1 est la plus simple et la plus honnête tant que la carte n'est pas
+  disputée.
+
 - [ ] **Les deux moteurs ne sont PAS d'accord sur le reste de cette note.**
   Gemini : `cable_elec_3x2_5_m = 30`. Local : `cables_installes_m = 3`. Même
   audio, champ différent ET valeur différente — l'un des deux s'est trompé de
