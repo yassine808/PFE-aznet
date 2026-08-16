@@ -125,11 +125,12 @@ services:
   # `gemini,local,groq` chain (config.py, ordered by accuracy since 2026-08-08),
   # so it answers when Gemini fails rather than on every note.
   #
-  # It starts with the stack but holds no VRAM until it is called: the model
-  # loads on the first /transcribe (see stt_server._ensure_loaded), so a quiet
-  # day costs nothing instead of pinning ~4 GB of an 8 GB card around the clock.
-  # The first caller pays the ~235 s load inside its own request, which the
-  # 300 s client timeout in local_darija._http() covers.
+  # It preloads the model at startup (STT_LOCAL_PRELOAD below), holding ~4 GB of
+  # the 8 GB card around the clock. The lazy load it replaced saved that VRAM by
+  # charging the load — measured 280-394 s on the 3070 — to the first caller,
+  # i.e. to the one technician for whom Gemini had just failed; and since the
+  # client budget was under the load time, that first call always failed.
+  # Set STT_LOCAL_PRELOAD=0 to get the lazy behaviour back.
   #
   # No published port and no auth of its own — same posture as `api`, reachable
   # only as `stt-local:8100` inside this network.
@@ -139,6 +140,12 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Africa/Casablanca
+      # Load the model at startup instead of on the first /transcribe. Lazy was
+      # the original choice, made before we measured that the first call ALWAYS
+      # timed out — and that failing warmed the model, so the retry passed and
+      # it read as "slow the first time". Set to 0 to get the lazy behaviour
+      # back if the card is needed for something else.
+      - STT_LOCAL_PRELOAD=1
     # The weights are NOT in the image and NOT in git: 5.8 GB total, largest
     # shard 4.7 GB, which is over GitHub's 2 GB Git-LFS per-file ceiling. They
     # are produced by `python download_models.py` and mounted read-only —

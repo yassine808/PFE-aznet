@@ -9,14 +9,20 @@ the machine that has the card; `api/app/providers/local_darija.py` is a thin
 HTTP client. If this process is down the API's STT chain simply falls through
 to the next engine — that is what the chain is for.
 
-The model is loaded ONCE — ~4 GB into VRAM and ~235 s of load time that must
-not be paid per voice note — but LAZILY, on the first /transcribe rather than
-at startup. The chain is `gemini,local,groq` (config.py, accuracy order), so
-this engine answers when Gemini fails, not on every note: an eager load pinned
-half an 8 GB card around the clock for a path that may go a whole day without
-firing. The first caller pays the load inside its own request — ~235 s load
-plus ~19 s transcribe, inside the 300 s timeout local_darija._http() sets for
-exactly this kind of last-resort wait — and every caller after it pays nothing.
+The model is loaded ONCE — ~4 GB into VRAM and 280-394 s of load time that must
+not be paid per voice note. Two shapes, chosen by STT_LOCAL_PRELOAD:
+
+  set    → load at startup, in a background thread. ~4 GB of the card is held
+           around the clock; the fallback is present the moment it is needed.
+  unset  → load lazily, on the first /transcribe. Costs nothing on a quiet day,
+           but the first caller pays the whole load inside their own request —
+           and that caller is by definition someone Gemini already failed.
+
+Lazy was the original default, and it was measured wrong: the client budget was
+300 s while the load alone took 280 s, so the first call after every restart
+failed. Failing warmed the model, so the retry succeeded and the whole thing
+read as "slow the first time". The budget is now 420 s (local_darija.py) and
+compose sets STT_LOCAL_PRELOAD=1, so neither half depends on the other.
 
 Run it with the isolated venv, from benchmark/:
 
@@ -35,6 +41,7 @@ Then point the API at it:  STT_LOCAL_URL=http://127.0.0.1:8100
 """
 import argparse
 import io
+import os
 import sys
 import threading
 import time
@@ -165,6 +172,18 @@ def build_app(device: str, dtype):
             print(f"[stt] first call — loading {MODEL_DIR.name} on {device}, "
                   "this takes minutes", flush=True)
             load_blocking(device, dtype)
+
+    # STT_LOCAL_PRELOAD=1 loads at startup instead of on the first call.
+    # The lazy default was chosen before we knew the first call ALWAYS failed:
+    # the load is paid inside that request (measured 280-394 s on the 3070) and
+    # it lands on the one caller who deserves it least — the one for whom both
+    # cloud engines already failed. Preloading trades ~4 GB of idle VRAM for a
+    # fallback that is actually present when it is needed. Same lock, same
+    # function, so a /transcribe arriving mid-load waits rather than starting a
+    # second 4 GB load.
+    if os.getenv("STT_LOCAL_PRELOAD", "").strip().lower() in ("1", "true", "yes"):
+        print("[stt] STT_LOCAL_PRELOAD set — loading at startup", flush=True)
+        threading.Thread(target=_ensure_loaded, daemon=True).start()
 
     @app.get("/health")
     def health() -> dict:

@@ -329,7 +329,17 @@ is **localization accuracy**, fixed before the run as the STT criterion was.
   chargement n'est pas un coût fixe, il dépend de ce qui occupe la carte, et ici
   `stt-local` venait de redémarrer en même temps que l'API.
 
-- [ ] **Le chargement paresseux est la mauvaise forme pour un repli.** Ne pas
+- [x] **Le chargement paresseux est la mauvaise forme pour un repli** — fait
+  2026-08-16, **option 1**. `STT_LOCAL_PRELOAD` dans `stt_server.build_app` :
+  un fil démon appelle le `_ensure_loaded` existant au démarrage, donc même
+  verrou et même fonction — un `/transcribe` qui arrive pendant le chargement
+  attend au lieu d'en lancer un second. `docker-compose.yml` met la variable à
+  `1` pour le service `stt-local` ; la mettre à `0` rend le comportement
+  paresseux. Le budget de 420 s reste en place : les deux moitiés ne dépendent
+  plus l'une de l'autre. **À vérifier au prochain redémarrage** :
+  `docker compose up -d stt-local` (pas `restart` — cf. piège n°4), puis
+  `/health` doit passer `loading` → `ok` sans qu'aucune note n'ait été envoyée.
+  Note d'origine : Ne pas
   « monter le timeout à 600 s » : poursuivre un nombre qui bouge, c'est finir
   avec un délai de dix minutes qui masque un vrai blocage. Le coût tombe sur le
   seul appelant qui le mérite le moins, au moment précis où les deux moteurs
@@ -474,7 +484,7 @@ Chacun passait la suite de tests au moment où il a été trouvé.
 |---|---|---|
 | 1 | **Un vrai message de technicien jusqu'au bout**, y compris `/journal` : création d'onglet, drapeau non vérifié, ligne à 62 colonnes, fusion d'un 2ᵉ message le même jour. **N'a jamais tourné.** | propriétaire |
 | 2 | ~~Porter le générateur .docx en Python~~ — **écrit le 2026-08-16**, reste à ouvrir un fichier produit et à recevoir un mail avec la pièce jointe | propriétaire (vérification) |
-| 3 | Préchauffer ou rendre non bloquant le STT local — 13 s de marge n'est pas une marge | assistant |
+| 3 | ~~Préchauffer le STT local~~ — **fait 2026-08-16** (`STT_LOCAL_PRELOAD=1`), reste à observer un démarrage réel | propriétaire (vérification) |
 | 4 | Refaire la comparaison à 25 modèles un matin calme, hors production | assistant |
 | 5 | Trancher le désaccord Gemini (`cable_elec_3x2_5_m: 30`) vs local (`cables_installes_m: 3`) sur la même note | propriétaire (darijophone) |
 | 6 | Plus de plans annotés, d'autres bâtiments — l'encombrement attentionnel se reproduit-il ? | propriétaire |
