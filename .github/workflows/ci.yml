@@ -157,12 +157,19 @@ jobs:
         with:
           name: api-coverage
           path: api
-      # Non-fatal for the same reason as the security scans below, plus one of
-      # its own: until the manual toggle above is flipped and SONAR_TOKEN is set
-      # as a repository secret, this step fails for a configuration reason that
-      # says nothing about the code under test.
+      # Fatal, unlike the security scans below. This step does not judge the
+      # code -- it only proves the analysis ran -- so the only way it fails is a
+      # configuration fault: a missing or expired SONAR_TOKEN, an unreadable
+      # coverage.xml, Automatic Analysis switched back on. Every one of those
+      # means the figures on sonarcloud.io are stale while CI shows green, which
+      # is exactly what happened between 15 and 18 August 2026 and went unnoticed
+      # because this step was `continue-on-error`.
+      #
+      # The quality gate itself is deliberately NOT awaited (no
+      # -Dsonar.qualitygate.wait): its default demands ~80 % coverage on new
+      # code, a threshold §4.9.4 argues against for a suite that is offline by
+      # construction. Gate results are read on sonarcloud.io.
       - name: SonarCloud scan
-        continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
