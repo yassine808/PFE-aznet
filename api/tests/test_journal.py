@@ -799,3 +799,36 @@ def test_another_technician_the_same_day_is_not_a_follow_up(fake):
     write_report("DGH", "2026-08-05", "NAROUZE", "DGH", rep(cables_installes_m=50))
     write_report("DGH", "2026-08-05", "HOUCINE", "DGH", rep(cables_installes_m=80))
     assert fake.marked == []
+
+
+def test_journal_never_writes_a_bare_id_as_the_audio_link(fake, monkeypatch):
+    """An id in a column called "Lien audio" opens nothing and claims to.
+
+    The Rapports mirror has always gone through audio_link(); the journal row
+    wrote whatever n8n put in the payload, so the live sheet had cells holding
+    1321591036458594. Empty beats a link that lies.
+    """
+    from app import journal as mod
+
+    monkeypatch.setattr(mod.settings, "dashboard_base_url", "", raising=False)
+    monkeypatch.setattr(mod.settings, "dashboard_url", "", raising=False)
+    mod.file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "correlation_id": "corr-xyz", "lien_audio": "1321591036458594",
+        "report": {"cables_installes_m": 10, "resume": "Résumé."},
+    })
+    assert fake.rows[-1].get("Lien audio", "") == ""
+
+
+def test_a_real_url_still_reaches_the_audio_column(fake, monkeypatch):
+    from app import journal as mod
+
+    monkeypatch.setattr(mod.settings, "dashboard_base_url", "", raising=False)
+    monkeypatch.setattr(mod.settings, "dashboard_url", "", raising=False)
+    mod.file_report({
+        "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+        "correlation_id": "corr-url",
+        "lien_audio": "https://drive.google.com/file/d/abc/view",
+        "report": {"cables_installes_m": 10, "resume": "Résumé."},
+    })
+    assert fake.rows[-1]["Lien audio"].startswith("https://")

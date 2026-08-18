@@ -433,3 +433,126 @@ powershell -ExecutionPolicy Bypass -File Pres+report/build.ps1
 
 Rebuilt: 32 slides. `presentation.py` stays the source of truth — a slide fixed
 only in PowerPoint is a fix that disappears on the next build.
+
+---
+
+## Done — 2026-08-18, seconde session
+
+Chaque case ci-dessous a été **vérifiée sur les données réelles** avant d'être
+cochée, jamais sur la foi du code. La preuve est citée à chaque ligne.
+
+### Le journal : une ligne par message
+
+- [x] **Accumulation supprimée.** Un second message n'écrase plus le premier.
+      Vérifié dans le conteneur : `grep -c merge_rows /app/app/journal.py` → **0**.
+- [x] **Un complément s'affiche `+50`.** Onglet `charé3 Moulay Slimane` :
+      `row2 fibre=30`, `row3 fibre=+50`. C'est un **format de nombre**, pas un
+      texte : la cellule contient toujours 50, donc la ligne de totaux et le
+      bordereau sont intacts. Les colonnes de stock en sont exclues — un stock
+      est un niveau, « +2 095 m restants » serait faux.
+- [x] **Heures dictées.** `row2 entree=10:00 sortie=17:00`, extraites de
+      « dakhalt m3a 10:00, kharajt m3a 5:00 dial l'achiya » — la conversion en
+      24 h est faite par le modèle.
+- [x] **JH calculé.** `row2 JH=0.88` (7 h ÷ 8, seul). `row3 JH=–` : aucune heure
+      dictée, donc aucune valeur inventée. Le chef ne saisit plus que cinq
+      colonnes : les quatre ORDRE DU JOUR et le taux de réalisation.
+- [x] **Rapport et présentation réécrits.** « Accumulation » est devenu « Ajout,
+      jamais réécriture » (`grep -c` → 1 dans `Rapport-PFE.md`), 14 passages au
+      total, 7 dans chaque document.
+
+### Les défauts du Sheet signalés le 18 août
+
+- [x] **Le `null` en fin de transcription.** Cause : n8n rend une expression
+      absente comme la **chaîne** `"null"` dans un champ multipart, et
+      `if caption:` est vrai pour quatre caractères de texte. Corrigé des deux
+      côtés — le workflow envoie `caption || ''`, et `/process` neutralise les
+      nulls écrits en toutes lettres **à la frontière de confiance**, parce que
+      le prochain client n'est pas encore écrit. **21 cellules déjà écrites ont
+      été nettoyées** (essai à blanc d'abord, écriture en `RAW` pour qu'aucune
+      transcription ne devienne une formule). Vérifié : `null_tail=False`.
+- [x] **La date et l'heure illisibles.** Elles affichaient `+46252` et `+1`.
+      **C'était ma régression** du marquage `+50` : les index de colonnes
+      étaient calculés depuis `RAPPORTS_COLUMNS` alors que l'onglet Rapports a
+      son propre ordre, et le format a atterri sur les colonnes 0 et 1.
+      `mark_increment` prend désormais des **noms** de colonnes et les résout
+      contre l'en-tête de l'onglet lui-même. Vérifié : `date='18/08/2026'`,
+      `heure='15:46'`.
+- [x] **Le drapeau de relecture est une case à cocher rouge.** C'était le mot
+      `TRUE` au milieu d'une colonne de prose — quelque chose qu'il fallait
+      remarquer plutôt que voir, sur la seule colonne qui existe pour être vue.
+      Règle **conditionnelle**, pas un fond rouge permanent : une couleur
+      toujours allumée ne dit rien quand elle compte. Vérifié : **1 règle par
+      onglet, sur les 6**, et le style appliqué deux fois de suite en laisse
+      toujours une seule.
+- [x] **Texte agrandi** à 11 pt (défaut de Sheets : 10). Vérifié sur les 6 onglets.
+- [x] **`Lien audio` n'écrit plus un identifiant nu.** `file_report` écrivait la
+      valeur brute de n8n pendant que le miroir passait par `audio_link()` ;
+      une colonne « Lien audio » contenait donc `1321591036458594`, qui n'ouvre
+      rien. Les deux passent maintenant par le même garde-fou. 4 cellules
+      nettoyées, **1 délibérément laissée** — `DGH` ligne 4 contient de la prose
+      *et* neuf identifiants collés par l'ancienne fusion : l'effacer
+      supprimerait un texte irrécupérable. À traiter à la main.
+
+### Deux bugs d'empilement trouvés en chemin
+
+- [x] `addBanding` **ajoute** au lieu de remplacer, et un `batchUpdate` est
+      atomique : sur un onglet déjà bandé, ce seul 400 emportait la taille de
+      police, la case à cocher et toutes les largeurs de colonnes. Le bandage
+      part désormais dans son propre lot, en dernier.
+- [x] `addConditionalFormatRule` **ajoute** aussi : styler un onglet quatre fois
+      y laissait quatre règles identiques. Les règles existantes sont supprimées
+      d'abord, index décroissant pour que les positions ne glissent pas.
+
+### Le tableau de bord
+
+- [x] **La page Chantiers ne disait plus rien.** La donnée n'a jamais manqué :
+      `stock.assess()` retourne zéro constat parce qu'aucun site n'approche un
+      seuil, et un état vide muet se lit comme une page cassée. La bande dit
+      maintenant combien de sites elle surveille, chaque site porte **Confirmé**
+      ou **Non vérifié**, et la liste distingue « aucun site » de « en cours de
+      chargement » et de « la requête a échoué ».
+- [x] **Toute suppression passe par une fenêtre.** Fond flouté, question qui
+      **nomme sa cible** — « Supprimer NAROUZE ? » et non « Supprimer cet
+      élément ? », parce que seule la première est vérifiable contre ce que
+      l'opérateur croyait cliquer. Échap annule, un clic à côté annule, la page
+      derrière cesse de défiler, et le **focus s'ouvre sur Annuler** : une
+      fenêtre qui s'ouvre sur le bouton destructeur transforme une frappe
+      d'Entrée égarée en la chose même qu'elle doit empêcher. Bouton rouge
+      `status-fail`, couleur dépensée nulle part ailleurs comme action.
+      Vérifié dans le bundle servi : `confirm.question`, `confirm.irreversible`,
+      `chantiers.allNone`, `chantiers.verified` — tous présents.
+      **Deux exceptions assumées** : les retraits d'adresse e-mail dans
+      `automation.tsx` et `settings-overlay.tsx` modifient un formulaire non
+      enregistré, qu'Annuler défait déjà.
+
+### La présentation
+
+- [x] **Un seul bleu, un seul motif.** Le skill `pptx` d'Anthropic — récupéré
+      depuis `anthropics/skills` — nomme littéralement ce que la première
+      version faisait : *« NEVER add decorative colour bars or accent stripes …
+      including vertical sidebar stripes down one edge of the slide »*,
+      *« NEVER use accent lines under titles »*, *« don't default to cream/beige
+      backgrounds »*. Les trois y étaient, dont deux **antérieures** au zellige.
+      Reste le khatam en **trait**, dans le bleu AZNET, et rien d'autre.
+- [x] **Morph sur les 32 diapositives**, une rosace nommée qui traverse tout le
+      parcours. **477 formes** contre 2 842 au premier jet : morph interpole
+      chaque forme, et une transition qui saccade devant un jury est pire que
+      pas d'ornement.
+- [x] **Notes TL;DR** sur 26 diapositives : une durée, puis une ou deux flèches.
+      Vérifié : `slides=32 morph=32 notes=26 hero=32`.
+- [x] **AZNET est à Rabat**, sur la couverture du rapport et du diaporama.
+      Les cinq `Africa/Casablanca` de la configuration sont **intacts** : c'est
+      l'identifiant de fuseau horaire de tout le Maroc, le renommer casserait
+      l'ordonnanceur sans rien corriger.
+
+**Suite de tests : 414 passants, ruff propre.** API, workflow n8n et image `web`
+redéployés et vérifiés dans les conteneurs.
+
+### Reste à faire, connu
+
+- [ ] `DASHBOARD_BASE_URL` / `dashboard_url` n'est pas défini : sans origine
+      publique, ni `Lien audio` ni `Correlation id` ne peuvent devenir des liens
+      cliquables. Le nom d'hôte Tailscale ferait l'affaire. Rappel : un `.env`
+      modifié n'atteint pas un conteneur déjà lancé — `up -d`, pas `restart`.
+- [ ] `DGH` ligne 4 : cellule « Lien audio » mêlant prose et neuf identifiants,
+      héritée de l'ancienne fusion. À reprendre à la main.

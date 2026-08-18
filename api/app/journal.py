@@ -1009,7 +1009,14 @@ def file_report(payload: Dict) -> Dict:
         COL_RAPPORT: payload.get("rapport_complet"),
         COL_CANAL: payload.get("canal"),
         COL_STT: payload.get("stt_engine"),
-        COL_LIEN_AUDIO: payload.get("lien_audio"),
+        # Through the same guard the Rapports mirror uses, not the raw payload.
+        # n8n puts the channel's own file ticket in `lien_audio`, so writing it
+        # unchecked filled a column called "Lien audio" with bare ids like
+        # 1321591036458594 -- which open nothing. audio_link() prefers the
+        # dashboard's inbox, falls back to a Drive URL, and returns None when
+        # all it has is an id: an empty cell says "no recording here", an id
+        # says "here is your link" and lies.
+        COL_LIEN_AUDIO: audio_link(payload),
         COL_CORRELATION: correlation_cell(payload.get("correlation_id")),
         COL_FLAG: "TRUE" if REVIEW_WARNINGS & set(warnings) else "FALSE",
         COL_MOTIF_FLAG: flag_reason(warnings),
