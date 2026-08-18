@@ -17,11 +17,9 @@ Keep it under ~200 tokens: Whisper only reads the tail of this window, so a
 long file silently drops its own beginning.
 -->
 
-Rapport de chantier, aznet, câblage réseau. Salam, lyoum f chantier Marina Center,
-client OCP. Rakebna miya w khamsin metre dyal goulotte f couloir, w jerrina tmn miya
+Rapport de chantier, aznet, câblage réseau. Salam, lyoum f chantier DGH. Rakebna miya w khamsin metre dyal goulotte f couloir, w jerrina tmn miya
 metre dyal câble réseau. Kmmalna khamsa dyal bureaux f l'étage l'lewel, w raccordina
 juj panneaux de brassage. Prise RJ45, baie de brassage, chemin de câbles, goulotte,
 gaine, fibre optique, tableau électrique, faux plafond. Kayn chi problème f
 l'ascenseur, ma qdrnach ntl3o l'étage tmnya. Khass matériel ghedda : goulottes w
-colliers. Chantier Anfa Place, Technopark, Casa Finance City, Zenith Millenium,
-Bouskoura, Sidi Maarouf. Client Attijari, Maroc Telecom, CNSS, Renault.
+colliers. Dkhelt f sb3a dyal sbah w khrejt f tmnya dyal l'3chiya, kunt m3a Hamid. Chantier DGH, Extralait, ACAPS.
