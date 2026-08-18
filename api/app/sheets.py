@@ -467,6 +467,45 @@ def append_row(tab: str, values: dict, headers: List[str]) -> Optional[int]:
         raise SheetsError(f"sheets append failed ({tab}): {exc}") from exc
 
 
+# A follow-up row's quantities are an addition to a day that already has a row,
+# and the sheet has to say so: 50 then +80 reads as ninety more metres, while 50
+# then 80 reads as a contradiction someone has to resolve by opening two
+# messages.
+#
+# It is a NUMBER FORMAT, not a "+" written into the cell. Values go in with
+# valueInputOption=USER_ENTERED, and Sheets parses a leading + as the start of a
+# formula: the string "+80" is stored as the number 80 and the plus disappears.
+# Forcing it in as text would keep the plus and break every SUM on the tab --
+# including the totals line, the one number the director actually reads.
+_PLUS_FORMAT = {"type": "NUMBER", "pattern": '"+"0;"−"0;0'}
+
+
+def mark_increment(tab: str, row: int, first_col: int, last_col: int) -> None:
+    """Format one row's quantity cells as +N. Best-effort: never raises.
+
+    A row that failed to be marked is a cosmetic loss; a row that failed to be
+    written is a report lost. This runs after the append and must not be able
+    to undo it.
+    """
+    try:
+        svc = _service()
+        sid = _sheet_id(svc, tab)
+        if sid is None:
+            return
+        svc.spreadsheets().batchUpdate(
+            spreadsheetId=settings.sheet_id,
+            body={"requests": [{"repeatCell": {
+                "range": {"sheetId": sid,
+                          "startRowIndex": row - 1, "endRowIndex": row,
+                          "startColumnIndex": first_col,
+                          "endColumnIndex": last_col + 1},
+                "cell": {"userEnteredFormat": {"numberFormat": _PLUS_FORMAT}},
+                "fields": "userEnteredFormat.numberFormat"}}]},
+        ).execute(num_retries=_RETRIES)
+    except Exception as exc:  # noqa: BLE001 - cosmetic, never fatal
+        print(f"[sheets] increment format skipped ({tab} row {row}): {exc}")
+
+
 def _row_from_range(updated_range: Optional[str]) -> Optional[int]:
     """'Rapports!A15:H15' → 15. Same positional numbering as read_reports."""
     if not updated_range:

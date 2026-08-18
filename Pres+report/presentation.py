@@ -792,7 +792,7 @@ def s10_flux(prs, n):
         ("3", "Identification", "L'expéditeur est retrouvé dans l'organigramme, son autorisation et son chantier vérifiés.", GREY),
         ("4", "Traitement", "POST /process : transcription, extraction contrainte, résumé français, avertissements.", GREY),
         ("5", "Réponse", "n8n répond au technicien avec son résumé.", GREEN),
-        ("6", "Journal", "Ensuite seulement : POST /journal fusionne la ligne dans l'onglet du chantier.", GREEN),
+        ("6", "Journal", "Ensuite seulement : POST /journal ajoute la ligne dans l'onglet du chantier.", GREEN),
         ("7", "Notification", "Les responsables sont notifiés.", GREY),
     ]
 
@@ -837,7 +837,7 @@ def s11_journal(prs, n):
 
     lw = CONTENT_W * 0.53
     tf = _txbox(slide, MARGIN, 2.02, lw, 0.28)
-    _run(_para(tf, first=True), "Règle 1 — accumulation", size=14.5, bold=True, color=BLUE)
+    _run(_para(tf, first=True), "Règle 1 — une ligne par message", size=14.5, bold=True, color=BLUE)
 
     mw = (lw - 0.28) / 2
     for i, (hdr, body) in enumerate([
@@ -1106,7 +1106,7 @@ def s16_perimetre(prs, n):
     col = [
         ["Réception Telegram", "Réception WhatsApp Cloud API",
          "Transcription — 3 moteurs, chaîne de repli", "Extraction structurée — 4 chaînes de repli",
-         "Entrée par photo — modèle de vision", "Journal de chantier par site — fusion, stock",
+         "Entrée par photo — modèle de vision", "Journal de chantier par site — ajout, stock",
          "Miroir plat pour le tableau de bord"],
         ["Observabilité PostgreSQL", "Tableau de bord trilingue FR / EN / AR",
          "Organigramme, comptes, chantiers, bordereau", "Ordonnanceur — 6 tâches, page Automatisation",
@@ -1200,7 +1200,7 @@ def s19_demo(prs, n):
     bullets(slide, [
         ("Une note vocale en darija ", "est envoyée depuis Telegram."),
         ("Le bot répond ", "avec le résumé en français professionnel et les quantités extraites."),
-        ("La ligne apparaît ", "dans l'onglet du chantier, fusionnée s'il en existe déjà une pour la journée."),
+        ("La ligne apparaît ", "dans l'onglet du chantier ; si la journée est déjà ouverte, les quantités s'affichent +80."),
         ("Le tableau de bord ", "affiche le rapport, ses avertissements de qualité et la trace de traitement."),
     ], y=BODY_TOP + 0.15, size=16.5, gap=17, accent=RGBColor(0x4F, 0xA9, 0xF5), on_dark=True)
 
@@ -1225,7 +1225,7 @@ def s20_bilan(prs, n):
         "Une architecture hybride dont la frontière a été fixée par une contrainte fonctionnelle identifiée en cours de projet, non par préférence.",
         "Un banc d'essai de treize moteurs de transcription du darija, avec une critique argumentée du WER et une métrique applicative de substitution.",
         "Un service d'extraction à sortie contrainte, quatre chaînes de repli alternant les fournisseurs, et une politique stricte d'absence de données inventées.",
-        "Un modèle métier reconstruit sur le fichier réel du client, avec accumulation intra-journalière et réconciliation de stock.",
+        "Un modèle métier reconstruit sur le fichier réel du client : une ligne par message, jamais réécrite, et réconciliation de stock.",
         "Une conception indépendante du canal, démontrée par la mise en service de deux messageries aux contraintes opposées.",
     ]):
         p = _para(tf, first=(i == 0))
@@ -1363,14 +1363,15 @@ NOTES = {
 """,
     "s09_frontiere": """
 1:00 · Testable → code. Câblage → n8n.
-→ Exemple : la fusion d'une ligne a quitté n8n, un IF ne relit pas une ligne.
+→ Exemple : la tenue du journal a quitté n8n, un IF ne relit pas un onglet.
 """,
     "s10_flux": """
 1:30 · Dérouler une fois, lentement.
 → La réponse part AVANT le Sheet : une panne Google ne coûte pas son résumé.
 """,
     "s11_journal": """
-1:30 · Une ligne par message, jamais de réécriture.
+1:30 · Une ligne par message, JAMAIS de réécriture.
+→ Un chiffre faux ne peut plus écraser un chiffre juste : 50 puis +80.
 → Stock réconcilié, jamais supposé. Heures et JH viennent de la voix.
 """,
     "s12_banc_protocole": """

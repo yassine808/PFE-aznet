@@ -366,9 +366,18 @@ def write_report(
     # one with it, and the totals stay correct because `totals()` and the
     # bordereau sum rows rather than reading one.
     #
-    # `existing` is still read: it feeds the stock baseline and the retry
-    # idempotency check in file_report, both of which need the day's history.
-    return sheets.append_row(tab, cells, list(HEADERS)), warnings
+    row = sheets.append_row(tab, cells, list(HEADERS))
+
+    # If the day already had a row for this technician, this one adds to it, and
+    # the sheet says so: the quantities are formatted +80 rather than 80. Only
+    # the display changes -- the cell still holds a number, so the totals line
+    # and the bordereau are untouched. The stock columns are deliberately left
+    # alone: stock is a level, not a flow, and "+2095 m left" would be a lie.
+    follow_up, _ = find_row(tab, date, technicien, rows)
+    if row and follow_up is not None:
+        first = HEADERS.index(next(iter(NUMERIC_COLUMNS.values())))
+        sheets.mark_increment(tab, row, first, first + len(NUMERIC_COLUMNS) - 1)
+    return row, warnings
 
 
 def _last_stock(tab: str, rows: Optional[List[Dict[str, str]]] = None) -> Dict[str, str]:
@@ -820,7 +829,8 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
     return cells
 
 
-def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str]) -> Optional[int]:
+def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
+                     increment: bool = False) -> Optional[int]:
     """Append the flat Rapports row for this message; never raises.
 
     The journal row is the record; the mirror is for the dashboard. When
@@ -830,7 +840,18 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str]) -> Optio
     failure, so /supprimer can clear the mirror row too.
     """
     try:
-        return sheets.append_report(_rapports_cells(payload, chantier, warnings))
+        row = sheets.append_report(_rapports_cells(payload, chantier, warnings))
+        # The dashboard reads this tab, so a follow-up has to read as one here
+        # too -- same number format, same reason as the journal row. It costs no
+        # extra read: file_report already knows, from the tab it just scanned.
+        if row and increment:
+            cols = [RAPPORTS_COLUMNS[f] for f in NUMERIC_COLUMNS
+                    if f in RAPPORTS_COLUMNS]
+            if cols:
+                headers = list(RAPPORTS_COLUMNS.values())
+                idx = [headers.index(c) for c in cols]
+                sheets.mark_increment("Rapports", row, min(idx), max(idx))
+        return row
     except Exception as exc:  # noqa: BLE001 - best-effort by design
         try:
             from app import logs
@@ -995,6 +1016,10 @@ def file_report(payload: Dict) -> Dict:
         COL_FLAG: "TRUE" if REVIEW_WARNINGS & set(warnings) else "FALSE",
         COL_MOTIF_FLAG: flag_reason(warnings),
     }
+    # Does this technician already have a row for this day on this tab? Both
+    # writers need the answer and the tab has already been read, so it is
+    # settled once here rather than scanned for twice.
+    follow_up = find_row(tab, str(payload.get("date") or ""), technicien, rows)[0] is not None
     row, stock_warnings = write_report(
         tab, payload.get("date") or "", technicien, chantier, report,
         {k: v for k, v in metadata.items() if v not in (None, "")},
@@ -1003,7 +1028,7 @@ def file_report(payload: Dict) -> Dict:
     warnings = warnings + stock_warnings
     # After the journal write succeeded, so a mirror failure cannot cost the
     # row — but before the reply, because the dashboard shows it.
-    mirror_row = _mirror_rapports(payload, chantier, warnings)
+    mirror_row = _mirror_rapports(payload, chantier, warnings, follow_up)
     return {
         "row": row,
         "tab": tab,

@@ -405,7 +405,7 @@ Le cahier des charges recommande n8n comme outil d'automatisation. L'étude comp
 
 n8n auto-hébergé en Docker combine gratuité, intégrations prêtes à l'emploi et possibilité d'insérer du code JavaScript. Le choix architectural du projet — détaillé au chapitre 3 — est toutefois **hybride** : n8n orchestre les intégrations, mais le cœur métier est un microservice codé sur mesure, testable et versionné.
 
-Le chapitre 4 documente la limite pratique qui a fixé la frontière entre les deux : une logique qui exige un *read-modify-write* — lire la ligne du jour, y fusionner de nouvelles quantités, réconcilier un stock — n'est pas exprimable dans un nœud conditionnel. C'est cette contrainte, et non une préférence esthétique, qui a fait migrer l'écriture du journal de n8n vers le service Python.
+Le chapitre 4 documente la limite pratique qui a fixé la frontière entre les deux : une logique qui exige un *read-modify-write* — lire l'onglet pour reconstituer le stock et reconnaître une journée déjà ouverte — n'est pas exprimable dans un nœud conditionnel. C'est cette contrainte, et non une préférence esthétique, qui a fait migrer l'écriture du journal de n8n vers le service Python.
 
 ## 2.5 Canal de réception : étude comparative
 
@@ -562,7 +562,7 @@ La **Figure 3.1** met ces cinq responsabilités en relation et fait apparaître 
 
 ### 3.2.2 Frontière entre orchestration et code
 
-La frontière n'est pas esthétique, elle est fonctionnelle, et l'expérience du projet l'a déplacée une fois. À l'origine, l'écriture dans Google Sheets était un nœud n8n. Elle a migré dans le service Python le 5 août 2026 pour une raison précise : tenir le journal exige un *read-modify-write* — lire la ligne existante du jour, y fusionner les nouvelles quantités, réconcilier le stock — qu'un nœud conditionnel ne sait pas exprimer. La correspondance entre les champs extraits et les colonnes du Sheet, jusque-là écrite en expressions n8n non testables, est devenue du code Python couvert par des tests.
+La frontière n'est pas esthétique, elle est fonctionnelle, et l'expérience du projet l'a déplacée une fois. À l'origine, l'écriture dans Google Sheets était un nœud n8n. Elle a migré dans le service Python le 5 août 2026 pour une raison précise : tenir le journal exige un *read-modify-write* — lire l'onglet pour réconcilier le stock et reconnaître une journée déjà ouverte — qu'un nœud conditionnel ne sait pas exprimer. La correspondance entre les champs extraits et les colonnes du Sheet, jusque-là écrite en expressions n8n non testables, est devenue du code Python couvert par des tests.
 
 **Règle retenue :** ce qui est *intégration* reste dans n8n ; ce qui est *décision* passe dans le service.
 
@@ -573,7 +573,7 @@ La frontière n'est pas esthétique, elle est fonctionnelle, et l'expérience du
 3. Le média est téléchargé et transmis au service (`POST /process`, multipart).
 4. Le service transcrit, extrait les champs, produit le résumé français et renvoie un JSON structuré assorti d'avertissements de qualité.
 5. **n8n répond au technicien** avec son résumé.
-6. **Ensuite seulement**, n8n appelle `POST /journal`, qui fusionne la ligne dans l'onglet du chantier et met à jour le miroir plat.
+6. **Ensuite seulement**, n8n appelle `POST /journal`, qui ajoute la ligne dans l'onglet du chantier et met à jour le miroir plat.
 7. Les responsables sont notifiés.
 
 L'ordre des étapes 5 et 6 est un invariant de conception, développé en §3.5.2.
@@ -815,13 +815,17 @@ Trois décisions le rendent sûr. Il n'existe **aucune table de faits mémorisé
 
 ### 3.4.7 Le journal de chantier
 
-`journal.py` tient **une ligne par (date, technicien)** dans l'onglet du chantier concerné, à l'image du fichier du directeur. Deux règles en assurent la justesse.
+`journal.py` tient **une ligne par message** dans l'onglet du chantier concerné, à l'image du fichier du directeur. Deux règles en assurent la justesse.
 
-**Accumulation.** Un second message le même jour est **fusionné** dans la ligne existante : les nombres s'additionnent, les localisations s'unissent, la prose s'ajoute, le stock est remplacé. Une seconde ligne doublerait les jours-homme et fausserait la ligne de totaux — le seul chiffre que le directeur lit vraiment. Les colonnes de pilotage ne sont jamais touchées par une fusion.
+**Ajout, jamais réécriture.** Jusqu'au 18 août 2026, un second message du jour était *fusionné* dans la ligne existante : les nombres s'additionnaient, la prose s'ajoutait. Cette règle a été retirée parce qu'elle détruisait de l'information : un chiffre erroné dicté l'après-midi écrasait sur place un chiffre juste du matin, sans qu'il reste rien à quoi le comparer. Chaque message occupe désormais sa propre ligne ; une correction fausse se supprime sans emporter la valeur correcte qu'elle prétendait corriger.
+
+Les totaux restent justes parce que rien ne lit une ligne isolée : `totals()` et la quantité installée du bordereau **somment les lignes de l'onglet**. Et pour qu'un lecteur distingue immédiatement un complément d'une contradiction, les quantités d'une ligne qui s'ajoute à une journée déjà ouverte sont **affichées avec un signe `+`** — `50` le matin, `+80` l'après-midi. Il s'agit d'un format de nombre et non d'un texte : la cellule contient toujours un nombre, donc la ligne de totaux et le bordereau sont intacts. Les colonnes de stock en sont exclues : un stock est un niveau et non un flux, et « +2 095 m restants » serait faux.
+
+Une seule grandeur ne survit pas telle quelle à ce changement : **JH**, les jours-homme, qui décrivent une journée et non un message. Elle est donc calculée par ligne à partir des heures et de l'équipe que le technicien dicte (`compute_jh`), et une journée se lit comme le maximum de ses lignes, jamais comme leur somme — deux messages décrivant une même journée de 7 h à 20 h décrivent deux fois les mêmes treize heures.
 
 **Réconciliation de stock.** La valeur de référence est *dernier stock connu moins quantité installée* ; un chiffre rapporté par le technicien l'emporte toujours et devient la nouvelle référence ; un écart émet un avertissement `stock_ecart` chiffré **au lieu de choisir silencieusement** — car une livraison et une perte sont arithmétiquement identiques, et seul un humain peut les distinguer.
 
-Les dates sont normalisées, le même jour arrivant tantôt au format ISO, tantôt en `05/08/2026`, tantôt sous forme de numéro de série `46174` ; une date illisible provoque un **ajout** (visible) plutôt qu'une fusion dans la mauvaise ligne (invisible).
+Les dates sont normalisées, le même jour arrivant tantôt au format ISO, tantôt en `05/08/2026`, tantôt sous forme de numéro de série `46174`. La normalisation ne décide plus de l'emplacement d'une ligne — toute ligne est ajoutée — mais elle reste nécessaire pour reconnaître qu'une journée est déjà ouverte, et donc pour marquer la ligne d'un `+`.
 
 
 La **Figure 3.9** décrit la tenue du journal, de la normalisation de la date à la réconciliation du stock.
@@ -832,7 +836,7 @@ La **Figure 3.9** décrit la tenue du journal, de la normalisation de la date à
 
 
 ::: {custom-style="FigureCaption"}
-**Figure 3.9 :** Tenue du journal : accumulation intra-journalière et réconciliation de stock. Les deux encadrés orangés sont les cas où le système préfère un signal visible à une décision silencieuse.
+**Figure 3.9 :** Tenue du journal : ajout d'une ligne par message et réconciliation de stock. Les deux encadrés orangés sont les cas où le système préfère un signal visible à une décision silencieuse.
 :::
 
 
@@ -1006,7 +1010,7 @@ Ce dernier point mérite d'être souligné : le moteur de transcription local, r
 
 ## 3.9 Conclusion du chapitre
 
-La conception traduit les contraintes du projet en structures : une architecture hybride dont la frontière est fonctionnelle et a été déplacée par l'expérience, un contrat de données reconstruit sur le fichier réel du client, un patron Stratégie qui a permis au banc d'essai de décider, quatre chaînes de repli explicites, un contrat d'erreurs qui refuse les échecs silencieux, un journal dont les règles d'accumulation et de réconciliation protègent le seul chiffre qui compte, et un modèle relationnel qui fait d'un humain une seule ligne. Le chapitre suivant décrit la mise en œuvre, le banc d'essai et les résultats.
+La conception traduit les contraintes du projet en structures : une architecture hybride dont la frontière est fonctionnelle et a été déplacée par l'expérience, un contrat de données reconstruit sur le fichier réel du client, un patron Stratégie qui a permis au banc d'essai de décider, quatre chaînes de repli explicites, un contrat d'erreurs qui refuse les échecs silencieux, un journal dont les règles d'ajout et de réconciliation protègent le seul chiffre qui compte, et un modèle relationnel qui fait d'un humain une seule ligne. Le chapitre suivant décrit la mise en œuvre, le banc d'essai et les résultats.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>

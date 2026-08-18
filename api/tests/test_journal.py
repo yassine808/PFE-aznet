@@ -167,6 +167,7 @@ class FakeSheet:
         self.created = []
         self.appended = []
         self.written = []
+        self.marked = []
         self.mirrored = []
         self.calls = []  # every Google round trip, in order
 
@@ -187,6 +188,9 @@ class FakeSheet:
 
     def write_row(self, tab, row, values):
         self.written.append((tab, row, values))
+
+    def mark_increment(self, tab, row, first, last):
+        self.marked.append((tab, row, first, last))
 
     def read_reports(self):
         """The flat Rapports mirror — read by the sticky-chantier fallback."""
@@ -757,3 +761,40 @@ def test_a_row_without_hours_writes_no_jh(monkeypatch):
 
     monkeypatch.setattr(mod, "jh_limits", lambda: {})
     assert "JH" not in mod.report_cells(rep(cables_installes_m=120))
+
+
+# --- a follow-up row says so ----------------------------------------------
+
+
+def test_first_report_of_the_day_is_not_marked(fake):
+    """50 is 50. Only a row that ADDS to an existing day gets the plus."""
+    from app.journal import write_report
+
+    write_report("DGH", "2026-08-05", "NAROUZE", "DGH", rep(cables_installes_m=50))
+    assert fake.marked == []
+
+
+def test_second_report_of_the_day_is_marked_as_an_increment(fake):
+    """50 then +80 reads as ninety more metres; 50 then 80 reads as a
+    contradiction someone has to open two messages to resolve."""
+    from app.journal import write_report, HEADERS, NUMERIC_COLUMNS
+
+    write_report("DGH", "2026-08-05", "NAROUZE", "DGH", rep(cables_installes_m=50))
+    row, _ = write_report("DGH", "2026-08-05", "NAROUZE", "DGH",
+                          rep(cables_installes_m=80))
+    assert len(fake.marked) == 1
+    tab, marked_row, first, last = fake.marked[0]
+    assert (tab, marked_row) == ("DGH", row)
+    # exactly the quantity block: no stock column, no prose column
+    assert list(HEADERS)[first] == next(iter(NUMERIC_COLUMNS.values()))
+    assert last - first + 1 == len(NUMERIC_COLUMNS)
+
+
+def test_another_technician_the_same_day_is_not_a_follow_up(fake):
+    """The plus means 'this technician already reported today', not 'the tab
+    already has a row'."""
+    from app.journal import write_report
+
+    write_report("DGH", "2026-08-05", "NAROUZE", "DGH", rep(cables_installes_m=50))
+    write_report("DGH", "2026-08-05", "HOUCINE", "DGH", rep(cables_installes_m=80))
+    assert fake.marked == []
