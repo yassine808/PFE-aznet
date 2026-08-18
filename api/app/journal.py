@@ -375,8 +375,7 @@ def write_report(
     # alone: stock is a level, not a flow, and "+2095 m left" would be a lie.
     follow_up, _ = find_row(tab, date, technicien, rows)
     if row and follow_up is not None:
-        first = HEADERS.index(next(iter(NUMERIC_COLUMNS.values())))
-        sheets.mark_increment(tab, row, first, first + len(NUMERIC_COLUMNS) - 1)
+        sheets.mark_increment(tab, row, list(NUMERIC_COLUMNS.values()))
     return row, warnings
 
 
@@ -845,12 +844,11 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
         # too -- same number format, same reason as the journal row. It costs no
         # extra read: file_report already knows, from the tab it just scanned.
         if row and increment:
-            cols = [RAPPORTS_COLUMNS[f] for f in NUMERIC_COLUMNS
-                    if f in RAPPORTS_COLUMNS]
-            if cols:
-                headers = list(RAPPORTS_COLUMNS.values())
-                idx = [headers.index(c) for c in cols]
-                sheets.mark_increment("Rapports", row, min(idx), max(idx))
+            sheets.mark_increment(
+                sheets.RAPPORTS_TAB,
+                row,
+                [RAPPORTS_COLUMNS[f] for f in NUMERIC_COLUMNS if f in RAPPORTS_COLUMNS],
+            )
         return row
     except Exception as exc:  # noqa: BLE001 - best-effort by design
         try:

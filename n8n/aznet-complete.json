@@ -389,7 +389,7 @@
             },
             {
               "name": "caption",
-              "value": "={{ $('Filtrer accès').item.json.caption }}"
+              "value": "={{ $('Filtrer accès').item.json.caption || '' }}"
             },
             {
               "name": "message_id",
@@ -1133,7 +1133,7 @@
             },
             {
               "name": "caption",
-              "value": "={{ $('Filtrer accès').item.json.caption }}"
+              "value": "={{ $('Filtrer accès').item.json.caption || '' }}"
             },
             {
               "name": "message_id",

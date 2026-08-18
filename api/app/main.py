@@ -598,6 +598,24 @@ async def _text_input(
     return rapport_complet
 
 
+# n8n renders an absent expression as the STRING "null" in a multipart field,
+# so an optional caption arrives as four characters of text rather than as
+# nothing at all. `if caption:` is true for that string, and every voice note
+# without a caption ended up with a literal "null" glued to the end of its
+# transcript in the Sheet. Sanitised here rather than only in the workflow,
+# because this is the trust boundary: any client can send it, and the fix has
+# to hold for the one that has not been written yet.
+_NULLISH = {"null", "undefined", "none", "nil", "nan", ""}
+
+
+def _clean(value: Optional[str]) -> Optional[str]:
+    """A client-supplied string, or None when it is a null spelled as text."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return None if stripped.lower() in _NULLISH else stripped
+
+
 @app.post("/process", responses={422: {"description": "Invalid input"}, 502: {"description": "Upstream service error"}})
 async def process(
     audio: Optional[UploadFile] = File(None, description="Voice note (ogg/opus from WhatsApp)"),
@@ -611,6 +629,8 @@ async def process(
     message_id: Optional[str] = Form(None, description="Channel message id (dedupe key, e.g. 'tg:123:456')"),
     caller: dict = Depends(auth.require_user),
 ) -> ProcessResponse:
+    caption = _clean(caption)
+    text = _clean(text)
     # Same trace id n8n threads through every stage, so the API's own errors
     # line up with the workflow's rows in the dashboard timeline.
     ctx = {"correlation_id": correlation_id, "channel": channel, "technicien": technicien}

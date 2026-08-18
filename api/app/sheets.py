@@ -480,7 +480,7 @@ def append_row(tab: str, values: dict, headers: List[str]) -> Optional[int]:
 _PLUS_FORMAT = {"type": "NUMBER", "pattern": '"+"0;"−"0;0'}
 
 
-def mark_increment(tab: str, row: int, first_col: int, last_col: int) -> None:
+def mark_increment(tab: str, row: int, columns: List[str]) -> None:
     """Format one row's quantity cells as +N. Best-effort: never raises.
 
     A row that failed to be marked is a cosmetic loss; a row that failed to be
@@ -492,6 +492,16 @@ def mark_increment(tab: str, row: int, first_col: int, last_col: int) -> None:
         sid = _sheet_id(svc, tab)
         if sid is None:
             return
+        # Resolved against the tab's OWN header row, never against a mapping
+        # kept elsewhere. Getting this wrong is not a cosmetic miss: on
+        # 2026-08-18 an index computed from RAPPORTS_COLUMNS landed on columns
+        # 0 and 1 of the Rapports tab, and the date and the time rendered as
+        # "+46252" and "+1" until it was found.
+        headers = _headers(svc, tab)
+        idx = [headers.index(c) for c in columns if c in headers]
+        if not idx:
+            return
+        first_col, last_col = min(idx), max(idx)
         svc.spreadsheets().batchUpdate(
             spreadsheetId=settings.sheet_id,
             body={"requests": [{"repeatCell": {
@@ -589,6 +599,20 @@ def _width_for(header: str) -> int:
     return 150
 
 
+# One point up from Sheets' 10pt default. The director reads this tab on a
+# laptop next to a site plan, not on a design mock.
+BODY_FONT_SIZE = 11
+
+# The column that says a row needs a human eye, and the two colours it turns
+# when it does. Red is spent on nothing else in this spreadsheet.
+# Two spellings, because the two tabs were built at different times: the
+# journal keeps the director's own "Flag review", the flat mirror uses the
+# schema's snake_case. Matching only one silently left half the spreadsheet
+# without the checkbox.
+FLAG_COLUMNS = ("Flag review", "flag_review")
+_FLAG_BG = {"red": 0.996, "green": 0.898, "blue": 0.894}
+_FLAG_FG = {"red": 0.702, "green": 0.078, "blue": 0.078}
+
 def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
     """Make one tab readable: frozen bold header, column widths, banding.
 
@@ -631,14 +655,84 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
                 "range": {"sheetId": sid, "dimension": "ROWS",
                           "startIndex": 0, "endIndex": 1},
                 "properties": {"pixelSize": 46}, "fields": "pixelSize"}},
-            # Body: wrapped and top-aligned. A 300-character transcript in a
-            # clipped cell reads as an empty cell with a stray word in it.
+            # Body: wrapped, top-aligned, and a point larger than Sheets'
+            # default. A 300-character transcript in a clipped cell reads as an
+            # empty cell with a stray word in it, and 10pt on a projector at the
+            # back of a room reads as nothing at all.
             {"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": 1},
                 "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP",
-                                               "verticalAlignment": "TOP"}},
-                "fields": "userEnteredFormat(wrapStrategy,verticalAlignment)"}},
+                                               "verticalAlignment": "TOP",
+                                               "textFormat": {"fontSize": BODY_FONT_SIZE}}},
+                "fields": "userEnteredFormat(wrapStrategy,verticalAlignment,"
+                          "textFormat.fontSize)"}},
         ]
+
+        # The flag column, if this tab has one: a real checkbox, and red when
+        # ticked. It was the word TRUE in a column of prose -- something a
+        # reader had to notice rather than see, on the one column that exists
+        # to be noticed. A checkbox also makes it correctable by clicking,
+        # which the string never was.
+        # A date column has to be formatted as a date. USER_ENTERED parses
+        # "2026-08-18" into a serial, so an unformatted cell shows 46252 and an
+        # hour shows 0.657 -- which is exactly what a stray numberFormat left
+        # behind on 2026-08-18. Stated here so the tab carries its own answer
+        # rather than depending on whatever format a cell happened to inherit.
+        for name, fmt in (("date", {"type": "DATE", "pattern": "dd/mm/yyyy"}),
+                          ("Date", {"type": "DATE", "pattern": "dd/mm/yyyy"}),
+                          ("heure", {"type": "DATE_TIME", "pattern": "hh:mm"})):
+            if name in headers:
+                at = headers.index(name)
+                requests.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": 1,
+                              "startColumnIndex": at, "endColumnIndex": at + 1},
+                    "cell": {"userEnteredFormat": {"numberFormat": fmt}},
+                    "fields": "userEnteredFormat.numberFormat"}})
+
+        meta_sheets = svc.spreadsheets().get(
+            spreadsheetId=settings.sheet_id).execute(num_retries=_RETRIES).get("sheets", [])
+        flag_at = next((headers.index(c) for c in FLAG_COLUMNS if c in headers), None)
+        if flag_at is not None:
+            flag_range = {"sheetId": sid, "startRowIndex": 1,
+                          "startColumnIndex": flag_at, "endColumnIndex": flag_at + 1}
+            # Drop the rules a previous run left, newest index first so the
+            # positions of the ones still to be deleted do not shift underneath.
+            existing = next((sh.get("conditionalFormats", [])
+                             for sh in meta_sheets
+                             if sh.get("properties", {}).get("sheetId") == sid), [])
+            requests += [{"deleteConditionalFormatRule": {"sheetId": sid, "index": i}}
+                         for i in range(len(existing) - 1, -1, -1)]
+            requests += [
+                {"repeatCell": {
+                    "range": flag_range,
+                    "cell": {"dataValidation": {
+                        "condition": {"type": "BOOLEAN"}, "strict": False}},
+                    "fields": "dataValidation"}},
+                {"repeatCell": {
+                    "range": flag_range,
+                    "cell": {"userEnteredFormat": {"horizontalAlignment": "CENTER"}},
+                    "fields": "userEnteredFormat.horizontalAlignment"}},
+                # Conditional, not flat: a red column would be red at rest, and
+                # a colour that is always on says nothing when it matters.
+                #
+                # Deleted first, then added. addConditionalFormatRule APPENDS,
+                # exactly like addBanding, so styling a tab four times left four
+                # identical rules stacked on the same range -- invisible in the
+                # sheet and unbounded over time.
+                {"addConditionalFormatRule": {
+                    "index": 0,
+                    "rule": {
+                        "ranges": [flag_range],
+                        "booleanRule": {
+                            "condition": {"type": "CUSTOM_FORMULA",
+                                          "values": [{"userEnteredValue":
+                                                      "=INDIRECT(ADDRESS(ROW(),COLUMN()))=TRUE"}]},
+                            "format": {"backgroundColor": _FLAG_BG,
+                                       "textFormat": {"bold": True,
+                                                      "foregroundColor": _FLAG_FG}},
+                        },
+                    }}},
+            ]
         for i, name in enumerate(headers[:cols]):
             requests.append({"updateDimensionProperties": {
                 "range": {"sheetId": sid, "dimension": "COLUMNS",
@@ -652,18 +746,29 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
             b.get("range", {}).get("sheetId") == sid
             for s in meta.get("sheets", []) for b in s.get("bandedRanges", [])
         )
-        if not banded:
-            # Alternating rows, added once. Banding is the one request here
-            # that appends rather than sets, so a second copy would stack.
-            requests.append({"addBanding": {"bandedRange": {
-                "range": {"sheetId": sid, "startRowIndex": 0},
-                "rowProperties": {
-                    "headerColor": _HEADER_BG,
-                    "firstBandColor": {"red": 1, "green": 1, "blue": 1},
-                    "secondBandColor": _BAND_BG}}}})
-
         svc.spreadsheets().batchUpdate(
             spreadsheetId=settings.sheet_id, body={"requests": requests},
         ).execute(num_retries=_RETRIES)
+
+        # Banding goes in its OWN batch, and last. It is the one request here
+        # that appends rather than sets, so Sheets rejects a second copy with a
+        # 400 -- and a batchUpdate is atomic, so that single rejection used to
+        # throw away the font size, the checkbox and the column widths with it.
+        # The membership test above is not enough on its own: a range banded by
+        # hand, or banded over a different row span, does not always show up
+        # where it is looked for.
+        if not banded:
+            try:
+                svc.spreadsheets().batchUpdate(
+                    spreadsheetId=settings.sheet_id,
+                    body={"requests": [{"addBanding": {"bandedRange": {
+                        "range": {"sheetId": sid, "startRowIndex": 0},
+                        "rowProperties": {
+                            "headerColor": _HEADER_BG,
+                            "firstBandColor": {"red": 1, "green": 1, "blue": 1},
+                            "secondBandColor": _BAND_BG}}}}]},
+                ).execute(num_retries=_RETRIES)
+            except Exception as exc:  # noqa: BLE001 - already banded is fine
+                print(f"[sheets] banding({tab}) skipped: {exc}"[:160], flush=True)
     except Exception as exc:  # noqa: BLE001 — presentation is never fatal
         print(f"[sheets] style_tab({tab}) skipped: {type(exc).__name__}: {exc}", flush=True)

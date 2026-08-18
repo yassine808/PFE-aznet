@@ -189,8 +189,8 @@ class FakeSheet:
     def write_row(self, tab, row, values):
         self.written.append((tab, row, values))
 
-    def mark_increment(self, tab, row, first, last):
-        self.marked.append((tab, row, first, last))
+    def mark_increment(self, tab, row, columns):
+        self.marked.append((tab, row, list(columns)))
 
     def read_reports(self):
         """The flat Rapports mirror — read by the sticky-chantier fallback."""
@@ -777,17 +777,18 @@ def test_first_report_of_the_day_is_not_marked(fake):
 def test_second_report_of_the_day_is_marked_as_an_increment(fake):
     """50 then +80 reads as ninety more metres; 50 then 80 reads as a
     contradiction someone has to open two messages to resolve."""
-    from app.journal import write_report, HEADERS, NUMERIC_COLUMNS
+    from app.journal import write_report, NUMERIC_COLUMNS
 
     write_report("DGH", "2026-08-05", "NAROUZE", "DGH", rep(cables_installes_m=50))
     row, _ = write_report("DGH", "2026-08-05", "NAROUZE", "DGH",
                           rep(cables_installes_m=80))
     assert len(fake.marked) == 1
-    tab, marked_row, first, last = fake.marked[0]
+    tab, marked_row, columns = fake.marked[0]
     assert (tab, marked_row) == ("DGH", row)
-    # exactly the quantity block: no stock column, no prose column
-    assert list(HEADERS)[first] == next(iter(NUMERIC_COLUMNS.values()))
-    assert last - first + 1 == len(NUMERIC_COLUMNS)
+    # Named columns, never indexes: an index computed from the wrong mapping is
+    # what put "+46252" in the Rapports date column on 2026-08-18.
+    assert columns == list(NUMERIC_COLUMNS.values())
+    assert "Reste du câble (Stock)" not in columns
 
 
 def test_another_technician_the_same_day_is_not_a_follow_up(fake):
