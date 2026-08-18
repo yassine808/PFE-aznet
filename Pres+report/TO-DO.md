@@ -51,79 +51,149 @@
 
 ---
 
-## To do — handoff, 2026-08-15
+## Done — 2026-08-18
 
-State at the end of the session: **CI green (18/18)**, **SonarCloud quality gate passing**,
-report rebuilt at **146 pages**. Everything below is pushed to `main`; the last commit is
-`96eaf35`. Nothing is left uncommitted.
+Three commits, all pushed to `main`: `f72d06b` (report + deck), `559a64d` (CI red
+for three days), `663febc` (SonarCloud step made fatal). Nothing left uncommitted
+except `build/reference.docx.prespacing`, the untracked backup from §7.
 
-Order below is the order I would do it in.
+### SonarCloud — items 1 and 8, closed
+
+- [x] **Automatic Analysis turned off** (manual step, done by the author).
+- [x] **The CI scan actually ran** — first time ever. From run `32120949305`:
+      `Parsing report '…/api/coverage.xml'` then
+      `ANALYSIS SUCCESSFUL, … https://sonarcloud.io/dashboard?id=yassine808_PFE-aznet&branch=main`.
+      Coverage is measured by the tool the report credits, not by a local run.
+- [x] **The scan step is no longer `continue-on-error`** (`663febc`). It does not judge
+      the code, so the only way it can fail is a configuration fault — missing or expired
+      token, unreadable `coverage.xml`, Automatic Analysis switched back on. Each means
+      the figures on sonarcloud.io are stale while CI shows green, which is precisely what
+      happened between 15 and 18 August and went unnoticed.
+- [x] **The quality gate is deliberately still not awaited.** Its default asks ~80 %
+      coverage on *new* code, and §4.9.4 argues against exactly that threshold for an
+      offline-by-construction suite. Enforcing in CI a rule the report argues against
+      would be a contradiction between two files. Reconsider after 31 August.
+
+Still open, and it needs the token:
+
+- [ ] **Re-read Table 4.16 against the CI-based scan.** A CI scan analyses a slightly
+      different file set than AutoScan did, so `ncloc`, `code_smells` and the debt figure
+      may have shifted; the ratings should not have. The public API answers
+      `Project doesn't exist` without authentication, so this needs `SONAR_TOKEN`:
+      ```bash
+      curl -s -u "$SONAR_TOKEN:" \
+        "https://sonarcloud.io/api/measures/component?component=yassine808_PFE-aznet&metricKeys=coverage,ncloc,bugs,vulnerabilities,code_smells,sqale_index"
+      ```
+- [ ] **Screenshot of the SonarCloud dashboard** for the §4.9.4 placeholder
+      (`*[FIGURE À INSÉRER — capture du tableau de bord SonarCloud.]*`).
+
+### CI was red for three days, and nobody could see it
+
+Found while checking whether the Sonar job had run. Three separate faults, all in `559a64d`:
+
+- [x] **Two unused imports failed Ruff** — `typing.Tuple` in `api/app/logs.py`, `pytest` in
+      `api/tests/test_exchanges.py`. Trivial in themselves, but they failed the `API` job,
+      and the `sonar` job `needs: api`, so GitHub marked SonarCloud **skipped**, not failed.
+      A skipped job reads as "didn't need to run". This is why the scanner never executed.
+- [x] **A real production bug in the workflow** — `scripts/check_workflow.py` was failing on
+      `TG reply summary`, `WA reply summary` and `Record exchange`, and it was right. Every
+      line break in those expressions is an escaped backslash-n, which is what must reach
+      n8n; the **chantier clause added 2026-08-15** used a real newline, and inside a
+      single-quoted JavaScript string a real newline ends the literal. The expression is a
+      syntax error, on the **reply path** — the confirmation the technician gets, on both
+      channels, plus the exchange archive.
+- [ ] **PUSH THE WORKFLOW TO n8n.** The repo fix changes nothing in production: n8n keeps
+      its own copy in its volume (deploy trap 2 in CLAUDE.md). Until it is re-imported or
+      pushed with `PUT /api/v1/workflows/{id}`, every reply that names a chantier is still
+      running the broken expression. **This is the only item on this page that affects a
+      live technician.**
+
+### The STT contradiction — item 2, closed
+
+Framing **(a)** chosen: the benchmark designates an accuracy reference, the call order is an
+operations decision.
+
+- [x] **§4.3.5 retitled** « La référence d'exactitude et sa place dans la chaîne », and it now
+      states the deployed chain (`gemini, local, groq`) with the three reasons for that order:
+      latency is paid by the technician on every note, 4 GB of VRAM and a 280–394 s load
+      cannot hang off one card for the whole service, and a local fallback is what makes
+      quota exhaustion a non-event.
+- [x] **All three abstracts** follow — FR, EN, and the Arabic OpenXML block, edited inside
+      its `<w:t>` runs.
+
+### Item 5 — the self-authored test cases, closed
+
+- [x] **Paragraph added to §4.3.9**, mirroring what §4.3.2 does for transcription. It names
+      the bias and then bounds it: the cases derive from real messages, the ground truth is
+      checkable field by field by a third party, and the decisive criterion (`t08`, invent
+      nothing) is *negative*, so it cannot be gamed by the designer's phrasing preferences.
+
+### Item 4 — the Dependabot claim, corrected against the API
+
+- [x] **§4.9.3 was wrong twice.** Not thirty-five: **38 opened**, and **none merged** — 29
+      closed without merge, superseded by the next day's grouped request, 9 still open
+      (`gh pr list --state all --author "app/dependabot"`). The claim that each one passes
+      the checks before being merged became "must pass **before it can be** merged", and the
+      section now says what the mechanism is worth at this stage: it makes version drift
+      visible, it has not yet closed it.
+- [ ] **The manual-process baseline is still missing** — see the open items below. It remains
+      the highest-value missing paragraph in the document.
+
+### Item 6 — the presentation, closed
+
+- [x] **Stale figures replaced**: `220 commits` → `6 mois`, `272` → `288` tests, `17` → `18`
+      checks (three places), `35` → `38` Dependabot, "semaine 0" → "phase 3", "sprint 2" →
+      "phase 4".
+- [x] **s15 retitled** and its "Ce qui est payé" panel now explains the chain position instead
+      of implying the local model is the primary engine.
+- [x] **Three slides added** — `s05b_planning` (the 7-phase timeline), `s15b_extraction` (the
+      text→table benchmark, with the `llama-3.1-8b-instant` five-invented-values panel), and
+      `s18b_sonar` (the SonarCloud result). Deck rebuilt: **32 slides**.
+
+### Found in passing
+
+- [x] **§4.7 did not exist** — the chapter ran 4.6 → 4.8, while §3.6 promised the dashboard
+      captures « rassemblées au §4.7 ». The dashboard section moved from §4.10 to §4.7, where
+      the cross-reference always intended it, and the chapter conclusion became §4.10.
+- [x] **§4.2's toolchain table** still said 17 checks; it is 18 everywhere else.
+
+Report rebuilt: **142 pages** (140 before; the new prose added two).
 
 ---
 
-### 1. One manual step nobody but you can do — SonarCloud analysis mode
+## To do — handoff, 2026-08-18
 
-**Why it matters:** the `sonar` job in CI currently *fails* and only looks green because the
-step is `continue-on-error`. Its log says, verbatim:
+State: **CI green**, SonarCloud analysing on every push with coverage, report at 142 pages,
+deck at 32 slides. Last commit `663febc`.
 
-> `ERROR You are running CI analysis while Automatic Analysis is enabled. Please consider disabling one or the other.`
-
-Automatic Analysis cannot read a coverage report — any coverage report. So until this is
-switched, SonarCloud will show **no coverage at all**, and the 60 % in Table 4.16 rests on a
-local `pytest --cov` run rather than on the tool the report credits.
-
-**Do this:**
-1. https://sonarcloud.io/project/administration?id=yassine808_PFE-aznet → **Analysis Method**
-2. Turn **Automatic Analysis OFF**.
-3. Push anything (or re-run the last CI run). `SONAR_TOKEN` is already a repository secret, so
-   nothing else is needed.
-4. Confirm coverage landed:
-   ```bash
-   curl -s -u "$SONAR_TOKEN:" \
-     "https://sonarcloud.io/api/measures/component?component=yassine808_PFE-aznet&metricKeys=coverage,ncloc,bugs,vulnerabilities,code_smells"
-   ```
-
-- [ ] Automatic Analysis turned off
-- [ ] CI-based scan succeeded (the `SonarCloud` job step no longer errors)
-- [ ] **Re-read Table 4.16** — a CI scan analyses a slightly different file set than AutoScan, so
-      `ncloc`, `code_smells` and the debt figure may shift. The ratings should not.
-- [ ] **Screenshot of the SonarCloud dashboard** to place under Table 4.16 (§4.9.4 already has the
-      caption placeholder: `*[FIGURE À INSÉRER — capture du tableau de bord SonarCloud.]*`).
+**13 days to the deadline (31 August 2026).** Order below is the order I would do it in.
 
 ---
 
-### 2. The contradiction a jury will find — which STT engine is actually used
+### 1. Push the fixed workflow to n8n — the only live-impact item
 
-This is the single most exploitable inconsistency left in the document.
+Covered above. Until this is done, a technician whose report names a chantier gets a reply
+built from a broken expression. `n8n/README.md` §7b has the push procedure; the node set is
+unchanged, so no `--allow-node-diff` is needed.
 
-- The three abstracts and §4.3.5 state that the retained engine is
-  `BounharAbdelaziz/Morocco-Darija-STT-large`.
-- `api/app/config.py:36` ships `stt_chain = "gemini,local,groq"` — Gemini answers first, and the
-  local Darija model only runs when Gemini fails.
-
-Both statements are defensible on their own; together they are a contradiction, and an examiner
-reading the config after reading the abstract will ask about it.
-
-**Decide one of two framings, then make the whole document say it:**
-
-- *(a) The benchmark winner is the accuracy reference, Gemini is the operational primary.* Then
-  §4.3.5 must say so explicitly: the local model won on preservation of digits and French
-  loanwords, but sits second in the chain because it costs 7.7 s and 4 GB of VRAM against
-  Gemini's API call. Abstracts change from "the engine selected is…" to "the benchmark
-  identified… which serves as the accuracy reference inside a three-engine chain".
-- *(b) The local model really is the primary.* Then `config.stt_chain` is wrong and should be
-  `local,gemini,groq` — but that changes production latency for every technician, so this is a
-  real product decision, not an editorial one.
-
-**Files to touch for (a):** `Pres+report/Rapport-PFE.md` §4.3.5, plus the FR abstract (~line 81),
-the EN abstract, and the Arabic abstract (which is now a raw OpenXML block — edit the text inside
-the `<w:t>` runs, do not re-wrap it).
-
-- [ ] Framing chosen
-- [ ] §4.3.5 harmonised with `config.py`
-- [ ] All three abstracts updated
+- [ ] Workflow re-imported or pushed
+- [ ] One real voice note sent end to end, reply checked for the chantier line
 
 ---
+
+### 2. The field data — items 4 and 5 of the old list, still open
+
+Deliberately skipped on 18 August; they need the author on site, and they are what turns the
+report from a description into an evaluation.
+
+- [ ] **Baseline of the manual process.** The report asserts a gain and never measures what it
+      replaced. Even rough figures from the director — "before: ~10 min per report, ~40 % of
+      days missing" — close it. One conversation.
+- [ ] **End-to-end latency** (§4.6.4). Per-engine numbers exist (1,53 s Groq → 7,7 s local);
+      what is missing is "the technician waits N seconds from voice note to reply". A
+      stopwatch on five real notes.
+- [ ] **Pilot results** (§4.6.5): number of reports processed, technician and management
+      feedback, incidents. Same field trip.
 
 ### 3. The 12 remaining `[À COMPLÉTER]` in the report
 
@@ -152,7 +222,11 @@ the `<w:t>` runs, do not re-wrap it).
 
 ---
 
-### 4. Two claims in the report I could not verify
+### 4. Two claims in the report I could not verify  — Dependabot corrected 2026-08-18, baseline still open
+
+> Superseded in part: the Dependabot figure was corrected against the API (38 opened, none
+> merged). The manual-process baseline below is still the open half.
+
 
 - [ ] **"Thirty-five Dependabot pull requests were opened"** (§4.9.3). I found no evidence for the
       number. Either count them (`gh pr list --state all --author "app/dependabot" | wc -l`) and
@@ -164,7 +238,10 @@ the `<w:t>` runs, do not re-wrap it).
 
 ---
 
-### 5. A methodological weakness worth owning before the jury names it
+### 5. A methodological weakness worth owning before the jury names it  ✅ done 2026-08-18
+
+> The paragraph is in §4.3.9. Kept below for the reasoning that produced it.
+
 
 The ten extraction test cases (`benchmark/dataset/text_cases.json`, Table 4.6) were written by the
 author of the system under test. That is a genuine limitation: the cases encode the same
@@ -178,7 +255,11 @@ paragraph; being caught by it costs credibility.
 
 ---
 
-### 6. Port all of this into the presentation
+### 6. Port all of this into the presentation  ✅ done 2026-08-18
+
+> All seven line edits applied and three slides added; the deck builds at 32 slides. The
+> table below is kept as the record of what was wrong.
+
 
 `Pres+report/presentation.py` still carries the figures the report no longer uses. Concretely:
 
