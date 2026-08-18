@@ -8,11 +8,11 @@
       "typeVersion": 1,
       "position": [
         0,
-        -75
+        -1100
       ],
       "parameters": {
         "content": "## 1 — Réception (Telegram + WhatsApp)\nPoll TG toutes les 15s + webhooks WA → contrôle d'accès → dédup → /process →\n**réponse au technicien D'ABORD**, puis POST /journal (l'API écrit le journal\ndu chantier ET le miroir Rapports du dashboard; échec = file d'attente côté\nAPI, drain toutes les 5 min).\nLes nœuds `Log *` en bas sont des feuilles : ils n'altèrent jamais le flux.",
-        "height": 180,
+        "height": 200,
         "width": 900,
         "color": 7
       }
@@ -34,7 +34,7 @@
       "typeVersion": 1.2,
       "position": [
         0,
-        -225
+        -240
       ]
     },
     {
@@ -47,7 +47,7 @@
       "typeVersion": 2,
       "position": [
         320,
-        -75
+        -80
       ]
     },
     {
@@ -61,7 +61,7 @@
       "typeVersion": 4.2,
       "position": [
         640,
-        75
+        80
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -90,7 +90,7 @@
       "typeVersion": 2,
       "position": [
         320,
-        75
+        80
       ]
     },
     {
@@ -135,7 +135,7 @@
       "typeVersion": 2,
       "position": [
         3520,
-        -75
+        -80
       ]
     },
     {
@@ -166,7 +166,7 @@
       "typeVersion": 2,
       "position": [
         3840,
-        150
+        160
       ]
     },
     {
@@ -184,7 +184,7 @@
       "typeVersion": 4.2,
       "position": [
         4160,
-        75
+        80
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -208,7 +208,7 @@
       "typeVersion": 4.2,
       "position": [
         4160,
-        225
+        240
       ],
       "credentials": {
         "whatsAppApi": {
@@ -280,7 +280,7 @@
       "typeVersion": 2,
       "position": [
         4800,
-        75
+        80
       ]
     },
     {
@@ -294,7 +294,7 @@
       "typeVersion": 1,
       "position": [
         5120,
-        -75
+        -80
       ],
       "credentials": {
         "telegramApi": {
@@ -318,7 +318,7 @@
       "typeVersion": 1,
       "position": [
         5120,
-        75
+        80
       ],
       "credentials": {
         "whatsAppApi": {
@@ -416,7 +416,7 @@
       "typeVersion": 4.2,
       "position": [
         6080,
-        -75
+        -80
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -472,7 +472,7 @@
       "typeVersion": 4.2,
       "position": [
         4800,
-        -75
+        -80
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -520,7 +520,7 @@
       "typeVersion": 2,
       "position": [
         6400,
-        150
+        160
       ]
     },
     {
@@ -563,7 +563,7 @@
       "typeVersion": 4.2,
       "position": [
         6720,
-        150
+        160
       ],
       "credentials": {
         "whatsAppApi": {
@@ -615,7 +615,7 @@
       "typeVersion": 1,
       "position": [
         4160,
-        -225
+        -240
       ],
       "credentials": {
         "telegramApi": {
@@ -639,7 +639,7 @@
       "typeVersion": 1,
       "position": [
         4160,
-        -75
+        -80
       ],
       "credentials": {
         "whatsAppApi": {
@@ -674,7 +674,7 @@
       "typeVersion": 4.2,
       "position": [
         7680,
-        -75
+        -80
       ],
       "onError": "continueErrorOutput"
     },
@@ -706,7 +706,7 @@
       "typeVersion": 2,
       "position": [
         6720,
-        -150
+        -160
       ]
     },
     {
@@ -723,7 +723,7 @@
       "typeVersion": 1,
       "position": [
         7040,
-        -225
+        -240
       ],
       "credentials": {
         "telegramApi": {
@@ -749,7 +749,7 @@
       "typeVersion": 4.2,
       "position": [
         7040,
-        -75
+        -80
       ],
       "credentials": {
         "whatsAppApi": {
@@ -771,7 +771,7 @@
       "typeVersion": 2,
       "position": [
         0,
-        375
+        400
       ],
       "webhookId": "wa-unified-verify"
     },
@@ -787,7 +787,7 @@
       "typeVersion": 1.1,
       "position": [
         320,
-        225
+        240
       ]
     },
     {
@@ -802,7 +802,7 @@
       "typeVersion": 2,
       "position": [
         0,
-        225
+        240
       ],
       "webhookId": "wa-unified-messages"
     },
@@ -826,7 +826,7 @@
       "typeVersion": 4.2,
       "position": [
         2560,
-        -75
+        -80
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -902,7 +902,7 @@
       "typeVersion": 4.2,
       "position": [
         3520,
-        75
+        80
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -932,7 +932,7 @@
       "typeVersion": 4.2,
       "position": [
         2560,
-        75
+        80
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -962,7 +962,7 @@
       "typeVersion": 4.2,
       "position": [
         3840,
-        -150
+        -160
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -992,7 +992,7 @@
       "typeVersion": 4.2,
       "position": [
         7360,
-        -225
+        -240
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1052,7 +1052,7 @@
       "typeVersion": 4.2,
       "position": [
         6400,
-        -150
+        -160
       ],
       "onError": "continueRegularOutput",
       "parameters": {
@@ -1160,7 +1160,7 @@
       "typeVersion": 4.2,
       "position": [
         6080,
-        75
+        80
       ],
       "onError": "continueErrorOutput",
       "retryOnFail": true,
@@ -1224,7 +1224,7 @@
       "typeVersion": 1,
       "position": [
         0,
-        -375
+        -400
       ]
     },
     {
@@ -1237,7 +1237,7 @@
       "typeVersion": 2,
       "position": [
         320,
-        -225
+        -240
       ]
     },
     {
@@ -1265,7 +1265,7 @@
       "typeVersion": 4.2,
       "position": [
         640,
-        -75
+        -80
       ],
       "onError": "continueRegularOutput"
     },
@@ -1276,11 +1276,11 @@
       "typeVersion": 1,
       "position": [
         0,
-        75
+        -880
       ],
       "parameters": {
         "content": "## 2 — Erreurs du workflow\nPoint d'entrée séparé : ne se déclenche que si la bande 1 lève une erreur.\nÉcrit dans `pipeline_logs` (Postgres), **jamais** dans le Sheet — un handler\nqui écrit chez Google ne peut pas signaler une panne de Google.\n⚠ À activer : Settings → Error Workflow → *ce même workflow*.",
-        "height": 180,
+        "height": 200,
         "width": 900,
         "color": 3
       }
@@ -1300,7 +1300,7 @@
       "typeVersion": 4.2,
       "position": [
         7360,
-        75
+        80
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -1324,7 +1324,7 @@
       "typeVersion": 4.2,
       "position": [
         7360,
-        225
+        240
       ],
       "credentials": {
         "whatsAppApi": {
@@ -1352,7 +1352,7 @@
       "typeVersion": 4.2,
       "position": [
         7040,
-        75
+        80
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -1376,7 +1376,7 @@
       "typeVersion": 4.2,
       "position": [
         7040,
-        225
+        240
       ],
       "credentials": {
         "whatsAppApi": {
@@ -1418,7 +1418,7 @@
       "typeVersion": 2,
       "position": [
         7360,
-        -75
+        -80
       ]
     },
     {
@@ -1447,9 +1447,137 @@
       "typeVersion": 4.2,
       "position": [
         7680,
-        75
+        80
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aa000000-0000-4000-8000-900000000000",
+      "name": "Phase 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -640
+      ],
+      "parameters": {
+        "content": "## 1 · Réception\nTelegram interroge toutes les 15 s (sortant, sans tunnel).\nWhatsApp arrive par webhook et exige une URL publique.",
+        "width": 840,
+        "height": 200,
+        "color": 7
+      }
+    },
+    {
+      "id": "aa000000-0000-4000-8000-900000000001",
+      "name": "Phase 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        960,
+        -640
+      ],
+      "parameters": {
+        "content": "## 2 · Qui parle ?\nExtraction du message, identification de l'expéditeur,\ncontrôle d'accès, puis un correlation_id qui suivra\nce message de bout en bout.",
+        "width": 1480,
+        "height": 200,
+        "color": 4
+      }
+    },
+    {
+      "id": "aa000000-0000-4000-8000-900000000002",
+      "name": "Phase 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        -640
+      ],
+      "parameters": {
+        "content": "## 3 · Une seule fois\nWhatsApp rejoue ses webhooks. La griffe (dedup) en Postgres\ngarantit qu'un même message n'est traité qu'une fois.",
+        "width": 1160,
+        "height": 200,
+        "color": 4
+      }
+    },
+    {
+      "id": "aa000000-0000-4000-8000-900000000003",
+      "name": "Phase 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3840,
+        -640
+      ],
+      "parameters": {
+        "content": "## 4 · Accusé de réception\n⏳ immédiat sur le canal d'origine : le technicien sait que\nsa note est arrivée avant que l'IA ne commence.",
+        "width": 840,
+        "height": 200,
+        "color": 5
+      }
+    },
+    {
+      "id": "aa000000-0000-4000-8000-900000000004",
+      "name": "Phase 5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4800,
+        -640
+      ],
+      "parameters": {
+        "content": "## 5 · Récupération du média\nChaque canal télécharge différemment. Texte : court-circuit\ndirect vers /process.",
+        "width": 1160,
+        "height": 200,
+        "color": 5
+      }
+    },
+    {
+      "id": "aa000000-0000-4000-8000-900000000005",
+      "name": "Phase 6",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        6080,
+        -640
+      ],
+      "parameters": {
+        "content": "## 6 · Cœur IA\nPOST /process : transcription (chaîne de 3 moteurs) puis\nextraction structurée. L'échec est une branche, pas un plantage.",
+        "width": 520,
+        "height": 200,
+        "color": 3
+      }
+    },
+    {
+      "id": "aa000000-0000-4000-8000-900000000006",
+      "name": "Phase 7",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        6720,
+        -640
+      ],
+      "parameters": {
+        "content": "## 7 · Réponse au technicien\nAVANT l'écriture du journal, et c'est délibéré : une panne\nde Google Sheets ne doit jamais coûter son résumé au technicien.",
+        "width": 840,
+        "height": 200,
+        "color": 6
+      }
+    },
+    {
+      "id": "aa000000-0000-4000-8000-900000000007",
+      "name": "Phase 8",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        7680,
+        -640
+      ],
+      "parameters": {
+        "content": "## 8 · Journal + archive\nPOST /journal écrit l'onglet du chantier et le miroir Rapports.\nUn message sans contenu exploitable est archivé dans exchanges\nau lieu d'ouvrir une ligne vide.",
+        "width": 520,
+        "height": 200,
+        "color": 7
+      }
     }
   ],
   "connections": {
