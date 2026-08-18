@@ -373,5 +373,37 @@ powershell -ExecutionPolicy Bypass -File Pres+report/build.ps1
       the 24 numbered slides. Grey enough for the audience to ignore, which is
       the point: it tells the speaker where they are without anyone counting.
 
+- [x] **Identité visuelle zellige**, drawn in code rather than photographed.
+      The reference image supplied was a *watermarked* CrystalGraphics sample,
+      so it could not be embedded — and generated geometry turned out to be the
+      better answer anyway: nothing to license, crisp at any projector
+      resolution, and **morph interpolates shapes**, so the rosette travels and
+      turns between slides where a bitmap could only cross-fade.
+      - **Motif**: the khatam, the eight-pointed star that signs Moroccan
+        tilework, built from `STAR_8_POINT` + `DIAMOND` autoshapes.
+      - **Coverage**: a zellige rail down the left of all 32 slides (left of
+        `MARGIN`, so no content moved), a full tile band on the cover and the
+        closing slide, and one rosette named `zHero` that travels the whole
+        deck — small beside the header while a table is being read, large and
+        rotated on the cover, the quote, the demo and the closing slide.
+      - **Palette**: an ornament-only range anchored on the AZNET blue already
+        sampled from the logo (turquoise, terracotta, saffron, sand). Headings,
+        data and the accent rule keep EMSI green / AZNET blue: decoration is
+        decorative, colour that carries meaning stays meaningful.
+      - **Font unchanged** — `Arial` is pinned in the code as one of the two
+        EMSI sanctions, so no display face was introduced.
+- [x] **Performance, which nearly went wrong.** The first build was **2842
+      shapes**, up to 180 on one slide: the rail was 63 shapes redrawn per
+      slide, each copy carrying a different auto-generated name, so morph
+      treated them as new objects and cross-faded all of them on every
+      transition. A transition that stutters on the amphitheatre projector is
+      worse than no ornament. Rail tiles now carry stable names (`zRail-0`…),
+      which morph reads as *unchanged* and animates for free; the band is two
+      shapes per tile instead of three. **1126 shapes, max 69 per slide.**
+- [x] **Z-order.** The ornament is drawn after each slide is built, so it
+      landed on top of the content — the cover band was covering both logos.
+      Every ornament shape is now pushed behind the content, in reverse so the
+      tiles keep their own order.
+
 Rebuilt: 32 slides. `presentation.py` stays the source of truth — a slide fixed
 only in PowerPoint is a fix that disappears on the next build.

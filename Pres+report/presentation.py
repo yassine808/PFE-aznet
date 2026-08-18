@@ -44,6 +44,23 @@ WASH = RGBColor(0xF4, 0xF5, 0xF3)    # card background
 LINE = RGBColor(0xDF, 0xE1, 0xDE)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 
+# --- zellige ---------------------------------------------------------------
+#
+# A second palette, for ornament ONLY. It is built outward from the AZNET blue
+# already sampled from the logo rather than beside it, so the tilework reads as
+# Moroccan without arguing with the two institutions on the cover. Nothing that
+# carries meaning uses these: headings stay INK, the accent rule stays EMSI
+# green, data stays AZNET blue. Decoration is decorative.
+Z_BLUE = BLUE                        # the anchor, straight off logo-aznet.png
+Z_TURQUOISE = RGBColor(0x17, 0xA2, 0xA8)
+Z_TERRA = RGBColor(0xC4, 0x54, 0x2B)
+Z_SAFFRON = RGBColor(0xE3, 0xB2, 0x3C)
+Z_SAND = RGBColor(0xF2, 0xEF, 0xE6)
+
+# The rail lives left of the content column: MARGIN is 0.85, so 0.30 wide at
+# x=0.28 never touches a word.
+RAIL_X, RAIL_W = 0.28, 0.30
+
 FONT = "Arial"  # one of the two fonts EMSI sanctions, and present on any machine
 
 SLIDE_W, SLIDE_H = 13.333, 7.5
@@ -109,6 +126,179 @@ def _rect(slide, x, y, w, h, fill=None, line=None, line_w=1.0):
         sh.line.width = Pt(line_w)
     sh.text_frame.word_wrap = True
     return sh
+
+
+# --- zellige geometry ------------------------------------------------------
+#
+# Everything here is a real PowerPoint shape, never a picture. Three reasons:
+# nothing to license, it stays crisp at whatever resolution the amphitheatre
+# projector runs, and morph interpolates shapes -- a rosette can travel and
+# spin between slides, which a bitmap can only cross-fade.
+
+
+def _alpha(shape, pct):
+    """Translucency, which python-pptx does not expose.
+
+    A solid fill's XML gains <a:alpha val="n"/>; 100000 is opaque. Ornament
+    sits behind content, so it is almost always partly transparent -- at full
+    strength a star competes with the sentence in front of it.
+    """
+    fill = shape.fill._xPr.find(qn("a:solidFill"))
+    if fill is None:
+        return
+    clr = fill.find(qn("a:srgbClr"))
+    if clr is None:
+        return
+    a = parse_xml('<a:alpha xmlns:a="http://schemas.openxmlformats.org/'
+                  'drawingml/2006/main" val="%d"/>' % int(pct * 1000))
+    clr.append(a)
+
+
+def _tile(slide, shape_kind, x, y, size, fill, alpha=100, rot=0.0, name=None):
+    """One tile: a star, a diamond, a square. The unit the whole grid is made of."""
+    sh = slide.shapes.add_shape(shape_kind, Inches(x), Inches(y),
+                                Inches(size), Inches(size))
+    sh.shadow.inherit = False
+    sh.fill.solid()
+    sh.fill.fore_color.rgb = fill
+    sh.line.fill.background()
+    if rot:
+        sh.rotation = rot
+    if alpha < 100:
+        _alpha(sh, alpha)
+    if name:
+        sh.name = name
+    return sh
+
+
+def khatam(slide, cx, cy, size, name=None, rot=0.0, alpha=100,
+           star=Z_BLUE, inner=Z_TURQUOISE, ring=Z_SAFFRON):
+    """The khatam -- the eight-pointed star that signs Moroccan tilework.
+
+    Three concentric pieces: the star, a diamond turned 45 degrees inside it,
+    and a small centre. Named parts, because morph matches shapes across slides
+    BY NAME: give the same rosette the same name on two slides at different
+    positions and PowerPoint moves it rather than cutting.
+    """
+    parts = []
+    parts.append(_tile(slide, MSO_SHAPE.STAR_8_POINT, cx - size / 2, cy - size / 2,
+                       size, star, alpha, rot, name and name + "-star"))
+    d = size * 0.46
+    parts.append(_tile(slide, MSO_SHAPE.DIAMOND, cx - d / 2, cy - d / 2,
+                       d, inner, alpha, rot, name and name + "-in"))
+    c = size * 0.16
+    parts.append(_tile(slide, MSO_SHAPE.OVAL, cx - c / 2, cy - c / 2,
+                       c, ring, alpha, 0, name and name + "-c"))
+    return parts
+
+
+def zellige_rail(slide, on_dark=False):
+    """The signature strip down the left edge of every slide.
+
+    One star per tile, not a full three-part khatam, and every one carries a
+    stable name -- zRail-0, zRail-1... The names are what make this cheap:
+    morph matches shapes across slides by name, so a rail whose tiles are named
+    identically on both slides is recognised as unchanged and animates nothing.
+    Drawn as unnamed decoration it was sixty-three shapes per slide that every
+    transition had to cross-fade, and a transition that stutters on the
+    amphitheatre projector is worse than no ornament at all.
+
+    The field runs past the top and bottom edges rather than stopping politely
+    inside them, the way a tiled wall runs past a doorway.
+    """
+    ground = Z_SAND if not on_dark else RGBColor(0x24, 0x27, 0x2C)
+    _rect(slide, RAIL_X, 0, RAIL_W, SLIDE_H, fill=ground)
+    colours = (Z_BLUE, Z_TURQUOISE, Z_TERRA, Z_SAFFRON)
+    step = RAIL_W * 2.0
+    n = int(SLIDE_H / step) + 2
+    for i in range(n):
+        y = -step * 0.4 + i * step
+        _tile(slide, MSO_SHAPE.STAR_8_POINT, RAIL_X + RAIL_W * 0.04, y,
+              RAIL_W * 0.92, colours[i % 4],
+              alpha=55 if not on_dark else 45,
+              rot=22.5 * (i % 2), name="zRail-%d" % i)
+
+
+def zellige_band(slide, y, height, tiles=13, alpha=70, on_dark=False):
+    """A horizontal course of tilework, for the hero slides.
+
+    The reference the deck was asked to echo is a photographed mosaic band
+    above plain text -- this is that band, drawn rather than photographed.
+    """
+    _rect(slide, 0, y, SLIDE_W, height,
+          fill=Z_SAND if not on_dark else RGBColor(0x1F, 0x22, 0x27))
+    step = SLIDE_W / float(tiles)
+    colours = (Z_BLUE, Z_TURQUOISE, Z_TERRA, Z_SAFFRON)
+    # Two shapes per tile, not three, and one course rather than two
+    # interleaved: the band reads the same from four metres away and costs a
+    # third of the shapes, which is what the transition into the next slide has
+    # to cross-fade.
+    for i in range(tiles + 1):
+        _tile(slide, MSO_SHAPE.STAR_8_POINT, i * step - step / 2,
+              y + height / 2 - step / 2, step, colours[i % 4],
+              alpha=alpha, rot=22.5 * (i % 2), name="zBand-%d" % i)
+        d = step * 0.42
+        _tile(slide, MSO_SHAPE.DIAMOND, i * step - d / 2,
+              y + height / 2 - d / 2, d, colours[(i + 2) % 4],
+              alpha=alpha, rot=0, name="zBandIn-%d" % i)
+
+
+# Where the travelling rosette sits on each slide, as a fraction of the slide:
+# (x, y, size, rotation). It is the SAME named shape throughout, so morph
+# carries it from one slide to the next -- small in a corner while a table is
+# being read, large and turning on the slides that breathe.
+HERO_STOPS = {
+    "s01_cover": (0.86, 0.30, 3.6, 0),
+    "s03_quote": (0.18, 0.72, 2.6, 22.5),
+    "s19_demo": (0.88, 0.34, 4.4, 45),
+    "s22_merci": (0.50, 0.42, 5.2, 22.5),
+}
+HERO_DEFAULT = (0.955, 0.115, 0.52, 0)   # the header corner, out of the way
+
+
+def zellige_hero(slide, key, on_dark=False):
+    """The one rosette that travels the whole deck.
+
+    Named `zHero`, so PowerPoint's morph recognises it as the same object from
+    slide to slide and animates the move instead of cutting. On content slides
+    it is a small mark beside the header; on the four slides that can carry it,
+    it grows, turns and bleeds off the edge.
+    """
+    fx, fy, size, rot = HERO_STOPS.get(key, HERO_DEFAULT)
+    big = size > 1.5
+    khatam(slide, SLIDE_W * fx, SLIDE_H * fy, size, name="zHero", rot=rot,
+           alpha=26 if big else 85,
+           star=Z_BLUE if not on_dark else Z_TURQUOISE,
+           inner=Z_TURQUOISE if not on_dark else Z_BLUE,
+           ring=Z_SAFFRON)
+
+
+def _to_back(slide, first):
+    """Push everything added since `first` behind the content.
+
+    The ornament is drawn after the slide is built -- the builders know nothing
+    about it -- so without this the cover's tile band lands on top of the two
+    logos and every rosette sits over the sentence it was meant to sit behind.
+    Inserted in reverse so the tiles keep their own order among themselves: a
+    star must still be under its own centre dot.
+    """
+    tree = slide.shapes._spTree
+    for shape in reversed(list(slide.shapes)[first:]):
+        el = shape._element
+        tree.remove(el)
+        tree.insert(2, el)      # after nvGrpSpPr and grpSpPr
+
+
+def zellige(slide, key, on_dark=False, band=None):
+    """Dress one slide. Called once per slide, from main().
+
+    """
+    first = len(list(slide.shapes))
+    zellige_rail(slide, on_dark)
+    if band is not None:
+        zellige_band(slide, band[0], band[1], on_dark=on_dark)
+    zellige_hero(slide, key, on_dark)
+    _to_back(slide, first)
 
 
 def new_slide(prs, bg=PAPER):
@@ -1374,11 +1564,52 @@ le modèle d'inventer une valeur.
 }
 
 
+# The design line appended to each slide's notes: enough to answer a question
+# about the visual identity without turning the notes into a design brief.
+DESIGN_NOTE = {
+    "s01_cover": "Bandeau zellige plein : khatam (étoile à 8 branches), le motif "
+                 "qui signe la mosaïque marocaine. La rosace repart vers la diapo "
+                 "suivante — c'est un morph, pas une coupure.",
+    "s03_quote": "La rosace a traversé depuis la couverture, agrandie et tournée.",
+    "s19_demo": "Fond sombre : la rosace passe au turquoise pour rester lisible.",
+    "s22_merci": "Rosace au centre, plein format — dernière image, on la laisse "
+                 "respirer avant les questions.",
+}
+DESIGN_DEFAULT = ("Rail zellige à gauche + rosace khatam près du titre. Palette "
+                  "d'ornement ancrée sur le bleu AZNET ; le texte et les chiffres "
+                  "gardent les couleurs institutionnelles.")
+
+
+# Slides whose background is INK, where the ornament has to invert.
+DARK_SLIDES = {"s19_demo"}
+
+# The two slides that carry a full course of tilework, and where it sits.
+BANDS = {
+    "s01_cover": (0.0, 1.15),
+    "s22_merci": (SLIDE_H - 1.15, 1.15),
+}
+
+
+def _dress(prs, name):
+    """Put the zellige on the slide that was just built."""
+    zellige(prs.slides[-1], name,
+            on_dark=name in DARK_SLIDES,
+            band=BANDS.get(name))
+
+
 def _annotate(prs, name):
-    """Attach the speaker notes for the slide that was just built."""
+    """Attach the speaker notes for the slide that was just built.
+
+    The design line comes last and is deliberately short: the notes exist to
+    pace a defence, not to explain a colour choice. It is there for the one
+    question a jury sometimes asks about a deck that does not look like every
+    other deck.
+    """
     text = NOTES.get(name)
-    if text:
-        speaker_notes(prs.slides[-1], text)
+    if not text:
+        return
+    design = DESIGN_NOTE.get(name, DESIGN_DEFAULT)
+    speaker_notes(prs.slides[-1], text.strip() + "\n\n— Design : " + design)
 
 
 def main():
@@ -1389,6 +1620,7 @@ def main():
     # Numbered in order of appearance, so inserting a slide never means
     # renumbering the ones after it by hand.
     s01_cover(prs)
+    _dress(prs, "s01_cover")
     _annotate(prs, "s01_cover")
     n = 1
     for build in (s02_plan, s03_quote, s03_contexte, s04_problematique, s05_besoins,
@@ -1399,10 +1631,21 @@ def main():
                   s21_perspectives):
         n += 1
         build(prs, n)
+        _dress(prs, build.__name__)
         _annotate(prs, build.__name__)
     s22_merci(prs)
+    _dress(prs, "s22_merci")
     _annotate(prs, "s22_merci")
+    first_backup = len(prs.slides._sldIdLst)
     backups(prs, n + 2)
+    # The backups only ever appear if the live demo dies. They get the rail, so
+    # they still belong to the deck, and nothing else: that is not a moment for
+    # decoration.
+    # The backups get the rail so they still belong to the deck, and nothing
+    # else: they only appear if the live demo dies, which is not a moment for
+    # decoration.
+    for slide in list(prs.slides)[first_backup:]:
+        zellige_rail(slide)
 
     # Morph on every slide, including the backups: a transition missing from
     # one slide is the one the audience notices.
