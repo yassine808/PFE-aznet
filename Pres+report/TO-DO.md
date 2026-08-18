@@ -353,4 +353,4 @@ powershell -ExecutionPolicy Bypass -File Pres+report/build.ps1
 ```
 
 
-- [] better design + notes between the sildes( only i can see it)
+- [] better design + morph between slides + notes between the sildes( only i can see it)
