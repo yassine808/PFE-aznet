@@ -39,7 +39,7 @@ Transcription de notes vocales en darija et extraction structurée
 :::
 
 ::: {custom-style="CoverMeta"}
-**Entreprise d'accueil :** AZNET — Casablanca
+**Entreprise d'accueil :** AZNET — Rabat
 :::
 
 ::: {custom-style="CoverFoot"}

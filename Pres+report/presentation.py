@@ -338,7 +338,7 @@ def s01_cover(prs):
 
     tf = _txbox(slide, SLIDE_W - MARGIN - 4.2, 5.30, 4.2, 1.3)
     for i, (k, v) in enumerate([
-        ("Entreprise d'accueil", "AZNET — Casablanca"),
+        ("Entreprise d'accueil", "AZNET — Rabat"),
         ("Soutenu le", "[À COMPLÉTER]"),
         ("Année universitaire", "2025 / 2026"),
     ]):
