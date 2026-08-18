@@ -46,20 +46,18 @@ WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 
 # --- zellige ---------------------------------------------------------------
 #
-# A second palette, for ornament ONLY. It is built outward from the AZNET blue
-# already sampled from the logo rather than beside it, so the tilework reads as
-# Moroccan without arguing with the two institutions on the cover. Nothing that
-# carries meaning uses these: headings stay INK, the accent rule stays EMSI
-# green, data stays AZNET blue. Decoration is decorative.
-Z_BLUE = BLUE                        # the anchor, straight off logo-aznet.png
-Z_TURQUOISE = RGBColor(0x17, 0xA2, 0xA8)
-Z_TERRA = RGBColor(0xC4, 0x54, 0x2B)
-Z_SAFFRON = RGBColor(0xE3, 0xB2, 0x3C)
-Z_SAND = RGBColor(0xF2, 0xEF, 0xE6)
-
-# The rail lives left of the content column: MARGIN is 0.85, so 0.30 wide at
-# x=0.28 never touches a word.
-RAIL_X, RAIL_W = 0.28, 0.30
+# ONE colour. The blue is the AZNET blue sampled from logo-aznet.png, and the
+# ornament uses nothing else -- depth comes from translucency, not from more
+# hues. A defence deck that introduces a second palette starts arguing with the
+# two institutions printed on its own cover.
+#
+# What is deliberately absent, on the upstream pptx skill's own list of things
+# that read as machine-generated filler: no vertical sidebar stripe, no
+# header/footer colour bar, no accent rule under a title, no cream ground. The
+# identity is carried by one repeated motif instead -- the khatam, the
+# eight-pointed star of Moroccan tilework -- drawn as an outline and given room.
+Z_BLUE = BLUE
+Z_DEEP = RGBColor(0x07, 0x2A, 0x45)   # the same blue, taken down for dark slides
 
 FONT = "Arial"  # one of the two fonts EMSI sanctions, and present on any machine
 
@@ -128,177 +126,99 @@ def _rect(slide, x, y, w, h, fill=None, line=None, line_w=1.0):
     return sh
 
 
-# --- zellige geometry ------------------------------------------------------
+# --- the motif -------------------------------------------------------------
 #
-# Everything here is a real PowerPoint shape, never a picture. Three reasons:
-# nothing to license, it stays crisp at whatever resolution the amphitheatre
-# projector runs, and morph interpolates shapes -- a rosette can travel and
-# spin between slides, which a bitmap can only cross-fade.
+# A real PowerPoint shape, never a picture: nothing to license, crisp at any
+# projector resolution, and morph interpolates shapes -- so the star travels
+# and turns between slides where a bitmap could only cross-fade.
 
 
-def _alpha(shape, pct):
-    """Translucency, which python-pptx does not expose.
+def _alpha(el, pct):
+    """Translucency on a fill or a line, which python-pptx does not expose."""
+    clr = el.find(qn("a:srgbClr"))
+    if clr is not None:
+        clr.append(parse_xml(
+            '<a:alpha xmlns:a="http://schemas.openxmlformats.org/drawingml/'
+            '2006/main" val="%d"/>' % int(pct * 1000)))
 
-    A solid fill's XML gains <a:alpha val="n"/>; 100000 is opaque. Ornament
-    sits behind content, so it is almost always partly transparent -- at full
-    strength a star competes with the sentence in front of it.
+
+def khatam(slide, cx, cy, size, name=None, rot=0.0, alpha=100,
+           colour=None, weight=1.25, solid=False):
+    """The khatam: the eight-pointed star that signs Moroccan tilework.
+
+    Drawn as an outline by default. A filled star at this scale becomes a blue
+    blob behind the text; an outline reads as geometry, stays legible over
+    anything, and is what the tile actually looks like once you take the colour
+    out of it.
+
+    `name` matters more than it looks: morph matches shapes across slides BY
+    NAME, so the same name on two slides makes PowerPoint move the star rather
+    than cut it.
     """
-    fill = shape.fill._xPr.find(qn("a:solidFill"))
-    if fill is None:
-        return
-    clr = fill.find(qn("a:srgbClr"))
-    if clr is None:
-        return
-    a = parse_xml('<a:alpha xmlns:a="http://schemas.openxmlformats.org/'
-                  'drawingml/2006/main" val="%d"/>' % int(pct * 1000))
-    clr.append(a)
-
-
-def _tile(slide, shape_kind, x, y, size, fill, alpha=100, rot=0.0, name=None):
-    """One tile: a star, a diamond, a square. The unit the whole grid is made of."""
-    sh = slide.shapes.add_shape(shape_kind, Inches(x), Inches(y),
-                                Inches(size), Inches(size))
+    colour = colour or Z_BLUE
+    sh = slide.shapes.add_shape(MSO_SHAPE.STAR_8_POINT, Inches(cx - size / 2),
+                                Inches(cy - size / 2), Inches(size), Inches(size))
     sh.shadow.inherit = False
-    sh.fill.solid()
-    sh.fill.fore_color.rgb = fill
-    sh.line.fill.background()
+    if solid:
+        sh.fill.solid()
+        sh.fill.fore_color.rgb = colour
+        sh.line.fill.background()
+        _alpha(sh.fill._xPr.find(qn("a:solidFill")), alpha)
+    else:
+        sh.fill.background()
+        sh.line.color.rgb = colour
+        sh.line.width = Pt(weight)
+        _alpha(sh.line._get_or_add_ln().find(qn("a:solidFill")), alpha)
     if rot:
         sh.rotation = rot
-    if alpha < 100:
-        _alpha(sh, alpha)
     if name:
         sh.name = name
     return sh
 
 
-def khatam(slide, cx, cy, size, name=None, rot=0.0, alpha=100,
-           star=Z_BLUE, inner=Z_TURQUOISE, ring=Z_SAFFRON):
-    """The khatam -- the eight-pointed star that signs Moroccan tilework.
-
-    Three concentric pieces: the star, a diamond turned 45 degrees inside it,
-    and a small centre. Named parts, because morph matches shapes across slides
-    BY NAME: give the same rosette the same name on two slides at different
-    positions and PowerPoint moves it rather than cutting.
-    """
-    parts = []
-    parts.append(_tile(slide, MSO_SHAPE.STAR_8_POINT, cx - size / 2, cy - size / 2,
-                       size, star, alpha, rot, name and name + "-star"))
-    d = size * 0.46
-    parts.append(_tile(slide, MSO_SHAPE.DIAMOND, cx - d / 2, cy - d / 2,
-                       d, inner, alpha, rot, name and name + "-in"))
-    c = size * 0.16
-    parts.append(_tile(slide, MSO_SHAPE.OVAL, cx - c / 2, cy - c / 2,
-                       c, ring, alpha, 0, name and name + "-c"))
-    return parts
-
-
-def zellige_rail(slide, on_dark=False):
-    """The signature strip down the left edge of every slide.
-
-    One star per tile, not a full three-part khatam, and every one carries a
-    stable name -- zRail-0, zRail-1... The names are what make this cheap:
-    morph matches shapes across slides by name, so a rail whose tiles are named
-    identically on both slides is recognised as unchanged and animates nothing.
-    Drawn as unnamed decoration it was sixty-three shapes per slide that every
-    transition had to cross-fade, and a transition that stutters on the
-    amphitheatre projector is worse than no ornament at all.
-
-    The field runs past the top and bottom edges rather than stopping politely
-    inside them, the way a tiled wall runs past a doorway.
-    """
-    ground = Z_SAND if not on_dark else RGBColor(0x24, 0x27, 0x2C)
-    _rect(slide, RAIL_X, 0, RAIL_W, SLIDE_H, fill=ground)
-    colours = (Z_BLUE, Z_TURQUOISE, Z_TERRA, Z_SAFFRON)
-    step = RAIL_W * 2.0
-    n = int(SLIDE_H / step) + 2
-    for i in range(n):
-        y = -step * 0.4 + i * step
-        _tile(slide, MSO_SHAPE.STAR_8_POINT, RAIL_X + RAIL_W * 0.04, y,
-              RAIL_W * 0.92, colours[i % 4],
-              alpha=55 if not on_dark else 45,
-              rot=22.5 * (i % 2), name="zRail-%d" % i)
-
-
-def zellige_band(slide, y, height, tiles=13, alpha=70, on_dark=False):
-    """A horizontal course of tilework, for the hero slides.
-
-    The reference the deck was asked to echo is a photographed mosaic band
-    above plain text -- this is that band, drawn rather than photographed.
-    """
-    _rect(slide, 0, y, SLIDE_W, height,
-          fill=Z_SAND if not on_dark else RGBColor(0x1F, 0x22, 0x27))
-    step = SLIDE_W / float(tiles)
-    colours = (Z_BLUE, Z_TURQUOISE, Z_TERRA, Z_SAFFRON)
-    # Two shapes per tile, not three, and one course rather than two
-    # interleaved: the band reads the same from four metres away and costs a
-    # third of the shapes, which is what the transition into the next slide has
-    # to cross-fade.
-    for i in range(tiles + 1):
-        _tile(slide, MSO_SHAPE.STAR_8_POINT, i * step - step / 2,
-              y + height / 2 - step / 2, step, colours[i % 4],
-              alpha=alpha, rot=22.5 * (i % 2), name="zBand-%d" % i)
-        d = step * 0.42
-        _tile(slide, MSO_SHAPE.DIAMOND, i * step - d / 2,
-              y + height / 2 - d / 2, d, colours[(i + 2) % 4],
-              alpha=alpha, rot=0, name="zBandIn-%d" % i)
-
-
-# Where the travelling rosette sits on each slide, as a fraction of the slide:
-# (x, y, size, rotation). It is the SAME named shape throughout, so morph
-# carries it from one slide to the next -- small in a corner while a table is
-# being read, large and turning on the slides that breathe.
+# Where the one travelling star sits, as a fraction of the slide: x, y, size,
+# rotation. It is the same named shape everywhere, so morph carries it across
+# the whole deck -- a quiet mark beside the title while a table is being read,
+# then large, turned and running off the edge on the slides that breathe.
 HERO_STOPS = {
-    "s01_cover": (0.86, 0.30, 3.6, 0),
-    "s03_quote": (0.18, 0.72, 2.6, 22.5),
-    "s19_demo": (0.88, 0.34, 4.4, 45),
-    "s22_merci": (0.50, 0.42, 5.2, 22.5),
+    "s01_cover": (0.80, 0.52, 6.2, 0),
+    "s03_quote": (0.16, 0.74, 4.4, 22.5),
+    "s12_banc_protocole": (0.94, 0.80, 3.0, 45),
+    "s19_demo": (0.86, 0.30, 5.6, 22.5),
+    "s22_merci": (0.50, 0.46, 7.4, 45),
 }
-HERO_DEFAULT = (0.955, 0.115, 0.52, 0)   # the header corner, out of the way
+HERO_DEFAULT = (0.965, 0.155, 1.15, 0)
 
 
-def zellige_hero(slide, key, on_dark=False):
-    """The one rosette that travels the whole deck.
-
-    Named `zHero`, so PowerPoint's morph recognises it as the same object from
-    slide to slide and animates the move instead of cutting. On content slides
-    it is a small mark beside the header; on the four slides that can carry it,
-    it grows, turns and bleeds off the edge.
-    """
+def zellige(slide, key, on_dark=False, band=None):
+    """Dress one slide: the travelling star, and the mark beside the kicker."""
     fx, fy, size, rot = HERO_STOPS.get(key, HERO_DEFAULT)
-    big = size > 1.5
+    first = len(list(slide.shapes))
+    big = size > 2
     khatam(slide, SLIDE_W * fx, SLIDE_H * fy, size, name="zHero", rot=rot,
-           alpha=26 if big else 85,
-           star=Z_BLUE if not on_dark else Z_TURQUOISE,
-           inner=Z_TURQUOISE if not on_dark else Z_BLUE,
-           ring=Z_SAFFRON)
+           alpha=14 if big else 22,
+           colour=Z_BLUE if not on_dark else RGBColor(0x4F, 0xA9, 0xF5),
+           weight=2.5 if big else 1.25)
+    # The motif again at reading size, level with the kicker: repetition is
+    # what makes it an identity rather than an ornament that happened once.
+    if key not in HERO_STOPS:
+        khatam(slide, MARGIN - 0.30, 0.72, 0.17, solid=True, alpha=100,
+               colour=Z_BLUE)
+    _to_back(slide, first)
 
 
 def _to_back(slide, first):
     """Push everything added since `first` behind the content.
 
-    The ornament is drawn after the slide is built -- the builders know nothing
-    about it -- so without this the cover's tile band lands on top of the two
-    logos and every rosette sits over the sentence it was meant to sit behind.
-    Inserted in reverse so the tiles keep their own order among themselves: a
-    star must still be under its own centre dot.
+    The motif is drawn after the slide is built -- the builders know nothing
+    about it -- so without this every star sits over the sentence it was meant
+    to sit behind. Reversed, so the stars keep their own order among themselves.
     """
     tree = slide.shapes._spTree
     for shape in reversed(list(slide.shapes)[first:]):
         el = shape._element
         tree.remove(el)
-        tree.insert(2, el)      # after nvGrpSpPr and grpSpPr
-
-
-def zellige(slide, key, on_dark=False, band=None):
-    """Dress one slide. Called once per slide, from main().
-
-    """
-    first = len(list(slide.shapes))
-    zellige_rail(slide, on_dark)
-    if band is not None:
-        zellige_band(slide, band[0], band[1], on_dark=on_dark)
-    zellige_hero(slide, key, on_dark)
-    _to_back(slide, first)
+        tree.insert(2, el)
 
 
 def new_slide(prs, bg=PAPER):
@@ -309,15 +229,19 @@ def new_slide(prs, bg=PAPER):
 
 
 def header(slide, kicker, title, accent=BLUE, on_dark=False):
-    """Kicker, title, and the short rule under it. Every content slide opens here."""
+    """Kicker and title. Every content slide opens here.
+
+    There is no rule under the title on purpose: a coloured line beneath a
+    heading is one of the clearest tells of a generated deck. The separation is
+    done with size and space instead -- 29pt against 11.5pt, and the body
+    starting a third of an inch lower than the title needs.
+    """
     ink = WHITE if on_dark else INK
     tf = _txbox(slide, MARGIN, 0.60, CONTENT_W, 0.34)
     _run(_para(tf, first=True), kicker.upper(), size=11.5, bold=True, color=accent)
 
-    tf = _txbox(slide, MARGIN, 0.98, CONTENT_W, 0.75)
-    _run(_para(tf, first=True), title, size=27, bold=True, color=ink)
-
-    _rect(slide, MARGIN, 1.80, 1.15, 0.035, fill=accent)
+    tf = _txbox(slide, MARGIN, 0.98, CONTENT_W, 0.78)
+    _run(_para(tf, first=True), title, size=29, bold=True, color=ink)
 
 
 # --- transitions, notes, progress ------------------------------------------
@@ -370,23 +294,6 @@ def speaker_notes(slide, text):
     slide.notes_slide.notes_text_frame.text = text.strip()
 
 
-def progress(slide, n, on_dark=False):
-    """A hairline showing how far through the defence this slide sits.
-
-    Twenty minutes in front of a jury is easier to pace when the deck says
-    where it is without anyone having to count slides. Thin and grey enough to
-    ignore, which is the point: it informs the speaker, not the audience.
-    """
-    if not n:
-        return
-    done = max(0.0, min(1.0, n / float(DECK_LENGTH)))
-    track = LINE if not on_dark else RGBColor(0x33, 0x36, 0x3B)
-    _rect(slide, MARGIN, FOOTER_Y + 0.30, CONTENT_W, 0.015, fill=track)
-    if done:
-        _rect(slide, MARGIN, FOOTER_Y + 0.30, CONTENT_W * done, 0.015,
-              fill=BLUE if not on_dark else RGBColor(0x4F, 0xA9, 0xF5))
-
-
 def footer(slide, n, on_dark=False):
     if n is None:
         return
@@ -396,8 +303,7 @@ def footer(slide, n, on_dark=False):
     tf = _txbox(slide, SLIDE_W - MARGIN - 0.6, FOOTER_Y, 0.6, 0.22)
     p = _para(tf, first=True)
     p.alignment = PP_ALIGN.RIGHT
-    _run(p, str(n), size=8.5, bold=True, color=c)
-    progress(slide, n, on_dark)
+    _run(p, "%d / %d" % (n, DECK_LENGTH), size=8.5, bold=True, color=c)
 
 
 def bullets(slide, items, x=MARGIN, y=BODY_TOP, w=CONTENT_W, size=16.5,
@@ -556,8 +462,6 @@ def arrow(slide, x, y, w, h, right=True, color=None):
 
 def s01_cover(prs):
     slide = new_slide(prs)
-    _rect(slide, 0, 0, SLIDE_W, 0.10, fill=GREEN)
-    _rect(slide, 0, SLIDE_H - 0.10, SLIDE_W, 0.10, fill=BLUE)
 
     slide.shapes.add_picture(str(ASSETS / "logo-emsi.png"), Inches(MARGIN), Inches(0.62), height=Inches(0.72))
     ai = Image.open(ASSETS / "logo-aznet.png")
@@ -572,8 +476,6 @@ def s01_cover(prs):
     _run(p, "ÉCOLE MAROCAINE DES SCIENCES DE L'INGÉNIEUR — RABAT", size=11.5, bold=True, color=GREY)
     p = _para(tf)
     _run(p, "Rapport de Projet de Fin d'Études — diplôme d'Ingénieur d'État", size=11.5, color=MUTE)
-
-    _rect(slide, MARGIN, 2.62, 1.6, 0.05, fill=GREEN)
 
     tf = _txbox(slide, MARGIN, 2.92, CONTENT_W - 0.5, 1.5)
     p = _para(tf, first=True)
@@ -1374,8 +1276,6 @@ def s21_perspectives(prs, n):
 
 def s22_merci(prs):
     slide = new_slide(prs)
-    _rect(slide, 0, 0, SLIDE_W, 0.10, fill=GREEN)
-    _rect(slide, 0, SLIDE_H - 0.10, SLIDE_W, 0.10, fill=BLUE)
     tf = _txbox(slide, MARGIN, 2.85, CONTENT_W, 1.0)
     p = _para(tf, first=True)
     p.alignment = PP_ALIGN.CENTER
@@ -1423,143 +1323,109 @@ def backups(prs, start):
 # un jury s'entend immédiatement.
 NOTES = {
     "s01_cover": """
-[30 s] Bonjour. Mohammed Yassine MAGRI, filière Ingénierie Informatique et
-Réseaux. Sujet : automatiser les rapports journaliers de chantier chez AZNET,
-à Rabat, à partir de notes vocales en darija.
-Attendre que le jury soit installé avant de commencer.
+0:30 · Se présenter. Sujet en une phrase.
+→ notes vocales darija → journal de chantier, chez AZNET Rabat.
 """,
     "s02_plan": """
-[30 s] Annoncer le parcours en une phrase : le problème, la conception, les
-bancs d'essai, la démonstration. Ne pas lire les six points.
+0:30 · Annoncer le parcours, ne pas lire les six points.
 """,
     "s03_quote": """
-[20 s] Laisser la citation à l'écran deux secondes avant de parler. C'est la
-phrase du directeur : elle pose le problème mieux que je ne le ferais.
+0:20 · Laisser lire deux secondes avant de parler.
+→ C'est la phrase du directeur, pas la mienne.
 """,
     "s03_contexte": """
-[1 min] AZNET pose des infrastructures réseau. Le suivi de chantier se fait
-aujourd'hui à la main, le soir, de mémoire.
-Chiffre à donner si la question vient : le directeur re-saisit les rapports
-lui-même dans son fichier de suivi.
+1:00 · Le suivi se fait le soir, de mémoire, à la main.
+→ Si on demande : le directeur re-saisit lui-même.
 """,
     "s04_problematique": """
-[1 min 30] Le cœur du problème : le technicien parle darija, mélange les
-emprunts français techniques, et le journal attend des chiffres par colonne.
-Insister sur l'écart entre « ce qui est dit » et « ce qui est compté » — c'est
-ce que tout le reste de la présentation résout.
+1:30 · LE point : écart entre ce qui est DIT et ce qui est COMPTÉ.
+→ Darija + emprunts français vs colonnes chiffrées.
 """,
     "s05_besoins": """
-[1 min] Besoins fonctionnels puis non fonctionnels. Souligner la contrainte de
-budget zéro : elle explique presque toutes les décisions techniques qui
-suivent, y compris la chaîne de repli entre fournisseurs.
+1:00 · Besoins fonctionnels puis non fonctionnels.
+→ Budget zéro explique presque toutes les décisions qui suivent.
 """,
     "s05b_planning": """
-[45 s] Sept phases sur six mois. Le point à faire passer : le bout-en-bout
-réel a été atteint en phase 3, une phase avant le planning — le risque
-d'intégration a été neutralisé avant d'engager le reste.
-Si on demande pourquoi : un défaut d'intégration ne se voit pas hors ligne.
+0:45 · Sept phases, six mois.
+→ Bout-en-bout atteint en phase 3, une phase EN AVANCE.
 """,
     "s06_etat_art_stt": """
-[1 min] État de l'art de la transcription de l'arabe dialectal. Dire que la
-littérature ne tranchait pas pour le darija : c'est ce qui a rendu le banc
-d'essai nécessaire plutôt que confortable.
+1:00 · La littérature ne tranchait pas pour le darija.
+→ D'où un banc d'essai, pas un choix de confort.
 """,
     "s07_etat_art_llm": """
-[1 min] Extraction structurée par LLM : sortie contrainte par schéma, et le
-risque central — un modèle qui invente une valeur plausible. C'est le critère
-qui décidera du choix au banc d'essai n°2.
+1:00 · Sortie contrainte par schéma.
+→ Le risque central : un modèle qui invente une valeur plausible.
 """,
     "s08_architecture": """
-[1 min 30] Architecture hybride : n8n orchestre, le service Python fait l'IA.
-La frontière est le sujet de la diapositive suivante, ne pas l'anticiper ici.
-Cinq services, une seule origine publique.
+1:30 · n8n orchestre, Python fait l'IA. Cinq services, une seule origine.
+→ Ne pas anticiper la frontière, c'est la diapo suivante.
 """,
     "s09_frontiere": """
-[1 min] Pourquoi cette frontière : ce qui est testable va dans le code, ce qui
-est du câblage reste dans n8n. Exemple concret si on demande — la fusion d'une
-ligne de journal a quitté n8n parce qu'un nœud IF ne sait pas relire une ligne.
+1:00 · Testable → code. Câblage → n8n.
+→ Exemple : la fusion d'une ligne a quitté n8n, un IF ne relit pas une ligne.
 """,
     "s10_flux": """
-[1 min 30] Dérouler le flux une fois, lentement. Le point non évident :
-la réponse au technicien part AVANT l'écriture du Sheet. Une panne Google ne
-doit jamais coûter son résumé au technicien ; la ligne est mise en file.
+1:30 · Dérouler une fois, lentement.
+→ La réponse part AVANT le Sheet : une panne Google ne coûte pas son résumé.
 """,
     "s11_journal": """
-[1 min 30] Le journal reproduit le fichier du directeur, colonne pour colonne.
-Deux règles : une ligne par message (jamais de réécriture, une correction
-fausse ne détruit pas un chiffre juste) et le stock réconcilié, jamais supposé.
+1:30 · Une ligne par message, jamais de réécriture.
+→ Stock réconcilié, jamais supposé. Heures et JH viennent de la voix.
 """,
     "s12_banc_protocole": """
-[1 min] Protocole. Assumer la décision de méthode : ni WER ni CER. Le journal
-ne consomme que des chiffres et des emprunts techniques — c'est cela qu'on
-mesure, jugé par un locuteur natif contre l'audio.
+1:00 · Ni WER ni CER — assumé.
+→ On mesure ce que le journal consomme : chiffres et emprunts techniques.
 """,
     "s13_banc_api": """
-[45 s] Trois moteurs par API. Groq est rapide, et c'est le plancher toujours
-disponible de la chaîne — pas le meilleur.
+0:45 · Groq est rapide, c'est le plancher toujours disponible.
+→ Pas le meilleur.
 """,
     "s14_banc_local": """
-[1 min] Douze moteurs en local sur la 3070. Raconter l'hypothèse renversée
-puis rétablie : les petits affinages darija perdaient, les grands gagnent.
-C'est la diapositive où l'on montre que le résultat n'était pas acquis.
+1:00 · Hypothèse renversée puis rétablie.
+→ Les petits affinages perdent, les grands gagnent. Rien n'était acquis.
 """,
     "s15_moteur_retenu": """
-[1 min 30] La référence d'exactitude est le modèle darija open-source. Dire
-tout de suite ce qui suit, avant qu'on le trouve dans la config : il est en
-REPLI en production, pas en tête. 7,7 s et 4 Go de VRAM se paient sur chaque
-note ; Gemini répond d'abord, le local prend le relais quand le quota tombe.
-Le banc d'essai désigne une référence, l'ordre d'appel est une décision
-d'exploitation.
+1:30 · Le modèle darija est la RÉFÉRENCE d'exactitude.
+→ Dire tout de suite qu'il est en REPLI en production (7,7 s, 4 Go).
+→ Le banc désigne une référence ; l'ordre d'appel est une décision d'exploitation.
 """,
     "s15b_extraction": """
-[1 min 30] Deuxième banc d'essai. Le chiffre qui frappe : llama-3.1-8b-instant
-est le plus rapide du tableau ET invente cinq valeurs. La vitesse ne rachète
-rien quand le modèle remplit des champs à partir de rien.
-Assumer la limite si on la soulève : les dix cas ont été écrits par l'auteur du
-système. C'est dit au §4.3.9 du rapport.
+1:30 · llama-3.1-8b : le plus rapide ET cinq valeurs inventées.
+→ La vitesse ne rachète rien.
+→ Si on soulève la limite : oui, les dix cas sont de ma main (§4.3.9).
 """,
     "s16_perimetre": """
-[1 min] Périmètre livré. Rester factuel, ne pas survendre : ce qui tourne, ce
-qui reste à faire.
+1:00 · Ce qui tourne, ce qui reste. Rester factuel.
 """,
     "s17_dashboard": """
-[1 min] Le tableau de bord. Trilingue, arabe en RTL, graphiques écrits à la
-main — aucune bibliothèque de composants. Les vingt-deux captures sont en
-annexe H du rapport.
+1:00 · Trilingue, arabe RTL, graphiques écrits à la main.
+→ Vingt-deux captures en annexe H.
 """,
     "s18_devops": """
-[1 min] Dix-huit contrôles à chaque push. Le point honnête : Dependabot ouvre
-les demandes, aucune n'a encore été fusionnée — le dispositif rend l'écart
-visible, il ne l'a pas encore résorbé.
+1:00 · Dix-huit contrôles à chaque push.
+→ Honnêteté : Dependabot ouvre, rien n'est encore fusionné.
 """,
     "s18b_sonar": """
-[45 s] SonarCloud : la porte qualité passe. Raconter le vrai bogue trouvé — un
-test qui dépendait du .env local, vert sur ma machine, rouge en intégration
-continue, et qui maintenait la chaîne au rouge à chaque exécution.
+0:45 · La porte qualité passe : 0 bogue, 0 vulnérabilité, A/A/A.
+→ Raconter le vrai bogue : un test qui dépendait du .env local.
 """,
     "s19_demo": """
-[3 min] DÉMONSTRATION EN DIRECT.
-Ordre : envoyer la note vocale → montrer le ⏳ → attendre le ✅ → ouvrir le
-Sheet → ouvrir la boîte de réception du tableau de bord.
-Si le réseau tombe : passer aux captures d'annexe, elles suivent le même
-parcours. Ne pas déboguer devant le jury.
+3:00 · DÉMO. Note vocale → ⏳ → ✅ → Sheet → boîte de réception.
+→ SI ÇA TOMBE : passer aux captures d'annexe. Ne pas déboguer devant le jury.
 """,
     "s20_bilan": """
-[1 min 30] Compétences techniques puis méthodologiques. La leçon à énoncer :
-un résultat flatteur mérite plus de vérification qu'un résultat décevant — le
-banc d'essai avait un bogue silencieux qui couronnait un modèle sur une
-transcription qu'il n'avait jamais produite.
+1:30 · Technique puis méthodologique.
+→ La leçon : un résultat flatteur mérite plus de vérification qu'un décevant.
 """,
     "s21_perspectives": """
-[1 min] Perspectives, et les limites assumées. Mieux vaut nommer les limites
-avant le jury : jeu de test écrit par l'auteur, pilote court, couverture qui
-ne décrit que le service Python.
+1:00 · Nommer les limites avant le jury.
+→ Jeu de test de ma main, pilote court, couverture = service Python seul.
 """,
     "s22_merci": """
-[fin] Remercier, puis se taire. Laisser venir les questions.
-Questions attendues : pourquoi pas Whisper seul / pourquoi n8n et pas tout en
-code / que se passe-t-il si les quotas gratuits tombent / comment on empêche
-le modèle d'inventer une valeur.
+Remercier, puis se taire.
+→ Attendues : pourquoi pas Whisper seul / pourquoi n8n / quotas épuisés /
+  comment on empêche l'invention d'une valeur.
 """,
 }
 
@@ -1567,34 +1433,22 @@ le modèle d'inventer une valeur.
 # The design line appended to each slide's notes: enough to answer a question
 # about the visual identity without turning the notes into a design brief.
 DESIGN_NOTE = {
-    "s01_cover": "Bandeau zellige plein : khatam (étoile à 8 branches), le motif "
-                 "qui signe la mosaïque marocaine. La rosace repart vers la diapo "
-                 "suivante — c'est un morph, pas une coupure.",
-    "s03_quote": "La rosace a traversé depuis la couverture, agrandie et tournée.",
-    "s19_demo": "Fond sombre : la rosace passe au turquoise pour rester lisible.",
-    "s22_merci": "Rosace au centre, plein format — dernière image, on la laisse "
-                 "respirer avant les questions.",
+    "s01_cover": "Khatam (étoile à 8 branches, zellige) en trait, hors-cadre. "
+                 "Il se déplace de diapo en diapo — morph, pas une coupure.",
+    "s19_demo": "Fond sombre : le trait passe au bleu clair pour rester lisible.",
+    "s22_merci": "Le khatam au centre, plein format. Dernière image.",
 }
-DESIGN_DEFAULT = ("Rail zellige à gauche + rosace khatam près du titre. Palette "
-                  "d'ornement ancrée sur le bleu AZNET ; le texte et les chiffres "
-                  "gardent les couleurs institutionnelles.")
+DESIGN_DEFAULT = ("Un seul bleu, celui du logo AZNET. Un seul motif, le khatam, "
+                  "en trait. Ni bandeau, ni filet sous les titres.")
 
 
-# Slides whose background is INK, where the ornament has to invert.
+# Slides whose background is INK, where the motif has to invert.
 DARK_SLIDES = {"s19_demo"}
-
-# The two slides that carry a full course of tilework, and where it sits.
-BANDS = {
-    "s01_cover": (0.0, 1.15),
-    "s22_merci": (SLIDE_H - 1.15, 1.15),
-}
 
 
 def _dress(prs, name):
     """Put the zellige on the slide that was just built."""
-    zellige(prs.slides[-1], name,
-            on_dark=name in DARK_SLIDES,
-            band=BANDS.get(name))
+    zellige(prs.slides[-1], name, on_dark=name in DARK_SLIDES)
 
 
 def _annotate(prs, name):
@@ -1641,11 +1495,10 @@ def main():
     # The backups only ever appear if the live demo dies. They get the rail, so
     # they still belong to the deck, and nothing else: that is not a moment for
     # decoration.
-    # The backups get the rail so they still belong to the deck, and nothing
-    # else: they only appear if the live demo dies, which is not a moment for
-    # decoration.
+    # The backups get the motif like everything else, and nothing more: they
+    # only appear if the live demo dies, which is not a moment for decoration.
     for slide in list(prs.slides)[first_backup:]:
-        zellige_rail(slide)
+        zellige(slide, "backup")
 
     # Morph on every slide, including the backups: a transition missing from
     # one slide is the one the audience notices.

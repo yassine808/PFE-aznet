@@ -405,5 +405,31 @@ powershell -ExecutionPolicy Bypass -File Pres+report/build.ps1
       Every ornament shape is now pushed behind the content, in reverse so the
       tiles keep their own order.
 
+- [x] **Simplified to one blue and one motif** (2026-08-18, second pass). The
+      first zellige attempt was too much: four ornament colours, a sand ground,
+      a tiled band and a rail down every slide. Anthropic's upstream `pptx`
+      skill — fetched from `anthropics/skills` — names most of that as the
+      signature of a machine-generated deck, verbatim: *"NEVER add decorative
+      colour bars or accent stripes … including vertical sidebar stripes down
+      one edge of the slide"*, *"NEVER use accent lines under titles"*, *"don't
+      default to cream/beige backgrounds"*. All three were in the deck, and two
+      of the three predate the zellige work.
+      - **Removed**: the rail, the tile band, the sand ground, the three extra
+        ornament colours, the green/blue edge bars on the cover and the closing
+        slide, the accent rule under every title, and the progress stripe
+        (replaced by `7 / 24` beside the page number — the same information
+        without a bar across the slide).
+      - **Kept, and made the whole identity**: the khatam, drawn as an
+        **outline** in the single AZNET blue. Large and translucent on the
+        slides that breathe, small and solid beside the kicker everywhere else.
+        One named shape (`zHero`) travels the deck, so morph moves it.
+      - **Titles now separate by size and space** — 29 pt against 11.5 pt — not
+        by a coloured line under them.
+      - **477 shapes**, down from 2842 in the first attempt.
+- [x] **Notes rewritten as TL;DR**: a timing, then one or two arrows. Short
+      enough to read in a glance while still talking, which a paragraph is not.
+- [x] **QA**: 153 XML parts, all well-formed; zip integrity OK; morph on 32/32;
+      travelling star on 32/32; notes on 26.
+
 Rebuilt: 32 slides. `presentation.py` stays the source of truth — a slide fixed
 only in PowerPoint is a fix that disappears on the next build.
