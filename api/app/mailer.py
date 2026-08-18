@@ -344,7 +344,8 @@ def sample_report(to: str = "") -> Tuple[str, str]:
     techs = rng.sample(
         ["Yassine", "Karim", "Rachid", "Mehdi", "Anas", "Hicham", "Youssef"], 3
     )
-    sites = rng.sample(["Sidi Maarouf", "Aïn Sebaâ", "Anfa", "Nouaceur"], 3)
+    # The real sites, so a test mail looks like the thing it is testing.
+    sites = rng.sample(["DGH", "Extralait", "ACAPS"], 3)
     goulottes = rng.randrange(60, 260, 10)
     cables = rng.randrange(120, 700, 10)
     prises = rng.randrange(2, 20)
