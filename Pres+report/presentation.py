@@ -821,7 +821,7 @@ def s14_banc_local(prs, n):
 
 def s15_moteur_retenu(prs, n):
     slide = new_slide(prs)
-    header(slide, "4 — Banc d'essai", "Le moteur retenu, et le coût assumé de ce choix")
+    header(slide, "4 — Banc d'essai", "La référence d'exactitude, et sa place dans la chaîne")
 
     tf = _txbox(slide, MARGIN, BODY_TOP - 0.06, CONTENT_W, 0.32)
     p = _para(tf, first=True)
@@ -856,7 +856,86 @@ def s15_moteur_retenu(prs, n):
     _run(_para(tf, first=True), "Ce qui est payé", size=14.5, bold=True, color=INK)
     p = _para(tf)
     p.line_spacing = 1.2
-    _run(p, "7,7 s de latence moyenne, le plus lent des douze, contre 1,53 s pour l'API de Groq. Environ 4 Go de mémoire graphique. Cinq fois l'attente contre la meilleure exactitude : c'est la décision centrale du banc d'essai.", size=12, color=GREY)
+    _run(p, "7,7 s de latence moyenne, le plus lent des douze, contre 1,53 s pour l'API de Groq, et 4 Go de mémoire graphique immobilisés. C'est ce coût qui lui vaut, en production, la position de repli : la chaîne livrée est gemini, local, groq. Le banc d'essai désigne la référence d'exactitude ; l'ordre d'appel est une décision d'exploitation.", size=12, color=GREY)
+    footer(slide, n)
+
+
+
+def s05b_planning(prs, n):
+    """Seven phases, March to August. Replaces the four-sprint story the report dropped."""
+    slide = new_slide(prs)
+    header(slide, "1 — Conduite du projet", "Six mois, sept phases")
+    table(slide,
+          ["Phase", "Période", "Objectif principal"],
+          [["0 — Cadrage", "2 – 27 mars", "Immersion métier, cahier des charges"],
+           ["1 — État de l'art", "30 mars – 30 avril", "Transcription du dialectal, extraction par LLM, jeu de test"],
+           ["2 — Conception", "4 mai – 5 juin", "Architecture hybride, contrat de données, frontière n8n / code"],
+           ["3 — Cœur IA", "8 juin – 17 juillet", "Service FastAPI, adaptateurs STT, chaînes de repli"],
+           ["4 — Chaîne complète", "20 juillet – 1er août", "Workflow n8n, réception bicanale, tableau de bord"],
+           ["5 — Bancs d'essai", "3 – 14 août", "Comparatifs STT et extraction, sécurité, intégration continue"],
+           ["6 — Pilote et rapport", "17 – 28 août", "Déploiement pilote, livrables, soutenance"]],
+          x=MARGIN, y=BODY_TOP, w=CONTENT_W, col_w=[2.5, 2.5, 6.6], size=12,
+          row_h=0.44, head_h=0.40, emphasis=(0,))
+    note(slide, "Le bout-en-bout réel a été atteint en phase 3, une phase avant le planning : le risque d'intégration a été neutralisé avant d'engager le reste.",
+         y=6.16, accent=GREEN, size=12.5, h=0.58)
+    footer(slide, n)
+
+
+def s15b_extraction(prs, n):
+    """The two extraction benchmarks: the report has them, the deck had only STT."""
+    slide = new_slide(prs)
+    header(slide, "4 — Banc d'essai", "Du texte au tableau : huit modèles, dix cas")
+    table(slide,
+          ["Modèle", "Cas répondus", "Exactitude", "Cas parfaits", "Valeurs inventées", "Latence"],
+          [["openai/gpt-oss-120b", "10 / 10", "1,000", "10 / 10", "0", "1,72 s"],
+           ["gemini-flash-lite-latest", "10 / 10", "0,980", "9 / 10", "1", "1,04 s"],
+           ["gemini-3.6-flash", "4 / 10", "1,000", "4 / 4", "0", "4,98 s"],
+           ["llama-3.3-70b-versatile", "10 / 10", "0,922", "7 / 10", "1", "0,69 s"],
+           ["llama-3.1-8b-instant", "7 / 10", "0,876", "5 / 7", "5", "0,50 s"],
+           ["qwen/qwen3.6-27b", "0 / 10", "—", "—", "—", "—"]],
+          x=MARGIN, y=BODY_TOP, w=CONTENT_W, col_w=[3.4, 1.7, 1.5, 1.6, 2.1, 1.3],
+          size=11.5, row_h=0.42, head_h=0.40, emphasis=(0,))
+
+    y = 5.02
+    half = (CONTENT_W - 0.4) / 2
+    _rect(slide, MARGIN, y, half, 1.02, fill=WASH)
+    _rect(slide, MARGIN, y, half, 0.05, fill=RGBColor(0xC0, 0x39, 0x2B))
+    tf = _txbox(slide, MARGIN + 0.26, y + 0.20, half - 0.52, 0.76)
+    _run(_para(tf, first=True), "La rapidité ne rachète rien", size=13.5, bold=True, color=INK)
+    p = _para(tf)
+    p.line_spacing = 1.15
+    _run(p, "llama-3.1-8b-instant : le plus rapide du tableau, et cinq valeurs inventées — dont un client qu'aucun cas ne mentionne.", size=11.5, color=GREY)
+
+    _rect(slide, MARGIN + half + 0.4, y, half, 1.02, fill=WASH)
+    _rect(slide, MARGIN + half + 0.4, y, half, 0.05, fill=BLUE)
+    tf = _txbox(slide, MARGIN + half + 0.66, y + 0.20, half - 0.52, 0.76)
+    _run(_para(tf, first=True), "La disponibilité prime", size=13.5, bold=True, color=INK)
+    p = _para(tf)
+    p.line_spacing = 1.15
+    _run(p, "gemini-3.6-flash obtient 1,000 — sur les quatre cas traités avant l'épuisement du quota gratuit. Parfait puis muet : c'est un repli, pas un primaire.", size=11.5, color=GREY)
+
+    note(slide, "D'où la chaîne gpt-oss-120b → flash-lite → 3.6-flash : elle alterne les fournisseurs dès le second maillon, parce que Groq et Google comptent leurs quotas séparément. Sur l'image, quatre modèles de vision sur les mêmes dix cas : l'écart texte / image est quasi nul.",
+         y=6.16, accent=BLUE, size=12, h=0.58)
+    footer(slide, n)
+
+
+def s18b_sonar(prs, n):
+    """SonarCloud: the gate passes now, and the deck never said so."""
+    slide = new_slide(prs)
+    header(slide, "5 — Qualité", "L'analyse statique externe : SonarCloud")
+    stats(slide, [("0", "bogue"),
+                  ("0", "vulnérabilité"),
+                  ("A / A / A", "fiabilité · sécurité\nmaintenabilité"),
+                  ("60 %", "de couverture\nmesurée (service Python)")],
+          y=BODY_TOP - 0.05, h=1.48)
+
+    bullets(slide, [
+        ("Le portail est passé de rouge à vert.", "Fiabilité E, sécurité C au départ : une image de conteneur qui s'exécutait en root et installait depuis des sources non épinglées, et une clé de projet qui ne désignait aucun projet existant."),
+        ("Un signalement a été refusé, motif consigné.", "Verrouiller les empreintes des dépendances du service GPU tirerait la variante processeur de torch et casserait silencieusement l'inférence — la dépendance vient de l'image CUDA."),
+        ("Un vrai bogue de test a été débusqué.", "Un test dépendait du fichier .env local : il passait sur la machine de développement et échouait en intégration continue. À lui seul, il maintenait la chaîne au rouge à chaque exécution."),
+    ], y=3.72, size=13, gap=10)
+    note(slide, "Une dette de 121 minutes et 15 mauvaises odeurs subsistent : maintenabilité déjà notée A, aucun correctif bloquant.",
+         y=6.16, accent=MUTE, size=12.5, h=0.58)
     footer(slide, n)
 
 
@@ -889,8 +968,8 @@ def s16_perimetre(prs, n):
     tf = _txbox(slide, MARGIN + 0.34, y + 0.22, CONTENT_W - 0.68, 1.05)
     p = _para(tf, first=True)
     p.line_spacing = 1.22
-    _run(p, "Dès la semaine 0", size=13.5, bold=True, color=INK)
-    _run(p, " — le planning la prévoyait au sprint 2 — la chaîne complète a été validée en conditions réelles : note vocale, détection, téléchargement, transcription, extraction, résumé français, réponse de confirmation. Le risque d'intégration majeur du projet a été neutralisé immédiatement. Lors de ces essais, ", size=13.5, color=GREY)
+    _run(p, "Dès la phase 3", size=13.5, bold=True, color=INK)
+    _run(p, " — le planning la prévoyait en phase 4 — la chaîne complète a été validée en conditions réelles : note vocale, détection, téléchargement, transcription, extraction, résumé français, réponse de confirmation. Le risque d'intégration majeur du projet a été neutralisé immédiatement. Lors de ces essais, ", size=13.5, color=GREY)
     _run(p, "le repli d'extraction s'est déclenché seul", size=13.5, bold=True, color=INK)
     _run(p, " sur indisponibilité du fournisseur principal, validant la conception sans intervention.", size=13.5, color=GREY)
     footer(slide, n)
@@ -923,17 +1002,17 @@ def s17_dashboard(prs, n):
 def s18_devops(prs, n):
     slide = new_slide(prs)
     header(slide, "5 — Qualité", "La chaîne d'intégration continue")
-    stats(slide, [("220", "commits en 29 jours\n(15 juil. – 12 août 2026)"),
-                  ("17", "contrôles automatiques\nà chaque push"),
-                  ("272", "tests, sans aucune\nclé d'API ni base"),
-                  ("35", "demandes Dependabot\nsur 5 écosystèmes")],
+    stats(slide, [("6 mois", "de développement\n(2 mars – 31 août 2026)"),
+                  ("18", "contrôles automatiques\nà chaque push"),
+                  ("288", "tests, sans aucune\nclé d'API ni base"),
+                  ("38", "demandes Dependabot\nsur 5 écosystèmes")],
           y=BODY_TOP - 0.05, h=1.48)
 
     y = 3.70
     tf = _txbox(slide, MARGIN, y, CONTENT_W, 0.3)
-    _run(_para(tf, first=True), "Les 17 contrôles, par famille", size=14.5, bold=True, color=BLUE)
+    _run(_para(tf, first=True), "Les 18 contrôles, par famille", size=14.5, bold=True, color=BLUE)
     fams = [
-        ("Correction", GREEN, "API — ruff, types, 272 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
+        ("Correction", GREEN, "API — ruff, types, 288 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
         ("Sécurité du code", BLUE, "CodeQL (python)  ·  CodeQL (javascript-typescript)  ·  Semgrep OWASP Top 10  ·  Bandit"),
         ("Dépendances et secrets", RGBColor(0x8E, 0x44, 0xAD), "Trivy filesystem  ·  Trivy config  ·  pip-audit  ·  npm audit  ·  gitleaks + check_secrets.py"),
         ("Conformité des fichiers", GREY, "Hadolint (api)  ·  Hadolint (Dashboard)  ·  actionlint"),
@@ -949,7 +1028,7 @@ def s18_devops(prs, n):
         _run(p, detail, size=11.5, color=GREY)
         yy += 0.50
 
-    note(slide, "Dependabot ouvre ses demandes quotidiennement sur npm, pip, les deux images Docker et les actions GitHub — chacune franchit les 17 contrôles avant d'être fusionnée.",
+    note(slide, "Dependabot ouvre ses demandes quotidiennement sur npm, pip, les deux images Docker et les actions GitHub — chacune doit franchir les 18 contrôles avant de pouvoir être fusionnée.",
          y=6.16, accent=BLUE, size=12.5, h=0.58)
     footer(slide, n)
 
@@ -1087,10 +1166,11 @@ def main():
     s01_cover(prs)
     n = 1
     for build in (s02_plan, s03_quote, s03_contexte, s04_problematique, s05_besoins,
-                  s06_etat_art_stt, s07_etat_art_llm, s08_architecture, s09_frontiere,
-                  s10_flux, s11_journal, s12_banc_protocole, s13_banc_api,
-                  s14_banc_local, s15_moteur_retenu, s16_perimetre, s17_dashboard,
-                  s18_devops, s19_demo, s20_bilan, s21_perspectives):
+                  s05b_planning, s06_etat_art_stt, s07_etat_art_llm, s08_architecture,
+                  s09_frontiere, s10_flux, s11_journal, s12_banc_protocole, s13_banc_api,
+                  s14_banc_local, s15_moteur_retenu, s15b_extraction, s16_perimetre,
+                  s17_dashboard, s18_devops, s18b_sonar, s19_demo, s20_bilan,
+                  s21_perspectives):
         n += 1
         build(prs, n)
     s22_merci(prs)
