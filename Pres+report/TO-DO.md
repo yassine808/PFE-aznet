@@ -351,3 +351,6 @@ gh run list --workflow=ci.yml --limit 1
 # Rebuild the report (kills Word first; ~1 min, add -ExportPdf for the PDF, ~20 min)
 powershell -ExecutionPolicy Bypass -File Pres+report/build.ps1
 ```
+
+
+- [] better design + notes between the sildes( only i can see it)
