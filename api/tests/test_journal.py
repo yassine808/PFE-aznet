@@ -1,4 +1,4 @@
-"""Journal row assembly: accumulation and stock reconciliation.
+"""Journal row assembly: appended rows and stock reconciliation.
 
 Pure logic, no Sheets and no Postgres — these are the two rules that make the
 director's file correct, so they get tested where they can fail fast.
@@ -10,7 +10,7 @@ from app import journal
 from app.journal import (
     HEADERS,
     CHEF_COLUMNS,
-    merge_rows,
+    correlation_of,
     reconcile_stock,
     report_cells,
 )
@@ -145,17 +145,6 @@ def test_unparseable_cell_is_not_treated_as_zero():
 # --- merge: the second report of the day ----------------------------------
 
 
-def test_quantities_accumulate():
-    merged = merge_rows({"Câble installé": "120"}, {"Câble installé": "160"})
-    assert merged["Câble installé"] == "280"
-
-
-def test_arret_minutes_accumulate():
-    """Two stops in one day are two stops: minutes add like any quantity."""
-    merged = merge_rows({"Arrêt (min)": "60"}, {"Arrêt (min)": "90"})
-    assert merged["Arrêt (min)"] == "150"
-
-
 def test_blocker_fields_land_in_their_own_columns():
     cells = report_cells(rep(
         temps_arret_min=90, motif_arret="Bureaux fermés",
@@ -165,57 +154,6 @@ def test_blocker_fields_land_in_their_own_columns():
     assert cells["MOTIF D'ARRÊT"] == "Bureaux fermés"
     assert cells["BESOINS / MATÉRIEL"] == "Connecteurs RJ45"
     assert cells["PROCHAINES ÉTAPES"] == "E3 demain"
-
-
-def test_empty_existing_cell_takes_the_new_value():
-    merged = merge_rows({"Câble installé": ""}, {"Câble installé": "160"})
-    assert merged["Câble installé"] == "160"
-
-
-def test_locations_union_without_duplicates():
-    merged = merge_rows({"ETAGE": "RDC, E1"}, {"ETAGE": "E1, E2"})
-    assert merged["ETAGE"] == "RDC, E1, E2"
-
-
-def test_remarks_append_rather_than_replace():
-    merged = merge_rows({"Remarques": "Bureaux fermés."},
-                        {"Remarques": "Arrêt de 1h30."})
-    assert merged["Remarques"] == "Bureaux fermés.\nArrêt de 1h30."
-
-
-def test_need_fields_append_like_remarks():
-    """A second list of needs joins the first; a repeated motive is not
-    repeated twice — same rules as Remarques."""
-    merged = merge_rows(
-        {"MOTIF D'ARRÊT": "Attente d'instruction.",
-         "BESOINS / MATÉRIEL": "Connecteurs RJ45.",
-         "PROCHAINES ÉTAPES": "On attaque E3."},
-        {"MOTIF D'ARRÊT": "Attente d'instruction.",
-         "BESOINS / MATÉRIEL": "2 boîtes de vis.",
-         "PROCHAINES ÉTAPES": "On attaque E3."},
-    )
-    assert merged["MOTIF D'ARRÊT"] == "Attente d'instruction."
-    assert merged["BESOINS / MATÉRIEL"] == "Connecteurs RJ45.\n2 boîtes de vis."
-    assert merged["PROCHAINES ÉTAPES"] == "On attaque E3."
-
-
-def test_identical_remark_is_not_duplicated():
-    merged = merge_rows({"Remarques": "Bureaux fermés."},
-                        {"Remarques": "Bureaux fermés."})
-    assert merged["Remarques"] == "Bureaux fermés."
-
-
-def test_stock_is_a_level_so_the_latest_reading_replaces():
-    merged = merge_rows({"Reste du câble (Stock)": "2274"},
-                        {"Reste du câble (Stock)": "2095"})
-    assert merged["Reste du câble (Stock)"] == "2095"
-
-
-@pytest.mark.parametrize("column", CHEF_COLUMNS)
-def test_chef_columns_survive_a_merge(column):
-    """The dashboard owns these; a second voice note must not undo a human."""
-    merged = merge_rows({column: "DRISS, BRAHIM"}, {column: "écrasé"})
-    assert merged[column] == "DRISS, BRAHIM"
 
 
 # --- the Sheets round trip (fake tab, no Google) --------------------------
@@ -292,15 +230,25 @@ def test_tab_is_created_on_demand(fake):
     assert fake.created == [("Extralait", HEADERS)]
 
 
-def test_second_report_same_day_merges_into_the_same_row(fake):
+def test_second_report_same_day_gets_its_own_row(fake):
+    """The afternoon note appends; it never rewrites the morning's row.
+
+    This is the whole point of dropping accumulation: 120 then 160 used to
+    become a single cell reading 280, and if the 160 was a mis-transcription
+    the 120 was gone with no way to tell. Two rows keep both figures, and the
+    bordereau still reads 280 because it sums rows.
+    """
     from app.journal import write_report
 
-    write_report("DGH", "2026-08-05", "NAROUZE", "DGH", rep(cables_installes_m=120))
-    row, _ = write_report("DGH", "2026-08-05", "NAROUZE", "DGH",
-                          rep(cables_installes_m=160))
-    assert row == 2
-    assert fake.written[-1][1] == 2
-    assert fake.written[-1][2]["Câble installé"] == "280"
+    first, _ = write_report("DGH", "2026-08-05", "NAROUZE", "DGH",
+                            rep(cables_installes_m=120))
+    second, _ = write_report("DGH", "2026-08-05", "NAROUZE", "DGH",
+                             rep(cables_installes_m=160))
+    assert (first, second) == (2, 3)
+    # Nothing was rewritten in place.
+    assert fake.written == []
+    assert fake.rows[-1]["Câble installé"] == "160"
+    assert fake.rows[-2]["Câble installé"] == "120"
 
 
 def test_a_different_technician_gets_their_own_row(fake):
@@ -323,21 +271,26 @@ def test_same_technician_next_day_gets_a_new_row(fake):
 
 
 def test_date_format_drift_still_finds_the_row(fake):
-    """We write '2026-08-05'; Google hands back '05/08/2026'."""
-    from app.journal import write_report
+    """We write '2026-08-05'; Google hands back '05/08/2026'.
+
+    Rows are appended now, so this no longer decides where a report lands --
+    but the day still has to be recognisable to anything asking "did this
+    technician report today?", so the normalisation is pinned here.
+    """
+    from app.journal import find_row
 
     fake.rows.append({"Date": "05/08/2026", "Technicien": "NAROUZE",
                       "Câble installé": "120", "_row": 2})
-    row, _ = write_report("DGH", "2026-08-05", "NAROUZE", "DGH",
-                          rep(cables_installes_m=160))
+    row, cells = find_row("DGH", "2026-08-05", "NAROUZE", fake.rows)
     assert row == 2
+    assert cells["Câble installé"] == "120"
 
 
 def test_technician_name_matching_ignores_case(fake):
-    from app.journal import write_report
+    from app.journal import find_row
 
     fake.rows.append({"Date": "2026-08-05", "Technicien": "narouze", "_row": 2})
-    row, _ = write_report("DGH", "2026-08-05", "NAROUZE", "DGH", rep())
+    row, _ = find_row("DGH", "2026-08-05", "NAROUZE", fake.rows)
     assert row == 2
 
 
@@ -532,52 +485,60 @@ def test_refiling_the_same_message_merges_nothing(fake):
     assert fake.written == []  # no merge write, so the total stays 120
 
 
-def test_refiling_a_different_message_still_merges(fake):
-    """A second report from the same technician the same day has its own
-    correlation: it is a real message, so it merges and the cell logs both."""
+def test_a_second_message_the_same_day_appends_its_own_row(fake):
+    """A real second report is not a duplicate: it gets its own row.
+
+    Both rows keep their own correlation id, which is what makes the retry
+    check below able to tell a replay from a genuine follow-up.
+    """
     from app.journal import file_report
 
-    file_report({
+    first = file_report({
         "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
         "correlation_id": "corr-abc",
         "report": {"cables_installes_m": 120, "resume": "Résumé."},
     })
-    retry = file_report({
+    second = file_report({
         "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
         "correlation_id": "corr-def",
         "report": {"cables_installes_m": 160, "resume": "Suite."},
     })
-    assert retry["duplicate"] is False
-    assert fake.written[-1][1] == retry["row"]
-    assert "corr-abc" in fake.written[-1][2]["Correlation id"]
-    assert "corr-def" in fake.written[-1][2]["Correlation id"]
-    assert fake.written[-1][2]["Câble installé"] == "280"
+    assert second["duplicate"] is False
+    assert second["row"] != first["row"]
+    assert fake.written == []          # nothing rewritten in place
+    # The cell is a link to the message in the inbox; the id is its text.
+    assert correlation_of(fake.rows[-1]["Correlation id"]) == "corr-def"
+    assert fake.rows[-1]["Câble installé"] == "160"
+    assert fake.rows[-2]["Câble installé"] == "120"
 
 
-def test_refile_without_correlation_merges_unchecked(fake):
+def test_refile_without_correlation_cannot_be_deduplicated(fake):
     """No correlation_id (e.g. a dashboard submission) cannot be proven a
-    duplicate, so it still merges — the pre-journal behavior."""
+    duplicate, so it lands as its own row rather than being silently dropped.
+
+    Appending is the safe failure here: a spurious extra row is visible and
+    deletable, where a swallowed report is neither.
+    """
     from app.journal import file_report
 
     first = file_report({
         "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
         "report": {"cables_installes_m": 120, "resume": "Résumé."},
     })
-    retry = file_report({
+    again = file_report({
         "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
         "report": {"cables_installes_m": 160, "resume": "Suite."},
     })
-    assert retry["duplicate"] is False
-    assert fake.written[-1][1] == first["row"]
-    assert fake.written[-1][2]["Câble installé"] == "280"
+    assert again["duplicate"] is False
+    assert again["row"] != first["row"]
 
 
 def test_excel_serial_date_matches_the_same_day(fake):
     """The director's own file stores 46174, not a date string."""
-    from app.journal import write_report
+    from app.journal import find_row
 
     fake.rows.append({"Date": "46174", "Technicien": "NAROUZE", "_row": 2})
-    row, _ = write_report("DGH", "2026-06-01", "NAROUZE", "DGH", rep())
+    row, _ = find_row("DGH", "2026-06-01", "NAROUZE", fake.rows)
     assert row == 2
 
 
@@ -631,30 +592,6 @@ def test_totals_never_count_arret_minutes():
     assert "temps_arret_min" not in out
 
 
-def test_flag_review_merges_as_a_state_not_as_prose():
-    """Once any message of the day needs checking, the row does.
-
-    Merging the flag through the text branch produced `FALSE\nTrue` in the one
-    column the director filters on. The sheet hands the cell back as the string
-    `TRUE`, so both shapes have to mean the same thing.
-    """
-    from app.journal import COL_FLAG, merge_rows
-
-    assert merge_rows({COL_FLAG: "FALSE"}, {COL_FLAG: "TRUE"})[COL_FLAG] == "TRUE"
-    # A flag already set is never cleared by a clean second message.
-    assert merge_rows({COL_FLAG: "TRUE"}, {COL_FLAG: "FALSE"})[COL_FLAG] == "TRUE"
-    assert merge_rows({COL_FLAG: "FALSE"}, {COL_FLAG: "FALSE"})[COL_FLAG] == "FALSE"
-
-
-def test_stt_engine_merges_to_the_latest_engine():
-    """Which engine answered last, not a transcript of the chain's history."""
-    from app.journal import COL_STT, merge_rows
-
-    assert merge_rows({COL_STT: "gemini"}, {COL_STT: "local"})[COL_STT] == "local"
-    # A text report carries no engine and must not blank the audio one.
-    assert merge_rows({COL_STT: "gemini"}, {COL_STT: ""})[COL_STT] == "gemini"
-
-
 def test_audio_link_points_at_the_inbox_when_the_dashboard_has_an_origin(monkeypatch):
     """The Sheet cell should open the message, not a bare Drive file."""
     monkeypatch.setattr(journal.settings, "dashboard_base_url", "https://aznet.example.com/")
@@ -699,3 +636,62 @@ def test_audio_link_refuses_to_write_something_that_is_not_a_link(monkeypatch):
     assert journal.audio_link({"lien_audio": "1115179874166528"}) is None
     assert journal.audio_link({"lien_audio": ""}) is None
     assert journal.audio_link({}) is None
+
+
+# --- the day's hours and crew, dictated rather than typed ------------------
+#
+# EQUIPE and the two hour columns were CHEF_COLUMNS until 2026-08-18: declared
+# chef-only, so extraction never wrote them and the schema had no field for
+# them. Technicians say the hours out loud in almost every note, so the columns
+# stayed empty while the information sat unreachable in the transcript.
+
+
+def test_spoken_hours_and_crew_reach_their_columns():
+    from app.journal import report_cells
+
+    cells = report_cells(rep(heure_entree="07:00", heure_sortie="20:00",
+                             equipe="Hamid, Abdelhaq"))
+    assert cells["HEURE D'ENTREE"] == "07:00"
+    assert cells["HEURE DE SORTIE"] == "20:00"
+    assert cells["EQUIPE"] == "Hamid, Abdelhaq"
+
+
+def test_unspoken_hours_write_no_cell():
+    """Silence is not a shift. An absent hour leaves the cell empty rather
+    than guessing a working day."""
+    from app.journal import report_cells
+
+    cells = report_cells(rep(cables_installes_m=120))
+    assert "HEURE D'ENTREE" not in cells
+    assert "HEURE DE SORTIE" not in cells
+    assert "EQUIPE" not in cells
+
+
+def test_only_six_columns_are_left_for_a_human_to_type():
+    """What a chef still fills by hand, pinned so it cannot grow back.
+
+    Every other column on the tab now comes from the voice note. These five
+    cannot: JH is arithmetic over the hours and the crew, the four ORDRE DU
+    JOUR cells are the plan (set before the day, not reported after it), and
+    the completion rate is a judgement against that plan.
+
+    If a column joins this list, something became untypeable-by-voice and the
+    project lost ground; if one leaves it, the technician gained it. Either way
+    it should be a deliberate edit here rather than a silent drift.
+    """
+    from app.journal import DAY_COLUMNS, report_cells
+
+    dictated = set(DAY_COLUMNS.values())
+    manual = [c for c in CHEF_COLUMNS if c not in dictated]
+    assert manual == [
+        "JH",
+        "ORDRE DU JOUR [Pose de câble cuivre]",
+        "ORDRE DU JOUR [Connectiques cuivre]",
+        "ORDRE DU JOUR [Test et etiquetage cuivre]",
+        "ORDRE DU JOUR [Pose de goulotte]",
+        "Taux de réalisation",
+    ]
+    # And the dictated three really are written by extraction now.
+    cells = report_cells(rep(heure_entree="07:00", heure_sortie="20:00",
+                             equipe="Hamid"))
+    assert dictated <= set(cells)

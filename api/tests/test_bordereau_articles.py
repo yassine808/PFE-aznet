@@ -21,7 +21,6 @@ from app.journal import (
     NUMERIC_COLUMNS,
     RAPPORTS_COLUMNS,
     _rapports_cells,
-    merge_rows,
     quantity_columns,
     report_cells,
 )
@@ -139,10 +138,21 @@ def test_unmentioned_article_writes_no_cell():
     assert "Onduleur" not in cells
 
 
-def test_articles_accumulate_across_two_notes_the_same_day():
-    """Two messages, one row: 36 then 12 pigtails is 48, not 12."""
-    merged = merge_rows({"Pigtail SC": "36"}, {"Pigtail SC": "12"})
-    assert merged["Pigtail SC"] == "48"
+def test_articles_sum_across_rows_rather_than_across_a_merged_cell():
+    """Two messages, two rows: 36 then 12 pigtails still totals 48.
+
+    Rows are appended one per message since 2026-08-18, so the article never
+    accumulates inside a cell. What the bordereau reads is the sum over rows,
+    which is what this pins — the figure the contract is measured against must
+    not depend on how many notes it arrived in.
+    """
+    from app.journal import totals
+
+    summed = totals([
+        {"Pigtail SC": "36"},
+        {"Pigtail SC": "12"},
+    ])
+    assert summed["pigtail_sc_u"] == 48
 
 
 # --- seeds ----------------------------------------------------------------

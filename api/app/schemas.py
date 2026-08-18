@@ -71,6 +71,7 @@ DATA_FIELDS = (
     "stock_cable_m", "stock_goulotte_m", "stock_fibre_m",
     "remarques", "temps_arret_min", "motif_arret",
     "besoins", "prochaines_etapes", "livraisons",
+    "heure_entree", "heure_sortie", "equipe",
 ) + ARTICLE_FIELDS
 
 # Every quantity the journal counts, in the director's own order.
@@ -264,6 +265,29 @@ class ExtractedReport(BaseModel):
 
     remarques: Optional[str] = Field(
         default=None, description="Problèmes, blocages, matériel manquant, remarques"
+    )
+    # --- la journée : heures et équipe ------------------------------------
+    #
+    # These three used to be `journal.CHEF_COLUMNS`: filled by a chef in the
+    # dashboard, never written by extraction, never merged. The premise was
+    # that a technician does not dictate them, and it was simply wrong — they
+    # say "je suis entré à 7h, sorti à 8h du soir" in the voice note, and the
+    # journal had nowhere to put it, so the sheet stayed empty while the
+    # information sat in the transcript.
+    #
+    # Stored as spoken, normalized to HH:MM. Never inferred: a note that does
+    # not give an hour leaves the cell empty rather than guessing a shift.
+    heure_entree: Optional[str] = Field(
+        default=None,
+        description="Heure d'arrivée sur le chantier, format HH:MM. « entré à 7h » = 07:00",
+    )
+    heure_sortie: Optional[str] = Field(
+        default=None,
+        description="Heure de départ du chantier, format HH:MM. « sorti à 8h du soir » = 20:00",
+    )
+    equipe: Optional[str] = Field(
+        default=None,
+        description="Les personnes présentes, telles que nommées. « j'étais avec Hamid » = Hamid",
     )
     # --- blocages, besoins, suite ----------------------------------------
     # A stopped day is a report (bureaux fermés, attente d'instruction), and so

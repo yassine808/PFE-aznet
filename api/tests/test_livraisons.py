@@ -152,7 +152,7 @@ def test_a_message_carrying_both_loses_neither(wired, monkeypatch):
     ledger, _ = wired
     written = {}
 
-    def fake_write(tab, date, tech, chantier, report, meta, known, rows):
+    def fake_write(tab, date, tech, chantier, report, meta, rows):
         written["posed"] = report.cables_installes_m
         return 7, []
 

@@ -1,13 +1,22 @@
-"""The journal tab — one row per (date, technicien), per chantier.
+"""The journal tab — one row per message, per chantier.
 
 This is the shape of the director's own tracking file, so the column names are
 his, in his order and his language. Two rules make it work:
 
-**Accumulation.** A technician reports twice in a day (morning, then afternoon)
-more often than not. The second message must land on the same row: quantities
-add, prose appends, the working window widens. A second row would double-count
-JH and make the totals line at the bottom of his sheet wrong — the one number
-he actually reads.
+**One row per message, appended, never rewritten.** Until 2026-08-18 a second
+report on the same day was folded into the first: quantities added, prose
+appended, the working window widened. It kept the tab looking like the
+director's file and it destroyed data — a wrong figure in the afternoon note
+overwrote a correct one from the morning, in place, leaving nothing to compare
+against. A correction now lands on its own line, where deleting the wrong one
+does not take the right one with it.
+
+The totals stay correct because nothing reads a single row: `totals()` and the
+bordereau's `qte_installee` sum every row on the tab. The one figure that does
+not survive the change is `JH` — three notes in a day are three rows, and
+summing that column counts three man-days for one. It is a per-day fact on a
+per-message row, so whatever reads it has to count distinct (date, technicien)
+pairs rather than rows.
 
 **Stock is reconciled, never assumed.** What is left on site is a physical
 count. The arithmetic (last known minus installed) is only a baseline: a
@@ -20,7 +29,7 @@ Beyond the director's original columns, the row also carries the blocker block
 the next steps (`PROCHAINES ÉTAPES`) — the three things he re-keys from
 remarks prose today.
 
-Everything here is pure: `merge_rows` and `reconcile_stock` take dicts and
+Everything here is pure: `reconcile_stock` and `report_cells` take dicts and
 return dicts. The Sheets round trip lives in `sheets.py`.
 """
 import re
@@ -37,9 +46,23 @@ COL_DATE = "Date"
 COL_TECHNICIEN = "Technicien"
 COL_CHANTIER = "Chantier"
 
-# Filled by the chef in the dashboard: planned before the day, or judged after
-# it. A technician never dictates these, so extraction never touches them and
-# a merge must never clobber them.
+# What the voice note now fills that used to be typed by hand. EQUIPE and the
+# two hours were `CHEF_COLUMNS` until 2026-08-18, on the premise that "a
+# technician never dictates these". The premise was false: they say "entré à
+# 7h, sorti à 8h" in the note, the schema had no field for it, and the columns
+# stayed empty while the information sat in the transcript, unreachable.
+DAY_COLUMNS = {
+    "heure_entree": "HEURE D'ENTREE",
+    "heure_sortie": "HEURE DE SORTIE",
+    "equipe": "EQUIPE",
+}
+
+# Column order only. Nothing is protected from extraction any more: the
+# project's whole point is that the voice note fills the sheet, so a column
+# nobody can dictate is a column nobody fills. What is left here is what no
+# report can state — JH is arithmetic over the hours, the ORDRE DU JOUR is
+# planned before the day rather than reported after it, and the completion
+# rate is a judgement.
 CHEF_COLUMNS = (
     "EQUIPE",
     "HEURE D'ENTREE",
@@ -67,9 +90,9 @@ NUMERIC_COLUMNS = {
 }
 
 # The bordereau articles, appended after the director's own columns so his part
-# of the tab keeps the order he knows. They merge like every other numeric
-# column — a second message the same day adds — which is what makes the
-# bordereau's `qte_installee` sum correct without storing it anywhere.
+# of the tab keeps the order he knows. They behave like every other numeric
+# column: one row per message, and the bordereau's `qte_installee` sums them
+# across rows without storing a total anywhere.
 ARTICLE_COLUMNS = {
     "cordons_brassage_1m_u": "Cordons brassage 1m",
     "cordons_liaison_3m_u": "Cordons liaison 3m",
@@ -118,16 +141,6 @@ TEXT_COLUMNS = {
     "besoins": "BESOINS / MATÉRIEL",
     "prochaines_etapes": "PROCHAINES ÉTAPES",
 }
-
-# Column order inside a merge must stay the director's order, so the new
-# blocker columns sit at the end of their blocks: quantity totals first, then
-# the prose columns — the additions are the ones nothing depends on the
-# position of.
-
-# How a column merges, resolved once here rather than on every merged row.
-_NUMERIC_COLS = set(NUMERIC_COLUMNS.values())
-_LIST_COLS = set(LIST_COLUMNS.values())
-_STOCK_COLS = {col for col, _ in STOCK_COLUMNS.values()}
 
 # Pipeline metadata, kept to the right of the director's columns so his part of
 # the sheet reads exactly like the file he already knows.
@@ -235,73 +248,11 @@ def report_cells(report: ExtractedReport) -> Dict[str, str]:
         value = getattr(report, field)
         if value:
             cells[column] = value.strip()
+    for field, column in DAY_COLUMNS.items():
+        value = getattr(report, field, None)
+        if value:
+            cells[column] = str(value).strip()
     return cells
-
-
-def merge_rows(existing: Dict[str, str], incoming: Dict[str, str]) -> Dict[str, str]:
-    """Fold a second report of the day into the row already on the sheet.
-
-    Quantities add. Locations union (order kept: it reads as a route through
-    the building). Prose appends. Stock is a level, not a flow, so the newer
-    reading replaces the older one. Chef columns are never touched — the
-    dashboard owns them, and a merge that overwrote EQUIPE would silently undo
-    a human's edit.
-    """
-    merged = dict(existing)
-    for column, value in incoming.items():
-        if column in CHEF_COLUMNS:
-            continue
-        merged[column] = _merge_cell(column, merged.get(column, ""), value)
-    return merged
-
-
-def _truthy(value) -> bool:
-    """Whether a flag cell reads as set, in any of the shapes it arrives in.
-
-    A fresh write hands us a Python bool; the sheet hands the same cell back as
-    the string `TRUE`. Both have to mean the same thing or a re-read would
-    clear a flag that was set an hour earlier.
-    """
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"true", "vrai", "1", "oui", "yes"}
-
-
-def _union_csv(old, value) -> str:
-    """The two comma-separated lists, first-seen order kept, no duplicates."""
-    seen = [p.strip() for p in str(old).split(",") if p.strip()]
-    for part in (p.strip() for p in str(value).split(",")):
-        if part and part not in seen:
-            seen.append(part)
-    return ", ".join(seen)
-
-
-def _merge_cell(column: str, old, value) -> str:
-    """One cell's new content, by what the column measures."""
-    if column == COL_FLAG:
-        # A flag is a state, not prose: once any message of the day needs
-        # checking the row needs checking. Merging it through the text branch
-        # wrote `FALSE\nTrue` into the one column the director filters on —
-        # unreadable for exactly the rows that matter. Sheets' own literals,
-        # so the cell stays a boolean rather than becoming a string.
-        return "TRUE" if (_truthy(old) or _truthy(value)) else "FALSE"
-    if column == COL_STT:
-        # Which engine answered last, not a transcript of the chain's history.
-        return str(value).strip() or str(old)
-    if not str(old).strip():
-        return value
-    if column in _NUMERIC_COLS:
-        return _fmt((_num(old) or 0) + (_num(value) or 0))
-    if column in _LIST_COLS:
-        return _union_csv(old, value)
-    if column in _STOCK_COLS:
-        return value  # a level: the latest reading is the truth
-    if str(value).strip() and str(value).strip() != str(old).strip():
-        return "%s\n%s" % (str(old).rstrip(), str(value).strip())
-    return old
-
-
-# --- the Sheets round trip -----------------------------------------------
 
 
 def _norm_date(value) -> Optional[str]:
@@ -366,7 +317,6 @@ def write_report(
     chantier: str,
     report: ExtractedReport,
     metadata: Optional[Dict[str, str]] = None,
-    known: Optional[Tuple[Optional[int], Dict[str, str]]] = None,
     rows: Optional[List[Dict[str, str]]] = None,
 ) -> Tuple[Optional[int], List[str]]:
     """Put one report on the journal tab, merging if the day already has a row.
@@ -374,18 +324,13 @@ def write_report(
     Returns the row number and any warnings raised while reconciling stock.
     The tab is created on demand, so a chantier added in the dashboard works on
     its first message rather than after someone opens Google Sheets.
-    `known` is find_row's (row, cells) and `rows` the tab it came from, when the
-    caller already read it — the retry idempotency check in file_report needs
-    the same row, so it ensures, reads once, and hands both down. Supplying
+    `rows` is the tab the caller already read — file_report's idempotency scan
+    needs it too, so it ensures, reads once, and hands it down. Supplying
     `rows` therefore also means "the tab is already ensured".
     """
     if rows is None:
         sheets.ensure_tab(tab, list(HEADERS))
         rows = sheets.read_tab(tab)
-    if known is None:
-        existing_row, existing = find_row(tab, date, technicien, rows)
-    else:
-        existing_row, existing = known
 
     # Stock draws down from the last known level on this chantier: the last
     # reading anyone wrote, whoever it was. Stock is site-wide — two
@@ -403,11 +348,18 @@ def write_report(
     cells[COL_TECHNICIEN] = technicien
     cells[COL_CHANTIER] = chantier
 
-    if existing_row is None:
-        return sheets.append_row(tab, cells, list(HEADERS)), warnings
-    merged = merge_rows(existing, cells)
-    sheets.write_row(tab, existing_row, merged)
-    return existing_row, warnings
+    # One row per message, always appended. Until 2026-08-18 a second report on
+    # the same day was folded into the first: quantities added, prose appended.
+    # It kept the tab shaped like the director's file, and it destroyed data —
+    # a wrong figure in the second note overwrote a correct one in the first,
+    # in place, with nothing left to compare against. Corrections now sit on
+    # their own line, where a wrong one can be deleted without taking the right
+    # one with it, and the totals stay correct because `totals()` and the
+    # bordereau sum rows rather than reading one.
+    #
+    # `existing` is still read: it feeds the stock baseline and the retry
+    # idempotency check in file_report, both of which need the day's history.
+    return sheets.append_row(tab, cells, list(HEADERS)), warnings
 
 
 def _last_stock(tab: str, rows: Optional[List[Dict[str, str]]] = None) -> Dict[str, str]:
@@ -693,6 +645,47 @@ def audio_link(payload: Dict) -> Optional[str]:
     return f'=HYPERLINK("{url.replace(chr(34), chr(34) * 2)}"; "▶ Écouter")'
 
 
+def correlation_cell(correlation: Optional[str]) -> str:
+    """What the "Correlation id" cell should hold.
+
+    The id is the join key between n8n's logs, ours and the inbox, and until
+    2026-08-18 the cell held it as 60-odd characters of raw text: readable by a
+    machine, useless to the person reading the sheet, who had to copy it into
+    the dashboard by hand to see the message it names. It now links straight to
+    that message, keeping the id as the visible text so the cell still says
+    what it is and still reads as the key it has always been.
+
+    Falls back to the bare id when no dashboard origin is configured — a
+    relative path in a spreadsheet cell opens nothing, the same rule
+    `audio_link` follows.
+    """
+    correlation = str(correlation or "").strip()
+    if not correlation:
+        return ""
+    base = (settings.dashboard_base_url or settings.dashboard_url or "").strip().rstrip("/")
+    if not base:
+        return correlation
+    url = f"{base}/#/inbox?msg={quote(correlation, safe='')}"
+    return (f'=HYPERLINK("{url.replace(chr(34), chr(34) * 2)}"; '
+            f'"{correlation.replace(chr(34), chr(34) * 2)}")')
+
+
+def correlation_of(cell) -> str:
+    """The id inside a "Correlation id" cell, whether or not it is a link.
+
+    The retry check compares this against the incoming message's id, so it has
+    to read both shapes: the bare id written before 2026-08-18 (and whenever no
+    dashboard origin is set) and the HYPERLINK formula written since. Reading
+    only the raw form would make every retry look like a new message and file
+    it twice — the one error that doubles a quantity without looking wrong.
+    """
+    text = str(cell or "").strip()
+    if not text.startswith("="):
+        return text
+    shown = re.findall(r'"((?:[^"]|"")*)"', text)
+    return shown[-1].replace('""', '"').strip() if shown else text
+
+
 def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
     """The flat Rapports row for one message, keyed by its header names."""
     report = payload.get("report")
@@ -867,17 +860,22 @@ def file_report(payload: Dict) -> Dict:
     # One read serves all three: the retry idempotency test below, the merge
     # lookup and the stock baseline inside write_report.
     rows = sheets.read_tab(tab)
-    known = find_row(tab, str(payload.get("date") or ""), technicien, rows)
-    existing_row, existing = known
     correlation = str(payload.get("correlation_id") or "").strip()
-    if existing_row is not None and correlation:
-        # The row's Correlation cell accumulates every message that touched it
-        # (the merge appends with a newline), so membership means "this exact
-        # message already landed here" — a retry after a Sheets failure that
-        # Google actually committed. Merging again would add the same numbers
-        # twice to the totals line, the one number the director reads.
-        filed = str(existing.get(COL_CORRELATION, "")).split("\n")
-        if correlation in filed:
+    if correlation:
+        # Rows are appended one per message since 2026-08-18, so a message's
+        # correlation id identifies exactly one row and the whole tab has to be
+        # scanned for it. It used to be enough to look inside the day's single
+        # merged row, whose Correlation cell accumulated every message that
+        # touched it. Finding it means this exact message already landed — a
+        # retry after a Sheets failure Google actually committed — and filing
+        # again would double every quantity it carried.
+        already = next(
+            (i for i, row in enumerate(rows, start=2)
+             if correlation_of(row.get(COL_CORRELATION)) == correlation),
+            None,
+        )
+        if already is not None:
+            existing_row = already
             # The mirror is the one thing the failed first write lost, so it
             # still runs: exactly one Rapports row per message.
             mirror_row = _mirror_rapports(payload, chantier, warnings)
@@ -896,14 +894,14 @@ def file_report(payload: Dict) -> Dict:
         COL_CANAL: payload.get("canal"),
         COL_STT: payload.get("stt_engine"),
         COL_LIEN_AUDIO: payload.get("lien_audio"),
-        COL_CORRELATION: payload.get("correlation_id"),
+        COL_CORRELATION: correlation_cell(payload.get("correlation_id")),
         COL_FLAG: "TRUE" if REVIEW_WARNINGS & set(warnings) else "FALSE",
         COL_MOTIF_FLAG: flag_reason(warnings),
     }
     row, stock_warnings = write_report(
         tab, payload.get("date") or "", technicien, chantier, report,
         {k: v for k, v in metadata.items() if v not in (None, "")},
-        known, rows,
+        rows,
     )
     warnings = warnings + stock_warnings
     # After the journal write succeeded, so a mirror failure cannot cost the

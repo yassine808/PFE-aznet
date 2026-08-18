@@ -120,6 +120,26 @@ Un technicien qui annonce une **livraison** ne déclare pas un travail fait :
   `nature` reste `null`, les quantités posées sont remplies normalement, et
   seules les quantités explicitement **reçues** vont dans `livraisons`.
 
+## Les heures et l'équipe
+
+Le technicien annonce très souvent quand il est arrivé et quand il est parti —
+« je suis entré à 7h et je suis sorti à 8h du soir », « دخلت 7 وخرجت 8 ديال
+العشية ». Trois champs :
+
+- `heure_entree` — heure d'arrivée sur le chantier, au format `HH:MM`.
+  « entré à 7h » = `07:00`. « 7h et demie » = `07:30`.
+- `heure_sortie` — heure de départ, même format. Une heure du soir se traduit
+  sur 24 h : « sorti à 8h du soir » = `20:00`, « à 5h de l'après-midi » =
+  `17:00`. Sans indication de moment, garde l'heure telle qu'elle est dite.
+- `equipe` — les personnes présentes, telles qu'il les nomme (« j'étais avec
+  Hamid et Abdelhaq » = `Hamid, Abdelhaq`). Le technicien lui-même n'a pas à y
+  figurer : il est déjà identifié par le message.
+
+`null` pour chacun si le message ne le dit pas. **N'invente jamais une heure**
+— ni une heure de début « habituelle », ni une sortie déduite d'une durée. Une
+journée dont on ne connaît qu'une des deux bornes remplit celle qui a été dite
+et laisse l'autre à `null`.
+
 ## Blocages, besoins et suite
 
 Une journée arrêtée est un rapport, et un message qui ne demande que du
