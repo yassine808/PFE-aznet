@@ -353,4 +353,25 @@ powershell -ExecutionPolicy Bypass -File Pres+report/build.ps1
 ```
 
 
-- [] better design + morph between slides + notes between the sildes( only i can see it)
+### Deck — design, morph, speaker notes  ✅ done 2026-08-18
+
+- [x] **Morph on all 32 slides.** `python-pptx` has no transition API, so
+      `morph()` writes the XML itself, wrapped in `mc:AlternateContent`:
+      PowerPoint 2016+ reads the `mc:Choice` and morphs, anything older reads
+      the `mc:Fallback` and fades. A deck that silently does nothing on the
+      examiner's machine would be worse than one that fades. Verified in the
+      built file: 32/32 carry the transition, and the element order is
+      `cSld → clrMapOvr → transition`, which is what PowerPoint itself writes —
+      wrong order there is what triggers the "repair" prompt.
+- [x] **Speaker notes on 26 slides** (every content slide; the six backup
+      captures have none). Presenter View only, never projected. Each opens
+      with its target duration so the 20 minutes can be paced, and carries the
+      point that is *not* on the slide — e.g. on §4.3.5, say the local model is
+      the **fallback** before a jury finds `stt_chain` in the config; on the
+      demo slide, the recovery order if the network drops.
+- [x] **A progress hairline** above the footer, filling left to right across
+      the 24 numbered slides. Grey enough for the audience to ignore, which is
+      the point: it tells the speaker where they are without anyone counting.
+
+Rebuilt: 32 slides. `presentation.py` stays the source of truth — a slide fixed
+only in PowerPoint is a fix that disappears on the next build.

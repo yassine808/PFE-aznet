@@ -22,6 +22,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
@@ -129,6 +130,73 @@ def header(slide, kicker, title, accent=BLUE, on_dark=False):
     _rect(slide, MARGIN, 1.80, 1.15, 0.035, fill=accent)
 
 
+# --- transitions, notes, progress ------------------------------------------
+
+# How many numbered slides the parcours has, so the progress rule knows how far
+# through the defence a slide sits. Backup slides are past the end and simply
+# fill it.
+DECK_LENGTH = 24
+
+
+def morph(slide, seconds=0.7):
+    """Morph this slide from the previous one.
+
+    PowerPoint interpolates shapes that appear on both slides -- a title that
+    moves, a card that grows -- instead of cutting. The deck reuses the same
+    header block and the same card geometry throughout, so most transitions
+    become a glide rather than a jump.
+
+    python-pptx has no transition API, so this writes the XML directly. Morph
+    is a 2016+ feature guarded by mc:AlternateContent: PowerPoint 2016 and
+    newer read the mc:Choice and morph, everything older reads the mc:Fallback
+    and fades. A deck that silently does nothing on the examiner's machine is
+    worse than one that fades, which is why the fallback is not omitted.
+    """
+    xml = (
+        '<mc:AlternateContent '
+        'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" '
+        'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+        '<mc:Choice '
+        'xmlns:p159="http://schemas.microsoft.com/office/powerpoint/2015/09/main" '
+        'Requires="p159">'
+        '<p:transition '
+        'xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" '
+        'spd="slow" p14:dur="%d">'
+        '<p159:morph option="byObject"/>'
+        '</p:transition>'
+        '</mc:Choice>'
+        '<mc:Fallback>'
+        '<p:transition '
+        'xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" '
+        'spd="slow" p14:dur="%d"><p:fade/></p:transition>'
+        '</mc:Fallback>'
+        '</mc:AlternateContent>'
+    ) % (int(seconds * 1000), int(seconds * 1000))
+    slide.element.append(parse_xml(xml))
+
+
+def speaker_notes(slide, text):
+    """What to say, visible only in Presenter View -- never on the projector."""
+    slide.notes_slide.notes_text_frame.text = text.strip()
+
+
+def progress(slide, n, on_dark=False):
+    """A hairline showing how far through the defence this slide sits.
+
+    Twenty minutes in front of a jury is easier to pace when the deck says
+    where it is without anyone having to count slides. Thin and grey enough to
+    ignore, which is the point: it informs the speaker, not the audience.
+    """
+    if not n:
+        return
+    done = max(0.0, min(1.0, n / float(DECK_LENGTH)))
+    track = LINE if not on_dark else RGBColor(0x33, 0x36, 0x3B)
+    _rect(slide, MARGIN, FOOTER_Y + 0.30, CONTENT_W, 0.015, fill=track)
+    if done:
+        _rect(slide, MARGIN, FOOTER_Y + 0.30, CONTENT_W * done, 0.015,
+              fill=BLUE if not on_dark else RGBColor(0x4F, 0xA9, 0xF5))
+
+
 def footer(slide, n, on_dark=False):
     if n is None:
         return
@@ -139,6 +207,7 @@ def footer(slide, n, on_dark=False):
     p = _para(tf, first=True)
     p.alignment = PP_ALIGN.RIGHT
     _run(p, str(n), size=8.5, bold=True, color=c)
+    progress(slide, n, on_dark)
 
 
 def bullets(slide, items, x=MARGIN, y=BODY_TOP, w=CONTENT_W, size=16.5,
@@ -1156,6 +1225,162 @@ def backups(prs, start):
     return n
 
 
+# --- ce que je dis, pas ce qui est projeté ---------------------------------
+#
+# Visible uniquement dans le mode Présentateur. Une ligne par idée, la durée
+# visée en tête : vingt minutes se tiennent si chaque diapositive sait combien
+# elle coûte. Ce sont des repères, pas un texte à lire — lire ses notes devant
+# un jury s'entend immédiatement.
+NOTES = {
+    "s01_cover": """
+[30 s] Bonjour. Mohammed Yassine MAGRI, filière Ingénierie Informatique et
+Réseaux. Sujet : automatiser les rapports journaliers de chantier chez AZNET,
+à Rabat, à partir de notes vocales en darija.
+Attendre que le jury soit installé avant de commencer.
+""",
+    "s02_plan": """
+[30 s] Annoncer le parcours en une phrase : le problème, la conception, les
+bancs d'essai, la démonstration. Ne pas lire les six points.
+""",
+    "s03_quote": """
+[20 s] Laisser la citation à l'écran deux secondes avant de parler. C'est la
+phrase du directeur : elle pose le problème mieux que je ne le ferais.
+""",
+    "s03_contexte": """
+[1 min] AZNET pose des infrastructures réseau. Le suivi de chantier se fait
+aujourd'hui à la main, le soir, de mémoire.
+Chiffre à donner si la question vient : le directeur re-saisit les rapports
+lui-même dans son fichier de suivi.
+""",
+    "s04_problematique": """
+[1 min 30] Le cœur du problème : le technicien parle darija, mélange les
+emprunts français techniques, et le journal attend des chiffres par colonne.
+Insister sur l'écart entre « ce qui est dit » et « ce qui est compté » — c'est
+ce que tout le reste de la présentation résout.
+""",
+    "s05_besoins": """
+[1 min] Besoins fonctionnels puis non fonctionnels. Souligner la contrainte de
+budget zéro : elle explique presque toutes les décisions techniques qui
+suivent, y compris la chaîne de repli entre fournisseurs.
+""",
+    "s05b_planning": """
+[45 s] Sept phases sur six mois. Le point à faire passer : le bout-en-bout
+réel a été atteint en phase 3, une phase avant le planning — le risque
+d'intégration a été neutralisé avant d'engager le reste.
+Si on demande pourquoi : un défaut d'intégration ne se voit pas hors ligne.
+""",
+    "s06_etat_art_stt": """
+[1 min] État de l'art de la transcription de l'arabe dialectal. Dire que la
+littérature ne tranchait pas pour le darija : c'est ce qui a rendu le banc
+d'essai nécessaire plutôt que confortable.
+""",
+    "s07_etat_art_llm": """
+[1 min] Extraction structurée par LLM : sortie contrainte par schéma, et le
+risque central — un modèle qui invente une valeur plausible. C'est le critère
+qui décidera du choix au banc d'essai n°2.
+""",
+    "s08_architecture": """
+[1 min 30] Architecture hybride : n8n orchestre, le service Python fait l'IA.
+La frontière est le sujet de la diapositive suivante, ne pas l'anticiper ici.
+Cinq services, une seule origine publique.
+""",
+    "s09_frontiere": """
+[1 min] Pourquoi cette frontière : ce qui est testable va dans le code, ce qui
+est du câblage reste dans n8n. Exemple concret si on demande — la fusion d'une
+ligne de journal a quitté n8n parce qu'un nœud IF ne sait pas relire une ligne.
+""",
+    "s10_flux": """
+[1 min 30] Dérouler le flux une fois, lentement. Le point non évident :
+la réponse au technicien part AVANT l'écriture du Sheet. Une panne Google ne
+doit jamais coûter son résumé au technicien ; la ligne est mise en file.
+""",
+    "s11_journal": """
+[1 min 30] Le journal reproduit le fichier du directeur, colonne pour colonne.
+Deux règles : une ligne par message (jamais de réécriture, une correction
+fausse ne détruit pas un chiffre juste) et le stock réconcilié, jamais supposé.
+""",
+    "s12_banc_protocole": """
+[1 min] Protocole. Assumer la décision de méthode : ni WER ni CER. Le journal
+ne consomme que des chiffres et des emprunts techniques — c'est cela qu'on
+mesure, jugé par un locuteur natif contre l'audio.
+""",
+    "s13_banc_api": """
+[45 s] Trois moteurs par API. Groq est rapide, et c'est le plancher toujours
+disponible de la chaîne — pas le meilleur.
+""",
+    "s14_banc_local": """
+[1 min] Douze moteurs en local sur la 3070. Raconter l'hypothèse renversée
+puis rétablie : les petits affinages darija perdaient, les grands gagnent.
+C'est la diapositive où l'on montre que le résultat n'était pas acquis.
+""",
+    "s15_moteur_retenu": """
+[1 min 30] La référence d'exactitude est le modèle darija open-source. Dire
+tout de suite ce qui suit, avant qu'on le trouve dans la config : il est en
+REPLI en production, pas en tête. 7,7 s et 4 Go de VRAM se paient sur chaque
+note ; Gemini répond d'abord, le local prend le relais quand le quota tombe.
+Le banc d'essai désigne une référence, l'ordre d'appel est une décision
+d'exploitation.
+""",
+    "s15b_extraction": """
+[1 min 30] Deuxième banc d'essai. Le chiffre qui frappe : llama-3.1-8b-instant
+est le plus rapide du tableau ET invente cinq valeurs. La vitesse ne rachète
+rien quand le modèle remplit des champs à partir de rien.
+Assumer la limite si on la soulève : les dix cas ont été écrits par l'auteur du
+système. C'est dit au §4.3.9 du rapport.
+""",
+    "s16_perimetre": """
+[1 min] Périmètre livré. Rester factuel, ne pas survendre : ce qui tourne, ce
+qui reste à faire.
+""",
+    "s17_dashboard": """
+[1 min] Le tableau de bord. Trilingue, arabe en RTL, graphiques écrits à la
+main — aucune bibliothèque de composants. Les vingt-deux captures sont en
+annexe H du rapport.
+""",
+    "s18_devops": """
+[1 min] Dix-huit contrôles à chaque push. Le point honnête : Dependabot ouvre
+les demandes, aucune n'a encore été fusionnée — le dispositif rend l'écart
+visible, il ne l'a pas encore résorbé.
+""",
+    "s18b_sonar": """
+[45 s] SonarCloud : la porte qualité passe. Raconter le vrai bogue trouvé — un
+test qui dépendait du .env local, vert sur ma machine, rouge en intégration
+continue, et qui maintenait la chaîne au rouge à chaque exécution.
+""",
+    "s19_demo": """
+[3 min] DÉMONSTRATION EN DIRECT.
+Ordre : envoyer la note vocale → montrer le ⏳ → attendre le ✅ → ouvrir le
+Sheet → ouvrir la boîte de réception du tableau de bord.
+Si le réseau tombe : passer aux captures d'annexe, elles suivent le même
+parcours. Ne pas déboguer devant le jury.
+""",
+    "s20_bilan": """
+[1 min 30] Compétences techniques puis méthodologiques. La leçon à énoncer :
+un résultat flatteur mérite plus de vérification qu'un résultat décevant — le
+banc d'essai avait un bogue silencieux qui couronnait un modèle sur une
+transcription qu'il n'avait jamais produite.
+""",
+    "s21_perspectives": """
+[1 min] Perspectives, et les limites assumées. Mieux vaut nommer les limites
+avant le jury : jeu de test écrit par l'auteur, pilote court, couverture qui
+ne décrit que le service Python.
+""",
+    "s22_merci": """
+[fin] Remercier, puis se taire. Laisser venir les questions.
+Questions attendues : pourquoi pas Whisper seul / pourquoi n8n et pas tout en
+code / que se passe-t-il si les quotas gratuits tombent / comment on empêche
+le modèle d'inventer une valeur.
+""",
+}
+
+
+def _annotate(prs, name):
+    """Attach the speaker notes for the slide that was just built."""
+    text = NOTES.get(name)
+    if text:
+        speaker_notes(prs.slides[-1], text)
+
+
 def main():
     prs = Presentation()
     prs.slide_width = Inches(SLIDE_W)
@@ -1164,6 +1389,7 @@ def main():
     # Numbered in order of appearance, so inserting a slide never means
     # renumbering the ones after it by hand.
     s01_cover(prs)
+    _annotate(prs, "s01_cover")
     n = 1
     for build in (s02_plan, s03_quote, s03_contexte, s04_problematique, s05_besoins,
                   s05b_planning, s06_etat_art_stt, s07_etat_art_llm, s08_architecture,
@@ -1173,8 +1399,15 @@ def main():
                   s21_perspectives):
         n += 1
         build(prs, n)
+        _annotate(prs, build.__name__)
     s22_merci(prs)
+    _annotate(prs, "s22_merci")
     backups(prs, n + 2)
+
+    # Morph on every slide, including the backups: a transition missing from
+    # one slide is the one the audience notices.
+    for slide in prs.slides:
+        morph(slide)
 
     prs.save(str(OUT))
     print(f"slides : {len(prs.slides._sldIdLst)}")
