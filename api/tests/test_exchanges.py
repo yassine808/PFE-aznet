@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
-import pytest
 
 import app.main as main
 from app import logs
