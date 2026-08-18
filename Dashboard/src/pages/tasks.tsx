@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react'
 import { api, createTask, deleteTask, updateTask, useApi, type TaskItem, type TaskRepeat, type TaskUnit } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
@@ -38,6 +39,9 @@ export function TasksPage() {
   const [remindUnit, setRemindUnit] = useState<TaskUnit>('day')
   const [busy, setBusy] = useState<'new' | number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Deleting a task is server-side and final, so it goes through the dialog
+  // every destructive action in this dashboard goes through.
+  const [pendingDelete, setPendingDelete] = useState<TaskItem | null>(null)
 
   const tasks = list.data?.tasks ?? []
   const open = tasks.filter((task) => !task.done_at)
@@ -184,13 +188,23 @@ export function TasksPage() {
 
           <button
             type="button"
-            onClick={() => void remove(task)}
+            onClick={() => setPendingDelete(task)}
             disabled={busy !== null}
             aria-label={t('tasks.delete')}
             className="text-ink-faint hover:text-status-fail focus-visible:ring-accent cursor-pointer rounded p-1 transition-colors outline-none focus-visible:ring-2 disabled:opacity-50"
           >
             <TrashIcon size={15} />
           </button>
+          <ConfirmDialog
+            open={pendingDelete?.id === task.id}
+            target={task.title}
+            busy={busy === task.id}
+            onConfirm={() => {
+              setPendingDelete(null)
+              void remove(task)
+            }}
+            onCancel={() => setPendingDelete(null)}
+          />
         </div>
       </li>
     )

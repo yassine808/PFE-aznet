@@ -486,5 +486,15 @@
   "usage.throughput": "Throughput",
   "usage.sent24h": "Messages (24 h)",
   "usage.ourCount": "our count",
-  "usage.none": "No call recorded yet."
+  "usage.none": "No call recorded yet.",
+  "confirm.title": "Confirmation",
+  "confirm.question": "Delete {x}?",
+  "confirm.irreversible": "This action is permanent and cannot be undone.",
+  "confirm.cancel": "Cancel",
+  "confirm.delete": "Delete",
+  "confirm.deleting": "Deleting…",
+  "chantiers.allNone": "No site registered yet.",
+  "chantiers.alertsOk": "No alerts: {n} site(s) tracked, stock above thresholds.",
+  "chantiers.verified": "Confirmed",
+  "chantiers.tracked": "sites tracked"
 }

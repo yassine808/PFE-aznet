@@ -19,10 +19,12 @@ import {
   setManager,
   useApi,
   type ReportRow,
+  type Identity,
   type Technician,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { isFlagged, num, toISODate } from '@/lib/metrics'
 import { ChannelIcon } from '@/components/channel-icon'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -1146,6 +1148,10 @@ function Identities({
   const [channel, setChannel] = useState<(typeof CHANNELS)[number]>('whatsapp')
   const [externalId, setExternalId] = useState('')
   const [busy, setBusy] = useState(false)
+  // Removing an identity revokes that channel's access for this person, and
+  // nothing in the interface puts it back, so it asks first like every other
+  // destructive action here.
+  const [pendingDelete, setPendingDelete] = useState<Identity | null>(null)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1193,14 +1199,7 @@ function Identities({
               {canEdit && (
                 <button
                   type="button"
-                  onClick={async () => {
-                    try {
-                      await deleteTechnician(id.id)
-                      onReload()
-                    } catch (err) {
-                      onError(err instanceof Error ? err.message : String(err))
-                    }
-                  }}
+                  onClick={() => setPendingDelete(id)}
                   aria-label={`${t('access.remove')} ${id.channel} ${id.external_id}`}
                   className="text-ink-faint hover:text-status-fail focus-visible:ring-accent cursor-pointer rounded p-0.5 transition-colors outline-none focus-visible:ring-2"
                 >
@@ -1211,6 +1210,27 @@ function Identities({
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        target={pendingDelete ? `${pendingDelete.channel} · ${pendingDelete.external_id}` : ''}
+        busy={busy}
+        onConfirm={async () => {
+          const target = pendingDelete
+          setPendingDelete(null)
+          if (!target) return
+          setBusy(true)
+          try {
+            await deleteTechnician(target.id)
+            onReload()
+          } catch (err) {
+            onError(err instanceof Error ? err.message : String(err))
+          } finally {
+            setBusy(false)
+          }
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
 
       {canEdit && (
         <form onSubmit={submit} className="flex flex-wrap items-end gap-3">

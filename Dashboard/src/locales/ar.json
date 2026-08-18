@@ -486,5 +486,15 @@
   "usage.throughput": "معدّل التدفق",
   "usage.sent24h": "الرسائل (24 س)",
   "usage.ourCount": "إحصاؤنا",
-  "usage.none": "لا يوجد استدعاء مسجَّل بعد."
+  "usage.none": "لا يوجد استدعاء مسجَّل بعد.",
+  "confirm.title": "تأكيد",
+  "confirm.question": "حذف {x}؟",
+  "confirm.irreversible": "هذا الإجراء نهائي ولا يمكن التراجع عنه.",
+  "confirm.cancel": "إلغاء",
+  "confirm.delete": "حذف",
+  "confirm.deleting": "جارٍ الحذف…",
+  "chantiers.allNone": "لا يوجد أي ورش مسجل حاليًا.",
+  "chantiers.alertsOk": "لا توجد تنبيهات: {n} ورش متابَعة، المخزون فوق العتبات.",
+  "chantiers.verified": "مؤكَّد",
+  "chantiers.tracked": "ورش متابَعة"
 }

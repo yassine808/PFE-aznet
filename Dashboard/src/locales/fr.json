@@ -486,5 +486,15 @@
   "usage.throughput": "Débit",
   "usage.sent24h": "Messages (24 h)",
   "usage.ourCount": "notre décompte",
-  "usage.none": "Aucun appel enregistré pour l'instant."
+  "usage.none": "Aucun appel enregistré pour l'instant.",
+  "confirm.title": "Confirmation",
+  "confirm.question": "Supprimer {x} ?",
+  "confirm.irreversible": "Cette action est définitive et ne peut pas être annulée.",
+  "confirm.cancel": "Annuler",
+  "confirm.delete": "Supprimer",
+  "confirm.deleting": "Suppression…",
+  "chantiers.allNone": "Aucun chantier enregistré pour le moment.",
+  "chantiers.alertsOk": "Aucune alerte : {n} chantier(s) suivi(s), stocks au-dessus des seuils.",
+  "chantiers.verified": "Confirmé",
+  "chantiers.tracked": "chantiers suivis"
 }

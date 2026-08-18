@@ -13,6 +13,7 @@ import {
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 const rise = {
   hidden: { opacity: 0, y: 6 },
@@ -133,8 +134,9 @@ function UnverifiedSites({ chantiers }: { readonly chantiers: ReturnType<typeof 
   const { t } = useI18n()
   const { user } = useAuth()
   const [busy, setBusy] = useState<number | null>(null)
-  // Deleting drops the bordereau with the site, so it takes a second click.
-  const [armed, setArmed] = useState<number | null>(null)
+  // Deleting drops the bordereau with the site, so it goes through the same
+  // dialog every destructive action in this dashboard goes through.
+  const [pendingDelete, setPendingDelete] = useState<Chantier | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const pending = (chantiers.data?.chantiers ?? []).filter((c) => c.verifie === false)
@@ -150,7 +152,7 @@ function UnverifiedSites({ chantiers }: { readonly chantiers: ReturnType<typeof 
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(null)
-      setArmed(null)
+      setPendingDelete(null)
     }
   }
 
@@ -183,14 +185,10 @@ function UnverifiedSites({ chantiers }: { readonly chantiers: ReturnType<typeof 
                   <button
                     type="button"
                     disabled={busy === c.id}
-                    onClick={armed === c.id ? act(c.id, deleteChantier) : () => setArmed(c.id)}
-                    className={`focus-visible:ring-accent cursor-pointer rounded-md px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 disabled:opacity-50 ${
-                      armed === c.id
-                        ? 'bg-status-fail text-white'
-                        : 'border-line text-ink-muted hover:text-ink border'
-                    }`}
+                    onClick={() => setPendingDelete(c)}
+                    className="border-status-fail/40 text-status-fail hover:bg-status-fail focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors outline-none hover:text-white focus-visible:ring-2 disabled:opacity-50"
                   >
-                    {armed === c.id ? t('chantiers.deleteSure') : t('chantiers.delete')}
+                    {t('chantiers.delete')}
                   </button>
                 </span>
               )}
@@ -199,6 +197,16 @@ function UnverifiedSites({ chantiers }: { readonly chantiers: ReturnType<typeof 
         </ul>
         {error && <p className="text-status-fail text-xs">{error}</p>}
       </Band>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        target={pendingDelete?.nom ?? ''}
+        body={t('chantiers.deleteSure')}
+        busy={busy !== null}
+        onConfirm={() => {
+          if (pendingDelete) void act(pendingDelete.id, deleteChantier)()
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </motion.div>
   )
 }
@@ -291,8 +299,8 @@ export function ChantiersPage() {
           {chantiers.error && (
             <ErrorState message={chantiers.error} onRetry={chantiers.reload} />
           )}
-          {!chantiers.loading && sites.length === 0 && (
-            <EmptyState body={t('chantiers.none')} />
+          {!chantiers.loading && !chantiers.error && sites.length === 0 && (
+            <EmptyState body={t('chantiers.allNone')} />
           )}
           <ul className="flex flex-col gap-2">
             {sites.map((c) => (
@@ -306,8 +314,15 @@ export function ChantiersPage() {
                   <span className="text-ink flex min-w-0 items-center gap-2 text-sm">
                     <BuildingsIcon size={14} className="text-ink-faint shrink-0" />
                     <span className="truncate">{c.nom}</span>
-                    {c.verifie === false && (
-                      <WarningIcon size={12} className="text-status-warn shrink-0" />
+                    {c.verifie === false ? (
+                      <span className="text-status-warn border-status-warn/40 flex shrink-0 items-center gap-1 rounded border px-1.5 py-px text-[0.625rem]">
+                        <WarningIcon size={10} />
+                        {t('chantiers.unverified')}
+                      </span>
+                    ) : (
+                      <span className="text-ink-faint border-line shrink-0 rounded border px-1.5 py-px text-[0.625rem]">
+                        {t('chantiers.verified')}
+                      </span>
                     )}
                   </span>
                   <span className="text-ink-faint truncate text-xs">
