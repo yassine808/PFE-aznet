@@ -205,6 +205,9 @@ def fake(monkeypatch, chantier_table):
 
     sheet = FakeSheet()
     monkeypatch.setattr(mod, "sheets", sheet)
+    # The JH convention lives in app_settings; without this the row assembly
+    # would reach for Postgres, which these tests deliberately do not have.
+    monkeypatch.setattr(mod, "jh_limits", dict)
     # `chantier_table` is not optional: since 2026-08-15 a chantier is resolved
     # against the table rather than trusted as a tab name, so without it these
     # rows would all land in `Non affecté` instead of on DGH.
@@ -667,7 +670,7 @@ def test_unspoken_hours_write_no_cell():
     assert "EQUIPE" not in cells
 
 
-def test_only_six_columns_are_left_for_a_human_to_type():
+def test_only_five_columns_are_left_for_a_human_to_type():
     """What a chef still fills by hand, pinned so it cannot grow back.
 
     Every other column on the tab now comes from the voice note. These five
@@ -681,17 +684,76 @@ def test_only_six_columns_are_left_for_a_human_to_type():
     """
     from app.journal import DAY_COLUMNS, report_cells
 
-    dictated = set(DAY_COLUMNS.values())
-    manual = [c for c in CHEF_COLUMNS if c not in dictated]
+    from app.journal import COL_JH
+
+    derived = set(DAY_COLUMNS.values()) | {COL_JH}
+    manual = [c for c in CHEF_COLUMNS if c not in derived]
     assert manual == [
-        "JH",
         "ORDRE DU JOUR [Pose de câble cuivre]",
         "ORDRE DU JOUR [Connectiques cuivre]",
         "ORDRE DU JOUR [Test et etiquetage cuivre]",
         "ORDRE DU JOUR [Pose de goulotte]",
         "Taux de réalisation",
     ]
-    # And the dictated three really are written by extraction now.
+    # And the dictated three, plus the derived JH, really are written now.
     cells = report_cells(rep(heure_entree="07:00", heure_sortie="20:00",
                              equipe="Hamid"))
-    assert dictated <= set(cells)
+    assert derived <= set(cells)
+
+
+# --- jours-homme, derived rather than typed --------------------------------
+
+
+def test_jh_is_hours_times_people_over_a_working_day():
+    """07:00 to 20:00 with one colleague: 13 h x 2 people / 8 h = 3.25."""
+    from app.journal import compute_jh
+
+    assert compute_jh(rep(heure_entree="07:00", heure_sortie="20:00",
+                          equipe="Hamid")) == 3.25
+
+
+def test_jh_alone_counts_one_person():
+    from app.journal import compute_jh
+
+    assert compute_jh(rep(heure_entree="08:00", heure_sortie="16:00")) == 1.0
+
+
+def test_jh_is_none_when_an_hour_is_missing():
+    """Unknown is not zero: a day nobody timed has no man-days, and writing 0
+    would claim nobody worked."""
+    from app.journal import compute_jh
+
+    assert compute_jh(rep(heure_entree="08:00")) is None
+    assert compute_jh(rep(heure_sortie="16:00")) is None
+    assert compute_jh(rep(cables_installes_m=120)) is None
+
+
+def test_jh_spans_midnight_rather_than_going_negative():
+    """22:00 to 06:00 is an eight-hour night shift, not minus sixteen hours."""
+    from app.journal import compute_jh
+
+    assert compute_jh(rep(heure_entree="22:00", heure_sortie="06:00")) == 1.0
+
+
+def test_jh_honours_the_configured_working_day_and_break():
+    from app.journal import compute_jh
+
+    limits = {"heures_jour": 10.0, "pause_min": 60.0}
+    # 07:00-20:00 = 13 h, minus an hour of break = 12 h, alone, over a 10 h day
+    assert compute_jh(rep(heure_entree="07:00", heure_sortie="20:00"),
+                      limits) == 1.2
+
+
+def test_jh_reaches_its_column(monkeypatch):
+    from app import journal as mod
+
+    monkeypatch.setattr(mod, "jh_limits", lambda: {})
+    cells = mod.report_cells(rep(heure_entree="07:00", heure_sortie="15:00"))
+    assert cells["JH"] == "1"
+
+
+def test_a_row_without_hours_writes_no_jh(monkeypatch):
+    from app import journal as mod
+
+    monkeypatch.setattr(mod, "jh_limits", lambda: {})
+    assert "JH" not in mod.report_cells(rep(cables_installes_m=120))

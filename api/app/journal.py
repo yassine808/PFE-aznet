@@ -12,11 +12,11 @@ against. A correction now lands on its own line, where deleting the wrong one
 does not take the right one with it.
 
 The totals stay correct because nothing reads a single row: `totals()` and the
-bordereau's `qte_installee` sum every row on the tab. The one figure that does
-not survive the change is `JH` — three notes in a day are three rows, and
-summing that column counts three man-days for one. It is a per-day fact on a
-per-message row, so whatever reads it has to count distinct (date, technicien)
-pairs rather than rows.
+bordereau's `qte_installee` sum every row on the tab, and `JH` is not among the
+columns they sum. `JH` is derived per row from that row's own hours and crew
+(`compute_jh`), so it says what that message accounted for rather than what the
+day cost; a day is `max` over its rows, never the sum, because two notes
+describing one 07:00-20:00 day describe the same thirteen hours twice.
 
 **Stock is reconciled, never assumed.** What is left on site is a physical
 count. The arithmetic (last known minus installed) is only a baseline: a
@@ -51,6 +51,8 @@ COL_CHANTIER = "Chantier"
 # technician never dictates these". The premise was false: they say "entré à
 # 7h, sorti à 8h" in the note, the schema had no field for it, and the columns
 # stayed empty while the information sat in the transcript, unreachable.
+COL_JH = "JH"
+
 DAY_COLUMNS = {
     "heure_entree": "HEURE D'ENTREE",
     "heure_sortie": "HEURE DE SORTIE",
@@ -59,10 +61,10 @@ DAY_COLUMNS = {
 
 # Column order only. Nothing is protected from extraction any more: the
 # project's whole point is that the voice note fills the sheet, so a column
-# nobody can dictate is a column nobody fills. What is left here is what no
-# report can state — JH is arithmetic over the hours, the ORDRE DU JOUR is
-# planned before the day rather than reported after it, and the completion
-# rate is a judgement.
+# nobody can dictate is a column nobody fills. JH is not dictated either — it
+# is computed from the hours and the crew. What is left for a human is what no
+# report can state: the ORDRE DU JOUR is planned before the day rather than
+# reported after it, and the completion rate is a judgement against that plan.
 CHEF_COLUMNS = (
     "EQUIPE",
     "HEURE D'ENTREE",
@@ -229,7 +231,8 @@ def reconcile_stock(
     return cells, warnings
 
 
-def report_cells(report: ExtractedReport) -> Dict[str, str]:
+def report_cells(report: ExtractedReport,
+                 limits: Optional[Dict[str, float]] = None) -> Dict[str, str]:
     """The extracted part of a row — everything a voice note can fill.
 
     Stock is not here: it needs the previous row, so it comes from
@@ -252,6 +255,12 @@ def report_cells(report: ExtractedReport) -> Dict[str, str]:
         value = getattr(report, field, None)
         if value:
             cells[column] = str(value).strip()
+    # JH is derived, not dictated: nobody says "three point two five man-days".
+    # Written only when both hours were given, so an unknown day stays empty
+    # rather than claiming zero work.
+    jh = compute_jh(report, limits)
+    if jh is not None:
+        cells[COL_JH] = _fmt(jh)
     return cells
 
 
@@ -341,7 +350,7 @@ def write_report(
     baseline = _last_stock(tab, rows)
     stock_cells, warnings = reconcile_stock(report, baseline)
 
-    cells = report_cells(report)
+    cells = report_cells(report, jh_limits())
     cells.update(stock_cells)
     cells.update(metadata or {})
     cells[COL_DATE] = date
@@ -643,6 +652,94 @@ def audio_link(payload: Dict) -> Optional[str]:
     # Quotes are doubled because a `"` inside a Sheets string literal escapes
     # that way; the id is percent-encoded above, so this is belt and braces.
     return f'=HYPERLINK("{url.replace(chr(34), chr(34) * 2)}"; "▶ Écouter")'
+
+
+# --- jours-homme ----------------------------------------------------------
+#
+# A working day, in hours, and the unpaid break to subtract from a day's span.
+# Both are overridable in `app_settings` (`jh_heures_jour`, `jh_pause_min`)
+# without a restart, because they are a company's own convention rather than a
+# fact about the domain, and getting them wrong scales every JH on the sheet.
+#
+# The break defaults to 0, which is the conservative choice and not the
+# realistic one: a crew on site 07:00-20:00 almost certainly ate. Subtracting
+# an hour nobody reported would be inventing data to make a figure prettier,
+# which is the one thing this pipeline refuses to do everywhere else. Set
+# `jh_pause_min` once the real convention is known.
+JH_HEURES_JOUR = 8.0
+JH_PAUSE_MIN = 0.0
+
+_HHMM = re.compile(r"^\s*(\d{1,2})\s*[:hH]\s*(\d{1,2})?\s*$")
+
+
+def jh_limits() -> Dict[str, float]:
+    """The working-day convention, from `app_settings` or the defaults.
+
+    Read per call rather than cached, like `stock._thresholds`: an edited
+    convention has to take effect without a restart, and this runs once per
+    report. An unreachable store falls back to the defaults instead of raising
+    — a JH nobody can compute must not cost the technician their row.
+    """
+    from app import logs
+
+    try:
+        row = logs.get_settings()
+    except Exception:  # noqa: BLE001 - an unreachable store must not cost the row
+        row = {}
+
+    def read(key: str, fallback: float) -> float:
+        try:
+            return float(row.get(key))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return fallback
+
+    return {
+        "heures_jour": read("jh_heures_jour", JH_HEURES_JOUR),
+        "pause_min": read("jh_pause_min", JH_PAUSE_MIN),
+    }
+
+
+def _minutes(value) -> Optional[int]:
+    """"07:00" -> 420. Tolerates "7h", "7h30", "07:00"; None on anything else."""
+    m = _HHMM.match(str(value or ""))
+    if not m:
+        return None
+    hours, minutes = int(m.group(1)), int(m.group(2) or 0)
+    if not (0 <= hours <= 23 and 0 <= minutes <= 59):
+        return None
+    return hours * 60 + minutes
+
+
+def crew_size(equipe) -> int:
+    """How many people the row accounts for: the technician plus whoever they
+    named. An empty EQUIPE is one person, never zero — somebody recorded it."""
+    names = [n.strip() for n in str(equipe or "").split(",") if n.strip()]
+    return 1 + len(names)
+
+
+def compute_jh(report: ExtractedReport, limits: Optional[Dict[str, float]] = None
+               ) -> Optional[float]:
+    """Man-days for one report, or None when the hours were not given.
+
+    `(sortie - entrée - pause) x people / hours-in-a-day`. Entered 07:00, left
+    20:00, one colleague named: 13 h x 2 / 8 = 3.25.
+
+    None rather than 0 when either hour is missing: a day whose span nobody
+    stated is unknown, and 0 would read as "no work", which is a claim. A
+    sortie before an entrée is a crossing of midnight -- an overnight shift is
+    real on a cabling site -- so the span wraps rather than going negative.
+    """
+    limits = limits or {}
+    start, end = _minutes(report.heure_entree), _minutes(report.heure_sortie)
+    if start is None or end is None:
+        return None
+    span = end - start
+    if span < 0:
+        span += 24 * 60
+    span -= float(limits.get("pause_min", JH_PAUSE_MIN))
+    hours_per_day = float(limits.get("heures_jour", JH_HEURES_JOUR)) or JH_HEURES_JOUR
+    jh = (max(span, 0) / 60.0) * crew_size(report.equipe) / hours_per_day
+    return round(jh, 2)
 
 
 def correlation_cell(correlation: Optional[str]) -> str:
