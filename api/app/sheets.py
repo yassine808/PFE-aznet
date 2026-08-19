@@ -194,6 +194,40 @@ def _grow_columns(svc, tab: str, needed: int) -> None:
     ).execute(num_retries=_RETRIES)
 
 
+def _grow_rows(svc, tab: str, needed: int) -> None:
+    """Make sure the tab has at least `needed` rows. No-op when it already has.
+
+    The twin of `_grow_columns`, and it was missing for the same reason nobody
+    had needed it: a tab Google creates starts with a thousand rows, so the
+    writer outgrew its width long before its height. Emptying a tab changes
+    that — Google refuses to delete every non-frozen row, so a wiped tab ends
+    up exactly two rows tall, and the next report is written to row 3 and
+    answered with "exceeds grid limits". The report then parks in
+    `failed_writes` and every retry fails identically, which is the shape of
+    outage this codebase has been bitten by twice already.
+
+    `appendDimension`, never an absolute resize: a resize computed from a stale
+    grid size could shrink the tab and take real rows with it.
+    """
+    meta = svc.spreadsheets().get(spreadsheetId=settings.sheet_id).execute(num_retries=_RETRIES)
+    sheet = next((s for s in meta["sheets"] if s["properties"]["title"] == tab), None)
+    if sheet is None:
+        raise SheetsError(f"tab {tab!r} not found")
+    current = sheet["properties"].get("gridProperties", {}).get("rowCount", 0)
+    if current >= needed:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=settings.sheet_id,
+        body={"requests": [{"appendDimension": {
+            "sheetId": sheet["properties"]["sheetId"],
+            "dimension": "ROWS",
+            # A comfortable margin, not exactly one row: growing the grid costs
+            # a round trip and reports arrive one at a time all day.
+            "length": max(200, needed - current),
+        }}]},
+    ).execute(num_retries=_RETRIES)
+
+
 def _extend_headers(svc, names: List[str]) -> None:
     """Append columns to the Rapports header row.
 
@@ -426,6 +460,7 @@ def append_report(values: dict) -> Optional[int]:
             headers = headers + missing
         row = [_cell(values.get(h)) for h in headers]
         at = _next_row(svc, RAPPORTS_TAB)
+        _grow_rows(svc, RAPPORTS_TAB, at)
         resp = (
             svc.spreadsheets()
             .values()
@@ -567,6 +602,7 @@ def append_row(tab: str, values: dict, headers: List[str]) -> Optional[int]:
     try:
         row = [_cell(values.get(h)) for h in headers]
         at = _next_row(svc, tab)
+        _grow_rows(svc, tab, at)
         resp = (
             svc.spreadsheets()
             .values()

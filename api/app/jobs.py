@@ -40,6 +40,8 @@ REMINDER_INTERVAL_SECONDS = 60  # task reminders fire within a minute of due
 # run inline (they are DB-only and fast).
 _TIMEOUT_SECONDS = {
     "sheet_queue": 120,
+    # One model call per report still missing its articles, capped at 25.
+    "refill_articles": 600,
     # Sheet read + SMTP + one LLM call for the company digest *and one more per
     # site manager* (reports went per-manager on this branch): 180 s was sized
     # for the single-digest era and would kill the job — and every chef's stored
@@ -64,6 +66,17 @@ _WORKERS: Dict[str, threading.Thread] = {}
 
 
 # ── The jobs ───────────────────────────────────────────────────────────────
+
+
+def refill_articles() -> dict:
+    """Fill in reports whose articles were lost to a rate-limited model.
+
+    Hourly rather than at a fixed time: a daily token ceiling comes back on the
+    vendor's clock, not ours, and a report is worth completing the hour it
+    becomes possible rather than the next morning. Cheap when there is nothing
+    to do — one indexed query returning no rows.
+    """
+    return journal.refill_missing_articles()
 
 
 def drain_sheet_queue() -> dict:
@@ -525,6 +538,7 @@ def send_reminders() -> dict:
 
 JOBS: Dict[str, Callable[[], dict]] = {
     "sheet_queue": drain_sheet_queue,
+    "refill_articles": refill_articles,
     "prune_logs": prune_logs,
     "profiles": refresh_profiles,
     "reminders": send_reminders,
@@ -667,6 +681,8 @@ DAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanch
 def _schedule_label(name: str) -> str:
     if name == "sheet_queue":
         return f"toutes les {DRAIN_INTERVAL_MINUTES} min"
+    if name == "refill_articles":
+        return "toutes les heures"
     if name == "reminders":
         return "chaque minute"
     if name in ("prune_logs", "profiles"):
@@ -707,6 +723,8 @@ def _settings_safe() -> dict:
 def _due(now: datetime, last: Optional[datetime], name: str) -> bool:
     if name == "sheet_queue":
         return last is None or now - last >= timedelta(minutes=DRAIN_INTERVAL_MINUTES)
+    if name == "refill_articles":
+        return last is None or now - last >= timedelta(hours=1)
     if name == "reminders":
         return last is None or now - last >= timedelta(seconds=REMINDER_INTERVAL_SECONDS)
     if name in ("prune_logs", "profiles"):

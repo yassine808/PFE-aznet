@@ -14,6 +14,7 @@ Two things deliberately absent from `ExtractedReport`:
   the day or judged after it. A technician does not dictate them; the chef
   fills them in the dashboard.
 """
+import json
 from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -388,6 +389,28 @@ class ExtractedReport(BaseModel):
     resume: str = Field(
         ..., description="Résumé professionnel en français (2-4 phrases)"
     )
+
+    @field_validator("articles_libres", "livraisons", mode="before")
+    @classmethod
+    def _decode_json_object(cls, v):
+        """Accept a nested object the model handed back as a JSON *string*.
+
+        `gpt-oss-120b` returns `articles_libres` as `'{"prise …": 2}'` rather
+        than an object — the content is right, the encoding is not. Pydantic
+        rejected it, the chain moved on, and a Gemini answer carrying no
+        articles at all won over a correct one that was merely wrapped in
+        quotes. Decoding here costs nothing and is strictly narrower than
+        loosening the type: a string that is not a JSON object is left exactly
+        as it was, so it still fails validation and the chain still advances.
+        """
+        if isinstance(v, str):
+            text = v.strip()
+            if text.startswith("{"):
+                try:
+                    return json.loads(text)
+                except ValueError:
+                    return v
+        return v
 
     @field_validator("livraisons", mode="after")
     @classmethod

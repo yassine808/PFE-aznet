@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple
 from app import prompt_loader
 from app import usage
 from app.config import settings
-from app.schemas import ExtractedReport
+from app.schemas import ExtractedReport, QUANTITY_FIELDS
 
 
 # One SDK client per process, the same rule the three STT providers already
@@ -229,10 +229,34 @@ def _call_groq(
             raise ValueError("empty completion")
         return ExtractedReport.model_validate_json(raw)
     except Exception as exc:  # noqa: BLE001
+        # A refusal is the only place Groq states its *daily* ceiling — the
+        # headers carry the per-minute window and nothing else, so without this
+        # the usage page reports a comfortable minute while the day is spent,
+        # which is exactly how the pipeline lost its articles on 2026-08-19
+        # with every panel showing green.
+        usage.note_quota_refusal("groq", model, "extraction", exc)
         raise ExtractionError(f"groq/{model}: {exc}") from exc
 
 
 _ENGINES = {"gemini": _call_gemini, "groq": _call_groq}
+
+
+def _carries_figures(report: ExtractedReport) -> bool:
+    """Did this extraction come back with any *number*, or only with labels?
+
+    `has_data()` is the wrong test for the chain, and a live message proved it:
+    Gemini returned `equipe` and `etages` and nothing else — both in
+    `DATA_FIELDS`, so `has_data()` said yes — while the message listed six
+    articles with their counts. A correct answer from another engine was never
+    asked for, because something had come back.
+
+    Names and floors are what a model gets right when it has stopped reading.
+    Quantities are the part that is expensive to extract and the part the
+    journal exists for, so the chain judges on those.
+    """
+    if report.articles_libres or report.livraisons:
+        return True
+    return any(getattr(report, f, None) is not None for f in QUANTITY_FIELDS)
 
 
 def _run_chain(
@@ -273,7 +297,7 @@ def _run_chain(
         # every engine answers this way the first answer still stands, because
         # losing a report to a heuristic would be worse than the emptiness it
         # was trying to catch.
-        if text and not report.has_data() and any(c.isdigit() for c in text):
+        if text and not _carries_figures(report) and any(c.isdigit() for c in text):
             failures.append(f"{provider}/{model}: no data extracted from a message with figures")
             empty = empty or (report, f"{provider}/{model}")
             continue

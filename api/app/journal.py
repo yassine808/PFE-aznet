@@ -32,6 +32,7 @@ remarks prose today.
 Everything here is pure: `reconcile_stock` and `report_cells` take dicts and
 return dicts. The Sheets round trip lives in `sheets.py`.
 """
+import json
 import re
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -714,6 +715,67 @@ def rapports_totals(rows: Sequence[Dict]) -> List[Tuple[str, str, str, float]]:
     return out
 
 
+def refill_missing_articles(limit: int = 25) -> Dict:
+    """Fill in the articles of reports that arrived while a model was refused.
+
+    The chain degrades rather than fails when the preferred engine is rate
+    limited: another model answers, the report files, the technician is
+    replied to — and the quantities are simply absent, because only
+    `gpt-oss-120b` returns `articles_libres`. Nothing is lost (the transcript
+    is in `report_rows`) but nothing says so either, and on 2026-08-19 that
+    cost a message its seven articles with every panel showing green.
+
+    So this re-reads the stored transcript once the quota is back and writes
+    the quantities into the row that already exists — never a second row, which
+    is why `journal_tab`/`journal_row` are stored at filing time. A report the
+    model still finds nothing in is left exactly as it was: a retry that keeps
+    finding nothing is not evidence of a problem to fix.
+    """
+    from app import extraction, logs
+
+    with logs._cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, correlation_id, rapport_complet, journal_tab, journal_row, data
+            FROM report_rows
+            WHERE journal_row IS NOT NULL
+              AND rapport_complet ~ '[0-9]'
+              AND COALESCE(data->'articles_libres', '{}'::jsonb) = '{}'::jsonb
+            ORDER BY id DESC LIMIT %s
+            """,
+            (limit,),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+    filled, skipped, failed = 0, 0, []
+    for row in rows:
+        try:
+            report, _model = extraction.extract_report_with_model(row["rapport_complet"])
+        except Exception as exc:  # noqa: BLE001 — one bad row never stops the batch
+            failed.append(f"{row['correlation_id']}: {str(exc)[:80]}")
+            continue
+        libres = report.articles_libres or {}
+        if not libres:
+            skipped += 1
+            continue
+        names = logs.register_articles(libres)
+        cells = {names.get(k, k).strip(): _fmt(float(v)) for k, v in libres.items()}
+        try:
+            sheets.ensure_columns(row["journal_tab"], list(cells))
+            sheets.update_report_fields(row["journal_row"], cells, row["journal_tab"])
+        except Exception as exc:  # noqa: BLE001
+            failed.append(f"{row['correlation_id']}: sheet {str(exc)[:70]}")
+            continue
+        data = dict(row["data"] or {})
+        data["articles_libres"] = {names.get(k, k).strip(): float(v) for k, v in libres.items()}
+        with logs._cursor() as cur:
+            cur.execute("UPDATE report_rows SET data = %s WHERE id = %s",
+                        (json.dumps(data, ensure_ascii=False, default=str), row["id"]))
+        filled += 1
+    return {"candidates": len(rows), "filled": filled,
+            "still_empty": skipped, "failed": failed}
+
+
 def audio_link(payload: Dict) -> Optional[str]:
     """What the Sheet's "Lien audio" cell should hold for this message.
 
@@ -934,7 +996,9 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
 
 
 def _mirror_postgres(payload: Dict, cells: Dict, chantier: str,
-                     warnings: List[str], rapports_row: Optional[int]) -> None:
+                     warnings: List[str], rapports_row: Optional[int],
+                     journal_tab: Optional[str] = None,
+                     journal_row: Optional[int] = None) -> None:
     """The same report, into the store the totals are computed from.
 
     Fed from `cells` rather than rebuilt, so the row in Postgres and the row in
@@ -962,11 +1026,17 @@ def _mirror_postgres(payload: Dict, cells: Dict, chantier: str,
         "resume": cells.get("resume"),
         "rapport_complet": cells.get("rapport_complet"),
         "rapports_row": rapports_row,
+        # Where the detail actually lives. Stored so a later pass can fill
+        # in the cells of a row whose articles were lost to a quota outage,
+        # instead of appending a second row for the same message.
+        "journal_tab": journal_tab,
+        "journal_row": journal_row,
     }, data)
 
 
 def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
-                     increment: bool = False) -> Optional[int]:
+                     increment: bool = False, journal_tab: Optional[str] = None,
+                     journal_row: Optional[int] = None) -> Optional[int]:
     """Append the flat Rapports row for this message; never raises.
 
     The journal row is the record; the mirror is for the dashboard. When
@@ -987,14 +1057,16 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
                 row,
                 [RAPPORTS_COLUMNS[f] for f in NUMERIC_COLUMNS if f in RAPPORTS_COLUMNS],
             )
-        _mirror_postgres(payload, cells, chantier, warnings, row)
+        _mirror_postgres(payload, cells, chantier, warnings, row,
+                         journal_tab, journal_row)
         return row
     except Exception as exc:  # noqa: BLE001 - best-effort by design
         # The figures still go to Postgres. Google being unreachable is exactly
         # when the totals must not also disappear from the dashboard and the
         # daily mail — that is the whole reason they stopped living in a
         # spreadsheet column.
-        _mirror_postgres(payload, cells, chantier, warnings, None)
+        _mirror_postgres(payload, cells, chantier, warnings, None,
+                         journal_tab, journal_row)
         try:
             from app import logs
 
@@ -1186,7 +1258,8 @@ def file_report(payload: Dict) -> Dict:
     warnings = warnings + stock_warnings
     # After the journal write succeeded, so a mirror failure cannot cost the
     # row — but before the reply, because the dashboard shows it.
-    mirror_row = _mirror_rapports(payload, chantier, warnings, follow_up)
+    mirror_row = _mirror_rapports(payload, chantier, warnings, follow_up,
+                                  journal_tab=tab, journal_row=row)
     return {
         "row": row,
         "tab": tab,

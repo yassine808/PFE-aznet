@@ -119,7 +119,7 @@ export function AppShell({
         id="nav-rail"
         aria-label={t('nav.label')}
         className={cn(
-          'border-line bg-surface edge z-40 w-60 flex-col gap-8 px-5 py-6',
+          'border-line bg-surface edge z-40 w-60 flex-col gap-4 px-4 py-4',
           // Mobile: an overlay drawer, toggled by presence rather than by a transform.
           // A translate needs ltr:/rtl: variants, and `[dir=ltr] &` outranks any
           // `md:` override on specificity — which is what hid the rail everywhere.
@@ -170,10 +170,10 @@ export function AppShell({
           </kbd>
         </button>
 
-        <div className="flex flex-1 flex-col gap-6 overflow-y-auto">
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
           {NAV.map(({ section, items }) => (
-            <div key={section} className="flex flex-col gap-1">
-              <p className="text-ink-faint px-2 pb-1 text-[0.6875rem] font-medium tracking-wide uppercase">
+            <div key={section} className="flex flex-col gap-0.5">
+              <p className="text-ink-faint px-2 text-[0.625rem] font-medium tracking-wide uppercase">
                 {t(section)}
               </p>
               {items.map(({ route: r, labelKey, Icon }) => {
@@ -185,7 +185,7 @@ export function AppShell({
                     onClick={() => go(r)}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
-                      'relative flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 text-sm transition-colors md:min-h-0 md:py-2',
+                      'relative flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md px-2 text-sm transition-colors md:min-h-0 md:py-1.5',
                       'hover:text-ink active:translate-y-px',
                       active ? 'text-ink font-medium' : 'text-ink-muted',
                     )}
@@ -291,18 +291,20 @@ function SystemStrip({
   const { t } = useI18n()
   const { stats } = useOps()
 
-  const gauges = [
-    {
-      item: SYSTEM_NAV[0],
-      count: stats?.last_24h.error ?? 0,
-      tone: 'text-status-fail',
-    },
-    {
-      item: SYSTEM_NAV[1],
-      count: stats?.pending_sheet_writes ?? 0,
-      tone: 'text-status-warn',
-    },
-  ]
+  // Derived from SYSTEM_NAV rather than indexed into it. Positional access
+  // (`SYSTEM_NAV[0]`, `[1]`) meant the strip could not grow: Consommation was
+  // added to the array, routed, and translated into three languages, and then
+  // rendered nowhere — reachable only by typing the URL. The array is the list;
+  // a route with no counter simply shows no number.
+  const counters: Partial<Record<Route, { count: number; tone: string }>> = {
+    logs: { count: stats?.last_24h.error ?? 0, tone: 'text-status-fail' },
+    queue: { count: stats?.pending_sheet_writes ?? 0, tone: 'text-status-warn' },
+  }
+  const gauges = SYSTEM_NAV.map((item) => ({
+    item,
+    count: counters[item.route]?.count ?? 0,
+    tone: counters[item.route]?.tone ?? 'text-ink-faint',
+  }))
 
   return (
     // Stacked, not side by side: two pills sharing a 240px rail left ~45px for

@@ -794,9 +794,15 @@ CREATE TABLE IF NOT EXISTS report_rows (
     resume         TEXT,
     rapport_complet TEXT,
     rapports_row   INTEGER,
+    -- Where the detail sits, so a message whose articles were lost to a
+    -- quota outage can be filled in later rather than filed twice.
+    journal_tab    TEXT,
+    journal_row    INTEGER,
     data           JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE report_rows ADD COLUMN IF NOT EXISTS journal_tab TEXT;
+ALTER TABLE report_rows ADD COLUMN IF NOT EXISTS journal_row INTEGER;
 CREATE INDEX IF NOT EXISTS report_rows_date_idx ON report_rows (date);
 CREATE INDEX IF NOT EXISTS report_rows_chantier_idx ON report_rows (chantier);
 
@@ -2853,7 +2859,8 @@ def record_report_row(row: dict, data: dict) -> None:
                 """
                 INSERT INTO report_rows (correlation_id, date, heure, technicien,
                     chantier, canal, role, stt_engine, confidence, flag_review,
-                    motif_flag, resume, rapport_complet, rapports_row, data)
+                    motif_flag, resume, rapport_complet, rapports_row,
+                    journal_tab, journal_row, data)
                 VALUES (%(correlation_id)s, %(date)s, %(heure)s, %(technicien)s,
                     %(chantier)s, %(canal)s, %(role)s, %(stt_engine)s, %(confidence)s,
                     %(flag_review)s, %(motif_flag)s, %(resume)s, %(rapport_complet)s,
@@ -2866,6 +2873,8 @@ def record_report_row(row: dict, data: dict) -> None:
                     flag_review = EXCLUDED.flag_review, motif_flag = EXCLUDED.motif_flag,
                     resume = EXCLUDED.resume, rapport_complet = EXCLUDED.rapport_complet,
                     rapports_row = COALESCE(EXCLUDED.rapports_row, report_rows.rapports_row),
+                    journal_tab = COALESCE(EXCLUDED.journal_tab, report_rows.journal_tab),
+                    journal_row = COALESCE(EXCLUDED.journal_row, report_rows.journal_row),
                     data = EXCLUDED.data
                 """,
                 {**row, "data": json.dumps(data, ensure_ascii=False, default=str)},

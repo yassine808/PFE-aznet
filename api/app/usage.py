@@ -30,6 +30,8 @@ not cost a technician their report. Every call site is wrapped accordingly.
 """
 from __future__ import annotations
 
+import re
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -60,6 +62,46 @@ def record(provider: str, model: str, kind: str, **fields) -> None:
         logs.record_usage(provider=provider, model=model, kind=kind, **fields)
     except Exception:  # noqa: BLE001 - a usage row is never worth a failed report
         pass
+
+
+#: A daily ceiling Groq states only when refusing. The per-minute window comes
+#: back in headers on every call, so `usage.py` has always seen it; the per-day
+#: one appears nowhere except the body of the 429 — which meant the page could
+#: report a comfortable 2493/8000 tokens while the limit that had actually
+#: stopped the pipeline was already spent. Recorded when it happens, because it
+#: is the only moment the number exists.
+_TPD = re.compile(
+    r"tokens per day \(TPD\):\s*Limit\s*(\d+),\s*Used\s*(\d+)", re.I)
+_RETRY_IN = re.compile(r"try again in\s*([0-9hms.]+)", re.I)
+
+
+def note_quota_refusal(provider: str, model: str, kind: str, error: object) -> bool:
+    """Record a 429 that names a *daily* ceiling. Returns whether one was found.
+
+    Never raises: this runs inside an except block on the extraction path, and
+    an instrumentation failure must not replace the error the caller is already
+    handling.
+    """
+    try:
+        text = str(error)
+        hit = _TPD.search(text)
+        if not hit:
+            return False
+        limit, used = int(hit.group(1)), int(hit.group(2))
+        reset = _RETRY_IN.search(text)
+        record(
+            provider, model, kind,
+            tokens_in=0, tokens_out=0,
+            limit_tokens=limit,
+            # What the vendor says is left, not what we wish were left. At a
+            # refusal that is zero or near it, and zero is the honest number:
+            # the call did not happen.
+            remaining_tokens=max(0, limit - used),
+            reset_tokens=(reset.group(1) if reset else None),
+        )
+        return True
+    except Exception:  # noqa: BLE001 — instrumentation never costs a report
+        return False
 
 
 def from_groq(raw, model: str, kind: str):
