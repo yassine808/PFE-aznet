@@ -625,16 +625,33 @@ Le schéma `ExtractedReport` est le contrat entre le service, n8n et le journal.
 | `panneaux_prises_brassees` | entier ≥ 0, optionnel | Prises raccordées côté panneau de brassage |
 | `prises_testees` | entier ≥ 0, optionnel | Prises testées et étiquetées |
 | `fibre_m` | décimal ≥ 0, optionnel | Mètres de câble fibre optique posés |
-| `interconnexions` | entier ≥ 0, optionnel | Interconnexions installées entre locaux |
-| `connexions_optiques_brins` | entier ≥ 0, optionnel | Brins de fibre fusionnés ou connectés |
-| `etages` | liste énumérée, optionnel | RDC, E1 à E4 |
-| `ailes` | liste énumérée, optionnel | Droite, Gauche |
-| `locaux_techniques` | liste énumérée, optionnel | RG, SR1 à SR10 |
-| `stock_cable_m` | décimal ≥ 0, optionnel | Câble restant en stock sur site |
-| `stock_goulotte_m` | décimal ≥ 0, optionnel | Goulotte restante en stock |
-| `stock_fibre_m` | décimal ≥ 0, optionnel | Fibre restante en stock |
-| `remarques` | texte, optionnel | Problèmes, blocages, matériel manquant |
-| `resume` | texte, **obligatoire** | Résumé professionnel en français (2 à 4 phrases) |
+| `interconnexions` | entier ≥ 0, optionnel | Nombre d'interconnexions installées entre locaux |
+| `connexions_optiques_brins` | entier ≥ 0, optionnel | Brins de fibre optique fusionnés/connectés |
+
+*Vingt-cinq champs d'article supplémentaires* (`cordons_brassage_1m_u`, `tiroir_optique_24_u`, `switch_acces_u`, `module_sfp_u`, `cable_elec_3x2_5_m`, `disjoncteur_2x16a_u`…) ont été ajoutés le 15 août 2026 : ils sont l'**union des trois bordereaux réels** — DGH, Extralait, ACAPS — repliée de sorte qu'un même objet physique soit un seul champ. La liste complète figure en **Annexe B.1**.
+
+| Champ | Type | Description |
+|---|---|---|
+| `etages` | liste, optionnel | Étages travaillés (RDC, E1..E4) |
+| `ailes` | liste, optionnel | Ailes (Droite, Gauche) |
+| `locaux_techniques` | liste, optionnel | Locaux techniques (RG, SR1..SR10) |
+| `stock_cable_m` | décimal ≥ 0, optionnel | Mètres de câble restants en stock sur site |
+| `stock_goulotte_m` | décimal ≥ 0, optionnel | Mètres de goulotte restants en stock |
+| `stock_fibre_m` | décimal ≥ 0, optionnel | Mètres de fibre optique restants en stock |
+| `remarques` | texte, optionnel | Problèmes, blocages, matériel manquant, remarques |
+| `heure_entree` | texte, optionnel | Heure d'arrivée sur le chantier, format HH:MM |
+| `heure_sortie` | texte, optionnel | Heure de départ du chantier, format HH:MM |
+| `equipe` | texte, optionnel | Les personnes présentes, telles que nommées |
+| `temps_arret_min` | décimal ≥ 0, optionnel | Minutes perdues à l'arrêt (attente, bureaux fermés, instruction) |
+| `motif_arret` | texte, optionnel | Raison de l'arrêt, une ligne |
+| `besoins` | texte, optionnel | Matériel manquant ou à commander |
+| `prochaines_etapes` | texte, optionnel | Ce que le technicien prévoit de faire ensuite |
+| `chantier_mentionne` | texte, optionnel | Nom du chantier tel qu'énoncé par le technicien, sinon null |
+| `date_declaree` | texte, optionnel | Date énoncée dans le message (« Salam 17-08-2026 »), telle quelle, sinon null |
+| `nature` | énuméré (pose / livraison), optionnel | 'livraison' uniquement pour un bon de livraison / une réception de matériel ; sinon null |
+| `livraisons` | objet {texte: décimal}, optionnel | Quantités reçues par champ (cables_installes_m, pigtail_sc_u, …), pour un bon de livraison |
+| `articles_libres` | objet {texte: décimal}, optionnel | Articles posés qui ne correspondent à AUCUN champ existant, {désignation courte au singulier: quantité} |
+| `resume` | texte, **obligatoire** | Résumé professionnel en français (2-4 phrases) |
 
 
 Trois décisions de modélisation méritent d'être justifiées.
@@ -707,7 +724,7 @@ La **Figure 3.6** complète le modèle avec les tables d'exploitation et d'audit
 
 ### 3.3.4 Les tables en détail
 
-Le schéma compte vingt-quatre tables — la moitié sont des séries temporelles et des tables de service ajoutées au fil des écrans du tableau de bord. Les treize décrites ci-dessous portent l'essentiel : quatre le métier et l'organigramme ; trois l'usage humain ; six la mécanique du pipeline et la mesure, et ces dernières n'ont **délibérément aucune clé étrangère** — ce sont des journaux, des files et des registres, pas des entités liées.
+Le schéma compte vingt-quatre tables — la moitié sont des séries temporelles et des tables de service ajoutées au fil des écrans du tableau de bord. Les quinze décrites ci-dessous portent l'essentiel : quatre le métier et l'organigramme ; trois l'usage humain ; huit la mécanique du pipeline et la mesure, et ces dernières n'ont **délibérément aucune clé étrangère** — ce sont des journaux, des files et des registres, pas des entités liées.
 
 **`persons` — l'humain.** Une ligne par personne, quel que soit son rôle. `role` vaut `directeur`, `chef` ou `tech` et pilote l'affichage de l'organigramme ; `manager_id` pointe un technicien vers son chef ; `chantier_id` porte l'affectation, qui n'est renseignée que sur les chefs, les techniciens en héritant. `profile` reçoit le paragraphe réécrit chaque nuit. `password_hash` est la seule chose qui distingue un compte d'une simple fiche : sa non-nullité **est** la définition d'un compte, ce qui explique que `login()` la teste explicitement, que la liste des comptes filtre dessus, et que la suppression d'un compte efface l'empreinte sans supprimer la ligne.
 
@@ -726,6 +743,10 @@ Le schéma compte vingt-quatre tables — la moitié sont des séries temporelle
 **`processed_messages` — l'idempotence.** WhatsApp relivre un webhook non acquitté ; sans cette table, un message relivré produirait une seconde réponse et une seconde ligne. Le workflow « réclame » l'identifiant avant tout traitement.
 
 **`failed_writes` — la file de reprise.** Charge utile complète et statut. Rejouée toutes les cinq minutes par le même chemin que le flux vivant, et résolue seulement lorsque Google a accepté la ligne. Une charge utile que le schéma ne sait plus lire est résolue en échec plutôt que de bloquer indéfiniment la file derrière elle.
+
+**`article_registry` — les articles hors bordereau.** Une ligne par article déclaré qu'aucun champ du schéma ne couvre : `slug` normalisé comme identité, `designation` comme libellé affiché, `confirmed` et un compteur `seen`. Volontairement **global et non par chantier** : la colonne appartient à l'onglet qui l'a déclarée, mais le nom est partagé, faute de quoi deux sites écriraient deux orthographes de la même chose. C'est la source du panneau « Matériel à confirmer » (§3.4.7).
+
+**`report_rows` — ce qu'une machine additionne.** L'onglet Rapports faisait deux métiers à la fois : le flux plat qu'un humain lit, et le seul endroit où le courriel quotidien, l'hebdomadaire, le document .docx et les indicateurs du tableau de bord pouvaient additionner une quantité. Il en était devenu large de soixante-cinq colonnes, et **chaque chiffre coûtait une lecture Google** sur un quota gratuit. Les deux métiers sont séparés : l'onglet garde ce qu'une personne lit, cette table garde ce qu'une machine compte. Le rapport y est stocké **en JSON et non en trente-cinq colonnes typées** — le schéma gagne des champs d'article régulièrement, vingt-cinq en une seule journée, et une table qu'il faut migrer à chaque fois est une table qui prend silencieusement du retard sur le schéma.
 
 **`receptions` — le registre du matériel reçu.** Une ligne par (message, article) : `qte` est **signée**, un retour au dépôt étant une ligne négative, et la contrainte d'unicité `(correlation_id, champ)` interdit le doublon. Cette contrainte n'est pas décorative : n8n réessaie et la file de reprise rejoue des charges utiles garées, or une réception comptée deux fois fausse tous les chiffres de stock **sans en avoir l'air**. Ce registre n'est jamais purgé, contrairement aux séries temporelles.
 
@@ -826,6 +847,18 @@ Trois décisions le rendent sûr. Il n'existe **aucune table de faits mémorisé
 Les totaux restent justes parce que rien ne lit une ligne isolée : `totals()` et la quantité installée du bordereau **somment les lignes de l'onglet**. Et pour qu'un lecteur distingue immédiatement un complément d'une contradiction, les quantités d'une ligne qui s'ajoute à une journée déjà ouverte sont **affichées avec un signe `+`** — `50` le matin, `+80` l'après-midi. Il s'agit d'un format de nombre et non d'un texte : la cellule contient toujours un nombre, donc la ligne de totaux et le bordereau sont intacts. Les colonnes de stock en sont exclues : un stock est un niveau et non un flux, et « +2 095 m restants » serait faux.
 
 Une seule grandeur ne survit pas telle quelle à ce changement : **JH**, les jours-homme, qui décrivent une journée et non un message. Elle est donc calculée par ligne à partir des heures et de l'équipe que le technicien dicte (`compute_jh`), et une journée se lit comme le maximum de ses lignes, jamais comme leur somme — deux messages décrivant une même journée de 7 h à 20 h décrivent deux fois les mêmes treize heures.
+
+**Une colonne qui se crée toute seule.** Le schéma d'extraction connaît trente-cinq champs de quantité ; un chantier réel en dicte davantage. Un rapport nommant quarante pièces réparties sur huit types d'article déposait auparavant une ligne **vide de toutes les huit** — la quantité était correctement extraite, puis abandonnée, faute d'un champ où la ranger. Aucune erreur n'était levée : la perte était silencieuse, ce qui est exactement le défaut que le reste du système s'interdit.
+
+Le champ `articles_libres` recueille désormais ces articles, `{désignation : quantité}`. Il est **volontairement en texte libre**, à la différence de `livraisons`, qui est validé contre la liste des champs connus : le sujet même de ce champ est l'article *pas encore connu*, et le valider contre la liste reviendrait à jeter précisément l'information qu'il existe pour porter. Au dépôt de la ligne, `sheets.ensure_columns` crée la colonne manquante dans l'onglet du chantier et la valeur y est écrite.
+
+Trois décisions rendent le procédé sûr plutôt que chaotique :
+
+- **Une identité normalisée, et non le libellé dicté.** « prises doubles étanches » et « prise double étanche encastrée » se réduisent au même *slug* — accents, casse, pluriels et mots vides retirés — de sorte que l'onglet ne gagne pas une seconde colonne parce qu'un technicien a mis un pluriel. Le premier libellé enregistré l'emporte jusqu'à ce qu'un humain en confirme un meilleur.
+- **Le registre est global, la colonne est locale.** `article_registry` est commun à tous les chantiers alors que la colonne appartient à l'onglet qui l'a déclarée : le *nom* est partagé, si bien qu'un second site déclarant la même chose réutilise l'orthographe existante au lieu d'en inventer une parallèle.
+- **La validation vient après, jamais avant.** La quantité est comptée immédiatement ; la page Chantiers propose ensuite de confirmer le libellé, de le corriger — un libellé corrigé vers un libellé existant **fusionne les deux colonnes** — ou de le supprimer. **Un rapport n'attend jamais une validation** : faire dépendre l'écriture d'une approbation humaine, c'est réintroduire au centre de la chaîne le délai que ce projet supprime.
+
+L'échec de la création de colonne est traité comme tel : il émet un avertissement `article_column_failed` et la ligne est écrite quand même. Une colonne ne vaut pas un rapport.
 
 **Réconciliation de stock.** La valeur de référence est *dernier stock connu moins quantité installée* ; un chiffre rapporté par le technicien l'emporte toujours et devient la nouvelle référence ; un écart émet un avertissement `stock_ecart` chiffré **au lieu de choisir silencieusement** — car une livraison et une perte sont arithmétiquement identiques, et seul un humain peut les distinguer.
 
@@ -1382,6 +1415,7 @@ Le **Tableau 4.9** dresse l'état du périmètre livré, composant par composant
 | Organigramme, comptes, chantiers, bordereau | En production |
 | Ordonnanceur (6 tâches) et page Automatisation | En production |
 | Rapports quotidien et hebdomadaire par e-mail (avec document .docx joint) | En production |
+| Colonnes d'article créées à la volée (`articles_libres`, registre, confirmation) | En production |
 | Registre des réceptions de matériel (`nature`, `livraisons`) | En production |
 | Alertes de stock en jours de couverture, et dépassement de bordereau | En production |
 | Page Consommation : quotas des offres gratuites mesurés | En production |
@@ -1712,236 +1746,66 @@ valide à l'exécution.
 
 ### B.1 `ExtractedReport` — le rapport extrait
 
-```json
-{
-  "properties": {
-    "cables_prepares_m": {
-      "anyOf": [
-        {
-          "type": "number",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Cables Prepares M",
-      "description": "Mètres de câble cuivre préparés (tirés et mesurés)"
-    },
-    "cables_installes_m": {
-      "anyOf": [
-        {
-          "type": "number",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Cables Installes M",
-      "description": "Mètres de câble cuivre installés et raccordés"
-    },
-    "goulotte_m": {
-      "anyOf": [
-        {
-          "type": "number",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Goulotte M",
-      "description": "Mètres de goulotte posés"
-    },
-    "prises_connectees": {
-      "anyOf": [
-        {
-          "type": "integer",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Prises Connectees",
-      "description": "Prises RJ45 raccordées côté bureau"
-    },
-    "panneaux_prises_brassees": {
-      "anyOf": [
-        {
-          "type": "integer",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Panneaux Prises Brassees",
-      "description": "Prises raccordées côté panneau de brassage"
-    },
-    "prises_testees": {
-      "anyOf": [
-        {
-          "type": "integer",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Prises Testees",
-      "description": "Prises testées et étiquetées"
-    },
-    "fibre_m": {
-      "anyOf": [
-        {
-          "type": "number",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Fibre M",
-      "description": "Mètres de câble fibre optique posés"
-    },
-    "interconnexions": {
-      "anyOf": [
-        {
-          "type": "integer",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Interconnexions",
-      "description": "Nombre d'interconnexions installées entre locaux"
-    },
-    "connexions_optiques_brins": {
-      "anyOf": [
-        {
-          "type": "integer",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Connexions Optiques Brins",
-      "description": "Brins de fibre optique fusionnés/connectés"
-    },
-    "etages": {
-      "anyOf": [
-        {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Etages",
-      "description": "Étages travaillés (RDC, E1..E4)"
-    },
-    "ailes": {
-      "anyOf": [
-        {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Ailes",
-      "description": "Ailes (Droite, Gauche)"
-    },
-    "locaux_techniques": {
-      "anyOf": [
-        {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Locaux Techniques",
-      "description": "Locaux techniques (RG, SR1..SR10)"
-    },
-    "stock_cable_m": {
-      "anyOf": [
-        {
-          "type": "number",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Stock Cable M",
-      "description": "Mètres de câble restants en stock sur site"
-    },
-    "stock_goulotte_m": {
-      "anyOf": [
-        {
-          "type": "number",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Stock Goulotte M",
-      "description": "Mètres de goulotte restants en stock"
-    },
-    "stock_fibre_m": {
-      "anyOf": [
-        {
-          "type": "number",
-          "minimum": 0.0
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Stock Fibre M",
-      "description": "Mètres de fibre optique restants en stock"
-    },
-    "remarques": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Remarques",
-      "description": "Problèmes, blocages, matériel manquant, remarques"
-    },
-    "resume": {
-      "type": "string",
-      "title": "Resume",
-      "description": "Résumé professionnel en français (2-4 phrases)"
-    }
-  },
-  "type": "object",
-  "required": [
-    "resume"
-  ],
-  "title": "ExtractedReport",
-  "description": "Structured facts extracted from one daily report."
-}
-```
+Les **cinquante-quatre champs** du contrat, dans l'ordre du schéma. Un seul est obligatoire : tous les autres valent `null` en l'absence d'information, ce qui est la règle énoncée au §3.3.2 — l'absence n'est pas zéro. Cette table est produite à partir du modèle lui-même ; la forme lisible par une machine est servie en direct par le service sur `/openapi.json`.
+
+| Champ | Type | Description |
+|---|---|---|
+| `cables_prepares_m` | décimal ≥ 0, optionnel | Mètres de câble cuivre préparés (tirés et mesurés) |
+| `cables_installes_m` | décimal ≥ 0, optionnel | Mètres de câble cuivre installés et raccordés |
+| `goulotte_m` | décimal ≥ 0, optionnel | Mètres de goulotte posés |
+| `prises_connectees` | entier ≥ 0, optionnel | Prises RJ45 raccordées côté bureau |
+| `panneaux_prises_brassees` | entier ≥ 0, optionnel | Prises raccordées côté panneau de brassage |
+| `prises_testees` | entier ≥ 0, optionnel | Prises testées et étiquetées |
+| `fibre_m` | décimal ≥ 0, optionnel | Mètres de câble fibre optique posés |
+| `interconnexions` | entier ≥ 0, optionnel | Nombre d'interconnexions installées entre locaux |
+| `connexions_optiques_brins` | entier ≥ 0, optionnel | Brins de fibre optique fusionnés/connectés |
+| `cordons_brassage_1m_u` | entier ≥ 0, optionnel | Cordons de brassage 1 m posés |
+| `cordons_liaison_3m_u` | entier ≥ 0, optionnel | Cordons de liaison 3 m posés |
+| `flexible_arme_d16_m` | décimal ≥ 0, optionnel | Mètres de flexible armé D16 posés |
+| `guide_cable_u` | entier ≥ 0, optionnel | Guides de câble à balais 19" posés |
+| `tiroir_optique_24_u` | entier ≥ 0, optionnel | Tiroirs optiques 24 ports installés |
+| `tiroir_optique_12_u` | entier ≥ 0, optionnel | Tiroirs optiques 12 ports installés |
+| `pigtail_sc_u` | entier ≥ 0, optionnel | Pigtails SC installés |
+| `jarretiere_om3_u` | entier ≥ 0, optionnel | Jarretières OM3 posées |
+| `jarretiere_sc_lc_u` | entier ≥ 0, optionnel | Jarretières SC/LC posées |
+| `jarretiere_lc_lc_u` | entier ≥ 0, optionnel | Jarretières LC/LC posées |
+| `switch_federateur_u` | entier ≥ 0, optionnel | Switchs fédérateurs installés |
+| `switch_acces_u` | entier ≥ 0, optionnel | Switchs d'accès installés |
+| `point_acces_ap_u` | entier ≥ 0, optionnel | Points d'accès WiFi (AP) installés |
+| `module_sfp_plus_u` | entier ≥ 0, optionnel | Modules optiques SFP+ installés |
+| `module_sfp_u` | entier ≥ 0, optionnel | Modules optiques SFP installés |
+| `module_sfp_rj45_u` | entier ≥ 0, optionnel | Modules optiques SFP-RJ45 installés |
+| `cable_dac_u` | entier ≥ 0, optionnel | Câbles DAC installés |
+| `coffret_12u_u` | entier ≥ 0, optionnel | Coffrets/baies 12U installés |
+| `onduleur_u` | entier ≥ 0, optionnel | Onduleurs installés |
+| `cable_elec_3x2_5_m` | décimal ≥ 0, optionnel | Mètres de câble électrique 3x2,5 posés |
+| `fiche_2p_t_u` | entier ≥ 0, optionnel | Fiches F 2P+T posées |
+| `disjoncteur_2x16a_u` | entier ≥ 0, optionnel | Disjoncteurs 2x16A posés |
+| `bandeau_elec_12p_u` | entier ≥ 0, optionnel | Bandeaux électriques 12P posés |
+| `passe_cable_u` | entier ≥ 0, optionnel | Passe-câbles posés |
+| `borne_2_5_u` | entier ≥ 0, optionnel | Bornes 2,5 posées |
+| `etages` | liste, optionnel | Étages travaillés (RDC, E1..E4) |
+| `ailes` | liste, optionnel | Ailes (Droite, Gauche) |
+| `locaux_techniques` | liste, optionnel | Locaux techniques (RG, SR1..SR10) |
+| `stock_cable_m` | décimal ≥ 0, optionnel | Mètres de câble restants en stock sur site |
+| `stock_goulotte_m` | décimal ≥ 0, optionnel | Mètres de goulotte restants en stock |
+| `stock_fibre_m` | décimal ≥ 0, optionnel | Mètres de fibre optique restants en stock |
+| `remarques` | texte, optionnel | Problèmes, blocages, matériel manquant, remarques |
+| `heure_entree` | texte, optionnel | Heure d'arrivée sur le chantier, format HH:MM |
+| `heure_sortie` | texte, optionnel | Heure de départ du chantier, format HH:MM |
+| `equipe` | texte, optionnel | Les personnes présentes, telles que nommées |
+| `temps_arret_min` | décimal ≥ 0, optionnel | Minutes perdues à l'arrêt (attente, bureaux fermés, instruction) |
+| `motif_arret` | texte, optionnel | Raison de l'arrêt, une ligne |
+| `besoins` | texte, optionnel | Matériel manquant ou à commander |
+| `prochaines_etapes` | texte, optionnel | Ce que le technicien prévoit de faire ensuite |
+| `chantier_mentionne` | texte, optionnel | Nom du chantier tel qu'énoncé par le technicien, sinon null |
+| `date_declaree` | texte, optionnel | Date énoncée dans le message (« Salam 17-08-2026 »), telle quelle, sinon null |
+| `nature` | énuméré (pose / livraison), optionnel | 'livraison' uniquement pour un bon de livraison / une réception de matériel ; sinon null |
+| `livraisons` | objet {texte: décimal}, optionnel | Quantités reçues par champ (cables_installes_m, pigtail_sc_u, …), pour un bon de livraison |
+| `articles_libres` | objet {texte: décimal}, optionnel | Articles posés qui ne correspondent à AUCUN champ existant, {désignation courte au singulier: quantité} |
+| `resume` | texte, **obligatoire** | Résumé professionnel en français (2-4 phrases) |
+
+Trois champs ne décrivent pas une quantité posée et méritent d'être distingués des cinquante autres. **`nature`** sépare une pose d'une réception : absent, il vaut `pose`, de sorte que toute ligne antérieure et toute note vocale restent inchangées et qu'une livraison n'est une livraison que parce que le modèle l'a positivement déclarée. **`livraisons`** porte les quantités reçues, **validées** contre le vocabulaire de champs connu — une clé inconnue lève une erreur, ce qui fait reprendre la chaîne d'extraction. **`articles_libres`** porte au contraire ce qu'aucun champ ne couvre et n'est **délibérément pas validé** : son objet même est l'article inconnu (§3.4.7).
 
 ### B.2 `ProcessResponse` — la réponse de `POST /process`
 

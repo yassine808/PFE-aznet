@@ -241,6 +241,67 @@ everywhere they appear — abstracts (FR/EN/AR), Tables 4.10, 4.12, 4.13, §3.3.
 
 ---
 
+## Done — 2026-08-19 (second pass) : the schema had outgrown the document
+
+Asked whether the auto-generated article columns had been carried into the
+report and the deck. They had not — the feature appeared in exactly one figure
+caption and nowhere else. Neither did three other things.
+
+### The column that creates itself — §3.4.7, new subsection
+
+`articles_libres` and `article_registry` are now documented where the journal is
+designed. The story worth telling is the failure it fixed: a report naming forty
+pieces across eight article types filed a row with **none** of them — extracted
+correctly, then dropped, **with no error raised anywhere**. The section carries
+the three decisions that keep the mechanism safe rather than chaotic: a
+normalised slug as identity (so a plural does not create a second column), a
+registry global while the column is local (so two sites share a spelling), and
+confirmation strictly **after** the fact (a report never waits for approval).
+Column creation failing is a warning, `article_column_failed`, not a lost row.
+
+### Two tables the report had never named — §3.3.4
+
+- **`article_registry`**, source of the "Matériel à confirmer" panel.
+- **`report_rows`**, and with it the reason it exists: the Rapports tab was
+  doing two jobs at once — the flat feed a human reads, and the only place a
+  machine could add a quantity up. Sixty-five columns wide, and every figure
+  cost a Google read on a free quota. The report is stored there as **JSON, not
+  35 typed columns**, because the schema gains article fields regularly (25 in
+  one day) and a table needing a migration each time silently lags the schema.
+
+Detailed table count went from thirteen to fifteen.
+
+### Table 3.1 and Annexe B.1 were 37 fields out of date
+
+`ExtractedReport` has **54 fields**; Table 3.1 listed 17 and Annexe B.1 was a
+stale JSON Schema dump missing every field added since 5 August — the 25
+bordereau articles, `nature`, `livraisons`, `articles_libres`, `besoins`,
+`chantier_mentionne`, `date_declaree`, the hours and the stoppage fields.
+
+Both are now **generated from the model itself**. Table 3.1 keeps a curated view
+by family with a pointer to the annex; B.1 became a complete field table rather
+than raw JSON — the full dump would have run to roughly fifteen pages — and says
+the machine-readable form is served live on `/openapi.json`. A closing paragraph
+distinguishes the three non-quantity fields: `nature` (absent means `pose`),
+`livraisons` (**validated** against known field names, an unknown key raises),
+and `articles_libres` (**deliberately not validated** — its subject is the
+unknown article).
+
+### The deck was still teaching a rule that was withdrawn
+
+`s11_journal` showed two messages merging into one line and argued that a second
+line would double the man-days — the merge rule was removed on 18 August for
+destroying information. Its title had been updated and its content had not, so
+the slide contradicted itself and the report. Rewritten: two lines, the second
+marked `+80`, totals summed from the tab, JH read as a maximum and never a sum.
+
+New slide **`s11b_colonnes`** for the auto-created column, with the silent-loss
+framing and the three safeguards. Scope slide gains the feature.
+
+Deck **36 slides**, report **151 pages**.
+
+---
+
 ## To do — handoff, 2026-08-18
 
 State: **CI green**, SonarCloud analysing on every push with coverage, report at 142 pages,

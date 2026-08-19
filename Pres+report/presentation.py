@@ -858,18 +858,20 @@ def s11_journal(prs, n):
     _rect(slide, MARGIN, 3.94, lw, 1.02, fill=RGBColor(0xE8, 0xF3, 0xFD))
     _rect(slide, MARGIN, 3.94, lw, 0.04, fill=BLUE)
     tf = _txbox(slide, MARGIN + 0.16, 4.10, lw - 0.32, 0.24)
-    _run(_para(tf, first=True), "Une seule ligne  —  12/08, technicien X", size=10.5, bold=True, color=BLUE)
+    _run(_para(tf, first=True), "Deux lignes  —  12/08, technicien X", size=10.5, bold=True, color=BLUE)
     tf = _txbox(slide, MARGIN + 0.16, 4.38, lw - 0.32, 0.5)
     p = _para(tf, first=True)
     p.line_spacing = 1.14
-    _run(p, "goulotte 200 m", size=12.5, bold=True, color=INK)
-    _run(p, "   ·   étages RDC + E1", size=12.5, color=INK)
+    _run(p, "goulotte 120 m", size=12.5, bold=True, color=INK)
+    _run(p, "   puis   ", size=12.5, color=GREY)
+    _run(p, "+80", size=12.5, bold=True, color=BLUE)
+    _run(p, "   ·   totaux de l'onglet : 200 m", size=12.5, color=INK)
 
     tf = _txbox(slide, MARGIN, 5.10, lw, 1.1)
     p = _para(tf, first=True)
     p.line_spacing = 1.18
-    _run(p, "Les nombres s'ajoutent, les localisations s'unissent, la prose s'ajoute. ", size=11.5, color=GREY)
-    _run(p, "Une seconde ligne doublerait les jours-hommes et fausserait la ligne de totaux — le seul chiffre que le directeur lit.", size=11.5, bold=True, color=INK)
+    _run(p, "La fusion a été retirée le 18 août : elle détruisait de l'information. ", size=11.5, color=GREY)
+    _run(p, "Un chiffre faux dicté l'après-midi écrasait sur place un chiffre juste du matin. Rien ne lit une ligne isolée — les totaux somment l'onglet — et les JH se lisent au maximum, jamais en somme.", size=11.5, bold=True, color=INK)
 
     rx = MARGIN + lw + 0.55
     rw = CONTENT_W - lw - 0.55
@@ -895,6 +897,61 @@ def s11_journal(prs, n):
     p.line_spacing = 1.22
     _run(p, "Une livraison et une perte sont identiques pour l'arithmétique. ", size=12.5, bold=True, color=WHITE)
     _run(p, "Le système ne peut pas trancher, donc il ne tranche pas : il écrit l'écart et son montant, et laisse un humain décider. C'est la même règle que partout ailleurs dans la chaîne — jamais d'échec silencieux, jamais de valeur devinée.", size=12.5, color=RGBColor(0xC0, 0xC0, 0xC0))
+    footer(slide, n)
+
+
+def s11b_colonnes(prs, n):
+    """The column that creates itself — and why it is not chaos.
+
+    The silent-loss story is the strongest one in the deck: the quantity was
+    extracted correctly and then dropped, with no error raised anywhere.
+    """
+    slide = new_slide(prs)
+    header(slide, "3 — Conception", "Le champ qui n'existe pas encore : une colonne créée à la volée")
+
+    note(slide, "Un rapport nommant quarante pièces sur huit types d'article déposait une ligne vide des huit : la quantité était extraite correctement, puis abandonnée faute d'un champ où la ranger. Aucune erreur n'était levée — une perte parfaitement silencieuse.",
+         y=BODY_TOP - 0.04, accent=RGBColor(0xC0, 0x39, 0x2B), size=13, h=0.86)
+
+    lw = CONTENT_W * 0.46
+    tf = _txbox(slide, MARGIN, 3.10, lw, 0.28)
+    _run(_para(tf, first=True), "Ce que dit le technicien", size=13.5, bold=True, color=MUTE)
+    _rect(slide, MARGIN, 3.46, lw, 0.86, fill=WASH)
+    tf = _txbox(slide, MARGIN + 0.18, 3.62, lw - 0.36, 0.6)
+    p = _para(tf, first=True)
+    p.line_spacing = 1.16
+    _run(p, "« … w rakkabt rbaa prises doubles étanches »", size=12, italic=True, color=INK)
+
+    arrow(slide, MARGIN + lw / 2 - 0.13, 4.44, 0.26, 0.30, right=False, color=BLUE)
+
+    _rect(slide, MARGIN, 4.86, lw, 1.34, fill=RGBColor(0xE8, 0xF3, 0xFD))
+    _rect(slide, MARGIN, 4.86, lw, 0.04, fill=BLUE)
+    tf = _txbox(slide, MARGIN + 0.18, 5.02, lw - 0.36, 1.05)
+    p = _para(tf, first=True)
+    p.line_spacing = 1.16
+    _run(p, "articles_libres", size=11.5, bold=True, color=BLUE)
+    _run(p, "  {« prise double étanche encastrée »: 4}", size=11.5, color=INK)
+    p = _para(tf)
+    p.line_spacing = 1.16
+    _run(p, "→ colonne créée dans l'onglet du chantier, valeur écrite, article inscrit au registre", size=11.5, color=GREY)
+
+    rx = MARGIN + lw + 0.55
+    rw = CONTENT_W - lw - 0.55
+    tf = _txbox(slide, rx, 3.10, rw, 3.1)
+    for i, (t, d) in enumerate([
+        ("Une identité normalisée, pas le libellé dicté",
+         "« prises doubles étanches » et « prise double étanche encastrée » se réduisent au même slug. L'onglet ne gagne pas une seconde colonne parce qu'un technicien a mis un pluriel."),
+        ("Registre global, colonne locale",
+         "La colonne appartient à l'onglet qui l'a déclarée ; le nom est partagé, donc un second site réutilise l'orthographe au lieu d'en inventer une parallèle."),
+        ("La validation vient après, jamais avant",
+         "La quantité est comptée immédiatement ; la page Chantiers confirme, corrige — un libellé corrigé vers un libellé existant fusionne les deux colonnes — ou supprime."),
+    ]):
+        p = _para(tf, first=(i == 0))
+        p.space_after = Pt(4)
+        _run(p, t, size=13, bold=True, color=BLUE)
+        p = _para(tf)
+        p.space_after = Pt(12)
+        p.line_spacing = 1.16
+        _run(p, d, size=11.5, color=GREY)
     footer(slide, n)
 
 
@@ -1111,6 +1168,7 @@ def s16_perimetre(prs, n):
         ["Observabilité PostgreSQL", "Tableau de bord trilingue FR / EN / AR",
          "Organigramme, comptes, chantiers, bordereau", "Ordonnanceur — 6 tâches, page Automatisation",
          "Rapports quotidien et hebdomadaire par e-mail — document .docx joint",
+         "Colonnes d'article créées à la volée, puis confirmées",
          "Réceptions de matériel et alertes de stock en jours de couverture",
          "Consommation des offres gratuites, mesurée",
          "Moteur local sur GPU, conteneurisé"],
@@ -1401,6 +1459,15 @@ NOTES = {
 → Un chiffre faux ne peut plus écraser un chiffre juste : 50 puis +80.
 → Stock réconcilié, jamais supposé. Heures et JH viennent de la voix.
 """,
+    "s11b_colonnes": """
+1:00 · La perte silencieuse est l'histoire à raconter, pas le mécanisme.
+→ Quarante pièces extraites correctement, puis jetées. Zéro erreur levée.
+→ Le champ est en texte libre EXPRÈS : son sujet est l'article pas encore
+  connu, le valider contre la liste jetterait ce qu'il existe pour porter.
+→ Insister sur « la validation vient après » : faire attendre une approbation
+  humaine remettrait au centre le délai que tout le projet supprime.
+→ Si on demande le risque : le slug. Sans lui, un pluriel = une colonne de plus.
+""",
     "s12_banc_protocole": """
 1:00 · Ni WER ni CER — assumé.
 → On mesure ce que le journal consomme : chiffres et emprunts techniques.
@@ -1517,7 +1584,7 @@ def main():
     n = 1
     for build in (s02_plan, s03_quote, s03_contexte, s04_problematique, s05_besoins,
                   s05b_planning, s06_etat_art_stt, s07_etat_art_llm, s08_architecture,
-                  s09_frontiere, s10_flux, s11_journal, s12_banc_protocole, s13_banc_api,
+                  s09_frontiere, s10_flux, s11_journal, s11b_colonnes, s12_banc_protocole, s13_banc_api,
                   s14_banc_local, s15_moteur_retenu, s15b_extraction, s16_perimetre,
                   s17_dashboard, s17b_usage, s18_devops, s18b_sonar, s19_demo, s20_bilan,
                   s21_perspectives):
