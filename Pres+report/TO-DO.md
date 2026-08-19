@@ -161,6 +161,86 @@ Report rebuilt: **142 pages** (140 before; the new prose added two).
 
 ---
 
+## Done — 2026-08-19 : screenshots refreshed, figures re-derived, two new screens
+
+### Screenshots — the whole set re-shot
+
+`Dashboard/scripts/report-shots.mjs` re-run against the live stack (twelve hours
+of uptime, so the service bars and the year graph are populated rather than
+near-empty). Same convention as before, deliberately: **dark theme, English,
+16:9**, one viewport per shot. Three routes were added to the script —
+`usage`, `chantiers`, and a scripted expansion of one site's bordereau, which
+lives behind a collapsed row and would otherwise never appear. **29 captures** (was 22), all regenerated, none reused.
+
+The light theme went from one capture to four — overview, rapports, consommation,
+chantiers. One shot proves the palette inverts; it does not prove that every
+*kind* of panel (table, chart, progress bar, quota gauge) was designed in both,
+and a quota bar built for a dark ground usually vanishes on a white one.
+
+The PNG→JPG step (downscale to 1800 px, quality 88) was undocumented and lived
+in somebody's shell history; it is now written into the script's header comment.
+
+### Figures re-derived from the running system, not from memory
+
+Every count in the report had drifted, some badly. Measured, then corrected
+everywhere they appear — abstracts (FR/EN/AR), Tables 4.10, 4.12, 4.13, §3.3.4,
+§3.4.1, §3.5, §3.6, §4.9, the annexes and the deck:
+
+| | Report said | Actually |
+|---|---|---|
+| Tests | 288 in 22 files, 4 095 lines | **429 in 33 files, 6 381 lines** |
+| Python (service) | 8 489 lines | **13 082** |
+| TypeScript (dashboard) | 11 590 lines | **14 516** |
+| API routes | 66 | **77** |
+| n8n nodes | 65 | **64**, of which 54 carry logic |
+| PostgreSQL tables | 11 | **24** |
+| Repository total | 33 274 lines | **43 618** |
+| Suite duration | 8 min 16 s | **5 min 55 s** (429 tests, measured) |
+| Versioned prompts | 6 | **5** |
+
+### Three things the report described that no longer exist
+
+- **The chat commands.** `/rapport`, `/modifier`, `/supprimer` were listed as
+  « En production » in Table 4.9 and described node by node in §3.5.3. They were
+  removed on 2026-08-15. The table row now says « Retirées », §3.5.1 says why in
+  two sentences, and the band counts were recomputed — band 7 was claimed at
+  17 nodes and is 8.
+- **`image-generation.md`.** Annex C.6 reproduced a prompt whose endpoint was
+  deleted. Annex removed, the prompt count corrected to five.
+- **The conclusion's perspectives** offered « avancement par site, consommation
+  de matériel, alertes de stock » as future work. All three shipped. Reworded to
+  what is genuinely still missing: order forecasting.
+
+### Two screens the report and the deck had never mentioned
+
+- **§4.8.1 — the Consommation page.** Table 4.11 is a *reasoning* about free-tier
+  headroom; the page is the *measurement*, and the section now says why the two
+  are not the same thing. It documents the honest part: Groq publishes real quota
+  in its response headers (« measured »), Gemini publishes none so its ceiling is
+  a documented constant, WhatsApp exposes its own tier but not our consumption —
+  and a missing header is recorded `NULL`, never `0`.
+- **Annexe H, Figures H.12–H.15** — Consommation, Chantiers (top and bottom) and
+  one site's bordereau expanded. The following figures were renumbered.
+- **Deck: `s17b_usage`**, both screens side by side with the three claims that
+  matter. Two captures added to the demo-failure backups: Consommation, and the
+  overview in light theme. Deck now builds at **35 slides**; report at
+  **149 pages** (was 142).
+
+### Found in passing
+
+- `usage.intro` in `fr.json` read « Chaque paliers gratuit » — fixed, `web`
+  rebuilt (a locale edit does not reach the served bundle without it).
+- `pfe-api` restarted twice during the shoot, exit code 0, not OOM-killed; one
+  screenshot caught nginx's 502 and had to be retaken. `/alerts` (5 s) and
+  `/chantiers/{id}/bordereau` (0.9 s) were both exercised directly afterwards and
+  are fine, so this is not a code fault — but it is unexplained.
+- **The bordereau's « installed » column is empty on all three sites.** The
+  figure is computed live from the journal, so this is not a display bug: no
+  journal quantity has yet landed on a contract line. Worth a sentence to the
+  jury before they ask.
+
+---
+
 ## To do — handoff, 2026-08-18
 
 State: **CI green**, SonarCloud analysing on every push with coverage, report at 142 pages,

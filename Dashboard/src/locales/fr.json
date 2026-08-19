@@ -485,7 +485,7 @@
   "nav.usage": "Consommation",
   "nav.kw.usage": "quota api tokens groq gemini whatsapp limite palier",
   "page.usage.title": "Consommation des API",
-  "usage.intro": "Chaque paliers gratuit dont dépend le pipeline. Un quota épuisé ne produit pas d'erreur visible : la chaîne bascule sur le fournisseur suivant et la journée paraît normale.",
+  "usage.intro": "Chaque palier gratuit dont dépend le pipeline. Un quota épuisé ne produit pas d'erreur visible : la chaîne bascule sur le fournisseur suivant et la journée paraît normale.",
   "usage.live": "mesuré",
   "usage.documented": "documenté",
   "usage.exhausted": "Palier gratuit épuisé : ce fournisseur ne répond plus, la chaîne bascule sur le suivant.",

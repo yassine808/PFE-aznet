@@ -700,9 +700,9 @@ def s08_architecture(prs, n):
     chain = [
         ("Terrain", "Technicien\nnote vocale en darija,\nphoto ou texte", GREY),
         ("Réception", "Telegram Bot API\nWhatsApp Cloud API", GREEN),
-        ("Orchestration", "n8n — 65 nœuds\nréception, déduplication,\nautorisation, réponses", GREEN),
-        ("Service applicatif", "FastAPI — 66 routes\nSTT, extraction, journal,\nordonnanceur, comptes", BLUE),
-        ("Persistance", "PostgreSQL — 11 tables\nGoogle Sheets\nun onglet par chantier", BLUE),
+        ("Orchestration", "n8n — 64 nœuds\nréception, déduplication,\nautorisation, réponses", GREEN),
+        ("Service applicatif", "FastAPI — 77 routes\nSTT, extraction, journal,\nordonnanceur, comptes", BLUE),
+        ("Persistance", "PostgreSQL — 24 tables\nGoogle Sheets\nun onglet par chantier", BLUE),
     ]
     x = MARGIN
     for i, (title, sub, accent) in enumerate(chain):
@@ -1110,7 +1110,9 @@ def s16_perimetre(prs, n):
          "Miroir plat pour le tableau de bord"],
         ["Observabilité PostgreSQL", "Tableau de bord trilingue FR / EN / AR",
          "Organigramme, comptes, chantiers, bordereau", "Ordonnanceur — 6 tâches, page Automatisation",
-         "Rapports quotidien et hebdomadaire par e-mail", "Commandes /rapport, /modifier, /supprimer",
+         "Rapports quotidien et hebdomadaire par e-mail — document .docx joint",
+         "Réceptions de matériel et alertes de stock en jours de couverture",
+         "Consommation des offres gratuites, mesurée",
          "Moteur local sur GPU, conteneurisé"],
     ]
     half = (CONTENT_W - 0.5) / 2
@@ -1146,7 +1148,7 @@ def s17_dashboard(prs, n):
     for i, (t, d) in enumerate([
         ("Trilingue", "Français, anglais, arabe. L'arabe impose le sens droite-à-gauche sur toute l'interface."),
         ("Sans dépendance d'UI", "React 19 et Tailwind v4, graphiques en SVG écrits à la main, aucune bibliothèque de composants."),
-        ("Huit écrans", "Vue d'ensemble, boîte de réception, rapports, quotidien, hebdomadaire, automatisation, journaux, équipe."),
+        ("Douze écrans", "Vue d'ensemble, réception, rapports, quotidien, hebdomadaire, automatisation, tâches, journaux, file de reprise, consommation, équipe, chantiers."),
         ("Organigramme éditable", "Le rattachement d'un technicien à un chef détermine le chantier de ses rapports."),
     ]):
         p = _para(tf, first=(i == 0))
@@ -1160,12 +1162,35 @@ def s17_dashboard(prs, n):
     footer(slide, n)
 
 
+def s17b_usage(prs, n):
+    """The two most recent screens, and the reason each one exists.
+
+    Both answer a question the rest of the interface could not: what is left of
+    a free tier, and how far along is a site. Both are read-only about figures —
+    nothing in the browser recomputes a number the service already settled.
+    """
+    slide = new_slide(prs)
+    header(slide, "5 — Réalisation", "Deux écrans récents : ce qu'il reste, et où en est le chantier")
+    half = (CONTENT_W - 0.34) / 2
+    image_fit(slide, SCREENS / "en-usage.jpg", MARGIN, 1.98, half, 2.28, frame=True)
+    image_fit(slide, SCREENS / "en-chantiers-bordereau.jpg", MARGIN + half + 0.34, 1.98, half, 2.28, frame=True)
+    caption(slide, "Consommation — les trois offres gratuites", MARGIN, 4.34, half)
+    caption(slide, "Chantiers — le bordereau d'un site", MARGIN + half + 0.34, 4.34, half)
+
+    bullets(slide, [
+        ("Un quota épuisé ne lève aucune erreur.", "La chaîne bascule sur le fournisseur suivant, ou WhatsApp se tait : vu de l'extérieur, une journée normale. C'est la raison d'être de l'écran."),
+        ("Chaque chiffre dit d'où il vient.", "Groq publie son quota dans ses en-têtes — « mesuré » ; Gemini n'en publie aucun, son plafond est une constante — « documenté ». Un en-tête absent est enregistré NULL, jamais 0."),
+        ("L'avancement n'est stocké nulle part.", "La quantité installée est recalculée depuis le journal à chaque appel : le journal étant le seul endroit où une quantité est saisie, un total conservé ne pourrait que dériver."),
+    ], y=4.74, size=12.5, gap=8)
+    footer(slide, n)
+
+
 def s18_devops(prs, n):
     slide = new_slide(prs)
     header(slide, "5 — Qualité", "La chaîne d'intégration continue")
     stats(slide, [("6 mois", "de développement\n(2 mars – 31 août 2026)"),
                   ("18", "contrôles automatiques\nà chaque push"),
-                  ("288", "tests, sans aucune\nclé d'API ni base"),
+                  ("429", "tests, sans aucune\nclé d'API ni base"),
                   ("38", "demandes Dependabot\nsur 5 écosystèmes")],
           y=BODY_TOP - 0.05, h=1.48)
 
@@ -1173,7 +1198,7 @@ def s18_devops(prs, n):
     tf = _txbox(slide, MARGIN, y, CONTENT_W, 0.3)
     _run(_para(tf, first=True), "Les 18 contrôles, par famille", size=14.5, bold=True, color=BLUE)
     fams = [
-        ("Correction", GREEN, "API — ruff, types, 288 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
+        ("Correction", GREEN, "API — ruff, types, 429 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
         ("Sécurité du code", BLUE, "CodeQL (python)  ·  CodeQL (javascript-typescript)  ·  Semgrep OWASP Top 10  ·  Bandit"),
         ("Dépendances et secrets", RGBColor(0x8E, 0x44, 0xAD), "Trivy filesystem  ·  Trivy config  ·  pip-audit  ·  npm audit  ·  gitleaks + check_secrets.py"),
         ("Conformité des fichiers", GREY, "Hadolint (api)  ·  Hadolint (Dashboard)  ·  actionlint"),
@@ -1258,7 +1283,7 @@ def s21_perspectives(prs, n):
         ("Constituer la vérité terrain qui manque, ", "à partir des rapports réels accumulés, afin de publier un WER et un CER et de rendre le classement reproductible."),
         ("Affiner un modèle de transcription ", "sur ce corpus darija propre au câblage — l'apport de l'affinage étant désormais démontré pour un modèle assez grand."),
         ("Remplacer Google Sheets par une base de données ", "lorsque la volumétrie le justifiera : l'infrastructure PostgreSQL est déjà en place."),
-        ("Étendre le tableau de bord vers l'analytique de chantier ", "— avancement par site, consommation de matériel, alertes de stock ; le bordereau en fournit la base."),
+        ("Prolonger l'analytique de chantier ", "— l'avancement par site, le registre des réceptions et les alertes de stock existent ; la prévision de commande, elle, reste à construire."),
     ], size=14.5, gap=13)
 
     y = 4.72
@@ -1300,6 +1325,8 @@ def backups(prs, start):
         ("en-equipe.jpg", "Équipe — l'organigramme : directeur, chefs de chantier, techniciens"),
         ("en-automation.jpg", "Automatisation — les six tâches planifiées et leurs dernières exécutions"),
         ("en-logs.jpg", "Journaux — la trace de traitement, n8n et service réunis par correlation_id"),
+        ("en-usage.jpg", "Consommation — ce qu'il reste de chaque offre gratuite, et d'où vient le chiffre"),
+        ("en-overview-light.jpg", "Thème clair — le thème est un choix persistant de l'utilisateur, pas une préférence système"),
         ("mobile-overview.jpg", "Usage mobile — la même interface, consultée depuis un téléphone"),
     ]
     n = start
@@ -1403,6 +1430,16 @@ NOTES = {
 1:00 · Trilingue, arabe RTL, graphiques écrits à la main.
 → Vingt-deux captures en annexe H.
 """,
+    "s17b_usage": """
+1:00 · Deux écrans ajoutés en dernier, pour deux angles morts.
+→ Consommation : tout le projet tient sur des offres gratuites, et un quota
+  épuisé ne fait aucun bruit — la chaîne bascule, la journée paraît normale.
+→ Insister sur « mesuré » vs « documenté » : les trois fournisseurs ne sont
+  pas également bavards, et l'écran le dit au lieu de faire semblant.
+→ Chantiers : l'avancement est recalculé à chaque appel, jamais stocké.
+→ Si on demande pourquoi la colonne installée est vide : le bordereau existe,
+  le pilote n'a pas encore produit de quantités sur ces lignes contractuelles.
+""",
     "s18_devops": """
 1:00 · Dix-huit contrôles à chaque push.
 → Honnêteté : Dependabot ouvre, rien n'est encore fusionné.
@@ -1482,7 +1519,7 @@ def main():
                   s05b_planning, s06_etat_art_stt, s07_etat_art_llm, s08_architecture,
                   s09_frontiere, s10_flux, s11_journal, s12_banc_protocole, s13_banc_api,
                   s14_banc_local, s15_moteur_retenu, s15b_extraction, s16_perimetre,
-                  s17_dashboard, s18_devops, s18b_sonar, s19_demo, s20_bilan,
+                  s17_dashboard, s17b_usage, s18_devops, s18b_sonar, s19_demo, s20_bilan,
                   s21_perspectives):
         n += 1
         build(prs, n)

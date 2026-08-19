@@ -8,6 +8,21 @@
 //
 // Usage (from Dashboard/, stack running on :8080):
 //   node scripts/report-shots.mjs
+//
+// The report embeds .jpg, not the .png written here: a 3200x1800 PNG is ~1 MB
+// and 26 of them make the .docx unopenable on a slow machine. Second step, from
+// the repo root, with the api venv (Pillow is already a dependency there):
+//
+//   api/.venv/Scripts/python.exe -c "
+//   from PIL import Image; import glob, os
+//   for f in glob.glob('Pres+report/screens/*.png'):
+//       n = os.path.basename(f)[:-4]; im = Image.open(f).convert('RGB')
+//       if not n.startswith('mobile-'):
+//           im = im.resize((1800, round(im.height*1800/im.width)), Image.LANCZOS)
+//       im.save(f[:-4]+'.jpg','JPEG',quality=88,optimize=True,progressive=True); os.remove(f)"
+//
+// Desktop shots are downscaled to 1800 px wide; phone shots are left at their
+// native size, which is already narrower than the column they sit in.
 import { chromium, devices } from 'playwright'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -90,18 +105,37 @@ const shot = async (page, name) => {
   console.log('desktop en/dark')
 
   for (const route of ['overview', 'inbox', 'reports', 'daily', 'weekly',
-                       'automation', 'tasks', 'logs', 'queue', 'equipe']) {
+                       'automation', 'tasks', 'logs', 'queue', 'usage',
+                       'equipe', 'chantiers']) {
     await go(page, route)
     await shot(page, `en-${route}`)
   }
 
   // Long routes: a second viewport further down beats one giant image.
-  for (const route of ['overview', 'equipe']) {
+  for (const route of ['overview', 'equipe', 'chantiers']) {
     await go(page, route)
     await page.evaluate(() => window.scrollTo(0, window.innerHeight * 0.85))
     await page.waitForTimeout(900)
     await shot(page, `en-${route}-2`)
   }
+
+  // The bordereau of one site, which is the point of the Sites page and lives
+  // behind a collapsed row: a shot of the closed list shows five names and no
+  // quantities. DGH is the site with the longest schedule of contract lines.
+  await go(page, 'chantiers')
+  const site = page.locator('button[aria-expanded]', { hasText: 'DGH' }).first()
+  await site.click()
+  // The schedule is fetched on expand, so wait on its header rather than on a
+  // timer: a fixed delay captured the loading skeleton about half the time.
+  await page.waitForSelector('text=PROGRESS', { timeout: 20000 })
+    .catch(() => console.warn('  ! bordereau header never appeared'))
+  await page.waitForTimeout(2000)
+  // Frame the tracked articles — the ones carrying a progress bar — which sit
+  // below the untracked hardware at the top of the schedule.
+  const top = await site.evaluate((el) => el.getBoundingClientRect().top + window.scrollY)
+  await page.evaluate((y) => window.scrollTo(0, y), top + 560)
+  await page.waitForTimeout(1200)
+  await shot(page, 'en-chantiers-bordereau')
 
   // A route that matches nothing: the app says so instead of silently
   // landing on Overview.
@@ -123,14 +157,24 @@ const shot = async (page, name) => {
   await shot(page, 'en-palette-noresult')
   await page.keyboard.press('Escape')
 
-  // Light theme, one shot, to show the theme switch is real.
-  await page.evaluate(() => {
-    localStorage.setItem('aznet.theme', 'light')
-    location.reload()
-  })
-  await page.waitForTimeout(3500)
-  await shot(page, 'en-overview-light')
+  await ctx.close()
+}
 
+// ── Desktop, English, LIGHT ───────────────────────────────────────────────
+// The theme is a persisted user choice, not a system preference, so it has to
+// be evidenced rather than asserted. Four routes rather than one: a single
+// overview shot shows the palette inverts, it does not show that every panel
+// type — table, chart, progress bar, quota gauge — was designed in both.
+{
+  const ctx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2 })
+  await ctx.addInitScript(seed, ['en', 'light'])
+  const page = await ctx.newPage()
+  await login(page)
+  console.log('desktop en/light')
+  for (const route of ['overview', 'reports', 'usage', 'chantiers']) {
+    await go(page, route)
+    await shot(page, `en-${route}-light`)
+  }
   await ctx.close()
 }
 
