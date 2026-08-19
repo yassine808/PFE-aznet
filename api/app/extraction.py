@@ -111,6 +111,43 @@ def _caption_block(caption: Optional[str]) -> str:
     )
 
 
+@lru_cache(maxsize=1)
+def _gemini_schema() -> dict:
+    """`ExtractedReport` as a JSON schema Gemini will actually accept.
+
+    Gemini's `response_schema` is not JSON Schema — it is a subset, and it
+    rejects the whole request with a 400 when it meets a keyword outside it.
+    `livraisons` is a `dict[str, float]`, which Pydantic renders with
+    `additionalProperties`, so from the day deliveries shipped (2026-08-16)
+    every Gemini call answered:
+
+        Unknown name "additional_properties" at
+        'generation_config.response_schema.properties[50].value'
+
+    The text chain survived it because Groq answers second. The **image chain
+    is Google-only** — there is no free vision model at Groq — so all three
+    engines failed on the identical malformed request, and from the outside
+    that reads exactly like an account-wide quota. It is not: it is a 400, on
+    every call, regardless of usage.
+
+    Stripped rather than restructured: turning `livraisons` into a list of
+    objects would change the contract with n8n, the prompts and the journal to
+    work around a limitation in one vendor's parser. The keyword only says
+    "values are numbers", which the prompt states anyway, so dropping it costs
+    nothing — and the response is validated against the real model on the way
+    back in, where it actually matters.
+    """
+    def strip(node):
+        if isinstance(node, dict):
+            return {k: strip(v) for k, v in node.items()
+                    if k not in ("additionalProperties", "$defs")}
+        if isinstance(node, list):
+            return [strip(v) for v in node]
+        return node
+
+    return strip(ExtractedReport.model_json_schema())
+
+
 def _call_gemini(
     model: str,
     text: Optional[str] = None,
@@ -133,15 +170,21 @@ def _call_gemini(
         resp = client.models.generate_content(
             model=model,
             contents=contents,
-            config={"response_mime_type": "application/json", "response_schema": ExtractedReport},
+            config={"response_mime_type": "application/json",
+                    "response_schema": _gemini_schema()},
         )
         usage.from_gemini(resp, model, "extraction")
-        parsed = resp.parsed
     except Exception as exc:  # noqa: BLE001
         raise ExtractionError(f"gemini/{model}: {exc}") from exc
-    if not isinstance(parsed, ExtractedReport):
-        raise ExtractionError(f"gemini/{model}: unparseable response {resp.text!r:.200}")
-    return parsed
+    # Validated here rather than by the SDK: a dict schema makes `resp.parsed`
+    # a plain dict, and the model is the contract — an answer that does not fit
+    # it has to fail loudly on this engine so the chain moves to the next one.
+    try:
+        return ExtractedReport.model_validate_json(resp.text or "")
+    except Exception as exc:  # noqa: BLE001
+        raise ExtractionError(
+            f"gemini/{model}: unparseable response {resp.text!r:.200} ({exc})"
+        ) from exc
 
 
 def _call_groq(

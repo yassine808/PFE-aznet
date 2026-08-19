@@ -17,6 +17,7 @@ import os
 import unicodedata
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, cast
 
 from app.config import settings
@@ -1515,9 +1516,24 @@ CHANNELS = ("telegram", "whatsapp")
 
 
 def _iso(row: dict) -> dict:
+    """Row values turned into things JSON can carry without lying about them.
+
+    `Decimal` is the one that bites: psycopg2 hands back every NUMERIC column
+    (`articles.qte_marche`, `receptions.qte`) as a `Decimal`, and FastAPI
+    serialises that as a *string* — so `qte_marche: 144` left here and arrived
+    in the browser as `"144"`. The dashboard's own type said `number`, so
+    nothing typechecked it, and the Chantiers page called `.toFixed()` on a
+    string the moment a site was opened: a TypeError during render, no error
+    boundary above it, and the whole app unmounted to a blank page. Unwrapped
+    here rather than in each endpoint because this is the one place every row
+    leaves the store through.
+    """
     for key, value in row.items():
         if isinstance(value, datetime):
             row[key] = value.isoformat()
+        elif isinstance(value, Decimal):
+            # int when it is one, so a count of switches is not `2.0`.
+            row[key] = int(value) if value == value.to_integral_value() else float(value)
     return row
 
 

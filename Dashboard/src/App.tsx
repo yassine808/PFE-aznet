@@ -9,6 +9,7 @@ import { ToastProvider } from '@/lib/toast'
 import { useI18n } from '@/lib/i18n'
 import { useRoute, type Route } from '@/lib/router'
 import { PageHeaderProvider, usePageAction } from '@/lib/page-header'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 /** The current page's primary action, rendered beside the page title. */
 function PageAction() {
@@ -197,9 +198,21 @@ function Dashboard() {
             {/* Suspense here, not inside RouteView: the shell, title and
               entrance animation paint while a lazily-loaded page chunk
               streams in; only the content area waits. */}
-            <Suspense fallback={<div className="min-h-[70vh]" />}>
-              <RouteView route={route} params={params} navigate={navigate} />
-            </Suspense>
+            {/* Keyed on the route so leaving a broken page clears the latch:
+              a boundary that stays tripped after navigation shows the previous
+              page's error under the next page's title. */}
+            <ErrorBoundary
+              key={route}
+              labels={{
+                title: t('state.crash.title'),
+                body: t('state.crash.body'),
+                retry: t('state.crash.retry'),
+              }}
+            >
+              <Suspense fallback={<div className="min-h-[70vh]" />}>
+                <RouteView route={route} params={params} navigate={navigate} />
+              </Suspense>
+            </ErrorBoundary>
           </motion.div>
         </AppShell>
       </PageHeaderProvider>

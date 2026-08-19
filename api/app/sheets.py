@@ -311,14 +311,14 @@ def append_report(values: dict) -> Optional[int]:
             _extend_headers(svc, missing)
             headers = headers + missing
         row = [_cell(values.get(h)) for h in headers]
+        at = _next_row(svc, RAPPORTS_TAB)
         resp = (
             svc.spreadsheets()
             .values()
-            .append(
+            .update(
                 spreadsheetId=settings.sheet_id,
-                range=_a1(RAPPORTS_TAB),
+                range=_a1(RAPPORTS_TAB, f"A{at}"),
                 valueInputOption="USER_ENTERED",
-                insertDataOption="INSERT_ROWS",
                 body={"values": [row]},
             )
             .execute(num_retries=_RETRIES)
@@ -327,7 +327,11 @@ def append_report(values: dict) -> Optional[int]:
         # cache dies here. The drain itself re-reads through the TTL window —
         # which is fine, because this very row is what it just wrote.
         invalidate_reports()
-        return _row_from_range(resp.get("updates", {}).get("updatedRange"))
+        # `update` reports its range at the top level; `append` used to nest it
+        # under "updates". Reading the old shape here returned None for every
+        # write, and None is the row number the caller records against the
+        # message — so the inbox would have lost the link to its Sheet row.
+        return _row_from_range(resp.get("updatedRange"))
     except SheetsError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -448,19 +452,23 @@ def append_row(tab: str, values: dict, headers: List[str]) -> Optional[int]:
     svc = _service()
     try:
         row = [_cell(values.get(h)) for h in headers]
+        at = _next_row(svc, tab)
         resp = (
             svc.spreadsheets()
             .values()
-            .append(
+            .update(
                 spreadsheetId=settings.sheet_id,
-                range=_a1(tab),
+                range=_a1(tab, f"A{at}"),
                 valueInputOption="USER_ENTERED",
-                insertDataOption="INSERT_ROWS",
                 body={"values": [row]},
             )
             .execute(num_retries=_RETRIES)
         )
-        return _row_from_range(resp.get("updates", {}).get("updatedRange"))
+        # `update` reports its range at the top level; `append` used to nest it
+        # under "updates". Reading the old shape here returned None for every
+        # write, and None is the row number the caller records against the
+        # message — so the inbox would have lost the link to its Sheet row.
+        return _row_from_range(resp.get("updatedRange"))
     except SheetsError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -514,6 +522,39 @@ def mark_increment(tab: str, row: int, columns: List[str]) -> None:
         ).execute(num_retries=_RETRIES)
     except Exception as exc:  # noqa: BLE001 - cosmetic, never fatal
         print(f"[sheets] increment format skipped ({tab} row {row}): {exc}")
+
+
+def _next_row(svc, tab: str) -> int:
+    """The first free row of a tab, resolved by us rather than by Google.
+
+    `values().append` does not take an address — it takes a *hint* and then
+    looks for "the table" itself, anchoring the write on whatever block it
+    decides it found. On a journal tab that guess is wrong in two ways at once.
+
+    The flag column carries a checkbox down the whole column, and an unticked
+    checkbox is not an empty cell: it is the value FALSE. So rows nobody has
+    written still look like data in that one column, Google anchors the table
+    on it, and a 65-cell row lands starting at column BK — date under "Flag
+    review", technicien under "Motif du flag", chantier under "Correlation id",
+    and the other 62 cells off the end of the sheet. That is exactly what
+    happened to row 8 of `charé3 Moulay Slimane` on 2026-08-19.
+
+    `INSERT_ROWS` adds a second failure on top: an inserted row inherits the
+    format of the row above it, so the very first data row of a fresh tab
+    copies the header — white text — and the banding then paints its
+    background white. Invisible text, on the only row of a new site.
+
+    Writing to an explicit `A{n}` with `update` has neither problem: the anchor
+    is stated, and no row is inserted so nothing is inherited.
+    """
+    used = (
+        svc.spreadsheets()
+        .values()
+        .get(spreadsheetId=settings.sheet_id, range=_a1(tab))
+        .execute(num_retries=_RETRIES)
+        .get("values", [])
+    )
+    return len(used) + 1
 
 
 def _row_from_range(updated_range: Optional[str]) -> Optional[int]:
@@ -636,9 +677,16 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
         requests: List[dict] = [
             # The header stays on screen. Without this, reading row 40 means
             # counting columns by hand to know what a number is.
+            #
+            # Three columns, not two (2026-08-19). Both kinds of tab answer
+            # "when, who, where" in their first three — `date, heure,
+            # technicien` on Rapports, `Date, Technicien, Chantier` on a site
+            # tab — and those are exactly the three you need still on screen to
+            # read a quantity sixty columns to the right. At two, the
+            # technician's name scrolled away and every number became anonymous.
             {"updateSheetProperties": {
                 "properties": {"sheetId": sid,
-                               "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": 2}},
+                               "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": 3}},
                 "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount"}},
             {"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
@@ -661,11 +709,19 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
             # back of a room reads as nothing at all.
             {"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": 1},
-                "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP",
-                                               "verticalAlignment": "TOP",
-                                               "textFormat": {"fontSize": BODY_FONT_SIZE}}},
+                "cell": {"userEnteredFormat": {
+                    "wrapStrategy": "WRAP",
+                    "verticalAlignment": "TOP",
+                    # Stated, not inherited. The header above is white on dark
+                    # and the banding paints the body white, so a body row that
+                    # merely *inherits* a colour is one accident away from
+                    # white on white — which is what a new site tab looked
+                    # like on 2026-08-19: a real report, present in the cells,
+                    # invisible on the screen.
+                    "textFormat": {"fontSize": BODY_FONT_SIZE,
+                                   "foregroundColor": {"red": 0, "green": 0, "blue": 0}}}},
                 "fields": "userEnteredFormat(wrapStrategy,verticalAlignment,"
-                          "textFormat.fontSize)"}},
+                          "textFormat.fontSize,textFormat.foregroundColor)"}},
         ]
 
         # The flag column, if this tab has one: a real checkbox, and red when

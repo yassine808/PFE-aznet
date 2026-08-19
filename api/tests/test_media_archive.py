@@ -239,17 +239,29 @@ def _fake_service(updated_range="Rapports!A17:Q17"):
             return self._get
 
         def append(self, spreadsheetId=None, range=None, valueInputOption=None,
-                   insertDataOption=None, body=None):
-            self._svc.appended = body
-            return _Resp({"updates": {"updatedRange": updated_range}})
+                   insertDataOption=None, body=None):  # pragma: no cover
+            raise AssertionError(
+                "values().append is banned: it makes Google guess the anchor "
+                "column, which is how a row landed under 'Flag review'"
+            )
 
         def batchUpdate(self, spreadsheetId=None, body=None):
             self._svc.batched = body
             return _Resp({})
 
         def update(self, **kwargs):
-            self._svc.updated = kwargs
-            return _Resp({})
+            # Two different writes land here now. `_extend_headers` writes the
+            # new header cell, then the row itself is written to an explicit
+            # `A{n}` — `values.append` is gone, because letting Google locate
+            # "the table" put a row 62 columns to the right of column A on a
+            # real journal tab (2026-08-19). So the first call is kept as
+            # `updated` (the header) and the last body as `appended` (the row),
+            # which is what the assertions below are actually about.
+            svc = self._svc
+            if svc.updated is None:
+                svc.updated = kwargs
+            svc.appended = kwargs.get("body")
+            return _Resp({"updatedRange": kwargs.get("range")})
 
         def clear(self, spreadsheetId=None, range=None, body=None):
             self._svc.cleared = range
@@ -307,7 +319,11 @@ def test_append_report_returns_row_number(monkeypatch):
     """The drain links a message to its Sheet row through this return value."""
     monkeypatch.setattr(main.sheets, "_service", _fake_service)
     row = main.sheets.append_report({"chantier": "Tour Atlas", "lien_audio": "x"})
-    assert row == 17
+    # 2, and computed here rather than reported back by Google: the fake tab
+    # holds a header row and nothing else, so the first free row is 2. The row
+    # number is the link between a message and its Sheet row, so it has to
+    # survive the move off `values.append`.
+    assert row == 2
 
 
 def test_append_report_extends_headers_for_new_columns(monkeypatch):
