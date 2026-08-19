@@ -647,6 +647,14 @@ def audio_link(payload: Dict) -> Optional[str]:
     here"; an id says "here is your link" and lies. Absence over a false claim,
     the same rule the quantity columns follow.
     """
+    # No recording, no link. A typed report has nothing to play, and the cell
+    # used to read "▶ Écouter" on it anyway — an invitation to click through to
+    # a player that does not exist, in the column whose whole job is to say
+    # whether there is a recording. `stt_engine` is the honest test: it is set
+    # by `/process` only when an engine actually transcribed audio, which is
+    # also why the Rapports mirror's `STT_model` is empty on exactly these rows.
+    if not str(payload.get("stt_engine") or "").strip():
+        return None
     base = (settings.dashboard_base_url or settings.dashboard_url or "").strip().rstrip("/")
     correlation = str(payload.get("correlation_id") or "").strip()
     if not base or not correlation:

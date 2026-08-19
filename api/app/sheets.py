@@ -674,6 +674,16 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
             headers = _headers(svc, tab)
         cols = max(1, len(headers))
 
+        # Freeze everything up to and including the site, rather than a fixed
+        # count. Both kinds of tab then keep "when, who, where" on screen while
+        # a quantity sixty columns to the right is read — but the site sits
+        # third on a journal tab and fourth on Rapports, so a constant would
+        # have to be wrong on one of them. Falls back to 3 on a tab with no
+        # site column at all.
+        site_at = next((headers.index(c) for c in ("Chantier", "chantier")
+                        if c in headers), None)
+        frozen_cols = site_at + 1 if site_at is not None else 3
+
         requests: List[dict] = [
             # The header stays on screen. Without this, reading row 40 means
             # counting columns by hand to know what a number is.
@@ -686,7 +696,8 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
             # technician's name scrolled away and every number became anonymous.
             {"updateSheetProperties": {
                 "properties": {"sheetId": sid,
-                               "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": 3}},
+                               "gridProperties": {"frozenRowCount": 1,
+                                                  "frozenColumnCount": frozen_cols}},
                 "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount"}},
             {"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},

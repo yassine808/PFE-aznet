@@ -603,7 +603,7 @@ def test_audio_link_points_at_the_inbox_when_the_dashboard_has_an_origin(monkeyp
     """The Sheet cell should open the message, not a bare Drive file."""
     monkeypatch.setattr(journal.settings, "dashboard_base_url", "https://aznet.example.com/")
     link = journal.audio_link({"lien_audio": "https://drive.google.com/uc?id=abc",
-                               "correlation_id": "tg:1:2"})
+                               "correlation_id": "tg:1:2", "stt_engine": "gemini"})
     # A HYPERLINK formula, not a bare URL: the cell shows a label instead of
     # 120 characters of encoded id, and USER_ENTERED turns the leading `=`
     # into a live link.
@@ -618,7 +618,7 @@ def test_audio_link_uses_dashboard_url_when_the_base_is_unset(monkeypatch):
     monkeypatch.setattr(journal.settings, "dashboard_base_url", None)
     monkeypatch.setattr(journal.settings, "dashboard_url", "https://aznet.example.com")
     link = journal.audio_link({"lien_audio": "https://drive.google.com/uc?id=abc",
-                               "correlation_id": "tg:1:2"})
+                               "correlation_id": "tg:1:2", "stt_engine": "gemini"})
     assert link.startswith('=HYPERLINK("https://aznet.example.com/#/inbox?msg=')
 
 
@@ -627,7 +627,8 @@ def test_audio_link_falls_back_to_drive_with_no_origin_at_all(monkeypatch):
     anywhere the Drive link is kept rather than an address going nowhere."""
     monkeypatch.setattr(journal.settings, "dashboard_base_url", None)
     monkeypatch.setattr(journal.settings, "dashboard_url", "")
-    payload = {"lien_audio": "https://drive.google.com/uc?id=abc", "correlation_id": "tg:1:2"}
+    payload = {"lien_audio": "https://drive.google.com/uc?id=abc", "correlation_id": "tg:1:2",
+               "stt_engine": "gemini"}
     assert journal.audio_link(payload) == "https://drive.google.com/uc?id=abc"
     # Same rule when the message has no correlation id to resolve against.
     monkeypatch.setattr(journal.settings, "dashboard_base_url", "https://aznet.example.com")
@@ -640,9 +641,19 @@ def test_audio_link_refuses_to_write_something_that_is_not_a_link(monkeypatch):
     like it should. An empty cell says "no recording"; an id lies."""
     monkeypatch.setattr(journal.settings, "dashboard_base_url", None)
     monkeypatch.setattr(journal.settings, "dashboard_url", "")
-    assert journal.audio_link({"lien_audio": "1115179874166528"}) is None
-    assert journal.audio_link({"lien_audio": ""}) is None
-    assert journal.audio_link({}) is None
+    assert journal.audio_link({"lien_audio": "1115179874166528", "stt_engine": "gemini"}) is None
+    assert journal.audio_link({"lien_audio": "", "stt_engine": "gemini"}) is None
+    assert journal.audio_link({"stt_engine": "gemini"}) is None
+
+
+def test_a_typed_report_gets_no_audio_link(monkeypatch):
+    """"▶ Écouter" on a message nobody recorded is an invitation to a player
+    that does not exist. `stt_engine` is set only when an engine actually
+    transcribed audio, so it is what separates the two."""
+    monkeypatch.setattr(journal.settings, "dashboard_base_url", "https://aznet.example.com")
+    typed = {"correlation_id": "tg:1:2", "lien_audio": "https://drive.google.com/uc?id=abc"}
+    assert journal.audio_link(typed) is None
+    assert journal.audio_link({**typed, "stt_engine": "gemini"}) is not None
 
 
 # --- the day's hours and crew, dictated rather than typed ------------------
@@ -827,7 +838,7 @@ def test_a_real_url_still_reaches_the_audio_column(fake, monkeypatch):
     monkeypatch.setattr(mod.settings, "dashboard_url", "", raising=False)
     mod.file_report({
         "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
-        "correlation_id": "corr-url",
+        "correlation_id": "corr-url", "stt_engine": "gemini",
         "lien_audio": "https://drive.google.com/file/d/abc/view",
         "report": {"cables_installes_m": 10, "resume": "Résumé."},
     })

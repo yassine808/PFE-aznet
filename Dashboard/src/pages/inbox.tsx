@@ -464,7 +464,9 @@ function ExchangeReply({ r }: { readonly r: ThreadExchange }) {
         </div>
 
         {r.reply ? (
-          <p className="text-ink text-sm leading-relaxed break-words whitespace-pre-wrap">{r.reply}</p>
+          <p className="text-ink text-sm leading-relaxed break-words whitespace-pre-wrap">
+            {r.reply}
+          </p>
         ) : (
           <p className="text-ink-faint text-sm italic">{t('inbox.noReply')}</p>
         )}
@@ -678,9 +680,7 @@ function ReplyComposer({
   // The operator's choice wins, then the channel this conversation arrived on,
   // then the only one there is. Never a silent broadcast.
   const target =
-    active.find((i) => i.id === pickedId) ??
-    active.find((i) => i.id === preferred) ??
-    active[0]
+    active.find((i) => i.id === pickedId) ?? active.find((i) => i.id === preferred) ?? active[0]
 
   // A different technician is a different conversation: a pick made for one
   // must not follow the operator into the next person's thread.
@@ -952,7 +952,10 @@ export function InboxPage({
           // The last thing said, the way a conversation list shows it — far
           // more use than a raw count when picking who to open. An exchange
           // has no summary, so its own last line stands in.
-          preview: ('reply' in r ? r.reply || r.text || '' : r.resume || r.rapport_complet || '').trim(),
+          preview: ('reply' in r
+            ? r.reply || r.text || ''
+            : r.resume || r.rapport_complet || ''
+          ).trim(),
           channels: new Set(),
         }
         byName.set(name, p)
@@ -1367,6 +1370,21 @@ export function InboxPage({
                         ref={(node) => {
                           if (node && target && (r.correlation_id ?? '').trim() === target) {
                             node.scrollIntoView({ block: 'center' })
+                            // Arriving from the Sheet's "▶ Écouter" cell, so
+                            // start the recording rather than making the reader
+                            // find the play button they already pressed once.
+                            // The element is `preload="none"`, so play() is
+                            // what fetches it.
+                            //
+                            // The catch is not optional and not a swallowed
+                            // error: browsers refuse audible playback on a page
+                            // the user has not interacted with, and a link from
+                            // Google Sheets does not count as interaction. When
+                            // it is refused the message is still scrolled to and
+                            // ringed with its player under the cursor, which is
+                            // the most a page is allowed to do unasked.
+                            const audio = node.querySelector('audio')
+                            if (audio) void audio.play().catch(() => {})
                             setTarget('')
                           }
                         }}
