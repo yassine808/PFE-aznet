@@ -286,7 +286,12 @@ def _fake_service(updated_range="Rapports!A17:Q17"):
             svc = self._svc
             return _Resp({"sheets": [{"properties": {
                 "title": "Rapports", "sheetId": 0,
-                "gridProperties": {"columnCount": svc.columns},
+                # A row count as well as a column count. `_grow_rows` reads it
+                # for the same reason `_grow_columns` reads the other one, and
+                # a fake that omits it reports zero rows — so the writer grew
+                # the grid on every call and the assertions about *column*
+                # widening started seeing a row append instead.
+                "gridProperties": {"columnCount": svc.columns, "rowCount": svc.rows},
             }}]})
 
         def batchUpdate(self, spreadsheetId=None, body=None):
@@ -304,6 +309,9 @@ def _fake_service(updated_range="Rapports!A17:Q17"):
         # Exactly as wide as the header row, so any new column forces a widen —
         # which is the state the live Rapports tab was in on 2026-08-16.
         columns = len(HEADERS)
+        # Wide enough that a write never has to lengthen the tab; the
+        # height is not what these tests are about.
+        rows = 1000
 
     class _Resp:
         def __init__(self, body):

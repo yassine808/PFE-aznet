@@ -160,7 +160,7 @@ def test_a_message_carrying_both_loses_neither(wired, monkeypatch):
     monkeypatch.setattr(journal, "resolve_tab",
                         lambda tech, spoken=None: ("DGH", "DGH", []))
     monkeypatch.setattr(journal.sheets, "read_tab", lambda tab: [])
-    monkeypatch.setattr(journal, "_mirror_rapports", lambda *a: 12)
+    monkeypatch.setattr(journal, "_mirror_rapports", lambda *a, **kw: 12)
 
     out = journal.file_report({
         "technicien": "Yassine", "date": "2026-08-16",
