@@ -59,7 +59,10 @@ def test_style_tab_freezes_the_header_and_sizes_the_columns(monkeypatch):
               .get("range", {}).get("dimension") == "COLUMNS"]
     # Date is narrow, a free-text column is wide: a transcript in a 90 px
     # column reads as an empty cell.
-    assert widths[0] == 90 and widths[2] == 320
+    # Narrow stays narrow and free text stays wide, but the floor is derived
+    # from the header rather than fixed: a column has to be able to show its
+    # own title, and 90 px could not fit "ORDRE DU JOUR [Pose de câble cuivre]".
+    assert widths[0] == 100 and widths[2] == 420
 
 
 def test_banding_is_added_once(monkeypatch):

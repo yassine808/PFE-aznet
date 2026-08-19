@@ -26,12 +26,44 @@ function consumed(limit?: number | null, remaining?: number | null): number | nu
   return Math.min(1, Math.max(0, (limit - remaining) / limit))
 }
 
+/**
+ * The panel used to state the numbers and leave the conclusion to the reader.
+ * A ceiling reached is exactly the case nobody notices from the outside — the
+ * extraction chain falls through to the next vendor and the day looks normal —
+ * so it is said in words here, not left to a bar that happens to be full.
+ *
+ * Exhaustion is read from `remaining`, the figure the vendor is enforcing, and
+ * only when a ceiling exists: no ceiling means no verdict, never "fine".
+ */
+function verdict(p: ProviderUsage): 'exhausted' | 'near' | null {
+  // The server's verdict first, when it has one. It sees what this function
+  // cannot: whether a ceiling was confirmed by the vendor or merely documented,
+  // and WhatsApp, where Meta gives the tier but not our consumption — so there
+  // is nothing here to divide. The arithmetic below stays as the fallback for a
+  // payload that predates the field, because a page that goes silent on an
+  // older API is worse than one doing its own sums.
+  if (p.state === 'epuise') return 'exhausted'
+  if (p.state === 'bas') return 'near'
+  if (p.state === 'ok') return null
+
+  const pairs: [number | null | undefined, number | null | undefined][] = [
+    [p.limit_requests, p.remaining_requests],
+    [p.limit_tokens, p.remaining_tokens],
+  ]
+  let worst: 'exhausted' | 'near' | null = null
+  for (const [limit, remaining] of pairs) {
+    if (!limit || remaining == null) continue
+    if (remaining <= 0) return 'exhausted'
+    if ((limit - remaining) / limit >= 0.9) worst = 'near'
+  }
+  return worst
+}
+
 function Meter({ value }: { readonly value: number }) {
   // Colour by headroom, not by activity: a busy day is not a problem, a nearly
   // empty quota is. Amber at 75%, red at 90% — the point where the fallback
   // chain is about to start carrying traffic it was not meant to carry.
-  const tone =
-    value >= 0.9 ? 'bg-status-fail' : value >= 0.75 ? 'bg-status-warn' : 'bg-accent'
+  const tone = value >= 0.9 ? 'bg-status-fail' : value >= 0.75 ? 'bg-status-warn' : 'bg-accent'
   return (
     <span className="bg-line block h-1 w-full overflow-hidden rounded-full">
       <span
@@ -67,6 +99,7 @@ function ProviderCard({ p }: { readonly p: ProviderUsage }) {
   const fmt = new Intl.NumberFormat()
   const req = consumed(p.limit_requests, p.remaining_requests)
   const tok = consumed(p.limit_tokens, p.remaining_tokens)
+  const state = verdict(p)
 
   return (
     <motion.section
@@ -80,14 +113,26 @@ function ProviderCard({ p }: { readonly p: ProviderUsage }) {
             limit is a documented constant and says so. */}
         <span
           className={`rounded-full px-2 py-0.5 text-[0.625rem] tracking-wide uppercase ${
-            p.limit_source === 'live'
-              ? 'bg-status-ok/10 text-status-ok'
-              : 'bg-line text-ink-faint'
+            p.limit_source === 'live' ? 'bg-status-ok/10 text-status-ok' : 'bg-line text-ink-faint'
           }`}
         >
           {p.limit_source === 'live' ? t('usage.live') : t('usage.documented')}
         </span>
       </header>
+
+      {/* Said before any figure: the sentence is the finding, the numbers under
+          it are the evidence. Nothing is printed while the tier is healthy —
+          "tout va bien" every day is how a warning stops being read. */}
+      {state && (
+        <p
+          className={`flex items-start gap-2 text-xs ${
+            state === 'exhausted' ? 'text-status-fail' : 'text-status-warn'
+          }`}
+        >
+          <WarningIcon size={14} weight="fill" className="mt-0.5 shrink-0" />
+          <span>{state === 'exhausted' ? t('usage.exhausted') : t('usage.nearLimit')}</span>
+        </p>
+      )}
 
       {p.error ? (
         <p className="text-status-warn flex items-start gap-2 text-xs">

@@ -287,6 +287,73 @@ def _norm_date(value) -> Optional[str]:
     return None
 
 
+# How far back a technician may date his own note. A voice note sent the same
+# evening, or on Monday for Friday, is ordinary; a date two months back is a
+# mis-transcription ("17-08-2025") and would file the row where nobody looks.
+DECLARED_DATE_MAX_AGE_DAYS = 60
+
+
+def resolve_date(declaree, transmise) -> Tuple[str, List[str]]:
+    """The day the report is about: what the technician said, else what n8n sent.
+
+    2026-08-19: a note opening « Salam 17-08-2026 » was filed under the 19th,
+    the day the pipeline ran it. The transmitted date is when the message was
+    processed, which is only the same day by luck — a note sent late at night,
+    or a payload replayed from `failed_writes` two days later, dates the work
+    to the wrong day and moves every per-day total with it.
+
+    The stated date only wins when it is *checkable*: parseable by the same
+    `_norm_date` every other date here goes through, not in the future, and not
+    older than `DECLARED_DATE_MAX_AGE_DAYS`. Anything else falls back to the
+    transmitted date with a warning, rather than trusting a number the model
+    may have misheard — a row on the wrong day is invisible, a warning is not.
+    """
+    fallback = str(transmise or "")
+    stated = _norm_date(declaree)
+    if stated is None:
+        return fallback, ["date_declaree_illisible"] if declaree else []
+    # Measured against the transmitted day, not `today()`: the drain re-files
+    # payloads days later and must reach the same verdict it would have on the
+    # day the message arrived.
+    reference = _norm_date(transmise) or date.today().strftime("%Y-%m-%d")
+    delta = (datetime.strptime(reference, "%Y-%m-%d")
+             - datetime.strptime(stated, "%Y-%m-%d")).days
+    if delta < 0 or delta > DECLARED_DATE_MAX_AGE_DAYS:
+        return fallback, ["date_declaree_hors_plage"]
+    return stated, []
+
+
+# A stated hour always carries a digit against an hour mark: "7h", "07:00",
+# "8 heures". Nothing in a list of installed sockets does.
+_HOUR_IN_TEXT = re.compile(r"\d\s*(?:h\b|h\d|:\s*\d|heures?\b)", re.IGNORECASE)
+
+
+def corroborated_hours(report: ExtractedReport, source) -> Tuple[ExtractedReport, List[str]]:
+    """Drop entry/exit hours the message never stated.
+
+    2026-08-19: a note that named five men and eleven kinds of socket, and no
+    time at all, was filed with `HEURE D'ENTREE = 7:00` — the shift the model
+    assumed everyone works. The prompt already forbids inventing an hour, and a
+    prompt is a request; this is the check. It also protects `JH`, which is
+    computed from those hours, so one invented figure was quietly producing a
+    second.
+
+    Corroboration is deliberately weak — any hour-shaped token anywhere in the
+    message is enough. It is not trying to verify *which* hour was said, only to
+    refuse one the source cannot possibly contain. With no source text to check
+    against (a photo, a replayed payload that kept no transcript) the hours are
+    left alone: silence is not evidence of invention.
+    """
+    text = str(source or "").strip()
+    if not text or _HOUR_IN_TEXT.search(text):
+        return report, []
+    if not (report.heure_entree or report.heure_sortie):
+        return report, []
+    return report.model_copy(update={"heure_entree": None, "heure_sortie": None}), [
+        "heure_non_dite"
+    ]
+
+
 # The same normalizer, under a public name: `/reports/export` has to match a
 # period against the Sheet's own date spellings, and reaching into a private
 # helper from another module is how a rename becomes an outage somewhere else.
@@ -366,7 +433,28 @@ def write_report(
     # one with it, and the totals stay correct because `totals()` and the
     # bordereau sum rows rather than reading one.
     #
-    row = sheets.append_row(tab, cells, list(HEADERS))
+    # An article the bordereau never listed gets a column on this site's tab,
+    # then a value in it. Before this the quantity was extracted correctly and
+    # then dropped on the floor: a report naming forty items across eight
+    # article types filed a row with none of them, because none of the
+    # thirty-five quantity fields is an electrical socket.
+    headers = list(HEADERS)
+    libres = getattr(report, "articles_libres", None) or {}
+    if libres:
+        from app import logs as _logs
+
+        names = _logs.register_articles(libres)
+        for spoken, qty in libres.items():
+            column = names.get(spoken, spoken).strip()
+            if column:
+                cells[column] = _fmt(float(qty))
+        try:
+            headers = sheets.ensure_columns(tab, [names.get(k, k).strip() for k in libres])
+        except Exception as exc:  # noqa: BLE001 — a column is not worth the row
+            warnings.append("article_column_failed")
+            print(f"[journal] ensure_columns({tab}) failed: {exc}"[:200], flush=True)
+
+    row = sheets.append_row(tab, cells, headers)
 
     # If the day already had a row for this technician, this one adds to it, and
     # the sheet says so: the quantities are formatted +80 rather than 80. Only
@@ -423,6 +511,9 @@ WARNING_LABELS = {
     "chantier_cree_non_verifie": "Chantier non confirmé",
     "no_report_content": "Aucune donnée exploitable",
     "stock_ecart": "Écart de stock",
+    "heure_non_dite": "Heure inventée, retirée",
+    "date_declaree_illisible": "Date énoncée illisible",
+    "date_declaree_hors_plage": "Date énoncée hors plage",
 }
 
 
@@ -552,7 +643,10 @@ def resolve_tab(technicien: str, chantier: Optional[str] = None) -> Tuple[str, s
 # The only columns whose Rapports header predates the 2026-08-05 schema.
 # Renaming one orphans every historical row in it, so the old spelling stays
 # and the mapping records the difference.
-_RAPPORTS_RENAMES = {
+#: Public alias. `/reports` puts the figures back on the feed under the header
+#: names the dashboard has always read, so moving them into Postgres stayed a
+#: storage decision rather than a frontend rewrite.
+RAPPORTS_RENAMES = _RAPPORTS_RENAMES = {
     "goulotte_m": "goulottes_m",
     "cables_installes_m": "cables_m",
     "prises_connectees": "bureaux_termines",
@@ -578,7 +672,13 @@ _UNIT_SUFFIXES = (("_min", "min"), ("_m", "m"), ("_u", "u"))
 
 
 def quantity_columns() -> List[Tuple[str, str, str]]:
-    """Every quantity as (Rapports column, the director's label, unit).
+    """Every quantity as (schema field, the director's label, unit).
+
+    Keyed on the schema field since 2026-08-19, not the Rapports header: the
+    quantities left that tab for `report_rows` in Postgres, and the rows this
+    catalogue is used against now carry their schema names. It also removes the
+    silent dependency on a column existing in a spreadsheet before a figure
+    could be totalled at all.
 
     The one catalogue anything reporting on quantities reads, so a new article
     appears in the report the moment it appears in `NUMERIC_COLUMNS` — the
@@ -588,9 +688,7 @@ def quantity_columns() -> List[Tuple[str, str, str]]:
     """
     out: List[Tuple[str, str, str]] = []
     for field in NUMERIC_COLUMNS:
-        column = RAPPORTS_COLUMNS.get(field)
-        if column:
-            out.append((column, *article_label(field)))
+        out.append((field, *article_label(field)))
     return out
 
 
@@ -809,7 +907,10 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
         "heure": payload.get("heure"),
         "canal": payload.get("canal"),
         "technicien": payload.get("technicien"),
-        "role": payload.get("role"),
+        # `role` is a fact about the person, not about the message: `persons`
+        # holds it and `report_rows` keeps a copy per report. A third place for
+        # it on the index tab was a column to scroll past, filled on every row
+        # with a value nobody reads there.
         "chantier": chantier,
         "resume": report.resume,
         "rapport_complet": payload.get("rapport_complet"),
@@ -823,17 +924,45 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
         # click in the Sheet without a second lookup table.
         "correlation_id": payload.get("correlation_id"),
     }
-    for field, column in RAPPORTS_COLUMNS.items():
-        value = getattr(report, field)
-        # An empty list is absence, not a value: written through it would put a
-        # literal `[]` in the cell, which reads as data to anyone scanning the
-        # column and to every `num()` in the dashboard.
-        if value is None or value == [] or value == "":
-            continue
-        # `etages` / `ailes` / `locaux_techniques` are lists; the flat tab is
-        # one cell per column, joined the same way the journal tab joins them.
-        cells[column] = ", ".join(value) if isinstance(value, list) else value
+    # The quantities are deliberately absent. Rapports is the index a human
+    # reads — when, who, where, what was said and a way back to the message —
+    # and it was 65 columns wide because it was also the only place a total
+    # could be computed. That job moved to `report_rows` in Postgres, where a
+    # figure costs no Google read and no column.
+
     return cells
+
+
+def _mirror_postgres(payload: Dict, cells: Dict, chantier: str,
+                     warnings: List[str], rapports_row: Optional[int]) -> None:
+    """The same report, into the store the totals are computed from.
+
+    Fed from `cells` rather than rebuilt, so the row in Postgres and the row in
+    the Sheet cannot describe the same message differently — one derivation,
+    two destinations.
+    """
+    from app import logs
+
+    report = payload.get("report")
+    if not isinstance(report, ExtractedReport):
+        report = ExtractedReport(**(report or {}))
+    data = {f: getattr(report, f) for f in DATA_FIELDS if getattr(report, f) not in (None, [])}
+    logs.record_report_row({
+        "correlation_id": payload.get("correlation_id"),
+        "date": cells.get("date") or "",
+        "heure": cells.get("heure"),
+        "technicien": cells.get("technicien"),
+        "chantier": chantier,
+        "canal": cells.get("canal"),
+        "role": cells.get("role"),
+        "stt_engine": payload.get("stt_engine"),
+        "confidence": payload.get("confidence"),
+        "flag_review": bool(cells.get("flag_review")),
+        "motif_flag": cells.get("motif_flag"),
+        "resume": cells.get("resume"),
+        "rapport_complet": cells.get("rapport_complet"),
+        "rapports_row": rapports_row,
+    }, data)
 
 
 def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
@@ -846,8 +975,9 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
     whole /journal call. Returns the appended row number, or None on
     failure, so /supprimer can clear the mirror row too.
     """
+    cells = _rapports_cells(payload, chantier, warnings)
     try:
-        row = sheets.append_report(_rapports_cells(payload, chantier, warnings))
+        row = sheets.append_report(cells)
         # The dashboard reads this tab, so a follow-up has to read as one here
         # too -- same number format, same reason as the journal row. It costs no
         # extra read: file_report already knows, from the tab it just scanned.
@@ -857,8 +987,14 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
                 row,
                 [RAPPORTS_COLUMNS[f] for f in NUMERIC_COLUMNS if f in RAPPORTS_COLUMNS],
             )
+        _mirror_postgres(payload, cells, chantier, warnings, row)
         return row
     except Exception as exc:  # noqa: BLE001 - best-effort by design
+        # The figures still go to Postgres. Google being unreachable is exactly
+        # when the totals must not also disappear from the dashboard and the
+        # daily mail — that is the whole reason they stopped living in a
+        # spreadsheet column.
+        _mirror_postgres(payload, cells, chantier, warnings, None)
         try:
             from app import logs
 
@@ -950,6 +1086,15 @@ def file_report(payload: Dict) -> Dict:
     report = payload.get("report")
     if not isinstance(report, ExtractedReport):
         report = ExtractedReport(**(report or {}))
+    # Both guards run here, on the one path every filed row goes through — the
+    # live call and the retry drain alike — and before anything is written, so
+    # the journal row, the Rapports mirror and a reception ledgered from the
+    # same message cannot end up on two different days. See `corroborated_hours`
+    # and `resolve_date` for the two 2026-08-19 incidents that put them there.
+    report, hour_warnings = corroborated_hours(report, payload.get("rapport_complet"))
+    when, date_warnings = resolve_date(report.date_declaree, payload.get("date"))
+    payload = {**payload, "date": when}
+
     # A delivery is ledgered whatever else the message carried: « on a reçu
     # 500 m et on a posé 80 » is two different facts and dropping either one
     # loses real work. Only `nature` decides whether a journal row follows.
@@ -966,7 +1111,7 @@ def file_report(payload: Dict) -> Dict:
             "rapports_row": None,
         }
     technicien = str(payload.get("technicien") or "").strip()
-    warnings = list(payload.get("warnings") or [])
+    warnings = list(payload.get("warnings") or []) + hour_warnings + date_warnings
 
     # The voice wins: what the technician said beats the org chart. `chantier`
     # on the payload stays supported (the drain re-files an already-routed row)
@@ -1032,9 +1177,9 @@ def file_report(payload: Dict) -> Dict:
     # Does this technician already have a row for this day on this tab? Both
     # writers need the answer and the tab has already been read, so it is
     # settled once here rather than scanned for twice.
-    follow_up = find_row(tab, str(payload.get("date") or ""), technicien, rows)[0] is not None
+    follow_up = find_row(tab, when, technicien, rows)[0] is not None
     row, stock_warnings = write_report(
-        tab, payload.get("date") or "", technicien, chantier, report,
+        tab, when, technicien, chantier, report,
         {k: v for k, v in metadata.items() if v not in (None, "")},
         rows,
     )

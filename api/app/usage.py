@@ -143,6 +143,93 @@ def _whatsapp() -> Dict[str, Any]:
     return out
 
 
+# ── Is a quota actually hit? ────────────────────────────────────────────────
+#
+# The numbers above are useless to a reader who has to divide them in their
+# head, and the case that matters most — a tier that has actually run out — was
+# the one nothing said out loud. So every provider carries a `state` a UI can
+# colour on and a French `message` it can print as-is. The sentence always names
+# its source, for the same reason `limit_source` exists: "il reste 0 requête"
+# read from a Groq header and the same words derived from a documented ceiling
+# are not the same claim.
+#
+# ponytail: one flat threshold (10 %) rather than stock.py's days-of-cover
+# model — an API quota resets on a fixed window, so there is no consumption rate
+# to project against, and % of the window is the honest unit here.
+PCT_BAS = 10
+
+STATES = ("epuise", "bas", "ok", "inconnu")
+
+
+def _ratio_state(remaining: Optional[int], limit: Optional[int]) -> Optional[str]:
+    """None when there is nothing to divide — never a zero, never a guess."""
+    if remaining is None or not limit:
+        return None
+    if remaining <= 0:
+        return "epuise"
+    return "bas" if remaining * 100 <= limit * PCT_BAS else "ok"
+
+
+def _worst(states: List[str]) -> str:
+    for s in STATES:
+        if s in states:
+            return s
+    return "inconnu"
+
+
+def _assess(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """State + French sentence for one provider. Adds nothing it cannot measure."""
+    label = {"groq": "Groq", "gemini": "Gemini", "whatsapp": "WhatsApp"}.get(
+        entry["provider"], entry["provider"]
+    )
+    source = entry.get("limit_source")
+    origin = {"live": "compteur du fournisseur",
+              "documented": "plafond documenté, non confirmé par le fournisseur"}.get(source, "")
+
+    if entry["provider"] == "whatsapp":
+        # Meta gives a ceiling but not our consumption against it, so there is
+        # no ratio to state — the honest signals are the quality rating and
+        # whether the call answered at all.
+        if entry.get("error"):
+            return {"state": "inconnu",
+                    "message": f"{label} : quota inconnu — {entry['error']}"}
+        sent = entry.get("sent_24h")
+        tier = entry.get("tier") or "inconnu"
+        if str(entry.get("quality") or "").upper() == "RED":
+            return {"state": "bas",
+                    "message": (f"{label} : qualité du numéro dégradée (RED) — Meta réduit "
+                                f"le palier {tier}. {sent} message(s) envoyés en 24 h.")}
+        return {"state": "ok",
+                "message": (f"{label} : palier {tier} (plafond Meta), "
+                            f"{sent} message(s) envoyés en 24 h d'après nos journaux.")}
+
+    req = _ratio_state(entry.get("remaining_requests"), entry.get("limit_requests"))
+    tok = _ratio_state(entry.get("remaining_tokens"), entry.get("limit_tokens"))
+    known = [s for s in (req, tok) if s]
+    if not known:
+        return {"state": "inconnu",
+                "message": (f"{label} : {entry['calls_24h']} appel(s) en 24 h, "
+                            f"plafond inconnu — rien à comparer.")}
+
+    state = _worst(known)
+    # "jetons restants" / "requêtes restantes" — the agreement is part of the
+    # sentence, and this string is printed to the operator as it stands.
+    unit, agreed = ("requêtes", "restantes") if req == state else ("jetons", "restants")
+    left = entry.get("remaining_requests") if unit == "requêtes" else entry.get("remaining_tokens")
+    ceiling = entry.get("limit_requests") if unit == "requêtes" else entry.get("limit_tokens")
+    reset = entry.get("reset_requests") if unit == "requêtes" else entry.get("reset_tokens")
+    tail = f" Réinitialisation dans {reset}." if reset else ""
+    if state == "epuise":
+        head = (f"Quota {label} épuisé : plus aucune {unit[:-1]} disponible "
+                f"sur {ceiling} ({origin}).")
+    elif state == "bas":
+        head = (f"Quota {label} bas : {left} {unit} {agreed} sur {ceiling} "
+                f"({left * 100 // ceiling} %, {origin}).")
+    else:
+        head = f"{label} : {left} {unit} {agreed} sur {ceiling} ({origin})."
+    return {"state": state, "message": head + tail}
+
+
 def snapshot() -> Dict[str, Any]:
     """Everything the usage panel draws. One database read, one Graph call."""
     from app import logs
@@ -153,7 +240,8 @@ def snapshot() -> Dict[str, Any]:
         latest = logs.latest_usage_quota()
         wa_sent = logs.whatsapp_sent_since(since)
     except Exception as exc:  # noqa: BLE001
-        return {"providers": [], "error": str(exc)[:200]}
+        return {"providers": [], "error": str(exc)[:200],
+                "state": "inconnu", "hit": False}
 
     providers: List[Dict[str, Any]] = []
     for name in ("groq", "gemini"):
@@ -203,4 +291,11 @@ def snapshot() -> Dict[str, Any]:
     wa = _whatsapp()
     wa["sent_24h"] = wa_sent
     providers.append(wa)
-    return {"providers": providers, "window_hours": 24}
+    for entry in providers:
+        entry.update(_assess(entry))
+    # The worst state travels to the top so a header badge does not have to
+    # re-derive it, and `hit` is the one question the TO-DO asked: has any free
+    # tier actually run out right now.
+    states = [e["state"] for e in providers]
+    return {"providers": providers, "window_hours": 24,
+            "state": _worst(states), "hit": "epuise" in states}

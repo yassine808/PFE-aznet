@@ -9,6 +9,7 @@ import {
   HourglassMediumIcon,
   PaperPlaneRightIcon,
   PencilSimpleIcon,
+  ImageIcon,
   SpeakerHighIcon,
   TextAlignLeftIcon,
   UserIcon,
@@ -403,7 +404,14 @@ function ExchangeIncoming({
 }) {
   const { t } = useI18n()
   const src = r.media_id != null ? mediaSrc(r.media_id) : null
-  const voice = src !== null
+  /*
+    A photo report archives an image blob in the same column an audio note uses,
+    and this bubble fed every blob to an `<audio>` element: the picture the
+    technician sent rendered as a player that plays nothing and says "Note
+    vocale". `kind` is what the two shapes differ by, and n8n has always sent it.
+  */
+  const photo = (r.kind ?? '').trim().toLowerCase() === 'image'
+  const voice = src !== null && !photo
 
   return (
     <div className="flex justify-start">
@@ -412,22 +420,36 @@ function ExchangeIncoming({
           <ChannelIcon channel={(r.canal ?? '').trim().toLowerCase()} size={12} />
           {address && <span className="tabular select-all">{address}</span>}
           <span className="flex items-center gap-1">
-            {voice ? <SpeakerHighIcon size={11} /> : <TextAlignLeftIcon size={11} />}
-            {voice ? t('inbox.audio') : t('inbox.text')}
+            {photo ? (
+              <ImageIcon size={11} />
+            ) : voice ? (
+              <SpeakerHighIcon size={11} />
+            ) : (
+              <TextAlignLeftIcon size={11} />
+            )}
+            {photo ? t('inbox.photo') : voice ? t('inbox.audio') : t('inbox.text')}
           </span>
         </div>
 
-        {src && (
-          <audio
-            controls
-            preload="none"
-            src={src}
-            className="h-9 w-full min-w-[16rem]"
-            aria-label={t('inbox.audio')}
-          >
-            <track kind="captions" />
-          </audio>
-        )}
+        {src &&
+          (photo ? (
+            <img
+              src={src}
+              alt={t('inbox.photo')}
+              loading="lazy"
+              className="border-line max-h-80 w-auto max-w-full rounded-lg border object-contain"
+            />
+          ) : (
+            <audio
+              controls
+              preload="none"
+              src={src}
+              className="h-9 w-full min-w-[16rem]"
+              aria-label={t('inbox.audio')}
+            >
+              <track kind="captions" />
+            </audio>
+          ))}
 
         {r.text &&
           (voice ? (
@@ -1138,7 +1160,9 @@ export function InboxPage({
   }
 
   if (reports.error) return <ErrorState message={reports.error} onRetry={reports.reload} />
-  if (reports.loading) {
+  // First paint only — a later poll never re-shows this, and an exchanges
+  // failure still leaves the thread readable (its own `error` is not gated on).
+  if (reports.loading || (exchanges.loading && !exchanges.data)) {
     return (
       <div className="flex flex-col gap-4 pt-8">
         {[0, 1, 2].map((i) => (

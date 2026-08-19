@@ -1,14 +1,26 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { BuildingsIcon, CaretRightIcon, TriangleIcon, WarningIcon } from '@phosphor-icons/react'
+import {
+  BuildingsIcon,
+  CaretRightIcon,
+  CheckIcon,
+  PencilSimpleIcon,
+  TriangleIcon,
+  WarningIcon,
+} from '@phosphor-icons/react'
 import {
   api,
   bordereau,
+  confirmArticle,
+  deleteArticle,
   deleteChantier,
+  freeArticles,
+  renameArticle,
   useApi,
   verifyChantier,
   type BordereauArticle,
   type Chantier,
+  type FreeArticle,
   type MaterialAlert,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -242,6 +254,140 @@ function UnverifiedSites({
   )
 }
 
+/**
+ * Articles a technician reported that no bordereau lists.
+ *
+ * A review, not an approval gate. The column and its figures already exist by
+ * the time a row appears here — the pipeline never makes a technician wait for
+ * a human — so the three actions are about the *name*: accept it, correct it,
+ * or reject a reading nobody recognises. Correcting onto an existing name
+ * merges the two columns, which is the only way to join two spellings the
+ * normaliser cannot: "prise 2P+T" and "prise industrielle 2P+T" are one socket
+ * to an electrician and two different word sets to a machine.
+ */
+function FreeArticles() {
+  const { t } = useI18n()
+  const { user } = useAuth()
+  const articles = useApi('free-articles', freeArticles)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<FreeArticle | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const pending = (articles.data?.articles ?? []).filter((a) => !a.confirmed)
+  if (articles.loading && !articles.data) return <Skeleton className="h-20" />
+  if (pending.length === 0) return null
+
+  const run = (slug: string, fn: () => Promise<void>) => async () => {
+    setBusy(slug)
+    setError(null)
+    try {
+      await fn()
+      articles.reload()
+      setEditing(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+      setPendingDelete(null)
+    }
+  }
+
+  return (
+    <motion.div variants={rise}>
+      <Band title={t('chantiers.materials')} aside={String(pending.length)}>
+        <p className="text-ink-muted max-w-[70ch] text-xs leading-relaxed">
+          {t('chantiers.materialsIntro')}
+        </p>
+        <ul className="border-line divide-line/70 divide-y border-t">
+          {pending.map((a) => (
+            <li key={a.slug} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
+              {editing === a.slug ? (
+                <>
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder={t('chantiers.renamePlaceholder')}
+                    aria-label={t('chantiers.rename')}
+                    className="border-line bg-surface text-ink focus-visible:ring-accent min-w-0 flex-1 rounded-md border px-2 py-1 text-sm outline-none focus-visible:ring-2"
+                  />
+                  <button
+                    type="button"
+                    disabled={busy === a.slug || !draft.trim()}
+                    onClick={run(a.slug, () => renameArticle(a.slug, draft.trim()))}
+                    className="border-line bg-surface text-ink hover:border-line-strong cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors active:translate-y-px disabled:opacity-50"
+                  >
+                    {t('chantiers.save')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(null)}
+                    className="text-ink-faint hover:text-ink cursor-pointer text-xs transition-colors"
+                  >
+                    {t('chantiers.cancel')}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-ink min-w-0 flex-1 truncate text-sm">{a.designation}</span>
+                  <span className="tabular text-ink-faint shrink-0 text-[0.6875rem]">
+                    {t('chantiers.seen', { n: String(a.seen) })}
+                  </span>
+                  {user?.role === 'directeur' && (
+                    <span className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={busy === a.slug}
+                        onClick={run(a.slug, () => confirmArticle(a.slug))}
+                        className="border-line bg-surface text-ink hover:border-line-strong focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-50"
+                      >
+                        <CheckIcon size={11} />
+                        {t('chantiers.confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy === a.slug}
+                        onClick={() => {
+                          setEditing(a.slug)
+                          setDraft(a.designation)
+                        }}
+                        className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-50"
+                      >
+                        <PencilSimpleIcon size={11} />
+                        {t('chantiers.rename')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy === a.slug}
+                        onClick={() => setPendingDelete(a)}
+                        className="border-status-fail/40 text-status-fail hover:bg-status-fail focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors outline-none hover:text-white focus-visible:ring-2 active:translate-y-px disabled:opacity-50"
+                      >
+                        {t('chantiers.delete')}
+                      </button>
+                    </span>
+                  )}
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+        {error && <p className="text-status-fail text-xs">{error}</p>}
+      </Band>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        target={pendingDelete?.designation ?? ''}
+        body={t('chantiers.deleteArticleSure')}
+        busy={busy !== null}
+        onConfirm={() => {
+          if (pendingDelete) void run(pendingDelete.slug, () => deleteArticle(pendingDelete.slug))()
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
+    </motion.div>
+  )
+}
+
 /** One contract line as a ledger row: figures right, meter under the percentage. */
 function ArticleRow({ article: a }: { readonly article: BordereauArticle }) {
   const { t } = useI18n()
@@ -465,6 +611,8 @@ export function ChantiersPage() {
       {/* First, and only when it exists: it is the only band that asks the
           director to do something, and it disappears once nothing is pending. */}
       <UnverifiedSites chantiers={chantiers} />
+
+      <FreeArticles />
 
       <motion.div variants={rise}>
         <MaterialAlerts />

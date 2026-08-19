@@ -18,21 +18,21 @@ from app import docx_report, journal
 ROWS = [
     {
         "date": "2026-08-16", "technicien": "Yassine", "chantier": "DGH",
-        "goulottes_m": "40", "cables_m": "120,5", "bureaux_termines": "3",
-        "panneaux_raccordes": "1", "flag_review": "TRUE",
+        "goulotte_m": "40", "cables_installes_m": "120,5", "prises_connectees": "3",
+        "panneaux_prises_brassees": "1", "flag_review": "TRUE",
         # Two columns the pre-2026-08-16 renderer could not name, and so could
         # never print however much of them was installed.
         "fibre_m": "210", "pigtail_sc_u": "12",
     },
     {
         "date": "2026-08-16", "technicien": "Yassine", "chantier": "DGH",
-        "goulottes_m": "10", "cables_m": "", "bureaux_termines": "",
-        "panneaux_raccordes": "", "flag_review": "",
+        "goulotte_m": "10", "cables_installes_m": "", "prises_connectees": "",
+        "panneaux_prises_brassees": "", "flag_review": "",
     },
     {
         "date": "2026-08-16", "technicien": "", "chantier": "ACAPS",
-        "goulottes_m": "abc", "cables_m": "60", "bureaux_termines": "2",
-        "panneaux_raccordes": "0", "flag_review": "oui", "fibre_m": "40",
+        "goulotte_m": "abc", "cables_installes_m": "60", "prises_connectees": "2",
+        "panneaux_prises_brassees": "0", "flag_review": "oui", "fibre_m": "40",
     },
 ]
 
@@ -82,7 +82,7 @@ def test_by_technician_groups_and_carries_its_own_totals():
     assert rows[0]["others"] == {"DGH"}
     # The split under a total is computed by the same call as the total, so the
     # two can never come from two different sums.
-    assert rows[0]["totals"]["goulottes_m"] == 50.0
+    assert rows[0]["totals"]["goulotte_m"] == 50.0
     assert rows[0]["totals"]["fibre_m"] == 210.0
     # An unattributed row keeps its own line rather than being dropped: it is
     # still work that was reported, and hiding it would make the table's

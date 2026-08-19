@@ -95,13 +95,20 @@ def test_every_data_field_reaches_the_rapports_mirror():
     assert set(DATA_FIELDS) == set(RAPPORTS_COLUMNS)
 
 
-def test_location_lists_reach_the_mirror_as_text():
+def test_locations_and_quantities_no_longer_reach_the_flat_tab():
+    """Both left Rapports on 2026-08-19, in opposite directions.
+
+    The locations went to the site tab, where the rest of a day's detail lives;
+    the quantities went to `report_rows` in Postgres, where a total costs no
+    Google read. Rapports keeps the index a person reads — the assertion that
+    matters now is that neither shows up here."""
     cells = _rapports_cells({"report": rep(etages=["E1", "E2"], fibre_m=120)}, "DGH", [])
-    assert cells["etages"] == "E1, E2"
-    assert cells["fibre_m"] == 120
-    # An empty list is absence. Written through, it puts a literal "[]" in the
-    # cell, which reads as data to anyone scanning the column.
+    assert "etages" not in cells
+    assert "fibre_m" not in cells
     assert "ailes" not in cells
+    # What it does still carry: where, and what was said about it.
+    assert cells["chantier"] == "DGH"
+    assert "resume" in cells
 
 
 def test_quantity_fields_match_the_journal_columns():

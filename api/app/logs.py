@@ -13,12 +13,13 @@ psycopg2 is imported lazily inside functions so the test suite keeps running
 with no database and no API keys (see CLAUDE.md).
 """
 import json
+import re
 import os
 import unicodedata
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from app.config import settings
 
@@ -736,6 +737,69 @@ CREATE TABLE IF NOT EXISTS receptions (
     correlation_id TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Articles a technician reported that no bordereau lists.
+--
+-- The catalogue came from three cabling bordereaux, so electricity, CCTV and
+-- plumbing are barely in it: a real report listing four double sockets, nine
+-- switches and two electrical panels had nowhere to put a single one of them
+-- and lost forty items to prose. A new article now becomes a column on the
+-- site's own tab and a row here.
+--
+-- Global rather than per-chantier on purpose: the column belongs to the site
+-- that reported it, but the NAME is shared, so a second site reporting the
+-- same thing reuses the wording instead of inventing a parallel spelling.
+-- `slug` is the normalised form and the identity; `designation` is what the
+-- sheet shows and what a confirmation can rewrite.
+CREATE TABLE IF NOT EXISTS article_registry (
+    slug        TEXT PRIMARY KEY,
+    designation TEXT NOT NULL,
+    unite       TEXT,
+    confirmed   BOOLEAN NOT NULL DEFAULT FALSE,
+    seen        INTEGER NOT NULL DEFAULT 0,
+    first_seen  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One row per filed report, holding every figure the Sheet holds.
+--
+-- The Rapports tab used to be both things at once: the flat feed a human
+-- reads, and the only place the daily mail, the weekly mail, the .docx tables
+-- and the dashboard metrics could add a quantity up. That made it 65 columns
+-- wide, most of them unreadable, and it meant every figure cost a Google read
+-- on a free quota. Splitting the two jobs: the Sheet keeps what a person
+-- reads, this table keeps what a machine counts.
+--
+-- `data` is the whole ExtractedReport as JSON rather than 35 typed columns —
+-- the schema gains article fields regularly (25 arrived in one day), and a
+-- table that has to be migrated for each one is a table that silently lags
+-- the schema. Totals are summed in Python from this, where `NUMERIC_COLUMNS`
+-- already says which keys are quantities.
+--
+-- `correlation_id` is UNIQUE for the same reason `receptions` keys on it: n8n
+-- retries, and the drain replays parked payloads. A doubled report is the one
+-- error that makes every total wrong without looking wrong.
+CREATE TABLE IF NOT EXISTS report_rows (
+    id             BIGSERIAL PRIMARY KEY,
+    correlation_id TEXT UNIQUE,
+    date           TEXT NOT NULL,
+    heure          TEXT,
+    technicien     TEXT,
+    chantier       TEXT,
+    canal          TEXT,
+    role           TEXT,
+    stt_engine     TEXT,
+    confidence     NUMERIC,
+    flag_review    BOOLEAN NOT NULL DEFAULT FALSE,
+    motif_flag     TEXT,
+    resume         TEXT,
+    rapport_complet TEXT,
+    rapports_row   INTEGER,
+    data           JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS report_rows_date_idx ON report_rows (date);
+CREATE INDEX IF NOT EXISTS report_rows_chantier_idx ON report_rows (chantier);
+
 -- One row per model API call: what it cost us, and what the vendor said was
 -- left. The whole project runs on free tiers and nothing measured how close any
 -- of them was to its ceiling — a quota running out shows up as the chain
@@ -1989,7 +2053,16 @@ def upsert_article(chantier_id: int, designation: str, unite: str = "U",
         return _iso(dict(_one(cur) or {}))
 
 
-def delete_article(article_id: int) -> bool:
+def delete_bordereau_article(article_id: int) -> bool:
+    """Remove one contract line from a site's bordereau.
+
+    Renamed 2026-08-19. It was `delete_article`, and so was the free-article
+    reject added the same day — the second definition silently shadowed this
+    one, so every call reached the wrong function with the wrong argument type.
+    Two things called "article" in this codebase and they are not the same
+    thing: a bordereau line is a contract commitment with a quantity, a free
+    article is a name a technician used that no bordereau lists.
+    """
     with _cursor() as cur:
         cur.execute("DELETE FROM articles WHERE id = %s", (article_id,))
         return cur.rowcount > 0
@@ -2756,3 +2829,299 @@ def stt_usage(days: int = 7) -> Dict[str, Any]:
             for r in rows
         ],
     }
+
+
+# --- the figures, kept where a machine can count them ----------------------
+
+
+def record_report_row(row: dict, data: dict) -> None:
+    """Mirror one filed report into Postgres. Never raises.
+
+    Called beside the Sheet write, not instead of it: the Sheet stays the
+    record the director reads and this is the copy every total is computed
+    from. Best-effort for the same reason the Rapports mirror is — a report
+    that reached the journal must not be lost because a second store was
+    unreachable.
+
+    `ON CONFLICT DO UPDATE` rather than DO NOTHING: n8n retries and the retry
+    drain replays parked payloads, and a replay carries the same figures, so
+    the later write is the corrected one rather than a duplicate to discard.
+    """
+    try:
+        with _cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO report_rows (correlation_id, date, heure, technicien,
+                    chantier, canal, role, stt_engine, confidence, flag_review,
+                    motif_flag, resume, rapport_complet, rapports_row, data)
+                VALUES (%(correlation_id)s, %(date)s, %(heure)s, %(technicien)s,
+                    %(chantier)s, %(canal)s, %(role)s, %(stt_engine)s, %(confidence)s,
+                    %(flag_review)s, %(motif_flag)s, %(resume)s, %(rapport_complet)s,
+                    %(rapports_row)s, %(data)s)
+                ON CONFLICT (correlation_id) DO UPDATE SET
+                    date = EXCLUDED.date, heure = EXCLUDED.heure,
+                    technicien = EXCLUDED.technicien, chantier = EXCLUDED.chantier,
+                    canal = EXCLUDED.canal, role = EXCLUDED.role,
+                    stt_engine = EXCLUDED.stt_engine, confidence = EXCLUDED.confidence,
+                    flag_review = EXCLUDED.flag_review, motif_flag = EXCLUDED.motif_flag,
+                    resume = EXCLUDED.resume, rapport_complet = EXCLUDED.rapport_complet,
+                    rapports_row = COALESCE(EXCLUDED.rapports_row, report_rows.rapports_row),
+                    data = EXCLUDED.data
+                """,
+                {**row, "data": json.dumps(data, ensure_ascii=False, default=str)},
+            )
+    except Exception as exc:  # noqa: BLE001 — a mirror never costs a report
+        print(f"[logs] report_rows mirror failed: {exc}"[:200], flush=True)
+
+
+def list_report_rows(dates: Optional[Sequence[str]] = None,
+                     chantier: Optional[str] = None) -> List[dict]:
+    """Filed reports as flat dicts, shaped like the Rapports rows they replace.
+
+    Returned with `data` merged into the top level so every existing caller —
+    `journal.rapports_totals`, the report payloads, the .docx tables — keeps
+    reading `row["goulotte_m"]` exactly as it read the Sheet column. That is
+    the whole point of the shape: the figures moved stores, not formats.
+    """
+    # Unconfigured is not the same as unreachable. With no DATABASE_URL there
+    # is no store to ask and the answer is "no rows" — which is what keeps the
+    # test suite runnable with no database, the rule this project holds to. A
+    # store that IS configured and fails still raises, because a daily report
+    # quietly mailed without its figures is worse than one that does not send.
+    if not settings.database_url:
+        return []
+    where, params = [], {}
+    if dates:
+        where.append("date = ANY(%(dates)s)")
+        params["dates"] = list(dates)
+    if chantier:
+        where.append("chantier = %(chantier)s")
+        params["chantier"] = chantier
+    sql = "SELECT * FROM report_rows"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY date, heure, id"
+    with _cursor() as cur:
+        cur.execute(sql, params)
+        out = []
+        for r in cur.fetchall():
+            row = dict(r)
+            data = row.pop("data", None) or {}
+            row.pop("id", None)
+            out.append({**row, **data})
+        return out
+
+
+def register_articles(items: Dict[str, float]) -> Dict[str, str]:
+    """Record free articles and hand back {slug: designation to use}.
+
+    The designation returned is the one already registered when the slug is
+    known, not the wording of this message: "prises doubles étanches" and
+    "prise double étanche encastrée" normalise to the same slug, and the sheet
+    must not grow a second column because a technician pluralised differently.
+    First spelling wins until someone confirms a better one.
+    """
+    if not items:
+        return {}
+    out: Dict[str, str] = {}
+    try:
+        with _cursor() as cur:
+            for designation, _qty in items.items():
+                slug = _slug_article(designation)
+                if not slug:
+                    continue
+                cur.execute(
+                    """
+                    INSERT INTO article_registry (slug, designation, seen)
+                    VALUES (%s, %s, 1)
+                    ON CONFLICT (slug) DO UPDATE
+                       SET seen = article_registry.seen + 1, last_seen = now()
+                    RETURNING designation
+                    """,
+                    (slug, designation.strip()),
+                )
+                row = _one(cur)
+                out[designation] = (row or {}).get("designation", designation.strip())
+    except Exception as exc:  # noqa: BLE001 — never costs the report
+        print(f"[logs] register_articles failed: {exc}"[:200], flush=True)
+        return {d: d.strip() for d in items}
+    return out
+
+
+def list_article_registry(unconfirmed_only: bool = False) -> List[dict]:
+    """Every free article, newest first. The Sites page confirms from this."""
+    sql = "SELECT * FROM article_registry"
+    if unconfirmed_only:
+        sql += " WHERE confirmed = FALSE"
+    sql += " ORDER BY last_seen DESC"
+    with _cursor() as cur:
+        cur.execute(sql)
+        return [dict(r) for r in cur.fetchall()]
+
+
+#: Words that carry no article identity. Dropped before comparing, so
+#: "chemin de câbles" and "chemin câbles" are one article and not two.
+_ARTICLE_STOPWORDS = frozenset({
+    "de", "du", "des", "d", "le", "la", "les", "l", "et", "a", "au", "aux",
+    "en", "avec", "pour", "un", "une", "type", "sur",
+})
+
+
+def _slug_article(designation: str) -> str:
+    """A designation reduced to its identity: accents, case, plural, **order**.
+
+    The words are sorted, and that is the whole point. A technician writes
+    "prise double étanche encastrée" one day and "prise étanche double
+    encastrée" the next; with the order preserved those were two slugs, two
+    columns and one article counted in both — 4 in one column, 13 in the other,
+    and a total that is right in neither. Adjective order carries no meaning in
+    an article name, so it must not carry identity either.
+
+    Still deliberately not fuzzy, the same rule site names follow: this merges
+    two *spellings of the same words*, never two different words. "prise simple
+    encastrée" and "prise simple étanche encastrée" stay apart, because
+    étanche is a real difference and a real price.
+    """
+    text = unicodedata.normalize("NFKD", (designation or "").lower())
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = re.sub(r"[^a-z0-9+]+", " ", text).strip()
+    words = []
+    for w in text.split():
+        if w in _ARTICLE_STOPWORDS:
+            continue
+        # The obvious French plural, so "prises doubles" == "prise double".
+        words.append(w[:-1] if len(w) > 3 and w.endswith("s") else w)
+    return " ".join(sorted(words))
+
+
+def _rekey_free_article(slug: str, designation: Optional[str]) -> int:
+    """Drop or re-key one free article inside every `report_rows.data`.
+
+    `report_rows` is what the daily mail, the weekly mail, the .docx tables and
+    the dashboard metrics count, so the registry row and the Sheet column are
+    only two thirds of an article. Deleting or renaming those two and leaving
+    the JSONB alone left the figures behind under a name that no longer exists:
+    a rejected article kept counting forever, and a renamed one counted under
+    its old spelling, both invisibly.
+
+    `designation is None` **deletes**: the quantity is removed, and that does
+    change historical totals. It is meant to — the endpoint already deletes the
+    Sheet column "figures included", and the two stores disagreeing is worse
+    than either answer. The caller records the row count in the audit trail so
+    the change is a fact somebody can find.
+
+    A rename **merges by addition**, never by overwrite: a single row can carry
+    both spellings ("prise 2P+T" and "prise industrielle 2P+T" on the same
+    message), and picking one would silently drop the other's quantity while
+    keeping the old key would double-count it. Same rule the journal's daily
+    merge follows.
+
+    Matching is by slug rather than by designation because the JSONB key is
+    what the technician *said*, not what the registry stored — first spelling
+    wins there, so the two are routinely different strings for one article.
+    """
+    # Same rule the rest of this module follows: unconfigured is not
+    # unreachable — with no DATABASE_URL there are no rows to re-key, and the
+    # suite has to run without a database.
+    if not settings.database_url:
+        return 0
+    changed = 0
+    target_slug = _slug_article(designation) if designation else ""
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT id, data -> 'articles_libres' AS libres FROM report_rows "
+            "WHERE data ? 'articles_libres'"
+        )
+        for r in list(cur.fetchall()):
+            libres = dict((r.get("libres") or {}))
+            hits = [k for k in libres if _slug_article(k) == slug]
+            if not hits:
+                continue
+            moved = 0.0
+            for k in hits:
+                try:
+                    moved += float(libres.pop(k))
+                except (TypeError, ValueError):  # a non-numeric cell is not a quantity
+                    pass
+            if designation:
+                key = next((k for k in libres if _slug_article(k) == target_slug), designation)
+                libres[key] = float(libres.get(key) or 0.0) + moved
+            cur.execute(
+                "UPDATE report_rows SET data = jsonb_set(data, '{articles_libres}', %s::jsonb) "
+                "WHERE id = %s",
+                (json.dumps(libres, ensure_ascii=False), r["id"]),
+            )
+            changed += 1
+    return changed
+
+
+def confirm_article(slug: str) -> bool:
+    """Mark a free article as accepted. Returns False when it is unknown."""
+    with _cursor() as cur:
+        cur.execute("UPDATE article_registry SET confirmed = TRUE WHERE slug = %s", (slug,))
+        return cur.rowcount > 0
+
+
+def rename_article(slug: str, designation: str) -> dict:
+    """Rename a free article, merging it into another when the name collides.
+
+    Renaming is how a wrong reading gets corrected, and how two spellings that
+    the slug could not tell apart get joined by hand — "prise 2P+T" and "prise
+    industrielle 2P+T" are the same socket to an electrician and two different
+    word sets to a normaliser. So a rename that lands on an existing article is
+    a **merge**, not an error: the caller folds the columns, this drops the
+    row.
+
+    Returns {"merged_into": slug} or {"slug": new_slug} so the caller knows
+    which of the two happened.
+    """
+    designation = (designation or "").strip()
+    if not designation:
+        raise LogStoreError("designation is required")
+    new_slug = _slug_article(designation)
+    if not new_slug:
+        raise LogStoreError("designation has no usable words")
+    with _cursor() as cur:
+        cur.execute("SELECT slug FROM article_registry WHERE slug = %s", (new_slug,))
+        exists = _one(cur) is not None
+        if exists and new_slug != slug:
+            cur.execute("DELETE FROM article_registry WHERE slug = %s", (slug,))
+            merged = True
+        else:
+            cur.execute(
+                "UPDATE article_registry SET slug = %s, designation = %s, confirmed = TRUE "
+                "WHERE slug = %s",
+                (new_slug, designation, slug),
+            )
+            if cur.rowcount == 0:
+                raise LogStoreError(f"no article {slug!r}")
+            merged = False
+    # After the registry, and outside its transaction on purpose: the figures
+    # in `report_rows` are keyed on the old wording too, and a rename that
+    # stopped at the registry left every total counting a name nobody could
+    # look up any more.
+    rows = _rekey_free_article(slug, designation)
+    if merged:
+        return {"merged_into": new_slug, "rows": rows}
+    return {"slug": new_slug, "designation": designation, "rows": rows}
+
+
+def delete_article(slug: str) -> Optional[Tuple[str, int]]:
+    """Drop a free article and its figures. Returns (designation, rows) or None.
+
+    The figures go with it. Rejecting an article is a statement that the thing
+    was never real — a misheard word, a duplicate reading — so leaving its
+    quantities inside `report_rows.data` would keep them in every total the
+    reports compute, under a designation the registry can no longer name. The
+    row count comes back so the caller can put it in the audit trail; that
+    entry is the only remaining trace, which is why it is not optional.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            "DELETE FROM article_registry WHERE slug = %s RETURNING designation", (slug,)
+        )
+        row = _one(cur)
+        if row is None:
+            return None
+        designation = row.get("designation")
+    return designation, _rekey_free_article(slug, None)

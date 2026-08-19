@@ -764,10 +764,44 @@ def list_messages(
 # No auth: dashboard + API run only on the admin's machine (localhost), decided 2026-07-23.
 @app.get("/reports", responses={502: {"description": "Sheets read failed"}})
 def list_reports(caller: dict = Depends(auth.require_human)) -> dict:
+    """The Rapports feed, with its figures put back on.
+
+    Rapports holds only the index columns since 2026-08-19 — when, who, where,
+    what was said, a way back to the message. The quantities live in
+    `report_rows`, so they are merged back in here under the header names the
+    dashboard has always read (`goulottes_m`, `cables_m`, …): the split is a
+    storage decision and the browser should not have to know about it.
+
+    Best-effort on the Postgres side. A figure that cannot be fetched leaves the
+    row without it, exactly as an empty cell did; it must never turn the whole
+    feed into a 502, because the feed is also the inbox.
+    """
     try:
-        return {"reports": sheets.read_reports()}
+        rows = sheets.read_reports()
     except sheets.SheetsError as exc:
         raise HTTPException(502, f"sheets read failed: {exc}") from exc
+    try:
+        renames = journal.RAPPORTS_RENAMES
+        figures = {
+            r["correlation_id"]: r
+            for r in logs.list_report_rows()
+            if r.get("correlation_id")
+        }
+        for row in rows:
+            extra = figures.get((row.get("correlation_id") or "").strip())
+            if not extra:
+                continue
+            for field in journal.DATA_FIELDS:
+                value = extra.get(field)
+                if value in (None, [], ""):
+                    continue
+                row.setdefault(
+                    renames.get(field, field),
+                    ", ".join(str(v) for v in value) if isinstance(value, list) else value,
+                )
+    except Exception as exc:  # noqa: BLE001 — figures are a bonus, the feed is not
+        logs.write_safe("api", "error", message=f"/reports figure merge failed: {exc}")
+    return {"reports": rows}
 
 
 @app.get("/reports/generated", responses={502: {"description": "Log store unreachable"}})
@@ -1921,6 +1955,78 @@ def assign_chantier(person_id: int, payload: NewChantierAssignment,
         raise HTTPException(502, str(exc)) from exc
 
 
+# --- free articles: what the bordereau never listed ------------------------
+
+
+class ArticleRename(BaseModel):
+    designation: str = Field(..., min_length=1, max_length=120)
+
+
+@app.get("/articles", responses={502: {"description": "Log store unreachable"}})
+def list_articles(caller: dict = Depends(auth.require_user)) -> dict:
+    """Articles a technician reported that no bordereau lists.
+
+    `confirmed` false is the queue the Sites page shows: the column and its
+    figures already exist — a report is never held back waiting for a human —
+    so this is a review, not an approval gate.
+    """
+    try:
+        return {"articles": logs.list_article_registry()}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.patch("/articles/{slug}", responses={404: {"description": "Unknown article"}, 502: {"description": "Log store unreachable"}})
+def confirm_or_rename_article(slug: str, body: Optional[ArticleRename] = None,
+                              caller: dict = Depends(auth.require_director)) -> dict:
+    """Accept an article as it stands, or rename it — renaming onto an existing
+    name merges the two, in the registry and in every tab that carries them.
+
+    Director-only, like confirming a site: it rewrites a column header the
+    whole spreadsheet reads.
+    """
+    try:
+        if body is None or not body.designation.strip():
+            if not logs.confirm_article(slug):
+                raise HTTPException(404, f"no article {slug!r}")
+            auth.record(caller, "article_confirmed", slug)
+            return {"ok": True, "slug": slug}
+        before = next((a for a in logs.list_article_registry() if a["slug"] == slug), None)
+        if before is None:
+            raise HTTPException(404, f"no article {slug!r}")
+        result = logs.rename_article(slug, body.designation)
+        moved = sheets.rename_column(before["designation"], body.designation.strip())
+        auth.record(caller, "article_renamed", slug,
+                    before=before["designation"],
+                    after=f"{body.designation.strip()} ({result['rows']} lignes)")
+        return {"ok": True, "tabs": moved, **result}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.delete("/articles/{slug}", responses={404: {"description": "Unknown article"}, 502: {"description": "Log store unreachable"}})
+def reject_article(slug: str, caller: dict = Depends(auth.require_director)) -> dict:
+    """Drop a free article and its column, figures included.
+
+    Only reachable deliberately: this is for a reading nobody recognises, and
+    the numbers under it are worth less than a column named after a mistake.
+    """
+    try:
+        dropped = logs.delete_article(slug)
+        if dropped is None:
+            raise HTTPException(404, f"no article {slug!r}")
+        designation, rows = dropped
+        removed = sheets.delete_column(designation)
+        # The row count goes in the audit entry because the figures are gone
+        # from `report_rows` with the column: that entry is the only place left
+        # that says a total moved, and by how much of the history.
+        auth.record(caller, "article_rejected", slug,
+                    before=designation, after=f"{rows} lignes recalculées")
+        return {"ok": True, "tabs": removed, "rows": rows}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 @app.get("/chantiers/{chantier_id}/bordereau", responses={404: {"description": "Chantier not found"}, 502: {"description": "Sheets or log store unreachable"}})
 def get_bordereau(chantier_id: int, caller: dict = Depends(auth.require_user)) -> dict:
     """Contract quantities against what the journal actually recorded.
@@ -2015,10 +2121,14 @@ def add_article(chantier_id: int, payload: NewArticle,
         raise HTTPException(422 if "required" in str(exc) else 502, str(exc)) from exc
 
 
-@app.delete("/articles/{article_id}", responses={502: {"description": "Log store unreachable"}})
+# `/bordereau-articles/…`, not `/articles/{article_id}`: the free-article
+# endpoints above claim `/articles/{slug}`, FastAPI matches the first route
+# that fits, and `{slug}` fits anything — so this one had become unreachable
+# the moment those were added. Two resources cannot share one path shape.
+@app.delete("/bordereau-articles/{article_id}", responses={502: {"description": "Log store unreachable"}})
 def remove_article(article_id: int, caller: dict = Depends(auth.require_director)) -> dict:
     try:
-        deleted = logs.delete_article(article_id)
+        deleted = logs.delete_bordereau_article(article_id)
         auth.record(caller, "article_removed", target=str(article_id))
         return {"deleted": deleted}
     except logs.LogStoreError as exc:

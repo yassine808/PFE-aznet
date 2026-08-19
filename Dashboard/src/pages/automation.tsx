@@ -6,6 +6,7 @@ import {
   BroomIcon,
   CalendarBlankIcon,
   CheckIcon,
+  ClockCountdownIcon,
   EnvelopeSimpleIcon,
   PaperPlaneTiltIcon,
   PlusIcon,
@@ -24,7 +25,7 @@ import {
   type JobStatus,
 } from '@/lib/api'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
-import { ErrorState, Skeleton } from '@/components/states'
+import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
 
 // The four fields this form edits. `stt_chain` is deliberately absent even
@@ -491,7 +492,11 @@ function JobsBand({
 }) {
   const { t } = useI18n()
   if (jobs.error) return <ErrorState message={jobs.error} onRetry={jobs.reload} />
-  if (!ordered.length) return <Skeleton className="h-64" />
+  // An empty list and a list still in flight are two different facts. Keying the
+  // skeleton on "no rows" made a scheduler with nothing registered pulse
+  // forever, which reads as a page that never finished loading.
+  if (jobs.loading && !jobs.data) return <Skeleton className="h-64" />
+  if (!ordered.length) return <EmptyState icon={ClockCountdownIcon} body={t('automation.noJobs')} />
 
   const mails = ordered.filter((j) => MAIL_JOBS.has(j.name))
   const upkeep = ordered.filter((j) => !MAIL_JOBS.has(j.name))

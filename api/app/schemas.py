@@ -70,7 +70,7 @@ DATA_FIELDS = (
     "etages", "ailes", "locaux_techniques",
     "stock_cable_m", "stock_goulotte_m", "stock_fibre_m",
     "remarques", "temps_arret_min", "motif_arret",
-    "besoins", "prochaines_etapes", "livraisons",
+    "besoins", "prochaines_etapes", "livraisons", "articles_libres",
     "heure_entree", "heure_sortie", "equipe",
 ) + ARTICLE_FIELDS
 
@@ -319,6 +319,21 @@ class ExtractedReport(BaseModel):
         default=None,
         description="Nom du chantier tel qu'énoncé par le technicien, sinon null",
     )
+    # The day the report is *about*, when the technician states it himself.
+    #
+    # 2026-08-19: a note opening « Salam 17-08-2026 » was filed under the 19th,
+    # the day the pipeline happened to run it — a voice note sent late, or a
+    # write replayed from `failed_writes` days after the fact, lands on the
+    # wrong row and every per-day total moves with it. Extracted verbatim and
+    # never guessed: `journal.resolve_date` normalizes it and falls back to the
+    # transmitted date when it is unparseable, in the future, or too old.
+    #
+    # Not in `DATA_FIELDS`: dating a report is addressing, like naming the site,
+    # not work done — « Salam 17-08-2026 » alone must stay `no_report_content`.
+    date_declaree: Optional[str] = Field(
+        default=None,
+        description="Date énoncée dans le message (« Salam 17-08-2026 »), telle quelle, sinon null",
+    )
     # --- réception de matériel ---------------------------------------------
     #
     # A bon de livraison is not a day's work, and until 2026-08-16 the image
@@ -342,6 +357,33 @@ class ExtractedReport(BaseModel):
     livraisons: Optional[Dict[str, float]] = Field(
         default=None,
         description="Quantités reçues par champ (cables_installes_m, pigtail_sc_u, …), pour un bon de livraison",
+    )
+    #: Articles the schema has no field for, as {désignation: quantité}.
+    #:
+    #: Added 2026-08-19 after a real report listed four double sockets, thirteen
+    #: single ones, three surface-mounted, nine switches, one two-way switch and
+    #: two electrical panels — forty items across eight article types — and
+    #: every one of them was lost to prose, because none of the thirty-five
+    #: quantity fields is an electrical socket, a switch or a panel. The model
+    #: was behaving correctly: it is told never to invent, and there was nowhere
+    #: to put them.
+    #:
+    #: Free text on purpose, unlike `livraisons`, which is validated against the
+    #: known field names. The whole point is the article that is NOT known yet;
+    #: validating it against the list would throw away exactly the information
+    #: this field exists to carry. It is normalised and registered downstream,
+    #: where a new column and a confirmation step give it a home.
+    articles_libres: Optional[Dict[str, float]] = Field(
+        default=None,
+        description=(
+            "Articles posés qui ne correspondent à AUCUN champ existant, "
+            "{désignation courte au singulier: quantité}. "
+            "INCLURE AUSSI les longueurs en mètres d'articles sans champ "
+            "(chemin de câbles, câble électrique) — un chemin de câbles n'est "
+            "PAS une goulotte. Additionner les mentions répétées du même "
+            "article. Exemple : {\"prise double étanche encastrée\": 4, "
+            "\"tableau électrique\": 2, \"chemin de câbles (m)\": 8}"
+        ),
     )
     resume: str = Field(
         ..., description="Résumé professionnel en français (2-4 phrases)"

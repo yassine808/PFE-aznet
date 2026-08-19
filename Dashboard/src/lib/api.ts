@@ -490,6 +490,45 @@ export interface Reception {
   canal?: string | null
 }
 
+/** An article a technician reported that no bordereau lists.
+ *
+ *  `confirmed` false is a review queue, not an approval gate: the column and
+ *  its figures already exist by the time this row does — the pipeline never
+ *  holds a report back waiting for a human. */
+export interface FreeArticle {
+  slug: string
+  designation: string
+  unite?: string | null
+  confirmed: boolean
+  seen: number
+  first_seen?: string
+  last_seen?: string
+}
+
+export const freeArticles = (s?: AbortSignal) => get<{ articles: FreeArticle[] }>('/articles', s)
+
+/** Accept the article as it stands. Director-only server-side. */
+export async function confirmArticle(slug: string): Promise<void> {
+  const res = await fetch(`${BASE}/articles/${encodeURIComponent(slug)}`, { method: 'PATCH' })
+  if (!res.ok) await fail(res)
+}
+
+/** Rename it — onto an existing name, this merges the two columns. */
+export async function renameArticle(slug: string, designation: string): Promise<void> {
+  const res = await fetch(`${BASE}/articles/${encodeURIComponent(slug)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ designation }),
+  })
+  if (!res.ok) await fail(res)
+}
+
+/** Drop it and its column, figures included. */
+export async function deleteArticle(slug: string): Promise<void> {
+  const res = await fetch(`${BASE}/articles/${encodeURIComponent(slug)}`, { method: 'DELETE' })
+  if (!res.ok) await fail(res)
+}
+
 export const bordereau = (id: number, s?: AbortSignal) =>
   get<{ chantier: Chantier; articles: BordereauArticle[]; totaux: Record<string, number> }>(
     `/chantiers/${id}/bordereau`,
@@ -524,6 +563,15 @@ export interface ProviderUsage {
   throughput?: string | null
   sent_24h?: number
   error?: string | null
+  /** The server's own verdict on this provider, and the sentence for it.
+   *
+   *  Added 2026-08-19 alongside the client-side `verdict()` in `usage.tsx`,
+   *  which predates it. The server's answer wins where it exists: it can see
+   *  things the browser cannot — a documented ceiling versus one the vendor
+   *  confirmed, and WhatsApp, where Meta gives the tier but not our
+   *  consumption. Two arithmetics over one question is two answers. */
+  state?: 'epuise' | 'bas' | 'ok' | 'inconnu'
+  message?: string | null
 }
 
 /** The org chart's "+": a chef with no channel and no login yet. */

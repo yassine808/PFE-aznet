@@ -221,6 +221,120 @@ def _extend_headers(svc, names: List[str]) -> None:
     ).execute(num_retries=_RETRIES)
 
 
+def ensure_columns(tab: str, names: List[str]) -> List[str]:
+    """Make sure `tab` has a column for each name; returns its full header row.
+
+    The same job `_extend_headers` does for Rapports, for any tab — a site tab
+    grows a column the first time that site reports an article the bordereau
+    never listed. Appends after the last existing header, never in the middle
+    of the director's own columns, and grows the grid first because writing
+    past a tab's allocated width is a 400 rather than an auto-extend.
+
+    Idempotent: a name already present is not added twice, which matters
+    because this runs on every report, not only the first.
+    """
+    svc = _service()
+    headers = _headers(svc, tab)
+    missing = [n for n in names if n and n not in headers]
+    if not missing:
+        return headers
+    _grow_columns(svc, tab, len(headers) + len(missing))
+    start = _col_letter(len(headers) + 1)
+    end = _col_letter(len(headers) + len(missing))
+    svc.spreadsheets().values().update(
+        spreadsheetId=settings.sheet_id,
+        range=_a1(tab, f"{start}1:{end}1"),
+        valueInputOption="USER_ENTERED",
+        body={"values": [missing]},
+    ).execute(num_retries=_RETRIES)
+    return headers + missing
+
+
+def rename_column(old: str, new: str) -> int:
+    """Rename a column header on every tab that has one, or fold it into `new`.
+
+    Two different jobs behind one name, because from the sheet's side they are
+    the same move. When the target header does not exist the header cell is
+    simply rewritten. When it does, the two columns are the same article under
+    two spellings, so the values are added into the survivor and the duplicate
+    column is deleted — leaving both would keep one article split across two
+    totals, which is the failure this whole mechanism exists to avoid.
+
+    Returns the number of tabs touched. Never raises for a tab it cannot read:
+    one bad tab must not stop the rename on the others.
+    """
+    svc = _service()
+    meta = svc.spreadsheets().get(spreadsheetId=settings.sheet_id).execute(
+        num_retries=_RETRIES
+    )
+    touched = 0
+    for sheet in meta.get("sheets", []):
+        tab = sheet["properties"]["title"]
+        sid = sheet["properties"]["sheetId"]
+        try:
+            headers = _headers(svc, tab)
+            if old not in headers:
+                continue
+            at = headers.index(old)
+            if new not in headers:
+                svc.spreadsheets().values().update(
+                    spreadsheetId=settings.sheet_id,
+                    range=_a1(tab, f"{_col_letter(at + 1)}1"),
+                    valueInputOption="RAW",
+                    body={"values": [[new]]},
+                ).execute(num_retries=_RETRIES)
+                touched += 1
+                continue
+            for row in read_tab(tab):
+                spare = str(row.get(old) or "").strip()
+                if not spare:
+                    continue
+                kept = str(row.get(new) or "").strip()
+                total = (float(kept) if kept else 0.0) + float(spare)
+                update_report_fields(row["_row"], {new: total, old: ""}, tab)
+            svc.spreadsheets().batchUpdate(
+                spreadsheetId=settings.sheet_id,
+                body={"requests": [{"deleteDimension": {"range": {
+                    "sheetId": sid, "dimension": "COLUMNS",
+                    "startIndex": at, "endIndex": at + 1}}}]},
+            ).execute(num_retries=_RETRIES)
+            touched += 1
+        except Exception as exc:  # noqa: BLE001 — one tab must not stop the rest
+            print(f"[sheets] rename_column({tab}): {exc}"[:200], flush=True)
+    return touched
+
+
+def delete_column(name: str) -> int:
+    """Remove a column from every tab that has it. Returns tabs touched.
+
+    The values go with it, which is why this is only reachable from an explicit
+    director-only reject: an article nobody recognises is worth less than a
+    column of numbers against a name that means nothing.
+    """
+    svc = _service()
+    meta = svc.spreadsheets().get(spreadsheetId=settings.sheet_id).execute(
+        num_retries=_RETRIES
+    )
+    touched = 0
+    for sheet in meta.get("sheets", []):
+        tab = sheet["properties"]["title"]
+        try:
+            headers = _headers(svc, tab)
+            if name not in headers:
+                continue
+            at = headers.index(name)
+            svc.spreadsheets().batchUpdate(
+                spreadsheetId=settings.sheet_id,
+                body={"requests": [{"deleteDimension": {"range": {
+                    "sheetId": sheet["properties"]["sheetId"], "dimension": "COLUMNS",
+                    "startIndex": at, "endIndex": at + 1}}}]},
+            ).execute(num_retries=_RETRIES)
+            touched += 1
+        except Exception as exc:  # noqa: BLE001
+            print(f"[sheets] delete_column({tab}): {exc}"[:200], flush=True)
+    return touched
+
+
 def update_report_field(row: int, field: str, value: Optional[str],
                         tab: str = RAPPORTS_TAB) -> None:
     """Write one cell back (manual correction). Column resolved from the header row."""
@@ -550,11 +664,24 @@ def _next_row(svc, tab: str) -> int:
     used = (
         svc.spreadsheets()
         .values()
-        .get(spreadsheetId=settings.sheet_id, range=_a1(tab))
+        .get(spreadsheetId=settings.sheet_id, range=_a1(tab, "A:A"))
         .execute(num_retries=_RETRIES)
         .get("values", [])
     )
-    return len(used) + 1
+    # The LAST row with something in column A, not the number of rows returned.
+    # Counting was wrong for the same reason `append` guessed wrong: the flag
+    # column carries a checkbox with no bottom bound, an unticked checkbox is
+    # the value FALSE, and Google therefore reports thousands of "used" rows.
+    # On the live Rapports tab that made the next free row A5076, which is past
+    # the grid and 400s — so every write failed and the report only survived
+    # because the Postgres mirror runs on the failure path too.
+    #
+    # Column A alone because every writer fills the date there, on both kinds
+    # of tab, and it is the one column no formatting artefact writes into.
+    for i in range(len(used), 0, -1):
+        if used[i - 1] and str(used[i - 1][0]).strip():
+            return i + 1
+    return len(used) + 1 if used else 2
 
 
 def _row_from_range(updated_range: Optional[str]) -> Optional[int]:
@@ -632,12 +759,22 @@ def _sheet_id(svc, tab: str) -> Optional[int]:
 
 
 def _width_for(header: str) -> int:
+    """A width that shows the content, not one that hides it.
+
+    Every cell wraps and no body row has a fixed height, so a column that is
+    wide enough for its *header* is wide enough for everything: the values
+    below simply wrap onto more lines and the row grows. The floor is therefore
+    derived from the header text rather than guessed — "ORDRE DU JOUR [Pose de
+    câble cuivre]" in a 90px column is three characters per line.
+    """
     h = (header or "").strip().lower()
     if any(k in h for k in _WIDE_COLUMNS):
-        return 320
+        return 420
+    # ~7px per character at 10pt, over two wrapped lines, and never below 100.
+    floor = max(100, min(240, int(len(header or "") * 7 / 2) + 24))
     if any(h.startswith(k) for k in _NARROW_COLUMNS):
-        return 90
-    return 150
+        return max(100, floor)
+    return max(150, floor)
 
 
 # One point up from Sheets' 10pt default. The director reads this tab on a
@@ -710,10 +847,14 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
                                    "foregroundColor": {"red": 1, "green": 1, "blue": 1}}}},
                 "fields": "userEnteredFormat(backgroundColor,horizontalAlignment,"
                           "verticalAlignment,wrapStrategy,textFormat)"}},
-            {"updateDimensionProperties": {
-                "range": {"sheetId": sid, "dimension": "ROWS",
-                          "startIndex": 0, "endIndex": 1},
-                "properties": {"pixelSize": 46}, "fields": "pixelSize"}},
+            # The header height is resolved by Sheets, not pinned at 46px.
+            # A pinned height clips a wrapped header, and the journal tabs have
+            # headers like "ORDRE DU JOUR [Pose de câble cuivre]" that need
+            # three lines — so the one row that exists to say what a column
+            # holds was the row least able to say it.
+            {"autoResizeDimensions": {
+                "dimensions": {"sheetId": sid, "dimension": "ROWS",
+                               "startIndex": 0, "endIndex": 1}}},
             # Body: wrapped, top-aligned, and a point larger than Sheets'
             # default. A 300-character transcript in a clipped cell reads as an
             # empty cell with a stray word in it, and 10pt on a projector at the
@@ -723,17 +864,38 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
                 "cell": {"userEnteredFormat": {
                     "wrapStrategy": "WRAP",
                     "verticalAlignment": "TOP",
+                    # Bold by default, and the prose columns are un-bolded below.
+                    # Everything on these tabs except three fields is a figure,
+                    # a name or a date — things read by glancing — while the
+                    # résumé, the remarks and the transcript are read as
+                    # sentences, and a paragraph set in bold is harder to read,
+                    # not easier.
                     # Stated, not inherited. The header above is white on dark
                     # and the banding paints the body white, so a body row that
                     # merely *inherits* a colour is one accident away from
                     # white on white — which is what a new site tab looked
                     # like on 2026-08-19: a real report, present in the cells,
                     # invisible on the screen.
-                    "textFormat": {"fontSize": BODY_FONT_SIZE,
+                    "textFormat": {"bold": True, "fontSize": BODY_FONT_SIZE,
                                    "foregroundColor": {"red": 0, "green": 0, "blue": 0}}}},
                 "fields": "userEnteredFormat(wrapStrategy,verticalAlignment,"
-                          "textFormat.fontSize,textFormat.foregroundColor)"}},
+                          "textFormat.fontSize,textFormat.foregroundColor,"
+                          "textFormat.bold)"}},
         ]
+
+        # The three columns that are read as sentences rather than glanced at.
+        # Both vocabularies, because the journal tab and the flat mirror name
+        # them differently and matching only one would leave half the
+        # spreadsheet with bold paragraphs.
+        for name in ("resume", "Résumé", "rapport_complet", "Rapport complet",
+                     "observations", "Remarques", "remarques"):
+            if name in headers:
+                at = headers.index(name)
+                requests.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": 1,
+                              "startColumnIndex": at, "endColumnIndex": at + 1},
+                    "cell": {"userEnteredFormat": {"textFormat": {"bold": False}}},
+                    "fields": "userEnteredFormat.textFormat.bold"}})
 
         # The flag column, if this tab has one: a real checkbox, and red when
         # ticked. It was the word TRUE in a column of prose -- something a

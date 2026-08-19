@@ -1315,7 +1315,12 @@ function WorkerStats({ name }: { readonly name: string }) {
       <h3 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
         {t('equipe.stats')}
       </h3>
-      {stats.count === 0 ? (
+      {/* Rows still in flight look exactly like a technician who never sent
+          anything, and the page used to state the second. The skeleton carries
+          the height of the table it replaces, so nothing moves when it lands. */}
+      {reports.loading && !reports.data ? (
+        <Skeleton className="h-56" />
+      ) : stats.count === 0 ? (
         <p className="text-ink-faint text-xs italic">{t('equipe.noActivity')}</p>
       ) : (
         <>

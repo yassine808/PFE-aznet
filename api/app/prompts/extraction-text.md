@@ -73,6 +73,72 @@ technicien dit « des jarretières » sans préciser le type, laisse les trois
 champs `null` et écris-le dans `remarques` — un article rangé dans la mauvaise
 ligne du bordereau est pire qu'un article non compté.
 
+Cette règle vise l'article **ambigu**, pas l'article **absent du catalogue**.
+Quand l'article est parfaitement clair mais qu'aucun champ ne lui correspond —
+une prise électrique, un interrupteur, un tableau, une caméra — il ne reste pas
+dans `remarques` : il va dans `articles_libres`, décrit plus bas. Une quantité
+chiffrée ne doit jamais finir uniquement en prose.
+
+## Un article qui n'a pas de champ — `articles_libres`
+
+Les champs de quantité ci-dessus ne couvrent pas tout. Le catalogue est né de
+trois bordereaux réseau ; l'électricité, la vidéosurveillance et la plomberie
+n'y sont presque pas. **Un article réellement posé ne doit jamais disparaître
+dans la prose parce qu'il n'a pas de colonne.**
+
+Règle, dans cet ordre :
+
+1. **Un champ existant convient ?** Utilise-le. C'est toujours le premier choix.
+2. **Aucun champ ne convient ?** Mets-le dans `articles_libres`, un objet
+   `{"désignation": quantité}`.
+
+`articles_libres` n'est **pas** une case à tout mettre :
+
+- Une **désignation courte, au singulier, sans verbe** — `"prise double étanche
+  encastrée"`, pas `"pose et raccordement de 4 prises doubles étanches"`.
+- Une **quantité chiffrée**. Un travail sans nombre (« finition des prises au
+  silicone », « repérage des câbles ») n'est pas un article : il va dans
+  `remarques`, comme aujourd'hui.
+- **Ne force jamais un article dans un champ qui lui ressemble.** Un *chemin de
+  câbles* n'est pas une *goulotte* : l'un est métallique et se pose au plafond,
+  l'autre est plastique et se visse au mur, et ce sont deux lignes de marché
+  différentes. Dans le doute, `articles_libres` — une désignation nouvelle se
+  corrige d'un clic, une quantité comptée sur la mauvaise ligne de marché ne se
+  voit pas.
+- Additionne les mentions du même article : « 6 m de chemin de câbles dans le
+  premier chalet … 2 m dans le deuxième » vaut `{"chemin de câbles (m)": 8}`.
+- Précise l'unité entre parenthèses quand ce n'est pas une pièce :
+  `"chemin de câbles (m)"`, `"câble électrique (m)"`.
+
+### Vérification avant de répondre
+
+Relis le message et repère **chaque nombre**. Chacun doit se retrouver dans
+exactement une de ces places :
+
+- un champ de quantité, ou
+- une entrée de `articles_libres`, ou
+- une heure, une date, un temps d'arrêt, un étage.
+
+Un nombre présent dans le message et absent de ta réponse est une **erreur**.
+Les longueurs sont les plus souvent oubliées, parce qu'elles arrivent en fin de
+phrase et parfois deux fois : « Pose de 6 m de chemin de câbles … Pose de 2 m
+de chemin de câbles dans le deuxième chalet » fait **une** entrée à 8, pas
+zéro.
+
+Exemple, sur un rapport d'électricité :
+
+```json
+"articles_libres": {
+  "prise double étanche encastrée": 4,
+  "prise simple étanche encastrée": 13,
+  "prise simple étanche apparente": 3,
+  "interrupteur simple étanche encastré": 9,
+  "interrupteur double allumage étanche": 1,
+  "tableau électrique": 2,
+  "chemin de câbles (m)": 8
+}
+```
+
 ## Localisation
 
 - `etages` — liste parmi : `RDC`, `E1`, `E2`, `E3`, `E4`.
@@ -140,6 +206,19 @@ Le technicien annonce très souvent quand il est arrivé et quand il est parti �
 journée dont on ne connaît qu'une des deux bornes remplit celle qui a été dite
 et laisse l'autre à `null`.
 
+Un message qui ne contient aucun chiffre d'heure (« 7h », « 07:00 », « 8
+heures ») n'en contient aucune : les deux champs restent `null`. Le 19-08-2026
+un rapport sans la moindre heure a été classé `HEURE D'ENTREE = 07:00`, et ce
+07:00 inventé a servi à calculer les JH de la journée.
+
+## La date énoncée
+
+Beaucoup de messages s'ouvrent sur la date du jour rapporté — « Salam
+17-08-2026 », « rapport du 5/8 ». Copie-la **telle qu'elle est écrite** dans
+`date_declaree` ; ne la reformate pas, ne la complète pas, ne la déduis ni d'un
+jour de la semaine ni de « hier ». Si le message n'énonce aucune date,
+`date_declaree` vaut `null` — la date de traitement est ajoutée ailleurs.
+
 ## Blocages, besoins et suite
 
 Une journée arrêtée est un rapport, et un message qui ne demande que du
@@ -165,7 +244,11 @@ matériel ou annonce la suite en est un aussi. Trois champs, distincts de
    interconnexions sont des compteurs entiers.
 3. **Additions énoncées** — si le technicien détaille des longueurs
    (« 1=52m / 2=53m / 3=64m »), additionne-les dans le champ correspondant.
-4. **Absence** — une information non mentionnée vaut `null`. Jamais 0, jamais une
+4. **Un article chiffré a toujours une place.** Un champ existant s'il y en a un,
+   sinon `articles_libres`. Le laisser seulement dans `remarques` le fait
+   disparaître de tous les totaux : c'est la seule erreur de ce document qui ne
+   se voit pas à la lecture de la ligne.
+5. **Absence** — une information non mentionnée vaut `null`. Jamais 0, jamais une
    estimation, jamais une valeur « typique ».
 5. **Autocorrection** — si le technicien se reprend (« 300… non, 350 »), retiens la
    **dernière** valeur énoncée.

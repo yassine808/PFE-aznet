@@ -349,8 +349,13 @@ def test_metadata_columns_ride_along(fake):
 # --- the Rapports mirror (the dashboard's flat feed) ------------------------
 
 
-def test_rapports_cells_map_the_new_schema_onto_old_columns():
-    """The mapping the old n8n expressions used to be — testable here."""
+def test_rapports_cells_carry_the_index_and_none_of_the_figures():
+    """Rapports is the index a human reads; the figures live in `report_rows`.
+
+    It used to be both — the feed AND the only place a total could be computed
+    — which is why it reached 65 columns. Since 2026-08-19 the quantities are
+    in Postgres, so this asserts the *absence* of every one of them as much as
+    the presence of the seven index columns."""
     from app.journal import _rapports_cells
 
     payload = {
@@ -368,17 +373,22 @@ def test_rapports_cells_map_the_new_schema_onto_old_columns():
         },
     }
     cells = _rapports_cells(payload, "DGH", ["short_transcription"])
-    assert cells["goulottes_m"] == 150
-    assert cells["cables_m"] == 800
-    assert cells["bureaux_termines"] == 14
-    assert cells["panneaux_raccordes"] == 12
-    assert cells["arrets_min"] == 90
-    assert cells["besoins"] == "Connecteurs RJ45."
-    assert cells["observations"] == "Bureaux fermés au RDC."
+    # The index: when, who, where, what was said, and the way back.
+    assert cells["date"] == "2026-08-05"
     assert cells["heure"] == "09:15"
+    assert cells["technicien"] == "NAROUZE"
     assert cells["chantier"] == "DGH"
+    assert cells["resume"] == "Résumé professionnel."
+    assert cells["rapport_complet"] == "…"
+    # And the plumbing the dashboard runs on.
     assert cells["STT_model"] == "groq"
     assert cells["flag_review"] is True
+    assert cells["confidence"] == 0.92
+    # Not one figure, and not the prose that belongs to the site tab.
+    for gone in ("goulottes_m", "cables_m", "bureaux_termines", "panneaux_raccordes",
+                 "arrets_min", "besoins", "observations", "prochaines_etapes",
+                 "etages", "stock_cable_m", "role", "client"):
+        assert gone not in cells, f"{gone} should have left the Rapports tab"
 
 
 def test_rapports_cells_leave_unmapped_fields_blank():
@@ -387,9 +397,10 @@ def test_rapports_cells_leave_unmapped_fields_blank():
     cells = _rapports_cells(
         {"report": {"cables_prepares_m": 50, "resume": "Résumé."}}, "DGH", []
     )
-    # Prepared cable has no old column; absence must not invent one.
+    # No quantity reaches this tab at all now, mapped or not.
     assert "cables_m" not in cells
     assert "goulottes_m" not in cells
+    assert "cables_prepares_m" not in cells
     assert cells["flag_review"] is False
 
 
@@ -406,8 +417,10 @@ def test_file_report_mirrors_to_the_flat_tab(fake):
     })
     assert result["tab"] == "DGH"
     assert fake.appended[0][0] == "DGH"          # journal row
-    assert fake.mirrored[-1]["goulottes_m"] == 150  # Rapports row
+    # The figure is NOT on the Rapports row any more — it went to `report_rows`.
+    assert "goulottes_m" not in fake.mirrored[-1]
     assert fake.mirrored[-1]["chantier"] == "DGH"
+    assert fake.mirrored[-1]["resume"] == "Pose de 150 m."
     assert fake.mirrored[-1]["flag_review"] is True
     assert result["rapports_row"] == 3  # the mirror's row number, for /supprimer
 
@@ -843,3 +856,85 @@ def test_a_real_url_still_reaches_the_audio_column(fake, monkeypatch):
         "report": {"cables_installes_m": 10, "resume": "Résumé."},
     })
     assert fake.rows[-1]["Lien audio"].startswith("https://")
+
+
+# --- the two 2026-08-19 fabrications -------------------------------------
+#
+# One real message, no time and a stated date, filed as 07:00 on the wrong day.
+_MSG_17_AOUT = (
+    "Salam 17-08-2026\n"
+    "Équipe : dris,brahim,adil,yassine et houcine.\n"
+    "_ Pose et raccordement de 2 prises industrielles 3P+N+T.\n"
+    "_ Pose et raccordement de 13 prises étanches doubles encastrées."
+)
+
+
+def test_an_hour_the_message_never_states_is_dropped(fake):
+    """The model answered 07:00 for a message with no time in it. The prompt
+    already forbade that; this is the check that makes it not reach the sheet."""
+    from app.journal import file_report
+
+    result = file_report({
+        "date": "2026-08-19", "technicien": "NAROUZE", "chantier": "DGH",
+        "rapport_complet": _MSG_17_AOUT,
+        "report": {"heure_entree": "07:00", "prises_connectees": 13,
+                   "equipe": "dris, brahim", "resume": "Pose."},
+    })
+    row = fake.appended[0][1]
+    assert "HEURE D'ENTREE" not in row
+    assert "JH" not in row          # the invented hour fed a second figure
+    assert "heure_non_dite" in result["warnings"]
+
+
+def test_an_hour_the_message_does_state_is_kept(fake):
+    from app.journal import file_report
+
+    file_report({
+        "date": "2026-08-19", "technicien": "NAROUZE", "chantier": "DGH",
+        "rapport_complet": "entré à 7h, sorti à 20h, avec Hamid",
+        "report": {"heure_entree": "07:00", "heure_sortie": "20:00",
+                   "equipe": "Hamid", "resume": "Journée."},
+    })
+    row = fake.appended[0][1]
+    assert row["HEURE D'ENTREE"] == "07:00"
+    assert row["JH"] == "3.25"
+
+
+def test_no_transcript_leaves_the_hours_alone(fake):
+    """A photo, or a replayed payload that kept no text: silence is not
+    evidence of invention."""
+    from app.journal import file_report
+
+    file_report({
+        "date": "2026-08-19", "technicien": "NAROUZE", "chantier": "DGH",
+        "report": {"heure_entree": "08:00", "resume": "Photo."},
+    })
+    assert fake.appended[0][1]["HEURE D'ENTREE"] == "08:00"
+
+
+def test_the_date_the_technician_states_wins(fake):
+    from app.journal import file_report
+
+    result = file_report({
+        "date": "2026-08-19", "technicien": "NAROUZE", "chantier": "DGH",
+        "rapport_complet": _MSG_17_AOUT,
+        "report": {"date_declaree": "17-08-2026", "prises_connectees": 13,
+                   "resume": "Pose."},
+    })
+    assert fake.appended[0][1]["Date"] == "2026-08-17"
+    assert fake.mirrored[-1]["date"] == "2026-08-17"
+    assert result["warnings"] == []
+
+
+def test_a_stated_date_that_cannot_be_trusted_falls_back(fake):
+    from app.journal import resolve_date
+
+    assert resolve_date("2026-08-17", "2026-08-19") == ("2026-08-17", [])
+    # In the future, way too old, and unreadable: the transmitted date stands
+    # and the row says why.
+    assert resolve_date("2026-09-01", "2026-08-19")[0] == "2026-08-19"
+    assert resolve_date("2026-01-05", "2026-08-19")[0] == "2026-08-19"
+    assert resolve_date("le 17", "2026-08-19") == ("2026-08-19", ["date_declaree_illisible"])
+    assert resolve_date(None, "2026-08-19") == ("2026-08-19", [])
+    # Sheets serials go through the one normalizer, like every other date here.
+    assert resolve_date("46251", "2026-08-19")[0] == "2026-08-17"

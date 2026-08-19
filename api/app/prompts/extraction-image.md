@@ -76,6 +76,12 @@ blanc, bon de livraison, écran, ou vue du chantier lui-même.
   un bon de livraison énumère ce qui est arrivé, pas ce qui est installé — il ne
   remplit donc aucun de ces champs.
 
+- **Date écrite sur le document** — une date lisible en tête d'un carnet de pose
+  ou d'un bon de livraison va dans `date_declaree`, telle qu'elle est écrite. Rien
+  d'autre ne la remplit : ni la date du jour, ni une déduction. De même,
+  `heure_entree` et `heure_sortie` restent `null` tant qu'aucune heure n'est
+  **écrite** sur la photo.
+
 Les règles générales d'extraction (nombres en lettres, unités en mètres, absence =
 `null`, nombres qui ne sont pas des quantités, distinction préparé / installé /
 brassé / testé, stock jamais déduit) s'appliquent à l'identique.

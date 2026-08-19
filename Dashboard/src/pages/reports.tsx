@@ -334,7 +334,14 @@ function ReportPane({
             {g.manager_name}
           </span>
           <span className="tabular">{fmt.format(new Date(g.generated_at))}</span>
-          <span className="ms-auto">{t('reports.generatedBy', { name: g.generated_by })}</span>
+          {/* "automatique" is the backend's marker for a scheduled run, not a
+              person: printing it raw read "Généré par automatique". Same branch
+              as the report editor, and the same wording as the .docx. */}
+          <span className="ms-auto">
+            {g.generated_by && g.generated_by !== 'automatique'
+              ? t('daily.generatedBy', { name: g.generated_by })
+              : t('daily.generatedAuto')}
+          </span>
         </div>
       </header>
 

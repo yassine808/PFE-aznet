@@ -96,7 +96,7 @@ def test_drain_does_not_stall_on_an_unprocessable_payload(monkeypatch):
 
 
 def test_daily_report_without_rows_sends_nothing(monkeypatch):
-    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: [])
+    monkeypatch.setattr(jobs.logs, "list_report_rows", lambda **kw: [])
     monkeypatch.setattr(jobs.mailer, "send", lambda *a, **k: pytest.fail("should not mail"))
 
     out = jobs.send_daily_report("2026-07-29")
@@ -218,7 +218,9 @@ def test_weekly_report_covers_the_whole_week(monkeypatch):
         {"date": "2026-07-31", "resume": "vendredi"},
         {"date": "2026-07-26", "resume": "dimanche d'avant"},  # previous week
     ]
-    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
+    monkeypatch.setattr(jobs.logs, "list_report_rows",
+                        lambda **kw: [r for r in rows
+                                      if not kw.get("dates") or r.get("date") in kw["dates"]])
     # No org chart rows in a DB-free test → the director's digest falls back to
     # the manual recipient list, and nobody's team buckets exist.
     monkeypatch.setattr(jobs.logs, "list_persons", lambda: [])
@@ -259,7 +261,9 @@ def test_daily_report_is_per_manager(monkeypatch):
         generated.append((label, sorted(row["resume"] for row in r)))
         return jobs.daily_report.DailyReportContent(objet=f"Rapport {label}", corps="corps")
 
-    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
+    monkeypatch.setattr(jobs.logs, "list_report_rows",
+                        lambda **kw: [r for r in rows
+                                      if not kw.get("dates") or r.get("date") in kw["dates"]])
     monkeypatch.setattr(jobs.logs, "list_persons", lambda: persons)
     monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
@@ -298,7 +302,9 @@ def test_weekly_report_stores_period_type(monkeypatch):
     def fake_gen(label, r, alerts=None):
         return jobs.daily_report.DailyReportContent(objet="Hebdo", corps="…")
 
-    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
+    monkeypatch.setattr(jobs.logs, "list_report_rows",
+                        lambda **kw: [r for r in rows
+                                      if not kw.get("dates") or r.get("date") in kw["dates"]])
     monkeypatch.setattr(jobs.logs, "list_persons", lambda: persons)
     monkeypatch.setattr(jobs.logs, "account_emails", lambda: [])
     monkeypatch.setattr(jobs.logs, "get_settings", lambda: {"emails": []})
@@ -366,7 +372,9 @@ def test_manager_without_email_does_not_abort_the_report_job(monkeypatch):
          "email": None, "manager_id": 2},
     ]
     stored = []
-    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: rows)
+    monkeypatch.setattr(jobs.logs, "list_report_rows",
+                        lambda **kw: [r for r in rows
+                                      if not kw.get("dates") or r.get("date") in kw["dates"]])
     monkeypatch.setattr(jobs.logs, "list_persons", lambda: persons)
     monkeypatch.setattr(jobs.logs, "save_manager_report",
                         lambda *a: stored.append(a))
@@ -468,7 +476,7 @@ def test_a_run_outcome_can_be_claimed_only_once():
 
 
 def _one_report_setup(monkeypatch):
-    monkeypatch.setattr(jobs.sheets, "read_reports", lambda: [
+    monkeypatch.setattr(jobs.logs, "list_report_rows", lambda **kw: [
         {"date": "2026-08-16", "technicien": "Tech 1", "resume": "salle 1", "goulottes_m": "40"},
     ])
     monkeypatch.setattr(jobs.logs, "list_persons", lambda: [

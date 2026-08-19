@@ -244,17 +244,42 @@ def _run_chain(
     caption: Optional[str] = None,
 ) -> Tuple[ExtractedReport, str]:
     """Try each `provider:model` in order. Returns (report, winning model id)."""
-    failures = []
+    failures: List[str] = []
+    empty: Optional[Tuple[ExtractedReport, str]] = None
     for provider, model in _parse_chain(chain):
         engine = _ENGINES.get(provider)
         if engine is None:
             failures.append(f"{provider}: unknown provider")
             continue
         try:
-            return (engine(model, text=text, image=image, mime_type=mime_type, profile=profile, caption=caption),
-                    f"{provider}/{model}")
+            report = engine(model, text=text, image=image, mime_type=mime_type,
+                            profile=profile, caption=caption)
         except ExtractionError as exc:
             failures.append(str(exc))
+            continue
+        # An engine that answers with nothing is not an engine that answered.
+        #
+        # The chain moves on when a call *fails*; it cannot move on when a model
+        # returns a well-formed empty object with a 200. On 2026-08-19 that cost
+        # a whole report: a message listing forty items across eight article
+        # types came back from Gemini with every quantity null, so the one model
+        # that could read it was never asked. The report was filed empty and
+        # nothing anywhere said so.
+        #
+        # The test is deliberately narrow. Digits in the message and no data
+        # extracted is a weak model far more often than it is a real report —
+        # "salam" carries no digits and is unaffected, which is the case
+        # `has_data` was written for. The fallback is kept, not discarded: if
+        # every engine answers this way the first answer still stands, because
+        # losing a report to a heuristic would be worse than the emptiness it
+        # was trying to catch.
+        if text and not report.has_data() and any(c.isdigit() for c in text):
+            failures.append(f"{provider}/{model}: no data extracted from a message with figures")
+            empty = empty or (report, f"{provider}/{model}")
+            continue
+        return report, f"{provider}/{model}"
+    if empty:
+        return empty
     raise ExtractionError("extraction failed on every engine — " + " | ".join(failures))
 
 

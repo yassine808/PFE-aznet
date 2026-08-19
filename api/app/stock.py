@@ -47,6 +47,13 @@ JOURS_BAS = 5.0
 PCT_CRITIQUE = 5.0
 PCT_BAS = 10.0
 
+# The other end of the same question. Material on site is money in a chalet and
+# a theft risk, so "far more than the work left needs" is worth saying — but
+# only as a multiple of the work that remains, because an absolute quantity
+# means nothing across metres, brins and switches. Twice what is left to pose
+# is the point where it stops looking like ordering ahead.
+SURPLUS_FACTEUR = 2.0
+
 # Below this, an average is one number pretending to be a trend: a material
 # installed on a single day gives a rate that is just that day's quantity.
 MIN_ACTIVE_DAYS = 2
@@ -79,6 +86,7 @@ def _thresholds() -> Dict[str, float]:
         "jours_bas": read("stock_jours_bas", JOURS_BAS),
         "pct_critique": read("stock_pct_critique", PCT_CRITIQUE),
         "pct_bas": read("stock_pct_bas", PCT_BAS),
+        "surplus_facteur": read("stock_surplus_facteur", SURPLUS_FACTEUR),
     }
 
 
@@ -155,11 +163,28 @@ def resolve_stock(
 
 def _level(
     reste: float, marche: Optional[float], rate: Optional[Tuple[float, int]],
-    limits: Dict[str, float],
+    limits: Dict[str, float], besoin: Optional[float] = None,
 ) -> Tuple[Optional[str], Optional[float]]:
     """(niveau, jours de couverture). `None` means nothing worth saying."""
     if rate and rate[1] >= MIN_ACTIVE_DAYS and rate[0] > 0:
         jours = reste / rate[0]
+        # Too much, before too little: with the work nearly done a material can
+        # be under two days of cover *and* several times what is left to pose,
+        # and "commandez-en" would be exactly the wrong sentence. Silence until
+        # the crew has a real pace — a site whose whole delivery landed on day
+        # one is stocked, not oversupplied, and only the journal can tell the
+        # difference. The excess must also be a visible share of the contract,
+        # or 2 m over a 1 m remainder becomes an alert.
+        if (
+            besoin is not None and marche
+            # `.get` with the module default, not `[...]`: callers build their
+            # own limits dict — the tests do, and so could a future caller —
+            # and a new threshold must not turn every one of them into a
+            # KeyError the moment it is added.
+            and reste > besoin * limits.get("surplus_facteur", SURPLUS_FACTEUR)
+            and reste - besoin > float(marche) * limits.get("pct_bas", PCT_BAS) / 100.0
+        ):
+            return "surplus", jours
         if jours <= limits["jours_critique"]:
             return "critique", jours
         if jours <= limits["jours_bas"]:
@@ -201,9 +226,13 @@ def assess_chantier(chantier: dict, limits: Optional[Dict[str, float]] = None) -
         posed = installed.get(champ)
         marche = articles.get(champ, {}).get("qte_marche")
         marche = float(marche) if marche else None
+        # What the contract still owes: the yardstick a surplus is measured
+        # against. Unknown without a bordereau, and it stays None there rather
+        # than becoming a zero that would make every leftover an excédent.
+        besoin = marche - (posed or 0.0) if marche else None
         common = {
             "chantier": chantier["nom"], "champ": champ, "article": label,
-            "unite": unit, "installe": posed, "marche": marche,
+            "unite": unit, "installe": posed, "marche": marche, "besoin": besoin,
         }
 
         # Over the contract is its own finding and does not depend on knowing
@@ -221,7 +250,7 @@ def assess_chantier(chantier: dict, limits: Optional[Dict[str, float]] = None) -
         reste, source = resolve_stock(champ, followed, received, posed, marche)
         if reste is None:
             continue
-        niveau, jours = _level(reste, marche, rates.get(champ), limits)
+        niveau, jours = _level(reste, marche, rates.get(champ), limits, besoin)
         if niveau is None:
             continue
         out.append({
@@ -232,7 +261,7 @@ def assess_chantier(chantier: dict, limits: Optional[Dict[str, float]] = None) -
     return out
 
 
-_ORDER = {"depassement": 0, "critique": 1, "bas": 2}
+_ORDER = {"depassement": 0, "critique": 1, "bas": 2, "surplus": 3}
 
 
 def assess(chantiers: Optional[Sequence[dict]] = None) -> List[dict]:
@@ -302,6 +331,12 @@ def line(alert: dict) -> str:
         return (
             f"{alert['chantier']} — {alert['article']} : dépassement du marché de "
             f"{reste}{unit} ({alert['source']})"
+        )
+    if alert["niveau"] == "surplus":
+        besoin = journal._fmt(alert["besoin"]) if alert.get("besoin") is not None else "?"
+        return (
+            f"{alert['chantier']} — {alert['article']} [EXCÉDENT] : reste {reste}{unit} "
+            f"sur le chantier pour {besoin}{unit} restant à poser ({alert['source']})"
         )
     couverture = (
         f", {alert['jours']:.1f} jour(s) de couverture au rythme actuel"

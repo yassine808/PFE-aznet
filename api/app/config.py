@@ -104,8 +104,23 @@ class Settings(BaseSettings):
     # identically: an alias silently becomes a different model. A benchmark
     # result is about the model it measured, so the evidence pins the primary,
     # and the floating name sits where a surprise costs the least.
+    #
+    # **Reordered 2026-08-19, and the reason matters more than the order.** A
+    # real report listing "4 prises doubles étanches, 13 prises simples, 9
+    # interrupteurs, 2 tableaux électriques" was measured through all three:
+    # `gpt-oss-120b` returned all six articles with their counts, and both
+    # Gemini models returned an empty object on the identical prompt. The
+    # benchmark that put Gemini first is not wrong — it measured the schema as
+    # it was, before `articles_libres` existed.
+    #
+    # It also exposes what a fallback chain does not protect against. The chain
+    # moves on when an engine *fails*; it cannot move on when an engine answers
+    # successfully with nothing. Gemini returning `{}` is a 200, so the one
+    # model able to read the report was never asked. Vendor alternation is
+    # preserved — groq, then gemini twice — so the free-tier reason for the
+    # second slot still holds.
     extraction_text_chain: str = (
-        "gemini:gemini-3.5-flash-lite,groq:openai/gpt-oss-120b,gemini:gemini-flash-lite-latest"
+        "groq:openai/gpt-oss-120b,gemini:gemini-3.5-flash-lite,gemini:gemini-flash-lite-latest"
     )
     # Not gemini-2.5-flash: it is still in the model list but 404s with "no
     # longer available to new users" (benchmark run 2026-07-27). Nor

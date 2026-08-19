@@ -328,7 +328,10 @@ def send_daily_report(date: Optional[str] = None) -> dict:
     technicians' /rapport command answers with the *same* text the mail showed.
     """
     day = date or datetime.now().strftime("%Y-%m-%d")
-    rows = [r for r in sheets.read_reports() if r.get("date") == day]
+    # From Postgres, not the Sheet: the quantities left the Rapports tab on
+    # 2026-08-19, and a report that reads its own figures out of a spreadsheet
+    # pays a Google call for every one of them.
+    rows = logs.list_report_rows(dates=[day])
     if not rows:
         # Not an error: a Sunday with no reports is a normal outcome, and mailing
         # an empty report teaches the manager to ignore the mail.
@@ -347,7 +350,7 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
     last_day = datetime.strptime(end, "%Y-%m-%d") if end else datetime.now()
     first_day = last_day - timedelta(days=last_day.weekday())
     span = {(first_day + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)}
-    rows = [r for r in sheets.read_reports() if r.get("date") in span]
+    rows = logs.list_report_rows(dates=sorted(span))
     label = f"{first_day.strftime('%Y-%m-%d')} → {last_day.strftime('%Y-%m-%d')}"
     if not rows:
         return {"period": label, "rows": 0, "sent_to": [], "reason": "aucun rapport sur la période"}
