@@ -177,10 +177,33 @@ class FakeSheet:
         self.marked = []
         self.mirrored = []
         self.calls = []  # every Google round trip, in order
+        self.headers = {}  # tab -> live header, grown by ensure_columns
 
     def read_tab(self, tab):
         self.calls.append(("read_tab", tab))
         return [dict(r) for r in self.rows]
+
+    def ensure_columns(self, tab, names):
+        """Grow the header, and hand back the live one.
+
+        The real `sheets.ensure_columns` is called on **every** report since
+        2026-08-20 — once for the base header, and again for any free article —
+        so a fake without it made `write_report` take its best-effort except
+        branch on every single write. Every test then saw a spurious
+        `article_column_failed` warning, and four of them failed on a warning
+        list they had every right to expect empty.
+
+        Idempotent like the real one, and it returns the header rather than
+        None: `write_report` writes positionally from what this returns, so a
+        fake returning None would align every cell against nothing.
+        """
+        self.calls.append(("ensure_columns", tab))
+        header = list(self.headers.get(tab) or names)
+        for name in names:
+            if name not in header:
+                header.append(name)
+        self.headers[tab] = header
+        return header
 
     def ensure_tab(self, tab, headers):
         self.calls.append(("ensure_tab", tab))

@@ -701,7 +701,7 @@ def s08_architecture(prs, n):
         ("Terrain", "Technicien\nnote vocale en darija,\nphoto ou texte", GREY),
         ("Réception", "Telegram Bot API\nWhatsApp Cloud API", GREEN),
         ("Orchestration", "n8n — 64 nœuds\nréception, déduplication,\nautorisation, réponses", GREEN),
-        ("Service applicatif", "FastAPI — 77 routes\nSTT, extraction, journal,\nordonnanceur, comptes", BLUE),
+        ("Service applicatif", "FastAPI — 82 routes\nSTT, extraction, journal,\nordonnanceur, comptes", BLUE),
         ("Persistance", "PostgreSQL — 24 tables\nGoogle Sheets\nun onglet par chantier", BLUE),
     ]
     x = MARGIN
@@ -1243,12 +1243,87 @@ def s17b_usage(prs, n):
     footer(slide, n)
 
 
+def s15c_ia_lecture(prs, n):
+    """What goes into a model call, and what is forbidden to come out of it.
+
+    The deck showed the chains and the benchmark but never the *inputs*: a jury
+    that has followed this far still does not know that three of the four
+    things the model reads are not the message.
+    """
+    slide = new_slide(prs)
+    header(slide, "4 — Conception", "Ce que lit le modèle, et ce qu'il ne peut pas en faire")
+    image_fit(slide, DIAGRAMS / "15-ai-inputs.png", MARGIN, 1.94, CONTENT_W * 0.53, 4.28,
+              frame=True)
+    tx = MARGIN + CONTENT_W * 0.56
+    tw = CONTENT_W - CONTENT_W * 0.56
+    tf = _txbox(slide, tx, 2.02, tw, 4.2)
+    for i, (t, d) in enumerate([
+        ("Quatre entrées, une seule est le message",
+         "L'âme (identité, ne jamais inventer), l'instruction d'extraction et le profil du "
+         "technicien accompagnent chaque appel."),
+        ("Le vocabulaire n'a pas d'âme",
+         "Whisper lit son champ comme le texte qui précède le clip : l'âme y serait recopiée "
+         "dans la transcription."),
+        ("Le profil est un contexte, jamais une source",
+         "« Intervient surtout sur Sidi Maarouf » est à un pas de remplir le chantier d'un "
+         "message qui n'a nommé aucun site. L'instruction l'interdit, et interdit les nombres."),
+        ("La réponse part avant l'écriture",
+         "Le résumé revient au technicien d'abord ; un échec Google lui coûte son accusé de "
+         "réception, jamais son message."),
+    ]):
+        para = _para(tf, first=(i == 0))
+        para.space_after = Pt(3)
+        _run(para, t, size=13.5, bold=True, color=BLUE)
+        para = _para(tf)
+        para.space_after = Pt(11)
+        para.line_spacing = 1.16
+        _run(para, d, size=11.5, color=GREY)
+    caption(slide, "Figure 4.14 — Les quatre sources d'une extraction et les trois issues.",
+            MARGIN, 6.30, CONTENT_W * 0.53)
+    footer(slide, n)
+
+
+def s17c_alertes(prs, n):
+    """The two warning families, and the button that admits a human already knew.
+
+    Kept to one slide because the point is the *contrast*: one family is
+    recomputed and stored nowhere, the other has a column. Two slides would
+    lose exactly that.
+    """
+    slide = new_slide(prs)
+    header(slide, "5 — Réalisation", "Deux familles d'avertissements, deux destins")
+    half = (CONTENT_W - 0.34) / 2
+    image_fit(slide, SCREENS / "en-chantiers.jpg", MARGIN, 1.94, half, 2.24, frame=True)
+    image_fit(slide, SCREENS / "en-chantiers-2.jpg", MARGIN + half + 0.34, 1.94, half, 2.24,
+              frame=True)
+    caption(slide, "Alertes matière : permanentes, bornées à trois lignes, « Ignorer » à droite",
+            MARGIN, 4.26, half)
+    caption(slide, "Le matériel déclaré hors bordereau, sur le site qui l'a déclaré",
+            MARGIN + half + 0.34, 4.26, half)
+
+    bullets(slide, [
+        ("Famille A — alertes matière : aucune colonne.",
+         "Recalculées à la demande depuis le journal, les réceptions et le bordereau. Un chiffre "
+         "dérivé de trois sources serait périmé avant d'être lu. Quatre niveaux, dont « excédent », "
+         "testé avant les pénuries : en fin de chantier « commandez-en » serait la phrase inverse."),
+        ("Famille B — avertissements de ligne : une colonne, dix clés, cinq drapeaux.",
+         "« Écart de stock » est le seul qui porte sur une contradiction numérique et il ne lève "
+         "pas le drapeau : l'écart est chiffré, une livraison et une perte sont arithmétiquement "
+         "identiques, et seul le technicien peut trancher."),
+        ("« Ignorer » enregistre la décision, pas l'effacement.",
+         "Le niveau et le reste sont pris en photo au moment du clic ; la mise en sourdine expire "
+         "d'elle-même dès que la situation empire. Un clic ne peut pas faire taire une pénurie "
+         "pour toujours."),
+    ], y=4.66, size=12.5, gap=8)
+    footer(slide, n)
+
+
 def s18_devops(prs, n):
     slide = new_slide(prs)
     header(slide, "5 — Qualité", "La chaîne d'intégration continue")
     stats(slide, [("6 mois", "de développement\n(2 mars – 31 août 2026)"),
                   ("18", "contrôles automatiques\nà chaque push"),
-                  ("429", "tests, sans aucune\nclé d'API ni base"),
+                  ("463", "tests, sans aucune\nclé d'API ni base"),
                   ("38", "demandes Dependabot\nsur 5 écosystèmes")],
           y=BODY_TOP - 0.05, h=1.48)
 
@@ -1256,7 +1331,7 @@ def s18_devops(prs, n):
     tf = _txbox(slide, MARGIN, y, CONTENT_W, 0.3)
     _run(_para(tf, first=True), "Les 18 contrôles, par famille", size=14.5, bold=True, color=BLUE)
     fams = [
-        ("Correction", GREEN, "API — ruff, types, 429 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
+        ("Correction", GREEN, "API — ruff, types, 463 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
         ("Sécurité du code", BLUE, "CodeQL (python)  ·  CodeQL (javascript-typescript)  ·  Semgrep OWASP Top 10  ·  Bandit"),
         ("Dépendances et secrets", RGBColor(0x8E, 0x44, 0xAD), "Trivy filesystem  ·  Trivy config  ·  pip-audit  ·  npm audit  ·  gitleaks + check_secrets.py"),
         ("Conformité des fichiers", GREY, "Hadolint (api)  ·  Hadolint (Dashboard)  ·  actionlint"),
@@ -1381,7 +1456,7 @@ def backups(prs, start):
         ("en-inbox.jpg", "Boîte de réception — les rapports arrivés, avec leurs avertissements de qualité"),
         ("en-reports.jpg", "Rapports — consultation et correction ligne à ligne"),
         ("en-equipe.jpg", "Équipe — l'organigramme : directeur, chefs de chantier, techniciens"),
-        ("en-automation.jpg", "Automatisation — les six tâches planifiées et leurs dernières exécutions"),
+        ("en-automation.jpg", "Automatisation — les neuf tâches planifiées et leurs dernières exécutions"),
         ("en-logs.jpg", "Journaux — la trace de traitement, n8n et service réunis par correlation_id"),
         ("en-usage.jpg", "Consommation — ce qu'il reste de chaque offre gratuite, et d'où vient le chiffre"),
         ("en-overview-light.jpg", "Thème clair — le thème est un choix persistant de l'utilisateur, pas une préférence système"),
@@ -1490,6 +1565,13 @@ NOTES = {
 → La vitesse ne rachète rien.
 → Si on soulève la limite : oui, les dix cas sont de ma main (§4.3.9).
 """,
+    "s15c_ia_lecture": """
+1 min 10. Trois des quatre choses que lit le modèle ne viennent pas du message.
+→ Le profil est du contexte, jamais une source de valeurs : sinon on remplit un
+  chantier que personne n'a nommé, et la donnée est plausible et fausse.
+→ Le vocabulaire de transcription est le seul sans âme : Whisper le lirait
+  comme un début de transcript.
+""",
     "s16_perimetre": """
 1:00 · Ce qui tourne, ce qui reste. Rester factuel.
 """,
@@ -1506,6 +1588,15 @@ NOTES = {
 → Chantiers : l'avancement est recalculé à chaque appel, jamais stocké.
 → Si on demande pourquoi la colonne installée est vide : le bordereau existe,
   le pilote n'a pas encore produit de quantités sur ces lignes contractuelles.
+""",
+    "s17c_alertes": """
+1 min 20. Deux familles, et c'est le contraste qui compte.
+→ A : recalculée, stockée nulle part — un chiffre dérivé de trois sources
+  périmerait dans une cellule.
+→ B : une colonne, dix clés, cinq drapeaux. « Écart de stock » ne lève pas le
+  drapeau, et c'est un choix : seul le technicien peut trancher.
+→ « Ignorer » photographie le niveau et le reste ; la sourdine expire dès que
+  ça empire.
 """,
     "s18_devops": """
 1:00 · Dix-huit contrôles à chaque push.
@@ -1585,8 +1676,9 @@ def main():
     for build in (s02_plan, s03_quote, s03_contexte, s04_problematique, s05_besoins,
                   s05b_planning, s06_etat_art_stt, s07_etat_art_llm, s08_architecture,
                   s09_frontiere, s10_flux, s11_journal, s11b_colonnes, s12_banc_protocole, s13_banc_api,
-                  s14_banc_local, s15_moteur_retenu, s15b_extraction, s16_perimetre,
-                  s17_dashboard, s17b_usage, s18_devops, s18b_sonar, s19_demo, s20_bilan,
+                  s14_banc_local, s15_moteur_retenu, s15b_extraction, s15c_ia_lecture,
+                  s16_perimetre, s17_dashboard, s17b_usage, s17c_alertes,
+                  s18_devops, s18b_sonar, s19_demo, s20_bilan,
                   s21_perspectives):
         n += 1
         build(prs, n)

@@ -1,0 +1,41 @@
+flowchart TD
+    MSG["Message recu<br/>Telegram ou WhatsApp"] --> TYPE{"Forme"}
+
+    TYPE -- "note vocale" --> STT["Chaine STT<br/>gemini puis local puis groq"]
+    TYPE -- "texte" --> TXT["Texte tel qu ecrit"]
+    TYPE -- "photo" --> IMG["Photo<br/>aucune transcription intermediaire"]
+
+    VOC["stt-vocabulary.md<br/>sans ame : Whisper lit ce champ<br/>comme le debut du transcript"] -.-> STT
+    STT --> TR["Transcription darija"]
+
+    TR --> PROMPT["Invite d extraction"]
+    TXT --> PROMPT
+    IMG --> PROMPTI["Invite d extraction image"]
+
+    SOUL["00-soul.md<br/>identite, ne jamais inventer,<br/>absence n est pas zero"] -.-> PROMPT
+    SOUL -.-> PROMPTI
+    PROF["Profil du technicien<br/>persons.profile<br/>contexte, jamais une source de valeurs"] -.-> PROMPT
+
+    PROMPT --> CHAIN["extraction_text_chain<br/>Gemini et Groq en alternance"]
+    PROMPTI --> CHAINI["extraction_image_chain<br/>Google seul : pas de vision chez Groq"]
+
+    CHAIN --> OUT["ExtractedReport<br/>valide par Pydantic"]
+    CHAINI --> OUT
+
+    OUT --> NAT{"nature"}
+    NAT -- "livraison" --> LIV["Registre receptions<br/>aucune ligne de journal"]
+    NAT -- "pose (defaut)" --> HAS{"has_data()"}
+
+    HAS -- non --> EX["Aucune ligne ecrite<br/>archive dans exchanges"]
+    HAS -- oui --> JOUR["Journal du chantier<br/>+ miroir Rapports"]
+
+    OUT --> RES["resume"] --> REP["Reponse au technicien<br/>AVANT toute ecriture"]
+
+    NIGHT["03h00 : jobs.refresh_profiles<br/>relit les rapports passes"] --> PROF
+
+    classDef ctx fill:#eef2ff,stroke:#4c51bf
+    classDef ko fill:#fde8e8,stroke:#c53030
+    classDef ok fill:#e6f4ea,stroke:#2f855a
+    class SOUL,PROF,VOC ctx
+    class EX ko
+    class JOUR,REP,LIV ok

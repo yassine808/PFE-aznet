@@ -539,6 +539,8 @@
   "chantiers.level.bas": "يُطلب قريبًا",
   "chantiers.level.critique": "حرج",
   "chantiers.level.depassement": "يتجاوز الصفقة",
+  "chantiers.level.surplus": "فائض",
+  "chantiers.excess": "{n} مقابل {besoin} متبقية للتركيب",
   "chantiers.open": "فتح الجدول",
   "chantiers.close": "إغلاق الجدول",
   "chantiers.tracked": "ورش متابَعة",

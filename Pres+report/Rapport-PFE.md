@@ -76,7 +76,7 @@ Enfin, je remercie ma famille et mes proches pour leur soutien constant durant l
 
 Dans le secteur du câblage réseau, le suivi de l'activité des techniciens repose encore largement sur des comptes rendus oraux ou manuscrits, hétérogènes et difficiles à exploiter. Ce projet de fin d'études, réalisé au sein de l'entreprise AZNET, automatise la production des rapports journaliers de chantier. Le technicien envoie, en fin de journée, une simple note vocale en arabe marocain (darija) — ou une photo de relevé — via Telegram ou WhatsApp ; le système transcrit l'audio, en extrait les données métier typées (mètres de goulotte, de câble préparé et installé, prises bureau, prises panneau, prises testées, mètres de fibre, interconnexions, brins optiques, étages et ailes concernés, stock, remarques), reformule le tout en un résumé professionnel en français, écrit la ligne dans le journal de chantier Google Sheets correspondant et notifie l'encadrement.
 
-L'architecture retenue est hybride : une plateforme d'orchestration low-code (n8n, 64 nœuds) assure la réception multicanale et les intégrations, tandis qu'un microservice développé en Python/FastAPI (77 routes, 13 082 lignes) prend en charge la transcription, l'extraction structurée par grands modèles de langage, la reformulation, la tenue du journal, l'ordonnancement des tâches périodiques et le service du tableau de bord. Un tableau de bord React (14 516 lignes) trilingue français/anglais/arabe complète l'ensemble. La méthodologie suivie est une démarche agile de type Scrum allégé.
+L'architecture retenue est hybride : une plateforme d'orchestration low-code (n8n, 64 nœuds) assure la réception multicanale et les intégrations, tandis qu'un microservice développé en Python/FastAPI (82 routes, 14 504 lignes) prend en charge la transcription, l'extraction structurée par grands modèles de langage, la reformulation, la tenue du journal, l'ordonnancement des tâches périodiques et le service du tableau de bord. Un tableau de bord React (14 829 lignes) trilingue français/anglais/arabe complète l'ensemble. La méthodologie suivie est une démarche agile de type Scrum allégé.
 
 Un banc d'essai comparatif de **treize** moteurs de transcription du darija — trois par API et douze en local sur GPU — a été conduit et a renversé l'hypothèse initiale : la **référence d'exactitude** n'est pas le service commercial de référence, mais un modèle open-source affiné sur le darija, `BounharAbdelaziz/Morocco-Darija-STT-large`, seul à préserver simultanément les quantités numériques et les emprunts techniques français dont dépend l'intégralité du schéma métier. Son coût — 7,7 s et 4 Go de mémoire graphique — lui vaut en production la position de repli au sein d'une chaîne de trois moteurs, arbitrage explicité au §4.3.5. La chaîne complète, de la note vocale à la réponse de confirmation, est opérationnelle depuis la phase de développement du cœur IA, une phase avant la date prévue. [À COMPLÉTER : résultats chiffrés du pilote en conditions réelles]
 
@@ -86,7 +86,7 @@ Un banc d'essai comparatif de **treize** moteurs de transcription du darija — 
 
 In the network cabling industry, tracking technicians' daily activity still relies heavily on oral or handwritten reports, which are inconsistent and hard to exploit. This graduation project, carried out at AZNET, automates the production of daily site reports. At the end of the day a technician sends a plain voice note in Moroccan Arabic (Darija) — or a photo of a hand-written tally — through Telegram or WhatsApp; the system transcribes the audio, extracts typed business data (metres of cable tray, of prepared and installed cable, office sockets, patch-panel sockets, tested sockets, metres of fibre, interconnections, optical strands, floors and wings involved, stock, remarks), rewrites everything into a professional French summary, writes the row into the matching Google Sheets site journal, and notifies management.
 
-The chosen architecture is hybrid: a low-code orchestration platform (n8n, 64 nodes) handles multi-channel reception and integrations, while a custom Python/FastAPI microservice (77 routes, 13,082 lines) performs transcription, LLM-based structured extraction, rewriting, journal bookkeeping, job scheduling and dashboard serving. A trilingual French/English/Arabic React dashboard (14,516 lines) completes the system. The project follows a lightweight Scrum methodology.
+The chosen architecture is hybrid: a low-code orchestration platform (n8n, 64 nodes) handles multi-channel reception and integrations, while a custom Python/FastAPI microservice (82 routes, 14,504 lines) performs transcription, LLM-based structured extraction, rewriting, journal bookkeeping, job scheduling and dashboard serving. A trilingual French/English/Arabic React dashboard (14,829 lines) completes the system. The project follows a lightweight Scrum methodology.
 
 A comparative benchmark of **thirteen** Darija speech-to-text engines — three via API and twelve locally on GPU — was carried out and overturned the initial hypothesis: the **accuracy reference** is not the leading commercial service but an open-source Darija fine-tune, `BounharAbdelaziz/Morocco-Darija-STT-large`, the only one preserving both numeric quantities and the French technical loanwords on which the entire business schema depends. Its cost — 7.7 s and 4 GB of GPU memory — places it in production as the fallback within a three-engine chain, a trade-off set out in §4.3.5. The full chain, from voice note to confirmation reply, has been operational since the core-AI phase, one phase ahead of the plan. [TO BE COMPLETED: field-pilot figures]
 
@@ -453,7 +453,7 @@ Le **Tableau 2.3** situe le besoin d'AZNET face aux catégories d'outils existan
 | Effort du technicien | Formulaire à remplir | Formulaire à remplir | Envoi manuel | **Une note vocale** |
 | Extraction structurée métier | Oui, par formulaire | À construire | Non | **Oui, par LLM** |
 | Écriture dans le fichier du client | Export | Oui | Non | **Oui, fusion par chantier** |
-| Logique versionnée et testée | Non | Non | — | **Oui, 429 tests** |
+| Logique versionnée et testée | Non | Non | — | **Oui, 463 tests** |
 
 
 La conclusion n'est pas que ces produits sont mauvais, mais que le besoin d'AZNET a une contrainte que le marché ne traite pas : **l'entrée doit être de la parole spontanée en langue peu dotée**, et tout le reste en découle.
@@ -483,7 +483,7 @@ Le **Tableau 2.4** reprend les technologies retenues et, pour chacune, l'alterna
 | **Docker Compose** | Déploiement | Installation manuelle, Kubernetes | Cinq services reproductibles ; Kubernetes serait disproportionné pour une machine |
 | **PyTorch + Transformers** | Banc d'essai local | ONNX Runtime, llama.cpp | Seul écosystème où les treize points de contrôle évalués sont publiés |
 | **Playwright** | Contrôle visuel | Selenium, Cypress | Capture multi-navigateur scriptable ; sert aussi à produire les captures de ce rapport |
-| **pytest** | Tests | unittest | Fixtures et paramétrage ; 429 tests sans aucune clé d'API |
+| **pytest** | Tests | unittest | Fixtures et paramétrage ; 463 tests sans aucune clé d'API |
 | **GitHub Actions** | Intégration continue | GitLab CI, Jenkins | Gratuit sur dépôt privé ; au plus près du dépôt |
 | **Mermaid** | Diagrammes | draw.io, Visio | Diagrammes en texte, donc versionnés et révisables comme du code |
 
@@ -765,7 +765,7 @@ Toutes les migrations sont idempotentes et rejouées à chaque démarrage. Celle
 
 Le service expose `POST /process`, acceptant **exactement une** de trois entrées : `audio`, `image` ou `text` — toute autre combinaison est un 422. L'aiguillage par type d'entrée est fait par n8n, jamais à l'intérieur du service. Les trois modes convergent vers le même pipeline d'extraction, ce qui rend la solution indépendante du canal.
 
-Le service compte **77 routes** et **13 082 lignes** de Python, organisées en modules : `main.py` (routes), `extraction.py`, `journal.py`, `sheets.py`, `logs.py`, `auth.py`, `jobs.py`, `memory.py`, `mailer.py`, `reply.py`, `daily_report.py`, `docx_report.py`, `drive.py`, `stock.py`, `usage.py`, `prompt_loader.py`, `schemas.py`, `config.py`.
+Le service compte **82 routes** et **14 504 lignes** de Python, organisées en modules : `main.py` (routes), `extraction.py`, `journal.py`, `sheets.py`, `logs.py`, `auth.py`, `jobs.py`, `memory.py`, `mailer.py`, `reply.py`, `daily_report.py`, `docx_report.py`, `drive.py`, `stock.py`, `usage.py`, `prompt_loader.py`, `schemas.py`, `config.py`.
 
 ### 3.4.2 Patron Stratégie pour la transcription
 
@@ -879,7 +879,7 @@ La **Figure 3.9** décrit la tenue du journal, de la normalisation de la date à
 
 ### 3.4.8 Les tâches planifiées
 
-`jobs.py` implémente un ordonnanceur : un fil d'exécution, un battement de 30 s, **six tâches** — vidange de la file de reprise (5 min), purge des journaux (03:00), reconstruction des profils (03:00), rappels, rapport quotidien par e-mail (lundi-samedi) et rapport hebdomadaire. Chacune dispose d'un budget de temps propre, dimensionné sur son coût réel : 600 s pour les rapports, qui enchaînent une lecture du Sheet, un envoi SMTP et un appel de modèle **par chef de chantier**.
+`jobs.py` implémente un ordonnanceur : un fil d'exécution, un battement de 30 s, **neuf tâches** — vidange de la file de reprise (5 min), reprise des messages en échec, complétion des articles libres manqués (chaque heure), veille matière (chaque heure), purge des journaux (03:00), reconstruction des profils (03:00), rappels de tâches, rapport quotidien par e-mail (lundi-samedi) et rapport hebdomadaire. Chacune dispose d'un budget de temps propre, dimensionné sur son coût réel : 600 s pour les rapports, qui enchaînent une lecture du Sheet, un envoi SMTP et un appel de modèle **par chef de chantier**.
 
 Ces tâches étaient des nœuds *cron* n8n ; elles ont migré dans le service parce qu'un nœud cron ne peut ni montrer à un opérateur ce qu'il a produit, ni lui permettre de forcer une réexécution — ce que la page **Automatisation** du tableau de bord fait.
 
@@ -894,8 +894,73 @@ La **Figure 3.10** détaille l'ordonnanceur et la réclamation atomique qui gara
 
 
 ::: {custom-style="FigureCaption"}
-**Figure 3.10 :** Ordonnanceur : six tâches, un fil unique, et une réclamation atomique du droit d'enregistrer le résultat — sans laquelle une tâche terminée juste au seuil du délai inscrivait deux issues contradictoires pour une même exécution.
+**Figure 3.10 :** Ordonnanceur : neuf tâches, un fil unique, et une réclamation atomique du droit d'enregistrer le résultat — sans laquelle une tâche terminée juste au seuil du délai inscrivait deux issues contradictoires pour une même exécution.
 :::
+
+
+### 3.4.9 Les avertissements : deux familles, deux destins
+
+Le système produit deux sortes d'avertissements. Elles ne vivent pas au même endroit, elles ne s'écrivent pas au même moment, et les confondre conduirait à chercher une colonne pour un chiffre qui n'en veut pas.
+
+**Famille A — les alertes matière** (`stock.py`, clé `niveau`). Elles répondent à « qu'est-ce qui va manquer ». Elles sont **recalculées à la demande** depuis le journal, le registre `receptions` et le bordereau, et **stockées nulle part**. Elles alimentent le corps du courriel quotidien et hebdomadaire, le tableau du document Word et la route `GET /alerts` que lit la page Chantiers. Quatre niveaux, classés dans cet ordre :
+
+- `depassement` — la quantité posée dépasse la quantité au marché. Ce niveau ne dépend pas du stock connu : sur-consommation ou erreur de saisie, le directeur doit l'entendre dans les deux cas.
+- `critique` — au plus deux jours de couverture au rythme actuel, ou au plus 5 % du marché lorsqu'aucun rythme n'est exploitable.
+- `bas` — au plus cinq jours, ou au plus 10 %.
+- `surplus` — plus de deux fois ce qu'il reste à poser, **et** un excédent représentant plus de 10 % du marché.
+
+L'ordre de ces tests porte une décision. `surplus` est évalué **avant** les niveaux de pénurie, parce qu'en fin de chantier un article peut se trouver simultanément sous deux jours de couverture *et* en excès de plusieurs fois le reste à poser : « commandez-en » serait alors exactement la phrase inverse de celle qu'il faut dire. Sous deux jours actifs il n'existe pas de rythme fiable — un chantier dont toute la livraison est arrivée le premier jour est approvisionné, pas suralimenté — et le calcul se replie sur le pourcentage ; sans quantité au marché il n'y a pas de dénominateur, et le système se tait plutôt que d'inventer un repère. Les seuils sont surchargeables dans `app_settings` sans redémarrage.
+
+**Le point à retenir est l'absence de colonne.** Une alerte matière est dérivée de trois sources qui bougent chacune de leur côté ; figée dans une cellule, elle serait périmée avant d'être lue. C'est la même raison qui fait recalculer `qte_installee` à chaque appel du bordereau plutôt que de la stocker.
+
+**Famille B — les avertissements de ligne** (`journal.WARNING_LABELS`). Elles répondent à « que faut-il vérifier sur cette ligne-ci », et celles-là **ont** une colonne : `Motif du flag` dans l'onglet du chantier, `motif_flag` dans l'onglet Rapports, plusieurs motifs étant joints par un point médian. Elles proviennent de deux processus qui convergent sur la même ligne : `/process` transmet les siennes à travers n8n, `file_report` y ajoute les siennes au moment de l'écriture.
+
+Dix clés existent, et **cinq seulement lèvent le drapeau de vérification** :
+
+| Avertissement | Lève `Flag review` | Ce qu'il dit |
+|---|---|---|
+| `image_input` | oui | La ligne a été lue sur une photo |
+| `photo_zones_partielles` | oui | Zones lues sur un plan : la liste peut être incomplète |
+| `low_confidence_transcription` | oui | La transcription est peu sûre |
+| `short_transcription` | oui | Transcription trop courte pour être un rapport |
+| `chantier_cree_non_verifie` | oui | Le chantier a été créé depuis un nom entendu |
+| `stock_ecart` | non | Le stock déclaré contredit le stock calculé |
+| `no_report_content` | non | Aucune donnée exploitable dans le message |
+| `heure_non_dite` | non | Une heure inventée par le modèle a été retirée |
+| `date_declaree_illisible` | non | La date énoncée n'a pas pu être lue |
+| `date_declaree_hors_plage` | non | La date énoncée sort de la plage acceptable |
+
+Le second point à retenir tient dans une seule ligne de ce tableau. **`stock_ecart` est le seul avertissement qui porte sur une contradiction numérique, et il ne lève pas le drapeau.** Le raisonnement est que la ligne se justifie d'elle-même : l'écart est chiffré dans le motif, une livraison et une perte y sont arithmétiquement identiques, et seul le technicien peut trancher. Personne n'est donc invité à venir la regarder. C'est un choix assumé, signalé au propriétaire du projet et maintenu à sa demande — pas un oubli ; il est mentionné ici pour qu'un lecteur qui le découvrirait en production sache qu'il a été pesé.
+
+`photo_zones_partielles` mérite la même précision, parce qu'il est le seul avertissement issu d'une **mesure** et non d'une intuition. Le banc d'essai vision du 16 août 2026 a montré un encombrement attentionnel reproductible : les mêmes points bleus, sur le même couloir, sont trouvés lorsqu'ils sont les seules marques du plan et manqués par trois modèles sur quatre dès que des marques plus visibles apparaissent ailleurs dans l'image. Une zone perdue est invisible — elle ne laisse pas de cellule vide à remarquer, seulement une liste plus courte — donc la ligne doit le dire elle-même.
+
+### 3.4.10 Ignorer une alerte sans l'effacer
+
+Une alerte matière permanente à l'écran pose une question à laquelle le système devait répondre : que fait un directeur qui a **déjà commandé** le câble qui manque ? Sans réponse, il apprend à ne plus lire le bandeau, et le jour où une alerte nouvelle s'y ajoute, elle ne se distingue plus des trois qu'il ignore déjà.
+
+Le bouton « Ignorer » n'efface donc rien — il n'y aurait d'ailleurs rien à effacer, l'alerte étant recalculée à chaque lecture. Ce qui est enregistré dans `alert_mutes`, c'est la **décision**, accompagnée du chiffre contre lequel elle a été prise : le niveau et le reste au moment du clic. Une décision portant sur 40 m de câble restants n'est pas une décision portant sur 12 m.
+
+C'est cet instantané qui fait **expirer la mise en sourdine toute seule**. Elle ne tient que tant que le niveau est celui qui a été écarté et que le reste n'est pas descendu en dessous de ce qu'il était ; toute aggravation — un niveau qui passe de `bas` à `critique`, ou dix mètres de moins — fait réapparaître la ligne. Sans cette règle, un clic pourrait faire taire définitivement une pénurie, ce qui est la seule chose qu'un panneau d'alerte ne doit jamais permettre. Une amélioration la fait réapparaître également : la décision avait été prise à propos d'autre chose.
+
+Trois décisions complémentaires en assurent la tenue :
+
+- **L'instantané est pris côté serveur**, à partir de son propre calcul, jamais depuis la requête. Un chiffre envoyé par le navigateur pourrait dater d'une heure, et l'instantané est précisément ce qui sépare « ignorer » de « faire taire pour toujours ».
+- **Une alerte qui n'est pas active ne peut pas être mise en sourdine** : il n'y aurait rien à instantanéiser, et la ligne resterait en base à masquer par avance une alerte que personne n'a encore vue.
+- **La route `GET /alerts` marque les alertes ignorées, elle ne les retire pas.** Une ligne qu'on ne voit plus est une ligne qu'on ne peut plus réafficher ; le tableau de bord les sort du bandeau qui alerte et les garde accessibles derrière un compteur.
+
+La mise en sourdine vaut pour tout le monde, et non pour un navigateur : « nous l'avons commandé » est une information d'exploitation, pas une préférence d'affichage.
+
+Une tâche horaire, `watch_alerts`, complète le dispositif : elle parcourt les alertes et fait sonner la cloche du tableau de bord pour celles dont personne n'a encore été informé — **une fois par état**, la signature retenue étant le niveau et le reste arrondi. Une pénurie inchangée reste donc silencieuse, une pénurie qui s'aggrave sonne de nouveau. Les alertes ignorées ne sonnent jamais : une notification qui passe outre rendrait le bouton mensonger.
+
+### 3.4.11 La matière reçue n'est pas la matière posée
+
+L'instruction de lecture d'image demandait au modèle de reporter un **bon de livraison** dans les colonnes de quantités *installées*. Cinq cents mètres de câble livrés étaient donc comptabilisés comme cinq cents mètres posés — gonflant précisément le nombre dont `GET /chantiers/{id}/bordereau` déduit l'avancement. Le défaut est resté latent tant qu'aucune colonne d'article ne portait de valeur.
+
+Le champ `nature` (`pose` ou `livraison`) et le dictionnaire `livraisons` séparent désormais les deux. **L'absence de `nature` vaut `pose`** : toute ligne existante et toute note vocale restent inchangées, et une livraison n'est une livraison que parce que le modèle l'a positivement dit. `livraisons` est validé contre le vocabulaire des champs connus — une clé inconnue **lève une erreur**, ce qui fait réessayer la chaîne d'extraction, exactement comme un étage non reconnu ; un article qui ne correspond à rien part en texte dans `besoins`. Le temps d'arrêt en est exclu : des minutes perdues ne sont pas de la marchandise.
+
+Le registre vit dans PostgreSQL, avec une quantité **signée** — un retour au dépôt est une ligne négative — et une contrainte d'unicité sur le couple message/article, parce que n8n réessaie et que la file de reprise rejoue les charges parquées : une réception comptée deux fois est la seule erreur qui rend fausses toutes les figures de stock sans en avoir l'air. Il n'est jamais purgé. Un onglet plat le reflète dans le classeur, au même titre que le miroir Rapports et avec le même contrat : au mieux.
+
+**Une livraison n'écrit aucune ligne de journal** — mais le registre traite ce que le message porte *par ailleurs*, car « on a reçu 500 m et on en a posé 80 » énonce deux faits et seul `nature` décide si une ligne de journal suit. La lecture se fait par `GET /receptions` uniquement : une seconde façon de saisir une réception serait une seconde façon pour le registre et les messages de se contredire.
 
 
 ## 3.5 Conception du workflow d'orchestration
@@ -961,7 +1026,7 @@ Le workflow se lit en sept bandes. Le détail ci-dessous explique ce que chacune
 
 ## 3.6 Conception du tableau de bord
 
-Le tableau de bord (14 516 lignes de TypeScript) est une application React 19 servie en statique.
+Le tableau de bord (14 829 lignes de TypeScript) est une application React 19 servie en statique.
 
 **Toutes les chaînes d'interface vivent dans `locales/{fr,en,ar}.json`**, le français faisant référence. L'arabe impose le sens droite-à-gauche, ce qui interdit les marges directionnelles au profit des propriétés logiques.
 
@@ -970,6 +1035,14 @@ Le tableau de bord (14 516 lignes de TypeScript) est une application React 19 se
 **La lecture des données** passe par un cache au niveau du module, afin qu'une navigation aller-retour se repeigne instantanément puis se revalide en arrière-plan. Le sondage d'état et l'échantillonneur de disponibilité vivent **au-dessus** du routeur : les placer dans une page les arrêterait à la navigation et creuserait de faux trous dans l'historique de disponibilité.
 
 **Douze pages** composent l'application : vue d'ensemble, réception, rapports, rapport quotidien, rapport hebdomadaire, automatisation, tâches, journaux, file de reprise, **consommation**, équipe et **chantiers**. Les deux dernières sont aussi les plus récentes et répondent à des questions que le reste de l'interface ne posait pas. **Chantiers** rassemble ce qui relève de l'administration d'un site — alertes matériel, sites et articles à confirmer, bordereau et son avancement — là où la vue d'ensemble répond à « que se passe-t-il aujourd'hui ». **Consommation** montre ce qu'il reste de chaque offre gratuite. Aucune des deux ne recalcule dans le navigateur un chiffre que le service a déjà arrêté : elles l'affichent, avec sa provenance.
+
+**La page Chantiers a changé de forme, et le motif mérite d'être exposé** parce qu'il vaut pour n'importe quelle page d'administration. Elle empilait quatre bandes pleine largeur — sites à confirmer, articles à confirmer, alertes matériel, puis la liste des sites en accordéon — chacune précédée de son paragraphe. Aucune bande n'était fautive ; c'est l'empilement qui l'était. Déplier deux sites repoussait le troisième hors de l'écran, et les deux bandes qui réclamaient une décision occupaient le haut de la page, au-dessus de la liste pour laquelle le lecteur était venu.
+
+Elle est devenue un **maître-détail** : la liste des sites à gauche, un volet à droite qui n'affiche **qu'une chose à la fois**. La page tient donc dans un écran quelle que soit la quantité de données, et rien n'a disparu — les files de validation et les alertes complètes sont à un clic au lieu d'un défilement. Trois décisions la rendent navigable :
+
+- **Le bandeau d'alertes matière est permanent**, en haut, limité à trois lignes. Une pénurie est la seule information de cette page qui porte une échéance ; derrière un compteur à ouvrir, c'est une information qu'on apprend à contourner.
+- **La liste de gauche est ordonnée par ce qui réclame une action** — sites non confirmés d'abord, puis nombre d'alertes — et chaque ligne porte ses compteurs. Une liste triée seulement par ordre alphabétique oblige à parcourir chaque ligne pour trouver celle qui attend quelque chose.
+- **Le matériel déclaré appartient au site qui l'a déclaré.** La file de validation était globale : elle présentait des libellés sans indiquer d'où ils venaient, et ne montrait que les libellés *non confirmés*, si bien qu'un article disparaissait de l'écran au moment précis où quelqu'un l'acceptait — la seule action qui prouve qu'il est réel. Le volet d'un site liste désormais tous ses articles libres, confirmés ou non, avec la quantité cumulée. L'action, elle, reste globale, puisque le registre est indexé sur un *slug* : une note sous le titre le dit, car un bouton dont la portée dépasse le panneau qui l'accueille doit l'avouer.
 
 Les captures du tableau de bord en fonctionnement sont rassemblées au §4.7, afin d'être lues à côté des résultats plutôt qu'au milieu de la conception.
 
@@ -1049,7 +1122,35 @@ Ces points relèvent de l'entreprise et non de la technique, et sont énoncés i
 Ce dernier point mérite d'être souligné : le moteur de transcription local, retenu au chapitre 4 pour son exactitude, se trouve également être le seul qui n'expose aucune donnée à un tiers. Un choix technique fait pour la qualité s'avère aussi le meilleur choix pour la conformité.
 
 
-## 3.9 Conclusion du chapitre
+## 3.9 Ce que lit le modèle, et ce qu'il n'a pas le droit d'en faire
+
+Les sections précédentes ont décrit les composants un par un. Cette section les regarde ensemble, du point de vue du modèle : que reçoit-il exactement, dans quel ordre, et qu'est-ce qui lui est explicitement interdit.
+
+**Quatre sources entrent dans une extraction, et une seule est le message.** Le message lui-même — transcription, texte ou photo — arrive accompagné de trois contextes qui ne viennent pas de lui :
+
+- **`00-soul.md`**, préfixé à toute instruction adressée à un modèle : l'identité du système, l'interdiction d'inventer, et la règle qu'une absence n'est pas un zéro. Il est versionné comme du contenu et non écrit dans le code, parce qu'un changement d'instruction est un changement de comportement et doit être visible en revue.
+- **L'instruction d'extraction** propre à la forme de l'entrée, `extraction-texte.md` ou `extraction-image.md`.
+- **Le profil du technicien**, un paragraphe écrit chaque nuit à partir de ses rapports passés.
+
+Une quatrième source ne suit pas ce chemin et c'est délibéré : `stt-vocabulary.md`, la liste des mots métier, **ne reçoit pas l'âme**. Whisper lit son champ `prompt` comme le texte qui *précède* le clip, et non comme des instructions ; l'âme s'y retrouverait recopiée dans la transcription.
+
+**Le profil est le seul contexte contre lequel le système se protège de lui-même.** Il est injecté encadré d'une consigne qui le déclare informatif et interdit de s'en servir comme source de valeurs. Sans cette précaution, « intervient surtout sur Sidi Maarouf » est à un pas de remplir le champ `chantier` sur un message qui n'a jamais nommé de site — c'est-à-dire de produire une donnée plausible, fausse, et indiscernable d'une donnée dictée. C'est aussi pourquoi l'instruction qui rédige les profils **interdit les nombres** : un profil n'a pas à savoir compter.
+
+**La sortie se sépare en deux immédiatement.** Le champ `resume` part vers la réponse au technicien, *avant* toute écriture ; tout le reste passe par deux aiguillages successifs. `nature` décide si le message décrit une pose ou une réception — une réception n'écrit aucune ligne de journal mais alimente le registre. `has_data()` décide ensuite si ce qui reste mérite une ligne : « salam » s'extrait parfaitement, tous les champs à `null` et un résumé poli, et sans ce garde-fou la chaîne répondait « rapport enregistré » puis déposait une ligne de blancs.
+
+La **Figure 3.14** rassemble ce parcours : les trois formes d'entrée, les contextes injectés, les deux chaînes de modèles, et les trois issues possibles.
+
+::: {custom-style="FigureImage"}
+![](diagrams/15-ai-inputs.png){ width=16.0cm }
+:::
+
+
+::: {custom-style="FigureCaption"}
+**Figure 3.14 :** Ce que lit le modèle. En bleu, les contextes injectés qui ne viennent pas du message : l'âme, l'instruction, le profil du technicien et le vocabulaire de transcription — ce dernier étant le seul à ne pas recevoir l'âme, parce que Whisper le lirait comme un début de transcription. La réponse au technicien part de `resume` avant toute écriture ; l'issue rouge est le message qui n'a rien à filer et que le système archive au lieu de l'écrire.
+:::
+
+
+## 3.10 Conclusion du chapitre
 
 La conception traduit les contraintes du projet en structures : une architecture hybride dont la frontière est fonctionnelle et a été déplacée par l'expérience, un contrat de données reconstruit sur le fichier réel du client, un patron Stratégie qui a permis au banc d'essai de décider, quatre chaînes de repli explicites, un contrat d'erreurs qui refuse les échecs silencieux, un journal dont les règles d'ajout et de réconciliation protègent le seul chiffre qui compte, et un modèle relationnel qui fait d'un humain une seule ligne. Le chapitre suivant décrit la mise en œuvre, le banc d'essai et les résultats.
 
@@ -1074,7 +1175,7 @@ Le **Tableau 4.1** récapitule l'environnement de développement.
 | Outil | Rôle |
 |---|---|
 | Python 3.11 / FastAPI / Pydantic | Service applicatif |
-| pytest | Tests automatisés (429 tests) |
+| pytest | Tests automatisés (463 tests) |
 | PostgreSQL 16 | Journal d'événements, idempotence, sessions, organigramme |
 | React 19 / TypeScript / Vite / Tailwind v4 | Tableau de bord |
 | Docker / Docker Compose | Exécution de la pile complète (5 services) |
@@ -1379,7 +1480,7 @@ La migration de fusion des comptes lit une colonne qu'elle supprime elle-même. 
 
 ## 4.5 Stratégie de test et intégration continue
 
-La suite compte **429 tests** répartis en 33 fichiers (6 381 lignes), **exécutables sans aucune clé d'API et sans base de données**. Cette propriété est une règle du projet, obtenue par deux moyens : les bibliothèques externes sont importées paresseusement *à l'intérieur* des fonctions, et les appels externes sont simulés aux frontières.
+La suite compte **463 tests** répartis en 37 fichiers (6 927 lignes), **exécutables sans aucune clé d'API et sans base de données**. Cette propriété est une règle du projet, obtenue par deux moyens : les bibliothèques externes sont importées paresseusement *à l'intérieur* des fonctions, et les appels externes sont simulés aux frontières.
 
 Elle a un corollaire honnête, qu'il faut énoncer : **aucun test ne parcourt le chemin réseau réel**. Les défauts décrits en §4.4 sont précisément ceux qu'une suite hors ligne ne peut pas voir, et c'est pourquoi la vérification en conditions réelles reste une étape distincte et nécessaire.
 
@@ -1413,11 +1514,14 @@ Le **Tableau 4.9** dresse l'état du périmètre livré, composant par composant
 | Observabilité PostgreSQL | En production |
 | Tableau de bord trilingue (FR/EN/AR) | En production |
 | Organigramme, comptes, chantiers, bordereau | En production |
-| Ordonnanceur (6 tâches) et page Automatisation | En production |
+| Ordonnanceur (9 tâches) et page Automatisation | En production |
 | Rapports quotidien et hebdomadaire par e-mail (avec document .docx joint) | En production |
 | Colonnes d'article créées à la volée (`articles_libres`, registre, confirmation) | En production |
 | Registre des réceptions de matériel (`nature`, `livraisons`) | En production |
-| Alertes de stock en jours de couverture, et dépassement de bordereau | En production |
+| Alertes de stock en jours de couverture, dépassement de bordereau et excédent | En production |
+| Mise en sourdine d'une alerte, expirant d'elle-même à la première aggravation | En production |
+| Veille matière horaire : cloche du tableau de bord, une fois par état | En production |
+| Matériel déclaré rattaché au site déclarant, validation depuis son volet | En production |
 | Page Consommation : quotas des offres gratuites mesurés | En production |
 | Commandes `/rapport`, `/modifier`, `/supprimer` | Retirées (voir §3.5.1) |
 | Moteur local sur GPU, conteneurisé | En production |
@@ -1435,9 +1539,9 @@ Le **Tableau 4.10** en donne les métriques.
 | Indicateur | Valeur |
 |---|---|
 | Durée du projet | 6 mois (2 mars – 31 août 2026) |
-| Lignes de Python (service) | 13 082 |
-| Lignes de tests | 6 381 (33 fichiers, 429 tests) |
-| Lignes de TypeScript et CSS (tableau de bord) | 14 516 |
+| Lignes de Python (service) | 14 504 |
+| Lignes de tests | 6 927 (37 fichiers, 463 tests) |
+| Lignes de TypeScript et CSS (tableau de bord) | 14 829 |
 | Clés d'interface traduites | 525 × 3 langues |
 | Routes d'API | 77 |
 | Nœuds n8n | 64 (dont 54 actifs) |
@@ -1460,7 +1564,7 @@ Le **Tableau 4.10** en donne les métriques.
 
 ## 4.7 Le tableau de bord en fonctionnement
 
-Le tableau de bord est l'interface par laquelle le directeur et les chefs de chantier consultent les rapports, les corrigent, administrent l'organigramme et surveillent l'ordonnanceur. Sa conception est traitée au §3.6 ; son rendu réel — vingt-neuf captures produites par un script Playwright versionné dans le dépôt, en thème sombre et en anglais, chacune cadrée en 16:9 — est reporté en **Annexe H**, où il peut être parcouru écran par écran sans interrompre le fil de ce chapitre.
+Le tableau de bord est l'interface par laquelle le directeur et les chefs de chantier consultent les rapports, les corrigent, administrent l'organigramme et surveillent l'ordonnanceur. Sa conception est traitée au §3.6 ; son rendu réel — vingt-neuf captures produites en une seule passe par un script Playwright versionné dans le dépôt (`Dashboard/scripts/shots.mjs`), en thème sombre et en anglais sauf mention contraire — est reporté en **Annexe H**, où il peut être parcouru écran par écran sans interrompre le fil de ce chapitre.
 
 ## 4.8 Analyse des coûts et des quotas
 
@@ -1537,11 +1641,11 @@ Le **Tableau 4.13** rassemble les indicateurs de qualité mesurés.
 
 | Indicateur | Valeur |
 |---|---|
-| Tests automatisés | 429, répartis en 33 fichiers |
-| Lignes de test | 6 381 |
-| Ratio test / code applicatif | ≈ 1 ligne de test pour 2 lignes de service (6 381 / 13 082) |
+| Tests automatisés | 463, répartis en 37 fichiers |
+| Lignes de test | 6 927 |
+| Ratio test / code applicatif | ≈ 1 ligne de test pour 2 lignes de service (6 927 / 14 504) |
 | Dépendances d'exécution requises pour les tests | **Aucune** — ni clé d'API, ni base de données |
-| Durée de la suite complète | 5 min 55 s (mesuré, 429 tests) |
+| Durée de la suite complète | 8 min 24 s (mesuré, 463 tests, suite verte) |
 | Contrôles d'intégration continue | **18** par *push* (détail au §4.9.3) |
 | Analyse statique externe | SonarCloud, sur chaque *push* (détail au §4.9.4) |
 | Mises à jour de dépendances automatisées | Dependabot, 5 écosystèmes (détail au §4.9.3) |
@@ -1560,7 +1664,7 @@ Le **Tableau 4.14** en donne le détail, famille par famille.
 
 | Famille | Contrôles | Ce qu'ils attrapent |
 |---|---|---|
-| Correction | `API — lint, types & tests` (ruff, 429 tests), `Dashboard — types, lint & build` (tsc, oxlint), `n8n workflow`, `Docker compose config`, `Locale key parity` | Régressions de logique, dérive de types, workflow invalide, clé de traduction manquante dans l'une des trois langues |
+| Correction | `API — lint, types & tests` (ruff, 463 tests), `Dashboard — types, lint & build` (tsc, oxlint), `n8n workflow`, `Docker compose config`, `Locale key parity` | Régressions de logique, dérive de types, workflow invalide, clé de traduction manquante dans l'une des trois langues |
 | Sécurité du code | `CodeQL (python)`, `CodeQL (javascript-typescript)`, `Semgrep (OWASP Top 10)`, `Bandit SAST` | Injections, chemins de données non assainis, primitives cryptographiques faibles |
 | Dépendances et secrets | `Trivy filesystem scan`, `Trivy config scan`, `pip-audit`, `npm audit`, `Secret scan` (gitleaks + `scripts/check_secrets.py`) | Vulnérabilités connues des bibliothèques tierces, mauvaise configuration d'infrastructure, jeton commité |
 | Conformité des fichiers | `Hadolint (api/Dockerfile)`, `Hadolint (Dashboard/Dockerfile)`, `actionlint` | Images Docker non conformes aux bonnes pratiques, workflow GitHub Actions syntaxiquement fragile |
@@ -1684,7 +1788,7 @@ La réalisation a concrétisé la conception et l'a confrontée au réel. Le ban
 4. **Un modèle métier reconstruit sur le fichier réel du client**, tenant un journal par chantier avec accumulation intra-journalière et réconciliation de stock — deux règles sans lesquelles le seul chiffre que lit le directeur, la ligne de totaux, serait faux.
 5. **Une conception indépendante du canal**, démontrée en pratique par la mise en service successive de deux messageries aux contraintes opposées, sans modification du cœur du système.
 
-**Résultats.** La chaîne complète est opérationnelle depuis la phase 3, avec un mécanisme de repli validé en conditions réelles. Le système compte 77 routes, 64 nœuds d'orchestration, 24 tables et 429 tests automatisés exécutables sans aucune clé d'API. *[À COMPLÉTER : latence de bout en bout mesurée et bilan du pilote.]*
+**Résultats.** La chaîne complète est opérationnelle depuis la phase 3, avec un mécanisme de repli validé en conditions réelles. Le système compte 82 routes, 64 nœuds d'orchestration, 28 tables et 463 tests automatisés exécutables sans aucune clé d'API. *[À COMPLÉTER : latence de bout en bout mesurée et bilan du pilote.]*
 
 **Limites.** Trois limites doivent être énoncées sans détour. D'abord, **le WER et le CER n'ont pas été calculés** : le choix d'une métrique applicative est argumenté au §4.3.2, mais il prive la comparaison d'un chiffre unique et universellement reconnu, et le classement final repose sur un jugement humain — rigoureux, mais non reproductible par un tiers sans le même locuteur. Ensuite, **la suite de tests ne parcourt jamais le réseau réel** ; elle sécurise les régressions de logique, non les ruptures de contrat des fournisseurs, qui ont été la source de la majorité des défauts rencontrés. Enfin, *[À COMPLÉTER : bilan du pilote en conditions réelles]*.
 
@@ -2201,7 +2305,7 @@ redémarrage de la machine.
 
 ```bash
 cd api
-.venv/Scripts/python.exe -m pytest              # 429 tests, sans aucune clé d'API
+.venv/Scripts/python.exe -m pytest              # 463 tests, sans aucune clé d'API
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload
 ```
 
@@ -2298,7 +2402,7 @@ terrain à partir des rapports réels accumulés est la première des perspectiv
 
 ## Annexe H : Le tableau de bord, écran par écran
 
-Les captures ci-dessous proviennent de l'application réelle, connectée à la pile complète, en thème sombre et en anglais — l'interface étant trilingue, la langue d'affichage est un choix de l'utilisateur. Elles ont été produites par un script Playwright versionné dans le dépôt, qui ouvre une session, attend la disparition des squelettes de chargement avant chaque capture, et cadre chaque écran en 16:9.
+Les captures ci-dessous proviennent de l'application réelle, connectée à la pile complète, en thème sombre et en anglais — l'interface étant trilingue, la langue d'affichage est un choix de l'utilisateur. Elles ont été produites par un script Playwright versionné dans le dépôt (`Dashboard/scripts/shots.mjs`), qui ouvre une session, attend la disparition des squelettes de chargement avant chaque capture — et l'attend **trois fois de suite**, les panneaux se montant par vagues, si bien qu'une seule lecture passe dans l'intervalle entre un panneau qui finit et le suivant qui commence — puis cadre chaque écran en 16:9. Trois captures font exception au cadrage : les trois vues téléphone, prises à 414 points de large, et deux gros plans du volet Chantiers, découpés sur la boîte mesurée de la colonne parce qu'un plein cadre imprimé à 15,5 cm rend le bordereau à six points. L'ensemble provient d'une seule exécution : un document reconstruit ne peut donc pas mélanger deux générations de l'interface.
 
 ### 4.10.1 Écrans principaux
 La **Figure H.1** montre l'écran de connexion, point d'entrée unique du tableau de bord.
@@ -2371,14 +2475,14 @@ La **Figure H.7** en montre l'équivalent hebdomadaire.
 **Figure H.7 :** Rapport hebdomadaire : le même moteur que le rapport quotidien, appelé sur une plage de dates.
 :::
 
-La **Figure H.8** donne la page Automatisation et l'état des six tâches planifiées.
+La **Figure H.8** donne la page Automatisation et l'état des neuf tâches planifiées.
 
 ::: {custom-style="FigureImage"}
 ![](screens/en-automation.jpg){ width=15.5cm }
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure H.8 :** Automatisation. Les six tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
+**Figure H.8 :** Automatisation. Les neuf tâches planifiées, leur dernier résultat et leur horaire. Le bouton de réexécution est la raison d'être de la migration depuis les nœuds cron.
 :::
 
 La **Figure H.9** montre les tâches et les rappels avec leur périodicité.
@@ -2428,17 +2532,17 @@ La **Figure H.13** donne la page Chantiers, qui rassemble l'administration d'un 
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure H.13 :** Chantiers, partie haute : le matériel à confirmer. Ces articles ont été déclarés par un technicien sans correspondre à aucune ligne de bordereau ; leur colonne existe déjà et leurs quantités sont comptées — **un rapport n'attend jamais une validation**. Confirmer, corriger (un libellé corrigé vers un libellé existant fusionne les deux colonnes) ou supprimer sont des décisions humaines, prises après coup.
+**Figure H.13 :** Chantiers, la page entière. En haut, le bandeau d'alertes matière, permanent et borné à trois lignes, chacune avec son bouton *Ignorer*. À gauche, la liste des sites ordonnée par ce qui réclame une action, chaque ligne portant ses compteurs — alertes en rouge, articles non validés en ambre. À droite, un seul volet : ici le site DGH, ses alertes, son bordereau et le matériel qu'il a déclaré hors bordereau. La page tient dans un écran quel que soit le nombre de sites.
 :::
 
-La **Figure H.14** en montre la suite : les alertes matériel et la liste des sites.
+La **Figure H.14** détaille le matériel déclaré hors bordereau pour un site.
 
 ::: {custom-style="FigureImage"}
 ![](screens/en-chantiers-2.jpg){ width=15.5cm }
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure H.14 :** Chantiers, partie basse : alertes matériel puis liste des sites. L'état vide est explicite — « rien ne manque au rythme actuel » — là où un panneau simplement vide serait indiscernable d'un panneau en panne.
+**Figure H.14 :** Le matériel déclaré hors bordereau, sur le site qui l'a déclaré. Tous les articles libres du site figurent, confirmés ou non, avec la quantité cumulée et le nombre de rapports qui l'ont portée. Les trois boutons ne portent que sur le **libellé** : la colonne et ses quantités existent déjà, parce qu'un rapport n'attend jamais une validation. Corriger un libellé vers un libellé existant **fusionne les deux colonnes** — c'est la seule façon de réunir deux orthographes que la normalisation ne peut pas rapprocher, « prise 2P+T » et « prise industrielle 3P+N+T » étant deux objets distincts là où « prises doubles étanches » et « prise double étanche » n'en font qu'un.
 :::
 
 La **Figure H.15** montre le bordereau d'un site, déplié.
@@ -2448,7 +2552,7 @@ La **Figure H.15** montre le bordereau d'un site, déplié.
 :::
 
 ::: {custom-style="FigureCaption"}
-**Figure H.15 :** Le bordereau du chantier DGH. La quantité installée est recalculée depuis le journal à chaque appel et n'est stockée **nulle part** : le journal étant le seul endroit où une quantité est saisie, un total conservé ne pourrait que dériver. Un article sans champ correspondant dans le schéma d'extraction — un commutateur, un onduleur — affiche « non suivi », ce qui signifie « non suivi ici » et jamais « rien d'installé ».
+**Figure H.15 :** Le bordereau du chantier DGH, affiché à gauche du matériel hors bordereau dans le volet du site. La quantité installée est recalculée depuis le journal à chaque appel et n'est stockée **nulle part** : le journal étant le seul endroit où une quantité est saisie, un total conservé ne pourrait que dériver. Un article sans champ correspondant dans le schéma d'extraction — un commutateur, un onduleur — affiche « non suivi », ce qui signifie « non suivi ici » et jamais « rien d'installé ».
 :::
 
 La **Figure H.16** donne l'organigramme et ses trois bandes.

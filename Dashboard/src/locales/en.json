@@ -539,6 +539,8 @@
   "chantiers.level.bas": "Order soon",
   "chantiers.level.critique": "Critical",
   "chantiers.level.depassement": "Over contract",
+  "chantiers.level.surplus": "Excess",
+  "chantiers.excess": "{n} for {besoin} left to install",
   "chantiers.open": "Open the contract list",
   "chantiers.close": "Close the contract list",
   "chantiers.tracked": "sites tracked",

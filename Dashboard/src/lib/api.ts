@@ -270,9 +270,7 @@ export async function n8nExecutions(signal?: AbortSignal): Promise<N8nExecution[
  * timestamp against the expected interval; a failure here is reported as
  * unknown (null), never as healthy.
  */
-export async function n8nListening(
-  signal?: AbortSignal,
-): Promise<{
+export async function n8nListening(signal?: AbortSignal): Promise<{
   stale: boolean | null
   last_execution_at: string | null
   age_seconds: number | null
@@ -512,12 +510,26 @@ export interface MaterialAlert {
   champ: string
   article: string
   unite: string
-  niveau: 'depassement' | 'critique' | 'bas'
+  /** `surplus` is not a shortage: more than twice what is left to install,
+   *  and the excess is a visible share of the contract. It is tested BEFORE
+   *  the shortage levels in `stock._level`, because near the end of a site a
+   *  material can be under two days of cover *and* oversupplied — and
+   *  "order more" would be exactly the wrong sentence. */
+  /** `surplus` is not a shortage: more than twice what is left to install,
+   *  and the excess is a visible share of the contract. It is tested BEFORE
+   *  the shortage levels in `stock._level`, because near the end of a site a
+   *  material can be under two days of cover *and* oversupplied — and
+   *  "order more" would be exactly the wrong sentence. */
+  niveau: 'depassement' | 'critique' | 'bas' | 'surplus' | 'surplus'
   reste: number | null
   jours: number | null
   rythme: number | null
   installe: number | null
   marche: number | null
+  /** What the contract still owes: `marche - installe`. The yardstick a
+   *  surplus is measured against, and null without a bordereau — never 0,
+   *  which would make every leftover an excess. */
+  besoin?: number | null
   source: string | null
   /** Somebody dismissed this finding and it has not got worse since.
    *  Sent rather than filtered out server-side: a line that vanishes cannot be

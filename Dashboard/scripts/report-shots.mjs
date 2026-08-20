@@ -112,30 +112,50 @@ const shot = async (page, name) => {
   }
 
   // Long routes: a second viewport further down beats one giant image.
-  for (const route of ['overview', 'equipe', 'chantiers']) {
+  for (const route of ['overview', 'equipe']) {
     await go(page, route)
     await page.evaluate(() => window.scrollTo(0, window.innerHeight * 0.85))
     await page.waitForTimeout(900)
     await shot(page, `en-${route}-2`)
   }
 
-  // The bordereau of one site, which is the point of the Sites page and lives
-  // behind a collapsed row: a shot of the closed list shows five names and no
-  // quantities. DGH is the site with the longest schedule of contract lines.
+  // The Sites page became a master-detail on 2026-08-20: there is no collapsed
+  // row to expand any more, the first site is selected on arrival, and its
+  // schedule sits beside the material it declared outside the schedule. Two
+  // crops rather than two full frames — printed at 15.5 cm a whole viewport
+  // renders the schedule at about six point, and the report argues about what
+  // these two columns contain, so they have to be readable. The crop is taken
+  // on the measured box, never by zooming the browser: a zoom moves the
+  // breakpoints and photographs a layout nobody ever sees.
   await go(page, 'chantiers')
-  const site = page.locator('button[aria-expanded]', { hasText: 'DGH' }).first()
-  await site.click()
-  // The schedule is fetched on expand, so wait on its header rather than on a
-  // timer: a fixed delay captured the loading skeleton about half the time.
-  await page.waitForSelector('text=PROGRESS', { timeout: 20000 })
-    .catch(() => console.warn('  ! bordereau header never appeared'))
-  await page.waitForTimeout(2000)
-  // Frame the tracked articles — the ones carrying a progress bar — which sit
-  // below the untracked hardware at the top of the schedule.
-  const top = await site.evaluate((el) => el.getBoundingClientRect().top + window.scrollY)
-  await page.evaluate((y) => window.scrollTo(0, y), top + 560)
+  const dgh = page.locator('button[aria-current]', { hasText: 'DGH' }).first()
+  if (await dgh.count()) {
+    await dgh.click().catch(() => {})
+    await settle(page)
+  }
+  await page.waitForSelector('table', { timeout: 20000 })
+    .catch(() => console.warn('  ! the schedule never appeared'))
   await page.waitForTimeout(1200)
-  await shot(page, 'en-chantiers-bordereau')
+
+  for (const [name, locator, headroom] of [
+    ['en-chantiers-bordereau', page.locator('table').first(), 34],
+    ['en-chantiers-2', page.locator('section').filter({ hasText: /Confirm/ }).last(), 8],
+  ]) {
+    if (!(await locator.count())) { console.warn('  !', name, 'not on screen'); continue }
+    const box = await locator.boundingBox()
+    if (!box) continue
+    const top = Math.max(0, box.y - headroom)
+    await page.screenshot({
+      path: join(OUT, `${name}.png`),
+      clip: {
+        x: Math.max(0, box.x - 8),
+        y: top,
+        width: box.width + 16,
+        height: Math.min(box.height + headroom + 8, VIEWPORT.height - top),
+      },
+    })
+    console.log('  ->', name)
+  }
 
   // A route that matches nothing: the app says so instead of silently
   // landing on Overview.

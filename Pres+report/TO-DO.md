@@ -697,7 +697,12 @@ redéployés et vérifiés dans les conteneurs.
       modifié n'atteint pas un conteneur déjà lancé — `up -d`, pas `restart`.
 - [ ] `DGH` ligne 4 : cellule « Lien audio » mêlant prose et neuf identifiants,
       héritée de l'ancienne fusion. À reprendre à la main.
-- [ ] **Documenter les avertissements dans `rapport-PFE.docx`.** Le système en
+- [x] **Documenter les avertissements dans `rapport-PFE.docx`.** Fait le 2026-08-20 :
+      §3.4.9 « Les avertissements : deux familles, deux destins » porte les deux
+      recensements ci-dessous, le tableau des dix clés et les deux décisions à
+      faire ressortir. Le diaporama en tire la diapositive « Deux familles
+      d'avertissements, deux destins ».
+      Recensé le 2026-08-20 : Le système en
       produit deux familles, elles ne vivent pas au même endroit, et le rapport
       n'en décrit aucune. Recensé le 2026-08-20 pour ne pas être re-dérivé plus
       tard :

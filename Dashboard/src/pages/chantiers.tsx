@@ -180,6 +180,26 @@ function Chip({
   )
 }
 
+/**
+ * The colour a finding is allowed to take.
+ *
+ * `surplus` is deliberately not a warm hue: it is information, not an alarm.
+ * Painting an oversupply in the same red as a two-day shortage tells the
+ * reader to order more of the one material they already have too much of —
+ * and the Ten Percent Rule means every extra red line costs the real ones
+ * their urgency.
+ */
+const TONE = {
+  depassement: 'text-status-fail',
+  critique: 'text-status-fail',
+  bas: 'text-status-warn',
+  surplus: 'text-ink-muted',
+} as const
+
+/** Worst first. `surplus` sorts last: it is the one finding nobody has to act
+ *  on today. Mirrors `stock._ORDER` on the server, which orders the mail. */
+const SEVERITY = { depassement: 0, critique: 1, bas: 2, surplus: 3 } as const
+
 const btn =
   'border-line bg-surface text-ink hover:border-line-strong focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-50'
 const btnDanger =
@@ -237,7 +257,9 @@ function AlertsBand({
           <TriangleIcon
             size={10}
             weight="fill"
-            className={live.length > 0 ? 'text-status-fail' : 'text-ink-faint'}
+            className={
+              live.some((a) => a.niveau !== 'surplus') ? 'text-status-fail' : 'text-ink-faint'
+            }
           />
           {showIgnored ? t('chantiers.ignored') : t('chantiers.alerts')}
           <span className="tabular">{showIgnored ? muted.length : live.length}</span>
@@ -293,7 +315,7 @@ function BandRow({
   const { user } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const tone = a.niveau === 'bas' ? 'text-status-warn' : 'text-status-fail'
+  const tone = TONE[a.niveau] ?? 'text-ink-muted'
 
   const run = (fn: () => Promise<unknown>) => async () => {
     setBusy(true)
@@ -322,9 +344,14 @@ function BandRow({
       <span className={`tabular shrink-0 text-[0.6875rem] ${tone}`}>
         {a.niveau === 'depassement'
           ? t('chantiers.over', { n: num(Math.abs(a.reste ?? 0), a.unite) })
-          : t('chantiers.remaining', { n: num(a.reste, a.unite) })}
+          : a.niveau === 'surplus'
+            ? t('chantiers.excess', {
+                n: num(a.reste, a.unite),
+                besoin: num(a.besoin, a.unite),
+              })
+            : t('chantiers.remaining', { n: num(a.reste, a.unite) })}
       </span>
-      {a.jours != null && (
+      {a.jours != null && a.niveau !== 'surplus' && (
         <span className="tabular text-ink-muted shrink-0 text-[0.6875rem] whitespace-nowrap">
           {t('chantiers.cover', { n: a.jours.toFixed(1) })}
         </span>
@@ -863,7 +890,7 @@ export function ChantiersPage() {
       cur[key] += 1
       live.set(k, cur)
     }
-    for (const a of rows) if (!a.ignored) bump(a.chantier, 'alerts')
+    for (const a of rows) if (!a.ignored && a.niveau !== 'surplus') bump(a.chantier, 'alerts')
     for (const a of registry) {
       if (a.confirmed) continue
       for (const s of a.sites ?? []) bump(s.chantier, 'articles')
@@ -896,8 +923,9 @@ export function ChantiersPage() {
 
   // Worst first. An operator reads the top of a list, so ordering is the
   // cheapest way to make the line that means "order today" the line they see.
-  const order = { depassement: 0, critique: 1, bas: 2 } as const
-  const sortedAlerts = [...rows].sort((a, b) => order[a.niveau] - order[b.niveau])
+  const sortedAlerts = [...rows].sort(
+    (a, b) => (SEVERITY[a.niveau] ?? 9) - (SEVERITY[b.niveau] ?? 9),
+  )
 
   const paneKey = view?.kind === 'alerts' ? 'alerts' : String(selected?.id ?? 'none')
 

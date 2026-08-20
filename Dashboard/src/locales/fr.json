@@ -539,6 +539,8 @@
   "chantiers.level.bas": "À commander",
   "chantiers.level.critique": "Critique",
   "chantiers.level.depassement": "Au-dessus du marché",
+  "chantiers.level.surplus": "Excédent",
+  "chantiers.excess": "{n} pour {besoin} à poser",
   "chantiers.open": "Ouvrir le bordereau",
   "chantiers.close": "Fermer le bordereau",
   "chantiers.tracked": "chantiers suivis",
