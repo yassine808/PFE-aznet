@@ -685,8 +685,9 @@ Tous les nœuds d'accusé visent le message par `$('Filtrer accès').item.json.m
 l'unique item — vérifié sur l'exécution 54910, `WA ack done` a réussi. À N
 messages il lève « can't determine which item to use » ou s'effondre sur l'indice 0.
 Les deux nœuds d'accusé portent `onError=continueRegularOutput` : **l'échec est
-donc muet**. `Process output` et `Restore message` posent déjà `pairedItem` — la
-leçon avait été apprise là et pas propagée.
+donc muet**. Seul `Restore message` posait `pairedItem` ; `Process output` le *nomme en
+commentaire* depuis le 2026-08-15 sans jamais le poser, donc la chaîne cassait là aussi.
+Six nœuds corrigés, pas cinq.
 → **Correctif** : poser `pairedItem` dans `Extract TG msgs`, `Extract WA msgs`,
 `Sender`, `Correlate` et `Filtrer accès`. On répare la chaîne une fois, pas les
 seuls accusés : tous les `$('…').item` du workflow en dépendent.

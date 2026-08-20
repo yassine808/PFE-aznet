@@ -1482,6 +1482,36 @@ def queue_write(item: FailedWrite, caller: dict = Depends(auth.require_user)) ->
         raise HTTPException(502, str(exc)) from exc
 
 
+class CursorIn(BaseModel):
+    value: Any
+
+
+@app.get("/cursor/{name}", responses={502: {"description": "Log store unreachable"}})
+def read_cursor(name: str, caller: dict = Depends(auth.require_user)) -> dict:
+    """A machine bookmark, e.g. the Telegram poll offset.
+
+    `require_user`, not `require_human`: n8n is the only caller and it has no
+    browser. It reads this at the top of every poll so the offset survives what
+    `$getWorkflowStaticData` does not — a workflow push, which wipes staticData
+    and makes Telegram re-send a day of updates into the dedupe.
+    """
+    try:
+        return {"name": name, "value": logs.get_cursor(name)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/cursor/{name}", responses={502: {"description": "Log store unreachable"}})
+def write_cursor(name: str, payload: CursorIn,
+                 caller: dict = Depends(auth.require_user)) -> dict:
+    """Move a bookmark forward; a lower value is ignored, not written."""
+    try:
+        logs.set_cursor(name, payload.value)
+        return {"name": name, "value": logs.get_cursor(name)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 @app.get("/sheet-queue", responses={502: {"description": "Log store unreachable"}})
 def list_queue(
     limit: int = Query(20, ge=1, le=500), caller: dict = Depends(auth.require_user)

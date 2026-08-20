@@ -2311,10 +2311,63 @@ def prune_meta(days: int = RETENTION_DAYS) -> dict:
 # domain data, and they change without a migration.
 
 
+# Machine bookmarks (a poll offset, a resume point) share app_settings' table —
+# key/JSONB, no migration to add one — but not its meaning. `CURSOR_PREFIX`
+# keeps them out of `get_settings()`, which is what the operator's Settings
+# panel renders: a Telegram update id is not a preference and must never appear
+# beside the report schedule for someone to "correct".
+CURSOR_PREFIX = "cursor:"
+
+
 def get_settings() -> dict:
     with _cursor() as cur:
-        cur.execute("SELECT key, value FROM app_settings")
+        cur.execute("SELECT key, value FROM app_settings WHERE key NOT LIKE %s",
+                    (CURSOR_PREFIX + "%",))
         return {r["key"]: r["value"] for r in (cast(dict, x) for x in cur.fetchall())}
+
+
+def get_cursor(name: str) -> Any:
+    """The last bookmark stored under this name, or None.
+
+    Exists because n8n's `$getWorkflowStaticData` does NOT survive a workflow
+    push — it is wiped, the Telegram offset falls back to 0, and Telegram
+    re-sends up to 24h of updates. The Postgres dedupe absorbs the replay so
+    nothing is filed twice, but the workflow still re-runs a day of messages
+    every time it is deployed. The bookmark belongs in the store that outlives
+    a deploy, beside the dedupe that already lives there.
+    """
+    with _cursor() as cur:
+        cur.execute("SELECT value FROM app_settings WHERE key = %s",
+                    (CURSOR_PREFIX + name,))
+        row = cur.fetchone()
+    return cast(dict, row)["value"] if row else None
+
+
+def set_cursor(name: str, value: Any) -> None:
+    """Move a bookmark forward. Never backwards.
+
+    The guard is the point: a replayed batch, a late execution or a second
+    poller can all present a *lower* update id than the one already confirmed,
+    and accepting it would re-open a window that was closed — exactly the 24h
+    replay this function exists to end. Non-numeric values are stored as-is,
+    since only the numeric ones have an ordering to defend.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO app_settings (key, value) VALUES (%s, %s)
+            ON CONFLICT (key) DO UPDATE SET
+                value = CASE
+                    WHEN jsonb_typeof(EXCLUDED.value) = 'number'
+                     AND jsonb_typeof(app_settings.value) = 'number'
+                     AND (EXCLUDED.value)::text::numeric <= (app_settings.value)::text::numeric
+                    THEN app_settings.value
+                    ELSE EXCLUDED.value
+                END,
+                updated_at = now()
+            """,
+            (CURSOR_PREFIX + name, json.dumps(value)),
+        )
 
 
 def put_settings(values: Dict[str, Any]) -> dict:
