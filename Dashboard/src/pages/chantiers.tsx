@@ -317,6 +317,20 @@ function BandRow({
   const [error, setError] = useState<string | null>(null)
   const tone = TONE[a.niveau] ?? 'text-ink-muted'
 
+  // The figure, in the sentence its own level calls for. Three findings, three
+  // statements: an overrun says by how much it is over, an excess says what is
+  // left against what is still to install, a shortage says what remains.
+  // Reusing "reste" for all three was true and useless -- it describes an
+  // oversupply in the vocabulary of a shortage.
+  let figure: string
+  if (a.niveau === 'depassement') {
+    figure = t('chantiers.over', { n: num(Math.abs(a.reste ?? 0), a.unite) })
+  } else if (a.niveau === 'surplus') {
+    figure = t('chantiers.excess', { n: num(a.reste, a.unite), besoin: num(a.besoin, a.unite) })
+  } else {
+    figure = t('chantiers.remaining', { n: num(a.reste, a.unite) })
+  }
+
   const run = (fn: () => Promise<unknown>) => async () => {
     setBusy(true)
     setError(null)
@@ -341,16 +355,7 @@ function BandRow({
       <span className={`${tone} shrink-0 text-[0.6875rem] font-medium`}>
         {t(`chantiers.level.${a.niveau}`)}
       </span>
-      <span className={`tabular shrink-0 text-[0.6875rem] ${tone}`}>
-        {a.niveau === 'depassement'
-          ? t('chantiers.over', { n: num(Math.abs(a.reste ?? 0), a.unite) })
-          : a.niveau === 'surplus'
-            ? t('chantiers.excess', {
-                n: num(a.reste, a.unite),
-                besoin: num(a.besoin, a.unite),
-              })
-            : t('chantiers.remaining', { n: num(a.reste, a.unite) })}
-      </span>
+      <span className={`tabular shrink-0 text-[0.6875rem] ${tone}`}>{figure}</span>
       {a.jours != null && a.niveau !== 'surplus' && (
         <span className="tabular text-ink-muted shrink-0 text-[0.6875rem] whitespace-nowrap">
           {t('chantiers.cover', { n: a.jours.toFixed(1) })}
@@ -914,18 +919,65 @@ export function ChantiersPage() {
 
   // The first site is selected for you. A master–detail that opens on an empty
   // pane costs the reader a click to reach the state the page exists for.
-  const selected =
-    view?.kind === 'site'
-      ? (sites.find((c) => c.id === view.id) ?? null)
-      : view == null
-        ? (shown[0] ?? null)
-        : null
+  const pickSelected = () => {
+    // An explicit choice wins; with no view at all the first row opens for you,
+    // because a master-detail that starts empty charges a click to reach the
+    // state the page exists for. A chip view selects nothing -- the pane
+    // belongs to the chip.
+    if (view?.kind === 'site') return sites.find((c) => c.id === view.id) ?? null
+    if (view == null) return shown[0] ?? null
+    return null
+  }
+  const selected = pickSelected()
 
   // Worst first. An operator reads the top of a list, so ordering is the
   // cheapest way to make the line that means "order today" the line they see.
   const sortedAlerts = [...rows].sort(
     (a, b) => (SEVERITY[a.niveau] ?? 9) - (SEVERITY[b.niveau] ?? 9),
   )
+
+  /**
+   * What the right-hand pane is showing, as statements rather than a chain.
+   *
+   * Exactly one of these is true at a time, which is the whole design of the
+   * page: one list on the left, one thing on the right. A chained ternary said
+   * the same and read as a puzzle.
+   */
+  const pane = () => {
+    if (view?.kind === 'alerts') {
+      return (
+        <div className="flex min-w-0 flex-col gap-3">
+          <Head title={t('chantiers.alerts')} aside={String(rows.length)} />
+          <p className="text-ink-muted max-w-[70ch] text-[0.6875rem] leading-relaxed">
+            {t('chantiers.alertsIntro')}
+          </p>
+          <ul className="border-line divide-line/40 divide-y border-t">
+            {sortedAlerts.map((a) => (
+              <BandRow key={`${a.chantier}-${a.champ}`} alert={a} site onDone={alerts.reload} />
+            ))}
+          </ul>
+        </div>
+      )
+    }
+    if (selected) {
+      return (
+        <SiteDetail
+          chantier={selected}
+          articles={registry}
+          alerts={rows}
+          onAlertsChanged={alerts.reload}
+          onArticlesChanged={articles.reload}
+          onSettled={() => {
+            chantiers.reload()
+            setView(null)
+          }}
+        />
+      )
+    }
+    // Nothing selected and nothing loading: say so. A blank pane during the
+    // first fetch would read as "no sites".
+    return chantiers.loading ? null : <EmptyState body={t('chantiers.pickSite')} />
+  }
 
   const paneKey = view?.kind === 'alerts' ? 'alerts' : String(selected?.id ?? 'none')
 
@@ -1027,38 +1079,7 @@ export function ChantiersPage() {
         <div className="min-w-0">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={paneKey} variants={fade} initial="hidden" animate="show" exit="exit">
-              {view?.kind === 'alerts' ? (
-                <div className="flex min-w-0 flex-col gap-3">
-                  <Head title={t('chantiers.alerts')} aside={String(rows.length)} />
-                  <p className="text-ink-muted max-w-[70ch] text-[0.6875rem] leading-relaxed">
-                    {t('chantiers.alertsIntro')}
-                  </p>
-                  <ul className="border-line divide-line/40 divide-y border-t">
-                    {sortedAlerts.map((a) => (
-                      <BandRow
-                        key={`${a.chantier}-${a.champ}`}
-                        alert={a}
-                        site
-                        onDone={alerts.reload}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              ) : selected ? (
-                <SiteDetail
-                  chantier={selected}
-                  articles={registry}
-                  alerts={rows}
-                  onAlertsChanged={alerts.reload}
-                  onArticlesChanged={articles.reload}
-                  onSettled={() => {
-                    chantiers.reload()
-                    setView(null)
-                  }}
-                />
-              ) : (
-                !chantiers.loading && <EmptyState body={t('chantiers.pickSite')} />
-              )}
+              {pane()}
             </motion.div>
           </AnimatePresence>
         </div>

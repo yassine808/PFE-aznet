@@ -459,6 +459,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     remind_before_unit   TEXT CHECK (remind_before_unit IN ('day','week','month')),
     repeat_every         INT CHECK (repeat_every IS NULL OR repeat_every >= 1),
     repeat_unit          TEXT CHECK (repeat_unit IN ('day','week','month')),
+    -- The day of the month a monthly repeat means, kept apart from `due_at`.
+    -- `due_at` is overwritten on every advance, so once a 31st has been
+    -- clamped to a 28th the original intent is gone and every later advance
+    -- computes from the clamped date: 31 Jan → 28 Feb → 28 Mar → 28 Apr,
+    -- for good. The anchor is the only thing that can say "the 31st, or the
+    -- last day if the month is shorter", so it is stored rather than derived.
+    repeat_anchor_day    INT CHECK (repeat_anchor_day IS NULL
+                                    OR repeat_anchor_day BETWEEN 1 AND 31),
     done_at              TIMESTAMPTZ,
     last_notified_at     TIMESTAMPTZ,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -474,6 +482,12 @@ DO $$ BEGIN
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS remind_before_unit TEXT;
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat_every INT;
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat_unit TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat_anchor_day INT;
+    -- Backfill from the current due date. It is the best available answer for
+    -- a task that already exists: right for every task that has not yet been
+    -- clamped, and no worse than today's behaviour for one that has.
+    UPDATE tasks SET repeat_anchor_day = EXTRACT(DAY FROM due_at)::INT
+     WHERE repeat_anchor_day IS NULL AND due_at IS NOT NULL;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint
                    WHERE conname = 'tasks_remind_before_value_check') THEN
         ALTER TABLE tasks ADD CONSTRAINT tasks_remind_before_value_check
@@ -493,6 +507,11 @@ DO $$ BEGIN
                    WHERE conname = 'tasks_repeat_unit_check') THEN
         ALTER TABLE tasks ADD CONSTRAINT tasks_repeat_unit_check
             CHECK (repeat_unit IN ('day','week','month'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'tasks_repeat_anchor_day_check') THEN
+        ALTER TABLE tasks ADD CONSTRAINT tasks_repeat_anchor_day_check
+            CHECK (repeat_anchor_day IS NULL OR repeat_anchor_day BETWEEN 1 AND 31);
     END IF;
 END $$;
 """
@@ -2889,23 +2908,31 @@ def mark_notifications_read(person_id: int, ids: Optional[List[int]] = None) -> 
 _TASK_COLUMNS = (
     "title", "notes", "due_at", "repeat",
     "remind_before_value", "remind_before_unit",
-    "repeat_every", "repeat_unit",
+    "repeat_every", "repeat_unit", "repeat_anchor_day",
 )
 
 
-def shift_months(dt: datetime, n: int) -> datetime:
+def shift_months(dt: datetime, n: int, anchor_day: Optional[int] = None) -> datetime:
     """Add n months (negative subtracts), clamping to the month's real length.
 
     Jan 31 + 1 month → Feb 28, never March 3: a monthly task on the 31st must
     not silently skip February. Shared by the repeat advance and the advance
     reminder offset, so both sides of the calendar math cannot drift apart.
+
+    `anchor_day` is the day the task actually means, and it exists because
+    clamping is **lossy**. Chaining each advance off the previous result gave
+    31 Jan → 28 Feb → 28 Mar → 28 Apr: the first clamp was correct, and every
+    one after it inherited a day the user never chose. Nothing raised, nothing
+    logged, and the task simply moved to a different day of the month for the
+    rest of its life. With the anchor, February is a detour rather than a
+    destination: 31 → 28 → 31 → 30 → 31.
     """
     import calendar
 
     month = dt.month + n
     year = dt.year + (month - 1) // 12
     month = (month - 1) % 12 + 1
-    day = min(dt.day, calendar.monthrange(year, month)[1])
+    day = min(anchor_day or dt.day, calendar.monthrange(year, month)[1])
     return dt.replace(year=year, month=month, day=day)
 
 
@@ -2935,10 +2962,15 @@ def create_task(title: str, notes: Optional[str] = None,
     with _cursor() as cur:
         cur.execute(
             "INSERT INTO tasks (title, notes, due_at, repeat, "
-            "remind_before_value, remind_before_unit, repeat_every, repeat_unit) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "repeat_anchor_day, "
+            "repeat_anchor_day) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (title, notes, due_at, repeat, remind_before_value,
-             remind_before_unit, repeat_every, repeat_unit),
+             remind_before_unit, repeat_every, repeat_unit,
+             # Taken from the date a human chose, once. Every later advance
+             # measures from this rather than from the last clamped result.
+             due_at.day if due_at else None),
         )
         row = _one(cur)
         if row is None:
@@ -2951,6 +2983,14 @@ def update_task(task_id: int, fields: dict) -> bool:
     allowed = {k: v for k, v in fields.items() if k in _TASK_COLUMNS or k == "done"}
     if not allowed:
         return False
+    # Moving the due date re-anchors the repeat. Without this the anchor kept
+    # the day of a date the user has just replaced: rescheduling a monthly task
+    # from the 31st to the 15th would run once on the 15th and then jump back
+    # to the 31st for ever after — the same silent drift, pointing the other
+    # way. An explicit anchor in the same call still wins.
+    if "due_at" in allowed and "repeat_anchor_day" not in allowed:
+        moved = allowed["due_at"]
+        allowed["repeat_anchor_day"] = moved.day if moved else None
     sets = []
     values = []
     if "done" in allowed:
@@ -2981,6 +3021,7 @@ def get_task(task_id: int) -> Optional[dict]:
         cur.execute(
             "SELECT id, title, notes, due_at, repeat, "
             "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "repeat_anchor_day, "
             "done_at, last_notified_at, created_at, updated_at FROM tasks "
             "WHERE id = %s",
             (task_id,),
@@ -2995,6 +3036,7 @@ def list_tasks() -> List[dict]:
         cur.execute(
             "SELECT id, title, notes, due_at, repeat, "
             "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "repeat_anchor_day, "
             "done_at, last_notified_at, created_at, updated_at FROM tasks "
             "ORDER BY (done_at IS NOT NULL), COALESCE(due_at, 'infinity'::timestamptz)"
         )
@@ -3025,6 +3067,7 @@ def due_tasks(now: datetime) -> List[dict]:
         cur.execute(
             "SELECT id, title, notes, due_at, repeat, "
             "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
+            "repeat_anchor_day, "
             "last_notified_at FROM tasks "
             "WHERE due_at IS NOT NULL AND done_at IS NULL ORDER BY due_at",
         )

@@ -397,6 +397,51 @@ raccordement de {rng.randint(2, 6)} panneaux, RDC et 1er étage.
     return subject, html
 
 
+def _compose(recipients: Sequence[str], subject: str, body: str, html: bool,
+             html_body: Optional[str],
+             attachments: Sequence[Tuple[str, bytes, str]]):
+    """Build the message. Split out of `send` so that function stays readable.
+
+    `send`'s job is the conversation with the server: refuse what cannot be
+    sent, hand the message over, report who actually took it. Assembling MIME
+    parts is a different job that happens to need the same arguments, and
+    keeping both in one function meant every part added over time — the HTML
+    alternative, the inline mark, the attachments — made the send path itself
+    harder to follow.
+    """
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.smtp_from or settings.smtp_user
+    msg["To"] = ", ".join(recipients)
+    msg.set_content(body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
+        # The mark rides along as a related part rather than a URL: a remote
+        # src is blocked by default in Gmail, Outlook and Apple Mail, and a
+        # data: URI is stripped. Attached only when the HTML references it, so
+        # a message built without the masthead carries no orphan attachment —
+        # which some clients would still show as a paperclip.
+        if f"cid:{LOGO_CID}" in html_body:
+            blob = logo_png()
+            if blob:
+                msg.get_payload()[-1].add_related(  # type: ignore[union-attr]
+                    blob, maintype="image", subtype="png", cid=f"<{LOGO_CID}>"
+                )
+    elif html:
+        msg.add_alternative(body.replace("\n", "<br>"), subtype="html")
+
+    for name, blob, mime in attachments:
+        maintype, _, subtype = mime.partition("/")
+        msg.add_attachment(
+            blob, maintype=maintype or "application",
+            subtype=subtype or "octet-stream", filename=name,
+        )
+
+    return msg
+
+
 def send(
     to: Sequence[str],
     subject: str,
@@ -431,35 +476,8 @@ def send(
         )
 
     import smtplib
-    from email.message import EmailMessage
 
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.smtp_from or settings.smtp_user
-    msg["To"] = ", ".join(recipients)
-    msg.set_content(body)
-    if html_body:
-        msg.add_alternative(html_body, subtype="html")
-        # The mark rides along as a related part rather than a URL: a remote
-        # src is blocked by default in Gmail, Outlook and Apple Mail, and a
-        # data: URI is stripped. Attached only when the HTML references it, so
-        # a message built without the masthead carries no orphan attachment —
-        # which some clients would still show as a paperclip.
-        if f"cid:{LOGO_CID}" in html_body:
-            blob = logo_png()
-            if blob:
-                msg.get_payload()[-1].add_related(  # type: ignore[union-attr]
-                    blob, maintype="image", subtype="png", cid=f"<{LOGO_CID}>"
-                )
-    elif html:
-        msg.add_alternative(body.replace("\n", "<br>"), subtype="html")
-
-    for name, blob, mime in attachments:
-        maintype, _, subtype = mime.partition("/")
-        msg.add_attachment(
-            blob, maintype=maintype or "application",
-            subtype=subtype or "octet-stream", filename=name,
-        )
+    msg = _compose(recipients, subject, body, html, html_body, attachments)
 
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:

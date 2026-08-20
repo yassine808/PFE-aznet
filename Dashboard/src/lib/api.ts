@@ -520,7 +520,7 @@ export interface MaterialAlert {
    *  the shortage levels in `stock._level`, because near the end of a site a
    *  material can be under two days of cover *and* oversupplied — and
    *  "order more" would be exactly the wrong sentence. */
-  niveau: 'depassement' | 'critique' | 'bas' | 'surplus' | 'surplus'
+  niveau: 'depassement' | 'critique' | 'bas' | 'surplus'
   reste: number | null
   jours: number | null
   rythme: number | null

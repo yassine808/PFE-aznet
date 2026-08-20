@@ -667,7 +667,8 @@ def send_weekly_report(end: Optional[str] = None) -> dict:
 
 def _next_occurrence(due: Optional[datetime], repeat: str,
                      repeat_every: Optional[int] = None,
-                     repeat_unit: Optional[str] = None) -> Optional[datetime]:
+                     repeat_unit: Optional[str] = None,
+                     anchor_day: Optional[int] = None) -> Optional[datetime]:
     """The next due_at after a reminder fires, per the repeat rule.
 
     `repeat_unit` carries a custom interval (every N days/weeks/months) and
@@ -684,17 +685,18 @@ def _next_occurrence(due: Optional[datetime], repeat: str,
             return due + timedelta(days=n)
         if repeat_unit == "week":
             return due + timedelta(weeks=n)
-        return logs.shift_months(due, n)
+        return logs.shift_months(due, n, anchor_day)
     if repeat == "daily":
         return due + timedelta(days=1)
     if repeat == "weekly":
         return due + timedelta(days=7)
-    return logs.shift_months(due, 1)
+    return logs.shift_months(due, 1, anchor_day)
 
 
 def _catch_up(due: Optional[datetime], repeat: str,
               repeat_every: Optional[int] = None,
-              repeat_unit: Optional[str] = None) -> Optional[datetime]:
+              repeat_unit: Optional[str] = None,
+              anchor_day: Optional[int] = None) -> Optional[datetime]:
     """The next occurrence that is actually still ahead of us.
 
     Stamping one period forward re-stamped a missed task to a date still in the
@@ -707,14 +709,18 @@ def _catch_up(due: Optional[datetime], repeat: str,
     Every step moves strictly forward, so this terminates; the cap is there
     only so a corrupt row cannot spin the scheduler thread.
     """
-    nxt = _next_occurrence(due, repeat, repeat_every, repeat_unit)
+    nxt = _next_occurrence(due, repeat, repeat_every, repeat_unit, anchor_day)
     if nxt is None:
         return None
     now = datetime.now(nxt.tzinfo)
     for _ in range(1000):
         if nxt > now:
             break
-        stepped = _next_occurrence(nxt, repeat, repeat_every, repeat_unit)
+        # The anchor travels through every catch-up step too. Stepping a
+        # missed monthly task over a February without it re-introduced exactly
+        # the drift this parameter exists to prevent, one skipped month at a
+        # time.
+        stepped = _next_occurrence(nxt, repeat, repeat_every, repeat_unit, anchor_day)
         if stepped is None or stepped <= nxt:
             break
         nxt = stepped
@@ -819,6 +825,7 @@ def send_reminders() -> dict:
                     task.get("repeat") or "none",
                     task.get("repeat_every"),
                     task.get("repeat_unit"),
+                    task.get("repeat_anchor_day"),
                 ),
             )
         except logs.LogStoreError as exc:

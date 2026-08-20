@@ -571,3 +571,71 @@ def test_catch_up_skips_a_missed_backlog_in_one_step():
     future = datetime.now() + _td(days=3)
     assert jobs._catch_up(future, "daily") == future + _td(days=1)
     assert jobs._catch_up(stale, "none") is None
+
+
+# --- monthly repeats keep the day the human chose --------------------------
+
+
+def test_a_monthly_task_on_the_31st_returns_to_the_31st():
+    """February is a detour, not a destination.
+
+    Clamping is lossy: 31 Jan has to become 28 Feb, and if the next advance is
+    computed from that clamped date the task is on the 28th for the rest of its
+    life. Nothing raises and nothing is logged — the reminder simply moves to a
+    day nobody picked. The anchor is what makes the clamp temporary.
+    """
+    from app.jobs import _next_occurrence
+
+    due = datetime(2026, 1, 31, 9, 0)
+    seen = []
+    for _ in range(4):
+        due = _next_occurrence(due, "monthly", anchor_day=31)
+        seen.append(due.strftime("%Y-%m-%d"))
+    assert seen == ["2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31"]
+
+
+def test_catch_up_over_a_short_month_keeps_the_anchor():
+    """A missed monthly task steps forward repeatedly; every step must anchor.
+
+    Without threading the anchor through `_catch_up`, a task that went unseen
+    across February drifted one skipped month at a time — the same bug, reached
+    by the path that exists to recover from downtime.
+    """
+    from app.jobs import _catch_up
+
+    # Due long enough ago that the loop has to step several months forward.
+    due = datetime(2020, 1, 31, 9, 0)
+    nxt = _catch_up(due, "monthly", anchor_day=31)
+    assert nxt is not None
+    # Whatever month it lands on, it is that month's 31st or its last day.
+    import calendar
+    assert nxt.day == min(31, calendar.monthrange(nxt.year, nxt.month)[1])
+
+
+def test_moving_the_due_date_re_anchors_the_repeat(monkeypatch):
+    """Rescheduling to the 15th must not send the task back to the 31st."""
+    seen = {}
+
+    class _Cur:
+        rowcount = 1
+
+        def execute(self, sql, params=None):
+            seen["sql"], seen["params"] = sql, list(params or [])
+
+        def fetchone(self):
+            return None
+
+        def fetchall(self):
+            return []
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _fake():
+        yield _Cur()
+
+    monkeypatch.setattr(logs.settings, "database_url", "postgres://test")
+    monkeypatch.setattr(logs, "_cursor", _fake)
+    logs.update_task(1, {"due_at": datetime(2026, 3, 15, 9, 0)})
+    assert "repeat_anchor_day" in seen["sql"]
+    assert 15 in seen["params"]

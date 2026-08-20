@@ -55,6 +55,12 @@ services:
       # shared secret in it is one copy-paste from being published. No default:
       # an unset value must fail the challenge loudly, never match "".
       - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+      # Meta's app secret, used by `Extract WA msgs` to verify the
+      # X-Hub-Signature-256 on every inbound delivery. Unset means the
+      # signature is NOT checked and the Code node says so in the log --
+      # fail-open on purpose, because failing closed here would silence
+      # WhatsApp reception the moment the workflow is imported without it.
+      - WHATSAPP_APP_SECRET=${WHATSAPP_APP_SECRET:-}
       # Telegram polling (unified reception workflow reads $env.TELEGRAM_BOT_TOKEN)
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       # Sheet target and the HR address the workflow gives to outsiders. Kept
