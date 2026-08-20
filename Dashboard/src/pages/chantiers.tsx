@@ -33,6 +33,38 @@ const rise = {
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 100, damping: 20 } },
 }
 
+/**
+ * Opening a site.
+ *
+ * Height is a layout property and DESIGN.md rules out animating one, so the
+ * panel does not unroll — it arrives. The parent fades and lifts, then hands
+ * off to its blocks, which come in one after another out of the disclosure's
+ * own rule. The staircase is what reads as "opening": a single simultaneous
+ * fade reads as a redraw. Closing runs without the stagger, because a reader
+ * who has decided to close something should not watch it leave in instalments.
+ */
+const panel = {
+  hidden: { opacity: 0, y: -4 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 140,
+      damping: 22,
+      staggerChildren: 0.06,
+      delayChildren: 0.04,
+    },
+  },
+  exit: { opacity: 0, y: -4, transition: { duration: 0.14 } },
+}
+
+/** One block inside an opened site. Slides in off the disclosure's rule. */
+const panelBlock = {
+  hidden: { opacity: 0, x: -8 },
+  show: { opacity: 1, x: 0, transition: { type: 'spring' as const, stiffness: 220, damping: 24 } },
+}
+
 /** Section heading. Same shape as Overview's: a rule and a label, no box. */
 function Band({
   title,
@@ -266,10 +298,13 @@ function UnverifiedSites({
  * normaliser cannot: "prise 2P+T" and "prise industrielle 2P+T" are one socket
  * to an electrician and two different word sets to a machine.
  */
-function FreeArticles() {
+function FreeArticles({
+  articles,
+}: {
+  readonly articles: ReturnType<typeof useApi<{ articles: FreeArticle[] }>>
+}) {
   const { t } = useI18n()
   const { user } = useAuth()
-  const articles = useApi('free-articles', freeArticles)
   const [busy, setBusy] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -389,6 +424,66 @@ function FreeArticles() {
   )
 }
 
+/**
+ * What this site declared that its bordereau never listed.
+ *
+ * The review queue two bands up only ever shows *unconfirmed* names, so an
+ * article vanished from the page the moment a director accepted or corrected
+ * it — the one action that proves it is real. This section is the opposite
+ * cut: every free article that reached this site, confirmed or not, with the
+ * quantity summed across its reports. Nothing here is an action; naming is
+ * settled in the queue, and a second place to change a column header is a
+ * second way for two spellings to diverge.
+ */
+function SiteMaterials({
+  chantier,
+  articles,
+}: {
+  readonly chantier: Chantier
+  readonly articles: readonly FreeArticle[]
+}) {
+  const { t } = useI18n()
+
+  // Matched on the site NAME, because that is what a report row snapshots —
+  // the chantier is frozen onto the row so a later reassignment never rewrites
+  // history, which means the id is not in the payload to match on.
+  const key = chantier.nom.trim().toLowerCase()
+  const rows = articles
+    .map((a) => ({ a, site: a.sites?.find((s) => s.chantier.trim().toLowerCase() === key) }))
+    .filter((r): r is { a: FreeArticle; site: NonNullable<FreeArticle['sites']>[number] } =>
+      Boolean(r.site),
+    )
+    .sort((x, y) => y.site.qte - x.site.qte)
+
+  if (rows.length === 0) return null
+
+  return (
+    <motion.div variants={panelBlock} className="flex flex-col gap-1.5">
+      <h4 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
+        {t('chantiers.declared')}
+      </h4>
+      <ul className="border-line/60 divide-line/50 divide-y border-t">
+        {rows.map(({ a, site }) => (
+          <li key={a.slug} className="flex items-baseline justify-between gap-3 py-1.5">
+            <span className="text-ink flex min-w-0 items-baseline gap-2 text-xs">
+              <span className="truncate">{a.designation}</span>
+              {/* Colour never carries it alone — the word is there too. */}
+              {!a.confirmed && (
+                <span className="text-status-warn shrink-0 text-[0.625rem]">
+                  {t('chantiers.toCheck')}
+                </span>
+              )}
+            </span>
+            <span className="tabular text-ink-muted shrink-0 text-xs whitespace-nowrap">
+              {num(site.qte, a.unite ?? undefined)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </motion.div>
+  )
+}
+
 /** One contract line as a ledger row: figures right, meter under the percentage. */
 function ArticleRow({ article: a }: { readonly article: BordereauArticle }) {
   const { t } = useI18n()
@@ -483,9 +578,9 @@ function Bordereau({ chantier }: { readonly chantier: Chantier }) {
   const named = lots.size > 1 || !lots.has('')
 
   return (
-    <div className="flex flex-col gap-5">
+    <>
       {[...lots.entries()].map(([lot, rows]) => (
-        <div key={lot || '_'} className="flex flex-col gap-1.5">
+        <motion.div variants={panelBlock} key={lot || '_'} className="flex flex-col gap-1.5">
           {named && (
             <h4 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
               {lot || t('chantiers.noTache')}
@@ -511,19 +606,21 @@ function Bordereau({ chantier }: { readonly chantier: Chantier }) {
               </tbody>
             </table>
           </div>
-        </div>
+        </motion.div>
       ))}
-    </div>
+    </>
   )
 }
 
 /** One site as a disclosure row: hairline rules, no card — DESIGN.md §4. */
 function SiteRow({
   chantier: c,
+  articles,
   open,
   onToggle,
 }: {
   readonly chantier: Chantier
+  readonly articles: readonly FreeArticle[]
   readonly open: boolean
   readonly onToggle: () => void
 }) {
@@ -581,13 +678,14 @@ function SiteRow({
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ type: 'spring', stiffness: 140, damping: 22 }}
-            className="border-line/70 ms-[1.65rem] border-s ps-4 pb-4"
+            variants={panel}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="border-line/70 ms-[1.65rem] flex flex-col gap-5 border-s ps-4 pb-4"
           >
             <Bordereau chantier={c} />
+            <SiteMaterials chantier={c} articles={articles} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -598,9 +696,14 @@ function SiteRow({
 export function ChantiersPage() {
   const { t } = useI18n()
   const chantiers = useApi('chantiers', api.chantiers)
+  // Fetched once here rather than inside each row: the registry is global, and
+  // `useApi` would dedupe the key anyway, but passing it down keeps an open
+  // site from showing a skeleton for data the page already has.
+  const articles = useApi('free-articles', freeArticles)
   const [open, setOpen] = useState<number | null>(null)
 
   const sites = chantiers.data?.chantiers ?? []
+  const registry = articles.data?.articles ?? []
 
   return (
     <motion.div
@@ -613,7 +716,7 @@ export function ChantiersPage() {
           director to do something, and it disappears once nothing is pending. */}
       <UnverifiedSites chantiers={chantiers} />
 
-      <FreeArticles />
+      <FreeArticles articles={articles} />
 
       <motion.div variants={rise}>
         <MaterialAlerts />
@@ -632,6 +735,7 @@ export function ChantiersPage() {
                 <SiteRow
                   key={c.id}
                   chantier={c}
+                  articles={registry}
                   open={open === c.id}
                   onToggle={() => setOpen(open === c.id ? null : c.id)}
                 />

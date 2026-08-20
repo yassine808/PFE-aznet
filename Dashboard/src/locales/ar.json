@@ -473,6 +473,8 @@
   "chantiers.marche": "الصفقة",
   "chantiers.materials": "مواد بانتظار التأكيد",
   "chantiers.materialsIntro": "هذه المواد صرّح بها فني ولا تطابق أي بند في الجدول. عمودها موجود وكمياتها محسوبة — التقرير لا ينتظر موافقة. أكّد التسمية، أو صحّحها، أو احذفها.",
+  "chantiers.declared": "مواد مصرّح بها خارج الجدول",
+  "chantiers.toCheck": "بانتظار التأكيد",
   "chantiers.materialsNone": "لا توجد مواد جديدة للتأكيد.",
   "chantiers.seen": "{n} تقرير",
   "chantiers.rename": "تصحيح",

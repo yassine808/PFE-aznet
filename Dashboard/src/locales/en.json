@@ -473,6 +473,8 @@
   "chantiers.marche": "Contract",
   "chantiers.materials": "Materials to confirm",
   "chantiers.materialsIntro": "These articles were reported by a technician and match no bordereau line. Their column already exists and their quantities are counted — a report never waits for approval. Confirm the wording, correct it (a name that meets an existing one merges the two columns), or delete it if nobody recognises it.",
+  "chantiers.declared": "Declared outside the bordereau",
+  "chantiers.toCheck": "to confirm",
   "chantiers.materialsNone": "No new articles to confirm.",
   "chantiers.seen": "{n} report(s)",
   "chantiers.rename": "Correct",

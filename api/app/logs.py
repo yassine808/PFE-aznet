@@ -3211,14 +3211,66 @@ def register_articles(items: Dict[str, float]) -> Dict[str, str]:
 
 
 def list_article_registry(unconfirmed_only: bool = False) -> List[dict]:
-    """Every free article, newest first. The Sites page confirms from this."""
+    """Every free article, newest first, each carrying the sites that reported it.
+
+    The registry is deliberately global — the *name* is shared, so a second
+    site reporting the same thing reuses the wording instead of inventing a
+    parallel spelling. But a director reading the page asks "what did DGH
+    declare", not "which spellings exist", so the sites are attached here from
+    `report_rows`, the only place that knows which chantier a quantity came
+    from. Matching is by slug on both sides: the stored key is whatever
+    wording won at the time, and a later rename must not orphan the history.
+    """
     sql = "SELECT * FROM article_registry"
     if unconfirmed_only:
         sql += " WHERE confirmed = FALSE"
     sql += " ORDER BY last_seen DESC"
     with _cursor() as cur:
         cur.execute(sql)
-        return [dict(r) for r in cur.fetchall()]
+        rows = [dict(r) for r in cur.fetchall()]
+    sites = _article_sites()
+    for row in rows:
+        row["sites"] = sites.get(row["slug"], [])
+    return rows
+
+
+def _article_sites() -> Dict[str, List[dict]]:
+    """slug -> [{chantier, qte, seen}], summed over every filed report.
+
+    Best-effort: an unreadable payload costs the grouping, never the list. A
+    report with no chantier lands under `Non affecté`, the same visible name
+    the journal gives an unrouted row — dropping it would hide a declared
+    quantity behind a routing failure.
+    """
+    out: Dict[str, Dict[str, dict]] = {}
+    try:
+        with _cursor() as cur:
+            cur.execute(
+                """
+                SELECT chantier, data->'articles_libres' AS libres
+                  FROM report_rows
+                 WHERE COALESCE(data->'articles_libres', '{}'::jsonb) <> '{}'::jsonb
+                """
+            )
+            rows = cur.fetchall()
+    except Exception as exc:  # noqa: BLE001 — grouping is not worth the list
+        print(f"[logs] _article_sites failed: {exc}"[:200], flush=True)
+        return {}
+    for row in rows:
+        site = (row["chantier"] or "").strip() or "Non affecté"
+        for spoken, qty in (row["libres"] or {}).items():
+            slug = _slug_article(spoken)
+            if not slug:
+                continue
+            try:
+                q = float(qty)
+            except (TypeError, ValueError):
+                continue
+            bucket = out.setdefault(slug, {})
+            entry = bucket.setdefault(site, {"chantier": site, "qte": 0.0, "seen": 0})
+            entry["qte"] += q
+            entry["seen"] += 1
+    return {slug: sorted(b.values(), key=lambda e: -e["qte"]) for slug, b in out.items()}
 
 
 #: Words that carry no article identity. Dropped before comparing, so

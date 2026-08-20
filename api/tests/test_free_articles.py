@@ -95,3 +95,43 @@ def test_low_is_a_share_of_the_ceiling_not_a_flat_count():
     assert usage._assess(entry)["state"] == "bas"
     entry["remaining_requests"] = 500
     assert usage._assess(entry)["state"] == "ok"
+
+
+class _FakeSiteRows:
+    """Just enough cursor to answer `_article_sites`' one query."""
+
+    def __init__(self, rows):
+        self.rows = rows
+
+    def execute(self, sql, args=None):
+        assert "articles_libres" in sql
+
+    def fetchall(self):
+        return self.rows
+
+
+def _sites(monkeypatch, rows):
+    monkeypatch.setattr(logs.settings, "database_url", "postgres://test")
+    monkeypatch.setattr(logs, "_cursor", lambda: _fake_cursor(_FakeSiteRows(rows)))
+    return logs._article_sites()
+
+
+def test_sites_sum_per_chantier_and_match_on_slug(monkeypatch):
+    """Two spellings of one article on one site are one line, not two.
+
+    The stored key is whatever wording won when the row was filed, so matching
+    on the raw text would split a site's total the day someone pluralised.
+    """
+    out = _sites(monkeypatch, [
+        {"chantier": "DGH", "libres": {"prise étanche": 4}},
+        {"chantier": "DGH", "libres": {"prises étanches": 6, "goulotte": 2}},
+        {"chantier": "ACAPS", "libres": {"prise étanche": 1}},
+    ])
+    per_site = {e["chantier"]: e for e in out[logs._slug_article("prise étanche")]}
+    assert per_site["DGH"] == {"chantier": "DGH", "qte": 10.0, "seen": 2}
+    assert per_site["ACAPS"]["qte"] == 1.0
+
+
+def test_a_report_with_no_chantier_is_visible_rather_than_dropped(monkeypatch):
+    out = _sites(monkeypatch, [{"chantier": None, "libres": {"goulotte": 3}}])
+    assert out[logs._slug_article("goulotte")][0]["chantier"] == "Non affecté"

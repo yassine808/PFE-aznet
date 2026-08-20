@@ -553,6 +553,11 @@ export interface FreeArticle {
   seen: number
   first_seen?: string
   last_seen?: string
+  /** Which sites declared it, and how much of it, summed over their reports.
+   *  The registry itself is global — the *name* is shared so two sites cannot
+   *  invent two spellings — so the per-site figures are attached server-side
+   *  from the filed reports rather than recomputed here. */
+  sites?: readonly { chantier: string; qte: number; seen: number }[]
 }
 
 export const freeArticles = (s?: AbortSignal) => get<{ articles: FreeArticle[] }>('/articles', s)

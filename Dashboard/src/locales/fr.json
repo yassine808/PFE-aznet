@@ -473,6 +473,8 @@
   "chantiers.marche": "Marché",
   "chantiers.materials": "Matériel à confirmer",
   "chantiers.materialsIntro": "Ces articles ont été déclarés par un technicien sans correspondre à aucune ligne de bordereau. Leur colonne existe déjà et leurs quantités sont comptées — un rapport n'attend jamais une validation. Confirmez le libellé, corrigez-le (un libellé qui en rejoint un autre fusionne les deux colonnes), ou supprimez-le si personne ne le reconnaît.",
+  "chantiers.declared": "Matériel déclaré hors bordereau",
+  "chantiers.toCheck": "à confirmer",
   "chantiers.materialsNone": "Aucun nouvel article à confirmer.",
   "chantiers.seen": "{n} rapport(s)",
   "chantiers.rename": "Corriger",
