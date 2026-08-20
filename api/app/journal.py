@@ -48,6 +48,14 @@ from app.schemas import DATA_FIELDS, ExtractedReport
 
 # --- the director's columns, in his order --------------------------------
 COL_DATE = "Date"
+# When the technician SENT the message, not when the work started -- that pair
+# is HEURE D'ENTREE / HEURE DE SORTIE further right. Added 2026-08-20 so a site
+# tab answers "when, who, where" in its frozen block exactly like the Rapports
+# tab does; `style_tab` freezes through the site column, so putting it here is
+# what makes the count 4 instead of 3, with no change to the styling code.
+# Unambiguous because a journal row is one message: a row that merged several
+# could not name a single send time.
+COL_HEURE = "Heure"
 COL_TECHNICIEN = "Technicien"
 COL_CHANTIER = "Chantier"
 
@@ -168,7 +176,7 @@ COL_CORRELATION = "Correlation id"
 COL_STT = "Moteur STT"
 
 HEADERS: Tuple[str, ...] = (
-    (COL_DATE, COL_TECHNICIEN, COL_CHANTIER)
+    (COL_DATE, COL_HEURE, COL_TECHNICIEN, COL_CHANTIER)
     + CHEF_COLUMNS
     + tuple(NUMERIC_COLUMNS.values())
     + tuple(LIST_COLUMNS.values())
@@ -1265,6 +1273,7 @@ def file_report(payload: Dict) -> Dict:
         COL_RESUME: report.resume,
         COL_RAPPORT: payload.get("rapport_complet"),
         COL_CANAL: payload.get("canal"),
+        COL_HEURE: payload.get("heure"),
         COL_STT: payload.get("stt_engine"),
         # Through the same guard the Rapports mirror uses, not the raw payload.
         # n8n puts the channel's own file ticket in `lien_audio`, so writing it
