@@ -98,3 +98,526 @@ Everything marked as done (`[x]`) in `TO-DO.md`, copied verbatim.
 - [x] Better CI checks in github — `.github/workflows/ci.yml`: real gates (no more `|| true`), plus secret scan (`scripts/check_secrets.py` + gitleaks over full history), n8n expression lint (`scripts/check_workflow.py`), locale parity (`scripts/check_locales.py`), compose validation and a real Dashboard build. **The checks still cannot go green**: every job reports "The job was not started because recent account payments have failed or your spending limit needs to be increased" — an Actions billing block on the account. Fix billing, or make the repo public (unlimited free minutes) after the two items below.
 - [x] **Revoke the Telegram bot token** (BotFather → `/mybots` → API Token → Revoke), then update `.env` + the n8n Telegram credential. It was committed in `how-to-setup.md` for ~38 commits. History was rewritten 2026-07-30 and force-pushed, but old commits stay fetchable by SHA on GitHub until purged — revocation is the only step that actually neutralizes it.
 - [x] add the deployment keys to the root `.env`: `N8N_API_KEY` (move the value out of `Dashboard/.env`), `N8N_URL=http://n8n:5678`, a real `POSTGRES_PASSWORD` (default is still pfe/pfe and the port is now closed), `COOKIE_SECURE=true`, `WEB_PORT=8080`
+
+---
+
+# Moved out of `TO-DO.md`, 2026-08-21
+
+Everything above this line is the Phase 0/1 list, copied when `FIXED.md` was
+first written. Everything below was closed after it and had stayed in
+`TO-DO.md`, where sixty-nine finished items sat above the twenty that were
+not — so the file answered "what is left?" only after a page of things that
+are not left.
+
+Moved whole, never summarised: each entry keeps its own reasoning, which is
+what a defence goes looking for when asked why something is built the way it
+is.
+
+- [x] Finish STT benchmark → pick default provider — **done 2026-08-07/08**: 13 engines, 3 by API and 12 locally on the RTX 3070, over 11 real clips. `stt_chain = gemini,local,groq`, ordered by accuracy judged against the audio by a native speaker rather than by latency. WER/CER deliberately not computed (`references.csv` stays header-only) — the criterion is preservation of digits and French technical loanwords, because that is all the journal consumes. Results: `benchmark/STT-BENCHMARK-STATUS.md`. The dead `hf-darija` adapter was deleted in the same pass.
+- [x] Daily stat: % spoken Darija words vs French (post-PFE, zero cahier value)
+## Code audit 2026-08-04 → `docs/audit-2026-08-04.md`
+Full-read audit of the backend + the dashboard's data spine. 11 findings, each with file, line, cause and fix; the status table in that file is the source of truth. **3 bugs fixed** (profile never reaching the primary text model; every API restart cancelling that day's report; the scheduler loop being killable). **8 open**: 4 hardening (login timing oracle, unbounded throttle dict, cache-by-reference, uncapped `limit` params), 3 perf (two Sheets calls per write, a DB write per authenticated request, polling a hidden tab), 1 maintainability (daily/weekly report duplication). Coverage gap: `app/logs.py`, the rest of `app/main.py`, and the Dashboard pages were not read.
+
+## Code audit 2026-08-10 → `docs/audit-2026-08-10.md`
+Coverage gap from the 04-08 audit closed: full read of `logs.py`, the rest of `main.py`, `imagegen.py`, `prompt_loader.py`, `schemas.py`, the `providers/` package, every Dashboard page, the `lib/` spine and all components. **0 bugs found** — verified `/process` contract, single-query list endpoints (no N+1), the provider registry, the `useApi` cache, and the lazy routes. Three planned perf optimizations (N+1 batching, `/service-samples` aggregation, bundle) measured and dismissed as non-problems. One stale doc line fixed (`api/README.md` listed the deleted `hf-darija` adapter).
+
+## Open before production (found reviewing the `opencode` merge, 2026-08-04)
+- [x] **Retention for the archive tables.** Done 2026-08-10 with the owner's policy: `media_files` 30 days, `chat_messages` 90 days, read `notifications` 30 days, `manager_reports` kept forever; env-tunable via `MEDIA_RETENTION_DAYS` / `CHAT_RETENTION_DAYS` / `NOTIF_RETENTION_DAYS`, swept by `logs.prune_meta` at 03:00 — see FIXED.md (Fourth pass)
+- [x] **`INTERNAL_API_KEY` set on both sides** — vérifié 2026-08-16 dans les deux conteneurs (43 caractères de chaque côté). `/process` est authentifié et n8n n'a pas de navigateur : la clé doit exister des deux côtés ou chaque message entrant renvoie 401.
+- [x] **`SMTP_USER` / `SMTP_PASS` set in `.env`** (2026-08-12) — every mail path is live; remaining action is a real test send via `POST /notify/test`.
+- [x] check email
+- [x] check Automated reports — prouvé 2026-08-16, mail reçu avec le .docx en pièce jointe
+- [x] check Automated weekly reports — **n'avait jamais tourné une seule fois** (`pipeline_logs` : aucune ligne `job:weekly_report`). Forcé le 2026-08-16 : 17 rapports, mail reçu. Le passage a révélé que l'objet annonçait « Rapport journalier » pour une période de sept jours — les instructions du modèle codaient le mot en dur. Corrigé, l'objet dépend maintenant de la période.
+- [] check images
+- [x] better sign-in design (profesionnal) — 2026-08-10: rewritten with language switcher, accent glow, AZnet avatar, aria-busy submit — see FIXED.md (Fourth pass)
+- [x] adds 404 page — exists and is captured in the report (Annexe H): an unknown address says so explicitly instead of redirecting silently to the home page, where the user would think their link had worked.
+- [x] remove image card generating in reports pages (make it auto when generating reports) — 2026-08-10: the card now rides along with the report's "Générer" click on both Daily and Weekly — see FIXED.md (Fourth pass)
+- [] Add charging animation in the website, if things are getting charged from the database
+- [] Add more columns inspired from the given data
+- [x] add techs vertically instead of horizentaly to reduce scroll (in TEAM panel)
+  — fait 2026-08-16, **non vérifié dans un navigateur** (pas de Chrome sur cette
+  machine ; typecheck + build verts). L'équipe d'un chef était sur trois cartes
+  de large (`max-w-[34.5rem]`, retour à la ligne), donc chaque colonne de chef
+  faisait trois fois sa largeur utile — et la rangée des chefs est en
+  `flex-nowrap`, elle ne peut pas se replier : à quatre chefs le graphe défilait
+  latéralement sur un portable. Une colonne fait 11rem, les quatre tiennent.
+  On échange de la hauteur, la direction la moins chère : la page défile déjà
+  verticalement. Les connecteurs sont dessinés par contenance (`.org-crew`), pas
+  par des traits vers chaque enfant, donc rien à recalculer.
+  À vérifier : `docker compose up -d --build web` puis la page Équipe avec
+  plusieurs chefs et un chef à six techniciens.
+
+## Batch 2026-08-16 (4) — la note vocale muette, et le lien audio qui pointe chez nous
+
+- [x] **Le .docx doit partir avec le mail de chaque rapport automatique.**
+  **Prouvé le 2026-08-16** : `jobs.run("daily_report")` exécuté dans le
+  conteneur, mail reçu à `ysmagri@gmail.com` avec la pièce jointe ouverte par
+  le propriétaire. `jobs._report_mail` joint le document à *chaque* rapport —
+  le digest entreprise et celui de chaque chef — et le rendu vit dans l'API
+  (`app/docx_report.py`) précisément pour que le courrier programmé, envoyé
+  par un fil dans le conteneur sans navigateur, puisse attacher quelque chose.
+  L'échec du rendu reste non fatal et imprimé : un document qui ne se construit
+  pas ne doit pas coûter le rapport, qui reste lisible dans le corps du mail.
+  **Le même passage a révélé deux vrais défauts, corrigés dans la foulée** :
+  1. **Le miroir Rapports perdait huit champs.** `journal.RAPPORTS_COLUMNS`
+     était une liste tenue à la main : `fibre_m`, `prises_testees`,
+     `cables_prepares_m`, `interconnexions`, `connexions_optiques_brins`, les
+     trois listes de localisation et les trois colonnes de stock n'atteignaient
+     jamais l'onglet plat. Leurs colonnes existent dans la feuille et étaient
+     **toutes vides**. La carte est maintenant dérivée de `schemas.DATA_FIELDS`,
+     donc un champ ajouté au schéma arrive dans le miroir par construction.
+  2. **Le .docx nommait quatre colonnes sur trente-cinq.** Les tuiles ne
+     portent plus de quantité, et les trois tableaux (Quantités déclarées,
+     Activité par technicien, Activité par chantier) sont construits depuis
+     `journal.quantity_columns()`. Les mêmes totaux sont passés au modèle
+     (`daily_report._payload`), donc le corps du mail et la pièce jointe ne
+     peuvent plus annoncer deux chiffres différents pour la même journée.
+- [x] **`lien_audio` doit pointer chez nous, pas sur Drive** — fait 2026-08-16,
+  **non vérifié** (suite API verte, typecheck et build verts ; ni feuille ni
+  navigateur ouverts ici). `journal.audio_link` écrit
+  `{DASHBOARD_BASE_URL}/#/inbox?msg={correlation_id}` ; `correlation_id` est
+  ajouté aux colonnes du miroir Rapports ; l'inbox lit `?msg=`, sélectionne le
+  technicien et le jour de ce message, y défile et l'entoure une fois (l'anneau
+  s'efface : un surlignage permanent se lirait comme un état que le message
+  n'a pas). Un id qui ne correspond à rien ne déplace rien — le message a pu
+  être purgé, et sauter ailleurs en silence serait pire.
+  **Action propriétaire : ajouter `DASHBOARD_BASE_URL=https://<hôte public>` au
+  `.env`, puis `docker compose up -d api`** (une modification de `.env`
+  n'atteint pas un conteneur réutilisé — piège n°4). Tant qu'elle est absente,
+  la colonne garde le lien Drive : rien ne casse, la nouveauté n'apparaît
+  simplement pas.
+  Détail 2026-08-16 : Aujourd'hui la colonne contient l'URL Drive : elle ouvre un
+  fichier nu, hors contexte, et dépend d'un service tiers pour lire quelque
+  chose qu'on héberge déjà (`media_files` en Postgres). Le lien devient une
+  **adresse du dashboard vers ce message précis** dans l'inbox, où il y a le
+  lecteur, la transcription corrigeable, le résumé et la réponse envoyée.
+  Clé retenue : **`correlation_id`**, pas le numéro de ligne — il existe *avant*
+  l'append (donc pas de second appel Sheets pour réécrire la cellule), il est
+  déjà porté par le message de bout en bout, et il vaut aussi pour un échange
+  qui n'est jamais devenu une ligne. Il faut donc l'ajouter aux colonnes du
+  miroir Rapports.
+  Base d'URL par `DASHBOARD_BASE_URL` ; **non définie, on retombe sur le lien
+  Drive** plutôt que d'écrire une adresse relative que personne ne peut ouvrir
+  depuis la feuille. L'upload Drive reste : c'est la copie durable au-delà de
+  `MEDIA_RETENTION_DAYS` (30 jours), et `media_files.drive_file_id` reste le
+  chemin de repli de la lecture.
+## Batch 2026-08-15 (grilled and locked with the owner before starting)
+- [x] **1. WhatsApp voice notes come back untagged — CLOSED, not fixable and never was a bug of ours (2026-08-15).** — fixed 2026-08-15: Text replies carry the grey quote, audio ones do not. Cause: the reply/ack nodes dereference `$('Filtrer accès').item`, and the paired-item chain breaks across the media branch (`WA Get media URL` → `WA Download audio`). Fix: carry `chat_id` + `message_id` in each item's own JSON through the media branch and read `$json` in the reply nodes — hardens the text and image paths too.
+- [x] **2. Remove the chat commands** — done 2026-08-15; `rapports_row` stayed, because `GET /audio/row/{row}` plays the inbox's voice notes through it. `/rapport`, `/modify`, `/delete` everywhere: the n8n command nodes and their six reply nodes, `POST /modify-command`, and the now write-only message→row link (`processed_messages.sheet_row` / `sheet_tab` / `rapports_row` plus every `logs.link_message_row` call). `processed_messages` itself stays — WhatsApp idempotency lives there.
+- [x] **3. Moroccan phone numbers: store `2126…`, always show `06…`/`07…`.** One `toMsisdn()` normalizer on the way in (Team form *and* the API, so `find_technician` cannot miss) and one `formatPhone()` on the way out, used by every place a WhatsApp id renders. — done 2026-08-15: the API already canonicalized (`logs.normalize_external_id`), so this was the display half — `toMsisdn`/`formatPhone` in `lib/utils.ts` with a runnable `utils.selfcheck.ts`, wired into the Team form, the identity chips and the inbox address.
+- [x] **4. New settings panel, bottom-left, tabbed full-screen overlay** — Appearance, Pipeline, Automation, Notifications, Account. Mirrors the server settings as well as the local ones, gated by role (the confidence threshold and `/settings` writes stay director-only). — done 2026-08-15 in `components/settings-overlay.tsx`; the gear is now only the trigger. Not verified in a browser — no Chrome on this machine — build, typecheck and locale parity are green.
+- [x] **5. Inbox shows new messages by itself, with a ⏳ per sender while their message is being processed.** In-flight is derived from `pipeline_logs` (a `received` row with no matching `replied`/`failed`), so no new table. Polling is adaptive: 5 s while anything is in flight, 30 s otherwise. — done 2026-08-15 (`GET /in-flight` + `HourglassMediumIcon` in the rail)
+- [x] **6. Split the notification area: messages vs alerts.** Two tabs in the bell panel; the unread badge counts alerts only. A received message toasts as “Message reçu de {name}” and nothing else, clicking it opens the inbox on that technician. — done 2026-08-15
+- [x] **7. WhatsApp-like inbox chat surface** — bubbles with tails, sender right / technician left, date pills, delivery ticks, textured thread background, all in the dashboard's own palette (no WhatsApp green). — done 2026-08-15: tails and the dot-grid ground are CSS (`.bubble`/`.thread-canvas` in `index.css`), the ticks say “sent” and never claim a read receipt the channel never gives us.
+- [x] **8. Choose where a reply is sent.** — done 2026-08-15 The composer defaults to the channel and identity the last message arrived on and shows it as a chip; clicking it lists every identity of that person. `POST /reply` gains an optional `identity_id` — omitted, it still broadcasts, so nothing existing breaks.
+- [x] **9. Space the n8n nodes on a grid** — done 2026-08-15: layered left-to-right by longest-path depth, 320 px between columns and 150 px of vertical pitch, branches kept next to the node they fork from. 56 nodes, 26 columns, widest column 6.
+- [x] **10. `WHATSAPP_ACCESS_TOKEN`** — présent dans le conteneur API (204 caractères), vérifié 2026-08-16. La réponse WhatsApp depuis le tableau de bord est configurée.
+- [x] **11. Reply quote restored** (2026-08-15). The #1 "fix" caused it. Routing the reply's `chat_id`/`message_id` through `Process output` instead of `$('Filtrer accès')` produced a byte-identical payload in every execution I inspected — and still killed the quoted bubble, so `.item` resolves to something different at send time than the stored run data shows. Known good beats a theory: every message field is back on `$('Filtrer accès')`, and the reply nodes are now byte-identical to commit 047ab64, where it worked. Kept: `/process` still echoes `correlation_id`/`message_id` (free, and a real join key if one is ever needed). **Do not re-route the message fields through `Process output`.**
+
+## WhatsApp quoting of voice notes — settled 2026-08-15, do not re-investigate
+`context.message_id` pointing at a **voice note** is accepted by the Cloud API
+(HTTP 200, a message id comes back) and then **not rendered as a quote** by
+WhatsApp. Proven outside n8n: two messages sent straight to
+`graph.facebook.com`, same code path, same recipient, one quoting an audio
+`wamid` and one quoting a text `wamid` — only the text one showed the grey
+quoted bubble.
+
+So the workflow was never wrong. Three attempts were spent moving the
+reference (`$('Filtrer accès').item` → `$('Process output').item` → `$json`)
+on the theory that `pairedItem` did not survive the media branch; all three
+sent the correct raw id, and none of them could have worked. The expressions
+are back on `$('Filtrer accès')`, byte-identical to 047ab64.
+
+What marks the message instead: the bot already reacts ⏳ on arrival and ✅ on
+success, and a reaction *does* attach to the voice note itself. That is the
+tag, and it is the owner's decision (2026-08-15) to leave it at that.
+
+Kept from the investigation: `/process` echoes `correlation_id` and
+`message_id` back in `ProcessResponse` (free, and a real join key if one is
+ever needed).
+- [x] **Panneau de consommation des API** — fait 2026-08-16 (`app/usage.py`,
+  `GET /usage`, page **Consommation** dans la bande système). Chiffres réels,
+  vérifiés en direct avant d'écrire une ligne de code, et **chacun annonce sa
+  provenance** parce que les trois fournisseurs ne répondent pas avec la même
+  certitude : Groq renvoie un vrai quota dans ses en-têtes (1000 requêtes,
+  12000 jetons, restant et fenêtres de réinitialisation) ; Gemini ne renvoie
+  **aucun** en-tête de quota — dictionnaire vide, vérifié — donc la consommation
+  est mesurée et le plafond est une constante documentée, affichée comme telle ;
+  Meta donne le plafond en direct (`messaging_limit_tier`, `quality_rating`,
+  `throughput`) mais pas notre consommation face à lui sans un identifiant WABA
+  que le jeton System User ne porte pas, donc le plafond est le sien et le
+  décompte le nôtre. Un en-tête absent enregistre NULL, jamais 0 : zéro se
+  lirait « le fournisseur dit qu'il ne reste rien ».
+- [x] **Retirer « 🤖 Moteur STT » de la réponse au technicien** — fait
+  2026-08-16 **et poussé en direct** (`--push`, workflow toujours actif,
+  0 occurrence de « Moteur STT » dans la copie vivante). Le premier essai avait
+  échoué en `getaddrinfo` : `N8N_URL` du `.env` est le nom Tailscale, que cette
+  machine ne résout pas — `N8N_URL=http://127.0.0.1:5678` devant la commande
+  suffit, le conteneur écoute bien. Trois nœuds nettoyés : `TG reply summary`, `WA reply summary`, et
+  `Record exchange` — ce dernier archive le texte de la réponse et doit rester
+  identique à ce qui est parti, sinon l'inbox montre une conversation qui n'a
+  pas eu lieu. Le nom du moteur reste dans `/journal` (`stt_engine`), dans les
+  logs et dans le dashboard : c'est une information d'exploitation, pas une
+  information de chantier. La confiance de transcription, elle, reste dans la
+  réponse — elle dit au technicien de relire, ce que le nom du moteur ne fait
+  pas.
+- [x] **Le moteur STT s'affiche dans l'inbox** — fait 2026-08-16, **non vérifié
+  dans un navigateur** (typecheck, build, parité des locales et suite API
+  verts). Une puce à côté du titre « Transcription », donc collée au texte
+  qu'elle qualifie : la chaîne se replie en cas d'échec, donc l'ordre configuré
+  ne dit pas ce qui a tourné — `local` ici signifie que les deux moteurs cloud
+  étaient indisponibles à cet instant, et un chiffre douteux ne se juge pas
+  pareil selon le moteur qui l'a entendu. Deux sources, parce qu'un message
+  peut ne jamais devenir une ligne : `STT_model` de la feuille Rapports pour un
+  rapport déposé, et une **nouvelle colonne `exchanges.stt_engine`** pour les
+  messages « aucun rapport détecté » — ce sont justement ceux qu'on relit.
+  Migration `ADD COLUMN IF NOT EXISTS`, donc les échanges antérieurs restent
+  sans puce plutôt que de mentir. Le nœud n8n `Record exchange` envoie le champ,
+  et il est **poussé** : `stt_engine` est présent dans le nœud vivant. `api` et
+  `web` ont été reconstruits et redémarrés le 2026-08-16. Reste à voir la puce
+  sur une **nouvelle** note vocale — les échanges antérieurs à la colonne
+  n'affichent rien, ce qui est le comportement voulu.
+
+## Batch 2026-08-15 (2) — bordereau columns, vision benchmark, .docx (grilled and locked with the owner)
+
+- [x] **1. Bordereau article columns — schema, journal, mirror, seeds.** 25 new
+  `ARTICLE_FIELDS` in `schemas.py`, all counted by `has_data`; `ARTICLE_COLUMNS`
+  folded into `journal.NUMERIC_COLUMNS` so they merge-by-addition for free;
+  identity entries in `RAPPORTS_COLUMNS`; `articles.tache` added for ACAPS's
+  grouping; Extralait (13) and ACAPS (17) bordereaux seeded and DGH's 13
+  previously unmapped articles wired to the new fields. Prompts updated on both
+  the text and image paths. 26 tests in `api/tests/test_bordereau_articles.py`;
+  full suite 299 green. The Rapports tab is live at **61 columns** — appended in
+  place, nothing renamed, nothing deleted.
+  Two traps found on the way, recorded so they are not re-introduced:
+  the article seed sat behind `if chantiers is empty`, so on any box that had
+  already booted (i.e. the live one) Extralait and ACAPS would silently never
+  arrive — the guard is now per chantier *and* per emptiness. And four Rapports
+  columns keep **legacy names** (`goulottes_m`, `cables_m`, `bureaux_termines`,
+  `panneaux_raccordes`): `RAPPORTS_COLUMNS` is where the two vocabularies meet,
+  and renaming a column orphans every historical row in it.
+- [x] **2. Vision benchmark on annotated plans** (`benchmark/run_plan_benchmark.py`,
+  `dataset/plan_cases.json`). One floor plan photographed in three annotation
+  states — circle only, dots only, fully marked — which makes the printed layout
+  a constant and the marks the only variable, so a claim about an unmarked zone
+  is *provably* false rather than merely unverified. Scored on recall of marked
+  zones and on hallucinated zones; mark counting is deliberately **not** graded
+  (counting dots on a phone photo is where vision models fail, and a wrong count
+  becomes a wrong contract total nobody catches).
+  Result — `gemini-3.5-flash-lite` and `gemini-flash-lite-latest`: **92% recall,
+  0 hallucinations, 1.3 s**. `gemini-3.1-flash-lite` reaches 100% recall with
+  **4 hallucinations** — it wins on recall by naming rooms that are not marked,
+  which is exactly why recall alone must not pick the model. Groq's Llama 4
+  Scout and Maverick **404 on this key**, so CLAUDE.md's "no vision model in the
+  free Groq catalogue" still holds.
+  Caveat kept deliberately: `gemini-3.6-flash` scored 0 hallucinations in a
+  warm-up and 1 in the full run on identical input — three cases is a noisy
+  sample and these numbers are directional, not precise.
+- [x] **3. Image-generation reachability survey** (`benchmark/run_imagegen_survey.py`).
+  **0 of 8 endpoints returned pixels.** Gemini's three image models answer
+  `429 RESOURCE_EXHAUSTED`, Pollinations now `403`s anonymous callers, and the
+  HF and Cloudflare paths have no credentials in `.env`. So the deterministic
+  Pillow card is not a fallback in practice — it is the only image path that
+  exists, exactly as `config.py` already claimed. The Gemini rows were probed
+  right after 18 vision calls on the same key, so that verdict deserves one
+  re-run on a cold quota before it is quoted in the report.
+- [x] **4. Chantier from the voice + sticky fallback** — done 2026-08-15
+  (`0d8eceb`). `chantier_mentionne` on the schema, `journal.resolve_site`
+  replacing the hazard below, `_sticky_chantier` derived from the Rapports
+  mirror, `chantiers.verifie`, and the `(repris du dernier rapport)` note on the
+  summary. Precedence shipped as voice → sticky → org chart → `Non affecté`.
+  16 tests in `test_chantier_routing.py`; suite 343 green at the time.
+
+  **`journal.resolve_tab` is the hazard and must be fixed in the same pass.**
+  Its first branch is `if chantier: return chantier, chantier, []` — a passed-in
+  chantier is trusted verbatim *as a tab name*, with no check that it exists in
+  the `chantiers` table. Nothing reaches that branch today because routing comes
+  from the org chart, but the moment the voice supplies the name, whatever the
+  model transcribes becomes a tab: "la DGH", "d.g.h" and "DGH" would be three
+  papers, three split bordereaux, and the director's totals scattered across
+  them. Tab creation is automatic and deliberately so — `file_report` calls
+  `sheets.ensure_tab` before every read because `read_tab` on an unknown tab is
+  a 400, not an empty list, so without it a new site's first message would 502
+  and jam `failed_writes` forever.
+
+  Owner's decision (2026-08-15), in two parts:
+  - **Match first.** Normalize the spoken name (case, accents, articles,
+    punctuation) against the existing `chantiers` rows, so the three spellings
+    above all land on DGH. No new paper for a mis-transcription.
+  - **Create on a genuine no-match**, rather than routing to `Non affecté`: an
+    unmatched name creates the chantier and its tab, marked **unverified** and
+    with `flag_review`, so a real new site works the first time a technician
+    mentions it and the owner confirms it afterwards in the dashboard.
+
+  Also settled the same day: the **per-site journal tabs stay**. They are the
+  director's own `Tableau de Suivi projet` format, and three things live only
+  there — accumulation (a second note the same day merges into one row per
+  (date, technicien), or the JH totals line double-counts), the chef columns
+  (EQUIPE / heures / JH / ordre du jour / taux de réalisation, written by the
+  dashboard and never by a merge), and stock reconciliation with its
+  `stock_ecart` warning. `GET /chantiers/{id}/bordereau` also reads
+  `chantier["sheet_tab"]` directly, so deleting the tabs would empty the
+  bordereau page. `Rapports` is the flat per-message mirror the dashboard
+  reads, not a replacement for the journal.
+- [x] **6. Port the .docx renderer to Python** — fait 2026-08-16 (`api/app/docx_report.py`). `Dashboard/src/lib/report-export.ts` n'est plus qu'un wrapper de téléchargement autour de `POST /reports/export`, et la dépendance npm `docx` a disparu du `package.json`.
+
+## Batch 2026-08-15 (3) — image generation removed, benchmarks widened
+
+- [x] **AI image generation removed from the whole project** (`15a5fd0`).
+  Image *understanding* untouched — it is the half that works (92% zone recall,
+  0 hallucinations). Generation went because it never worked and could not:
+  Google answers every image model with `429` and "check your plan and billing
+  details" — a billing wall, not a rate that resets — reproduced twice on
+  different days including once on a deliberately cold quota, and no other free
+  endpoint returned pixels either (Pollinations now 403s anonymous callers; HF
+  and Cloudflare need keys this project does not have). 0 of 8.
+  Out: `app/imagegen.py`, `POST /generate-image`, `image_generation_chain`,
+  `prompts/image-generation.md`, the survey script, and the whole dashboard
+  surface (9 locale keys per file, now 446 x 3). `report_versions.image` is
+  **kept** — dropping a column is irreversible and old signed-off versions still
+  hold their picture.
+- [x] **Benchmark results filed by date** (`b10fbf1`): `results/<YYYY-MM-DD>/`,
+  with the STT history from 2026-07-27 to 08-08 filed retroactively. A ranking
+  quoted without the day it was measured is not evidence — free catalogues
+  change under you.
+- [x] **Text candidates widened from 8 to 25** — every model the two keys
+  actually serve (16 Gemini + 9 Groq), enumerated from the live catalogues
+  rather than hand-picked. Includes `allam-2-7b`, Arabic-first, the one
+  candidate with a claim to win on a Darija corpus specifically. Also fixed
+  `engine_for`, which guessed the vendor from the model string and would have
+  misrouted `allam-2-7b` and `gemma-4-31b-it` to the wrong API — returning a
+  404 indistinguishable from "this model is dead".
+
+## Batch 2026-08-15 (4) — vérification bout en bout et ce qui reste
+
+- [x] **Un vrai message a traversé le nouveau code** (2026-08-15, 23h). Une note
+  vocale réelle du dataset (`WhatsApp Audio 2026-07-22 at 3.43.06 AM.ogg`)
+  poussée dans le `/process` **en production**, pas dans un test : STT `gemini`
+  en 6,3 s, aller-retour 12,9 s, aucun warning. Elle a rempli
+  `cable_elec_3x2_5_m: 30` — un des 25 champs articles créés le jour même, à
+  partir de « posina 30 m d'le câble 3*2.5 » en darija mélangé — plus
+  `goulotte_m`, `prises_connectees`, `etages: [E4, E2, E1]`, et surtout
+  `chantier_mentionne: "Novick"`. Toute la journée s'exécute en un appel.
+  Note : « Novick » n'existe pas dans `chantiers`, donc le passage par
+  `/journal` créera un site **non vérifié** et marquera la ligne — le chemin
+  prévu, pas encore observé.
+- [x] **Quatrième piège de déploiement trouvé en le commettant** (`ac2bb1c`).
+  Le Dashboard est une image construite lui aussi (`build: ./Dashboard`) : rien
+  dans `up -d --build api` ne le touche. Supprimer `POST /generate-image` côté
+  API sans reconstruire `web` a laissé le bundle servi appeler un endpoint
+  disparu — un bouton vivant en apparence qui renvoyait 404, en direct, pendant
+  une heure. La règle est maintenant dans CLAUDE.md : **on retire une
+  fonctionnalité `web` d'abord et `api` en dernier ; on en ajoute une dans
+  l'autre sens.**
+### Ce qui reste, par ordre de valeur
+- [x] **Porter le générateur .docx en Python** — fait 2026-08-16, **à vérifier
+  par le propriétaire** (voir le batch 2026-08-16 (3) plus bas).
+  Ancienne note : **toujours pas commencé.** Une tentative du 2026-08-16 s'est arrêtée sur la
+  limite de session après n'avoir ajouté que la dépendance `python-docx`, qui a
+  été annulée : une dépendance inutilisée dans l'image de production, c'est du
+  poids et de la surface d'attaque pour rien, et `pip-compile` la régénère en
+  une commande le jour où le rendu existe vraiment.
+  C'est **le dernier endroit où le système contredit une décision prise à voix
+  haute** : « keep it in the backend, so if no one has the browser opened, the
+  docx will still be auto-generated and sent by email ». Aujourd'hui le
+  document n'existe encore que si quelqu'un clique.
+- [x] **Interface de confirmation des chantiers non vérifiés** — fait
+  2026-08-16 (`76a5757`). `PATCH /chantiers/{id}` confirme, `DELETE` supprime
+  une mauvaise transcription avec son bordereau ; les deux en
+  `require_director` et tracés dans l'audit. La liste vit sur la page Vue
+  d'ensemble — la seule qu'un directeur ouvre sans y être envoyé — et ne
+  s'affiche pas du tout tant qu'il n'y a rien en attente. **La suppression
+  laisse l'onglet du journal en place** : le bordereau est à nous et part avec
+  la ligne, l'onglet est le registre du directeur, et un clic dans un dashboard
+  ne doit jamais effacer des mois de rapports dans son fichier.
+- [x] **Cas chantier dans `text_cases.json`** — fait 2026-08-16 (`4627044`).
+  24 cas, dont 6 notent `chantier_mentionne` et 2 exigent qu'il vaille `null` :
+  c'est cette absence qui déclenche la reprise du dernier chantier connu, donc
+  un nom deviné n'y donne pas un champ un peu faux, il envoie une journée
+  entière sur le mauvais onglet.
+
+## Batch 2026-08-16 (2) — le repli local n'avait jamais répondu du premier coup
+
+- [x] **`local` expirait systématiquement à son premier appel.** Le sidecar
+  charge son modèle au **premier** `/transcribe` (pour ne pas immobiliser 4 Go
+  d'une carte de 8 Go en permanence), et ce chargement se paie **dans la requête
+  elle-même**. Mesuré le 2026-08-16 sur la 3070 : `load_seconds = 280,4`, puis
+  ~32 s de transcription. Le budget client était de 300 s : il couvrait le
+  chargement et ne laissait rien pour le travail. Donc **chaque premier appel
+  après un redémarrage échouait — et en échouant il chauffait le modèle, si bien
+  que le suivant réussissait.** Vu de l'extérieur cela ressemble à « c'est lent
+  la première fois », et c'est exactement pour cela que personne ne l'a vu :
+  ce moteur n'avait jamais répondu à sa première requête.
+  Corrigé : `COLD_START_BUDGET_S = 420` (chargement + transcription + marge) et
+  `proxy_read_timeout 460s` côté nginx, qui doit rester **au-dessus** du client
+  sinon le proxy plafonne en silence un budget que l'API croit maîtriser.
+  Le chiffre « ~235 s » de CLAUDE.md était faux et a été remplacé par la mesure.
+- [x] **Le « 18 prises » n'était pas une hallucination.** Vérifié en
+  re-transcrivant la même note avec le **moteur local** — autre fournisseur,
+  autre architecture, autres modes d'échec. Les deux chaînes produisent `18`.
+  Technique réutilisable : la chaîne existe pour la disponibilité, mais elle
+  sert aussi de vérification croisée gratuite sur le GPU de la maison dès qu'un
+  chiffre est contesté.
+- [x] **Preuve sur modèle FROID** (2026-08-16, après le correctif) : 407 s au
+  total, dont 394 s de STT, `engine=local`, et `prises_connectees: 18`. C'est
+  la première fois que ce moteur répond à son premier appel. La marge est
+  cependant **de 13 s seulement** sur le budget de 420 s — et 394 s, ce n'est
+  pas les ~312 s attendus (280 de chargement + 32 de transcription) : le
+  chargement n'est pas un coût fixe, il dépend de ce qui occupe la carte, et ici
+  `stt-local` venait de redémarrer en même temps que l'API.
+- [x] **Le chargement paresseux est la mauvaise forme pour un repli** — fait
+  2026-08-16, **option 1**. `STT_LOCAL_PRELOAD` dans `stt_server.build_app` :
+  un fil démon appelle le `_ensure_loaded` existant au démarrage, donc même
+  verrou et même fonction — un `/transcribe` qui arrive pendant le chargement
+  attend au lieu d'en lancer un second. `docker-compose.yml` met la variable à
+  `1` pour le service `stt-local` ; la mettre à `0` rend le comportement
+  paresseux. Le budget de 420 s reste en place : les deux moitiés ne dépendent
+  plus l'une de l'autre. **À vérifier au prochain redémarrage** :
+  `docker compose up -d stt-local` (pas `restart` — cf. piège n°4), puis
+  `/health` doit passer `loading` → `ok` sans qu'aucune note n'ait été envoyée.
+  Note d'origine : Ne pas
+  « monter le timeout à 600 s » : poursuivre un nombre qui bouge, c'est finir
+  avec un délai de dix minutes qui masque un vrai blocage. Le coût tombe sur le
+  seul appelant qui le mérite le moins, au moment précis où les deux moteurs
+  cloud ont déjà échoué. Deux vraies options :
+  1. **Préchauffer au démarrage** derrière un drapeau (`STT_LOCAL_PRELOAD`) —
+     on échange 4 Go de VRAM au repos contre un repli réellement présent quand
+     il sert. C'est le compromis que le chargement paresseux avait justement
+     refusé, mais il a été choisi avant qu'on sache que le premier appel
+     échouait toujours.
+  2. **Rendre le premier appel non bloquant** : `/transcribe` répond « en
+     chargement, réessayez » et le déclenche, la chaîne passe au moteur suivant
+     ou la file de reprise repasse plus tard. Le technicien n'attend jamais
+     7 minutes.
+  L'option 1 est la plus simple et la plus honnête tant que la carte n'est pas
+  disputée.
+
+## Batch 2026-08-16 (3) — le .docx passe au backend, la transcription devient corrigeable
+
+- [x] **Le rendu .docx vit maintenant dans l'API** (`api/app/docx_report.py`).
+  C'était le dernier endroit où le système contredisait une décision prise à
+  voix haute : le document n'existait que si quelqu'un cliquait, donc le
+  courrier programmé — envoyé par un fil d'exécution dans le conteneur, sans
+  navigateur — ne pouvait rien joindre. Désormais :
+  - `jobs._report_mail` joint le document à **chaque** rapport envoyé, y
+    compris celui de chaque chef. L'échec du rendu est **non fatal** et
+    imprimé : un document qui ne se construit pas ne doit pas coûter le
+    rapport lui-même, qui reste lisible dans le corps du mail.
+  - `POST /reports/export` renvoie **les mêmes octets** ; le bouton du tableau
+    de bord les télécharge au lieu de fabriquer sa copie. Un seul moteur de
+    rendu, sinon les deux dérivent comme l'avait fait le mapping n8n.
+  - **Les chiffres ne voyagent pas.** Le navigateur envoie le titre et le
+    corps (l'opérateur a pu éditer le brouillon — ce texte *est* le rapport) ;
+    l'API recalcule les huit totaux et le tableau par technicien depuis les
+    lignes de la feuille que la période couvre. Un client ne peut donc pas
+    poster ses propres chiffres dans un document signé de l'en-tête maison, et
+    la page et le document ne peuvent pas se contredire. L'arithmétique
+    reproduit `metrics.ts` (`num`, `isFlagged`) à l'identique — une virgule
+    décimale est un nombre, `"abc"` vaut 0, un technicien vide n'est pas
+    quelqu'un.
+  - Dépendance `python-docx` ajoutée à `requirements.in` et recompilée ; la
+    dépendance npm `docx` a été **retirée** du Dashboard, elle n'a plus
+    d'appelant. 7 tests dans `api/tests/test_docx_report.py` (parité des
+    chiffres, le .docx est un vrai ZIP OOXML avec en-tête, pied de page et
+    champ `NUMPAGES` vivant, et un rapport sans lignes s'écrit quand même).
+  - **Non vérifié :** personne n'a encore ouvert le fichier produit dans Word,
+    ni reçu un mail avec la pièce jointe. C'est le contrôle à faire.
+- [x] **La transcription d'une note vocale est affichée sous l'audio, et
+  corrigeable** (inbox). Une sous-bulle « Transcription » sous le lecteur, avec
+  un crayon ; l'édition écrit par `PATCH /reports/{row}` (champ
+  `rapport_complet`) pour un message devenu ligne de la feuille, et par le
+  nouveau `PATCH /exchanges/{id}` pour un message qui ne l'est jamais devenu.
+  La règle précédente disait « jamais éditable — c'est la preuve, et une
+  transcription corrigée rendrait l'extraction inauditables ». Elle avait raison
+  sur le risque et tort sur le remède : laisser à la seule personne capable
+  d'entendre l'erreur une transcription qu'elle peut lire sans la corriger ne
+  préserve pas la preuve, cela préserve l'erreur. Les deux chemins d'écriture
+  enregistrent la **valeur précédente** dans la piste d'audit
+  (`transcript_edited` / `report_edited`), donc la sortie brute du moteur reste
+  récupérable. **Ne jamais écrire cette correction autrement.**
+  Un message **tapé** n'a pas de sous-bulle : son texte *est* ce que le
+  technicien a écrit, et proposer de l'éditer inviterait à réécrire ses propos.
+## Bilan des 15–16 août 2026 — 18 commits, suite à 355 vert
+
+### Livré
+
+| Livraison | Commit | État |
+|---|---|---|
+| 25 champs articles du bordereau (union DGH / Extralait / ACAPS) | `ac349cf` | Feuille Rapports à **62 colonnes**, en ligne |
+| Benchmark vision sur plans annotés + relevé de joignabilité génération d'images | `7d9b75a` | Corrigé **confirmé par le propriétaire** le 16-08 → chiffres citables |
+| Chantier dicté par le technicien + reprise du dernier connu | `0d8eceb` | Prouvé sur du darija réel (`chantier_mentionne: "Novick"`) |
+| Jeu de cas du benchmark texte réécrit pour le schéma courant | `dca386f` | 20 cas, les 25 champs articles couverts |
+| Génération d'images retirée du projet (compréhension conservée) | `15a5fd0` | 0/8 points d'accès joignables, mesuré deux fois |
+| Résultats classés par date + 25 modèles candidats | `b10fbf1` | `results/<AAAA-MM-JJ>/`, historique STT reclassé |
+| Les deux chaînes d'extraction reclassées sur les preuves | `70f0ab4` | `gpt-oss-120b` gardé en 2ᵉ pour le compteur indépendant |
+| Cas chantier notés dans le benchmark | `4627044` | 24 cas, 2 exigent `null` |
+| Chantiers non vérifiés : liste + confirmer/supprimer | `76a5757` | En ligne, la suppression épargne l'onglet du journal |
+| Motif du flag + alerte `photo_zones_partielles` | `ec34be9` | Colonne en ligne, alerte issue d'une mesure |
+| Repli STT local : budget de démarrage à froid | `4517469` | **407 s sur modèle froid — premier succès au premier appel** |
+
+### Bugs trouvés en se servant du système, pas en le lisant
+
+Chacun passait la suite de tests au moment où il a été trouvé.
+
+| Bug | Comment il se présentait | Ce qu'il faisait vraiment |
+|---|---|---|
+| `engine_for` devinait le fournisseur d'après le nom du modèle | un 404 | `allam-2-7b` et `gemma-*` envoyés à la mauvaise API — indiscernable d'un modèle mort |
+| Listes comparées avec `==` | rien du tout | `["E1","RDC"]` noté faux contre `["RDC","E1"]` : chaque cas multi-étages sous-noté |
+| La chaîne `"null"` dans les champs liste | « Groq est mauvais » | validateur générique court-circuité → la moitié Groq de la chaîne échouait sur la plupart des rapports |
+| Bundle du dashboard périmé | un bouton normal | appelait `POST /generate-image`, supprimé — 404 en direct pendant une heure |
+| Limite de grille Sheets | un script qui plante | `_extend_headers` aurait bloqué la file de reprise au prochain champ ajouté |
+| Repli STT local jamais joignable au 1ᵉʳ appel | « c'est lent la première fois » | **échouait toujours**, et l'échec chauffait le modèle donc la reprise passait |
+| `ec34be9` poussé sans relancer la suite | vérifié en direct sur la vraie feuille | le faux service Sheets n'avait pas `.get()` — corrigé en `4517469` |
+
+### Reste à faire, par valeur
+
+| # | Tâche | Qui |
+|---|---|---|
+| 1 | **Un vrai message de technicien jusqu'au bout**, y compris `/journal` : création d'onglet, drapeau non vérifié, ligne à 62 colonnes, fusion d'un 2ᵉ message le même jour. **N'a jamais tourné.** | propriétaire |
+| 2 | ~~Porter le générateur .docx en Python~~ — **écrit le 2026-08-16**, reste à ouvrir un fichier produit et à recevoir un mail avec la pièce jointe | propriétaire (vérification) |
+| 3 | ~~Préchauffer le STT local~~ — **fait 2026-08-16** (`STT_LOCAL_PRELOAD=1`), reste à observer un démarrage réel | propriétaire (vérification) |
+| 4 | Refaire la comparaison à 25 modèles un matin calme, hors production | assistant |
+| 5 | Trancher le désaccord Gemini (`cable_elec_3x2_5_m: 30`) vs local (`cables_installes_m: 3`) sur la même note | propriétaire (darijophone) |
+| 6 | Plus de plans annotés, d'autres bâtiments — l'encombrement attentionnel se reproduit-il ? | propriétaire |
+
+- [x] **Le lien audio de la feuille n'était pas un lien** — trouvé et corrigé
+  2026-08-16. `DASHBOARD_BASE_URL` est optionnel et n'avait jamais été défini,
+  donc la branche « pointer vers l'inbox » n'a jamais tourné une seule fois ;
+  et la valeur de repli n'était pas une URL Drive mais un **identifiant nu**
+  (`1115179874166528`) : 22 cellules d'une colonne intitulée « Lien audio » qui
+  n'ouvrent rien. Deux corrections : l'origine retombe sur `dashboard_url`
+  (celle que le bouton du mail doit déjà avoir juste), et `audio_link` refuse
+  d'écrire ce qui n'est pas une URL — une cellule vide dit « pas
+  d'enregistrement », un identifiant ment.
+  **Reste :** `DASHBOARD_URL` vaut `http://localhost:8080`, qui n'ouvre que sur
+  la machine qui héberge la pile. À pointer sur le Funnel au moment du pilote,
+  sinon le directeur cliquera dans le vide depuis son poste.
+- [] fix this in frontend "Generated by automatique"
+
+## Batch 2026-08-19 — file d'attente, quotas, ordre des messages (dictés par le propriétaire)
+
+- [x] When i send text with images, if the gemini hit the quota , i believe chatgpt oss 120b stops working aswell — **ce n'était pas un quota** (corrigé 2026-08-19, commit `020e87b`). Aucun 429 depuis le 2026-08-04, et ceux-là venaient de la génération d'images supprimée depuis. Le vrai message, sur **chaque** appel : `400 INVALID_ARGUMENT — Unknown name "additional_properties"`. La propriété fautive est `livraisons`, un `dict[str, float]` que Pydantic rend avec `additionalProperties`, mot-clé que le `response_schema` de Gemini refuse ; arrivé avec les livraisons le 2026-08-16. La chaîne texte survivait parce que Groq répond en second ; **la chaîne image est Google seule**, donc les trois moteurs échouaient sur la même requête malformée — ce qui ressemble exactement à un quota de compte. Le chemin image était mort trois jours. Corrigé par `_gemini_schema()`. Vérifié en vrai : texte et image répondent.
+- [x] If the usage is hit, then it should show in text + add a page only to show all the usages etc — **fait 2026-08-19**. La page existait (`Consommation`, `GET /usage`) mais **rien n'y menait** : la bande système du rail est construite sur `SYSTEM_NAV[0]` et `[1]`, donc l'entrée ajoutée en troisième position était routée, traduite en trois langues et rendue nulle part. Elle est maintenant dérivée du tableau. Côté fond, `/usage` porte un `state` (`epuise`/`bas`/`ok`/`inconnu`) et une phrase française par fournisseur, et la page lit ce verdict au lieu de recalculer le sien. **Et le plafond journalier est enfin capté** : Groq ne l'énonce que dans le corps du 429 — jamais dans un en-tête — si bien que la page affichait « 2493/8000 jetons, ok » pendant que la limite qui avait réellement arrêté l'extraction était épuisée. `usage.note_quota_refusal` l'enregistre au moment du refus, seul instant où le chiffre existe.
+- [x] fix text color in the google sheets sites pages (from white text to black) — **fait 2026-08-19**, et ce n'était pas une couleur. `values().append` ne prend pas une adresse mais un *indice* : Google cherche « le tableau » lui-même. Deux conséquences sur un onglet de chantier. `INSERT_ROWS` **insère** une ligne, et une ligne insérée hérite du format de celle du dessus — pour la première ligne d'un onglet neuf, c'est l'en-tête : texte blanc, que le banding pose ensuite sur fond blanc. Invisible. Et la case à cocher du drapeau court sur toute la colonne sans borne : une case décochée n'est pas vide, elle vaut FALSE, donc des lignes que personne n'a écrites ressemblent à des données dans cette colonne-là. Corrigé en écrivant à une adresse explicite (`_next_row` + `values.update` sur `A{n}`) : plus d'insertion, donc plus d'héritage ; plus de devinette, donc plus de décalage. Le noir du corps est en plus **affirmé** dans `style_tab` au lieu d'être hérité.
+- [x] **La 8ᵉ ligne sans date ni technicien** — même cause, autre symptôme (2026-08-19). Les valeurs y étaient : `2026-08-19` dans *Flag review*, `Yassine` dans *Motif du flag*, le chantier dans *Correlation id* — la ligne avait été posée à partir de la colonne BK au lieu de A, 62 colonnes trop à droite. Onglet `charé3 Moulay Slimane` réparé : lignes 5 à 8 supprimées, le rapport du 19/08 réécrit en A5 par le chemin corrigé.
+- [x] in the main page in google sheets , the date + heur + tech should be fixed when i scroll to right (switch canal with tech, then make tech fixed like the date and heure) — **fait 2026-08-19**. `technicien` déplacé devant `canal` (l'écriture résout les colonnes **par nom** sur l'en-tête vivant, donc déplacer la colonne suffit, le code suit). `frozenColumnCount` passe de 2 à 3 dans `style_tab`, et appliqué aux 7 onglets existants — `style_tab` ne tourne qu'à la naissance d'un onglet. Les deux familles répondent « quand, qui, où » dans leurs trois premières colonnes.
+- [x] when i send multiple messages the chatbot did reply to one of my messages, but the check emoji was never done, fix this bug — **fait 2026-08-20**. Ce n'était pas un problème de réaction : c'est l'**appariement d'items n8n**. Tous les nœuds d'accusé visent le message par `$('Filtrer accès').item` ; ce nœud tourne en `runOnceForAllItems`, retourne un tableau neuf **sans `pairedItem`** et peut émettre moins d'items qu'il n'en reçoit. À un message l'appariement retombe sur l'unique item (vérifié : `WA ack done` a réussi sur l'exécution 54910), à N il lève « can't determine which item to use » ou s'effondre sur l'indice 0 — et les deux nœuds d'accusé portent `onError=continueRegularOutput`, donc **l'échec est muet**. `pairedItem` posé dans six nœuds Code. `Process output` le *nommait en commentaire* depuis le 2026-08-15 en retournant un tableau nu : le commentaire affirmait un invariant que le code n'établissait pas. Poussé en vrai (`2Q293TODQzb6YMoE`, 64 nœuds, `errorWorkflow` préservé) ; sondage vert toutes les 15 s après le push.
+- [x] always respect the messages in chronical order, since sometimes old messages aren't seen by the chatbot, then the next day or something, it reads them again — **fait 2026-08-20**. Le tri chronologique et le dédoublonnage Postgres étaient déjà en place ; **la cause racine ne l'était pas**. `Offset + token` lisait encore `lastUpdateId` dans `$getWorkflowStaticData`, *que chaque push de workflow efface* : l'offset retombait à 0, Telegram rejouait jusqu'à 24 h d'updates, et seul `POST /logs/claim` empêchait le double dépôt — symptôme masqué, cause intacte. L'offset vit maintenant dans Postgres (`GET|POST /cursor/{name}`, table `app_settings`, préfixe `cursor:`). Trois propriétés : il **ne recule jamais** (un lot rejoué présenterait un id inférieur et rouvrirait une fenêtre déjà fermée), il est **invisible de `GET /settings`** (un update id n'est pas une préférence et n'a rien à faire à côté de l'horaire des rapports), et **staticData reste le repli** — API ou Postgres injoignable dégrade au comportement d'avant au lieu de remettre l'offset à 0. L'écriture est dans `Extract TG msgs` et non dans un nœud dédié : ce nœud tourne à *chaque* sondage, y compris les vides, alors qu'un nœud en aval ne se déclencherait jamais sur un lot sans message.
+- [x] the error messages should be a retry queue before going to the next one with a retrying message, unless there is a quota. then wait till quota comes back then resume reading messages, but show the retry queue in the dashboard — **fait 2026-08-20**, selon le design verrouillé ci-dessous. `message_queue` (Postgres) tient les messages dont `/process` a échoué — l'étage *avant* `failed_writes`, qui tient un rapport déjà formé que Google a refusé. Le déblocage qui a rendu la file possible : `_audio_input` transcrivait **puis** archivait, donc une note vocale ratée ne laissait aucun blob et les URL média expirent (Telegram ~1 h, Meta quelques minutes) ; l'archivage passe **avant** l'appel STT. `/process` interroge la file lui-même (`blocked_technician`) : un message dont l'expéditeur a déjà quelque chose de coincé rejoint la file derrière lui, sinon le message 2 est déposé avant le 1 dès que le 1 échoue. Réessais par `jobs.retry_messages` toutes les 30 s, backoff 30 s → 2 min → 5 min → 10 min ×3, puis abandon (❌) qui **libère** le technicien — sans plafond un message impossible bloquerait ses rapports pour toujours. Un refus de quota **ne consomme pas d'essai** et suspend la boucle 5 min, sans jamais suspendre la *réception* (Telegram ne retient les updates que ~24 h ; Meta pousse de toute façon). Signal par réaction seule — ⏳ → 🔄 → ✅/❌, `reply.set_reaction` ajouté, `reply.py` ne savait envoyer que du texte. Message de chat réservé au quota, une fois par panne et par technicien. Le rejeu passe par HTTP local vers `/process` (en-tête `X-Queue-Retry` pour franchir le portillon) : un second chemin de code qui dépose des rapports serait un second endroit où ils peuvent être déposés différemment. Vu dans le tableau de bord, page **Queue**, section « Messages en attente » au-dessus des écritures Sheets refusées. Vérifié sur le vrai Postgres : file idempotente sur `correlation_id`, portillon limité au bon technicien, essai compté sur échec (1) et **pas** sur quota (toujours 1). Tests : `api/tests/test_message_queue.py` (12).
+### Design verrouillé au grill du 2026-08-20 (avec le propriétaire, question par question)
+- [x] Check and warns if we have too many in the stock , warns if we have too little aswell — **fait 2026-08-19**. `stock.py` ne disait que « il va manquer » ; il dit maintenant aussi « il y en a trop » (`surplus`) : plus du double de ce qu'il reste à poser, et seulement si l'excédent pèse une part visible du marché — 2 m de trop sur 1 m restant n'est pas une alerte. Vérifié **avant** les branches de pénurie, parce qu'en fin de chantier un article peut être sous deux jours de couverture *et* en excès, et « commandez-en » serait alors exactement la mauvaise phrase. Seuil `stock_surplus_facteur` dans `app_settings`, silence s'il n'y a pas de `qte_marche` ou moins de deux jours actifs.
+- [x] if the tech reports a new cable or "prise" or something new, then add it in new column But show the confirm (just like site confirming) in the Sites page — **fait 2026-08-19**. `ExtractedReport.articles_libres` porte les articles qu'aucun bordereau ne liste ; la colonne est créée **sur l'onglet du chantier qui l'a déclaré** et le nom est enregistré une fois pour toutes dans `article_registry`, si bien qu'un second chantier réutilise la formulation au lieu d'en inventer une deuxième. L'identité **trie les mots** : « prise double étanche encastrée » et « prise étanche double encastrée » étaient deux colonnes pour un article, 4 dans l'une et 13 dans l'autre, avec un total juste dans aucune des deux. Toujours pas de correspondance approximative — *étanche* est une vraie différence et un vrai prix. La page Chantiers relit les noms : confirmer, corriger (un libellé qui en rejoint un autre fusionne les deux colonnes **et** les deux stockages), ou rejeter.
+- [x] if i send a text, it shows in google sheets as "ecoutez", fix it — **fait 2026-08-19**. `journal.audio_link` construisait le lien `▶ Écouter` pour **tout** message ayant un `correlation_id`, y compris un rapport tapé qui n'a rien à jouer : la colonne dont le seul rôle est de dire s'il existe un enregistrement invitait à cliquer vers un lecteur inexistant. Le test honnête est `stt_engine`, que `/process` ne renseigne que si un moteur a réellement transcrit de l'audio — la même raison pour laquelle `STT_model` est vide sur exactement ces lignes. Sans audio : cellule vide.
+- [x] freeze the column site in google sheets — **fait 2026-08-19**. `chantier` déplacé en 4ᵉ position sur Rapports (après `technicien`), et `style_tab` fige désormais **jusqu'à la colonne du site incluse** au lieu d'un nombre fixe : le site est 3ᵉ sur un onglet de chantier et 4ᵉ sur Rapports, donc une constante serait fausse pour l'un des deux. Les 7 onglets restylés.
+- [x] if i sent a message yesterday, but the chatbot was online today ,then it reports the message as if it was sent today, not yesterday ,fix this bug, make each message associated with the time it was sent — **fait 2026-08-19**. `POST /journal` et `Record exchange` dataient avec `$now`, l'horloge de l'**exécution**, pas celle du message : une note envoyée hier soir et relevée ce matin était classée aujourd'hui. Visible en clair sur la ligne 73 de Rapports, dont le `rapport_complet` commence par « Salam 18-08-2026 » alors que la colonne date dit 19/08. Les deux extracteurs portent maintenant `sent_date`/`sent_heure`, calculés depuis `m.date` (Telegram, secondes unix) et `m.timestamp` (WhatsApp), formatés en `Africa/Casablanca` — le fuseau doit être nommé ou une note de 23h30 tombe le mauvais jour. `$now` reste le repli. Workflow poussé en vrai (id `2Q293TODQzb6YMoE`, toujours actif, `errorWorkflow` préservé).
+- [x] lots of infos are being ignored, ( like row 74 in page rapport in google sheets) — **diagnostiqué 2026-08-19 : le modèle n'ignore rien, le schéma n'a pas de case.** Sur les 35 champs de quantité, aucun ne contient `prise` au sens électrique (les `prises_*` sont des RJ45), aucun `interrupteur`, aucun `tableau`, aucune `caméra`. Le seul chiffre qui a atterri, `goulottes_m = 8`, est 6 m + 2 m de **chemin de câbles** additionnés dans le champ le plus proche — et un chemin de câbles n'est pas une goulotte : des mètres de chemin de câbles sont comptés sur la ligne de marché de la goulotte. **La correction est l'item ci-dessus** (nouvel article → nouvelle colonne + confirmation).
+- [x] **check what was transcribed in the line 73 / lots of infos ignored (ligne 74)** — diagnostiqué 2026-08-19, **le modèle n'a rien ignoré : le schéma n'a pas de case**. Ligne 73, le technicien déclare 4 prises doubles étanches, 13 prises simples étanches, 3 prises simples apparentes, 9 interrupteurs simples, 1 interrupteur double, 2 tableaux électriques et 8 m de chemin de câbles. Sur les 25 `ARTICLE_FIELDS`, il n'existe **aucun** champ contenant `prise` (au sens électrique — les `prises_*` du schéma sont des RJ45), aucun `interrupteur`, aucun `tableau`. Seul le chemin de câbles a trouvé une case, `goulotte_m = 8` — d'où les « 8 goulottes » qui n'ont pas de sens isolées. Ligne 74 pareil : « 30 caméra w 50 câble », et il n'existe pas de champ caméra. Le prompt interdit d'inventer, donc le modèle a écrit la vérité dans `observations` et laissé les quantités nulles — c'est le comportement correct sur un schéma incomplet. **La correction est l'item ci-dessus** (« si le technicien déclare un nouveau câble ou une prise, l'ajouter en colonne avec une confirmation comme pour les chantiers ») : tant qu'il n'est pas fait, tout article hors bordereau reste de la prose.
+
+## Batch 2026-08-19 (2) — ce que la journée a appris
+
+- [x] **Le quota journalier de Groq est invisible jusqu'au refus.** `gpt-oss-120b` est le **seul** moteur qui remplit `articles_libres` ; quand ses 200 000 jetons/jour sont épuisés la chaîne bascule sur Gemini, qui répond correctement — sans un seul article. Le rapport se dépose, le technicien reçoit sa réponse, et les quantités manquent en silence. Deux correctifs : le plafond est enregistré depuis le corps du 429, et `jobs.refill_articles` (horaire) relit la transcription conservée et **remplit la ligne qui existe déjà** — d'où `report_rows.journal_tab` / `journal_row`, stockés au dépôt. Une ligne où le modèle ne trouve toujours rien est laissée telle quelle : un réessai qui ne trouve rien n'est pas la preuve d'un problème.
+- [x] **Groq rendait `articles_libres` en *chaîne* JSON**, pas en objet. Contenu juste, encodage faux : Pydantic refusait, la chaîne passait au suivant, et une réponse vide bien formée l'emportait sur une réponse juste entre guillemets. Décodé à la validation, strictement : une chaîne qui n'est pas un objet JSON échoue toujours.
+- [x] **La garde « rien extrait » jugeait sur les mauvaises données.** Gemini renvoyait `equipe` et `etages` — tous deux dans `DATA_FIELDS`, donc `has_data()` disait oui — pendant que le message énumérait sept articles chiffrés. La chaîne juge maintenant sur les **quantités** : un nom et un étage sont ce qu'un modèle réussit quand il a cessé de lire.
+- [x] **Deux collisions introduites le jour même.** `delete_article` défini deux fois, le second masquant silencieusement le premier ; et deux routes `DELETE /articles/{…}` où `{slug}` capture tout, rendant l'endpoint bordereau injoignable. Renommés en `delete_bordereau_article` et `DELETE /bordereau-articles/{id}`.
+- [x] **La grille Sheets ne grandissait qu'en largeur.** `_grow_columns` existait, pas son jumeau : un onglet vidé fait exactement deux lignes de haut (Google refuse de supprimer toutes les lignes non figées), la ligne 3 dépasse la grille, et le rapport part en 400. `_grow_rows` par tranches de 200.
+- [x] **Rien ne remarque quand n8n cesse d'écouter.** — **fait 2026-08-20**, commit `060516c` : `GET /n8n/listening` compare l'horodatage de la dernière exécution à `n8n_stale_after_minutes` (30). La preuve honnête est le *travail*, pas la joignabilité : un n8n joignable avec un workflow actif ne prouve ni l'un ni l'autre. Le 2026-08-19 à 06:48 les crons ont été désenregistrés après une série de `Bad request` Telegram ; le sondage et le webhook WhatsApp sont restés morts une heure pendant que l'API répondait `active: True` et que le tableau de bord affichait « Serveur actif ». Réactiver par l'API a tout relancé en quelques secondes. À surveiller : comparer l'horodatage de la dernière exécution n8n à l'intervalle de sondage, et le dire.
