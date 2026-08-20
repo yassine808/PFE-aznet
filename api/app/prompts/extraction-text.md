@@ -143,16 +143,46 @@ Règle, dans cet ordre :
 - Précise l'unité entre parenthèses quand ce n'est pas une pièce :
   `"chemin de câbles (m)"`, `"câble électrique (m)"`.
 
+### L'ordre dans lequel tu cherches une place
+
+Pour **chaque** chose chiffrée du message, dans cet ordre, et tu t'arrêtes au
+premier qui convient :
+
+1. **Un champ de quantité existant.** Les métrages, les prises, les brins, les
+   interconnexions. C'est toujours le premier choix.
+2. **Un article du bordereau.** Les cordons, tiroirs, pigtails, jarretières,
+   switches, modules, câble électrique, disjoncteurs.
+3. **Un article déjà nommé auparavant.** Le catalogue s'enrichit : si tu as
+   déjà vu « prise étanche double encastrée », réutilise **exactement** cette
+   désignation. Deux orthographes pour un objet, c'est deux colonnes dont
+   aucune ne porte le bon total.
+4. **Sinon, `articles_libres`** — une désignation neuve, courte, au singulier.
+   C'est une place, pas un échec : une colonne est créée pour cet objet.
+
+**Rien ne tombe entre ces quatre.** Un objet posé, chiffré, qui finit seulement
+dans `remarques` est une erreur — c'est du travail fait qui ne sera compté nulle
+part et que personne ne verra manquer.
+
 ### Vérification avant de répondre
 
-Relis le message et repère **chaque nombre**. Chacun doit se retrouver dans
-exactement une de ces places :
+Relis le message et repère **chaque nombre**, un par un. Chacun doit se
+retrouver dans **exactement une** de ces places :
 
-- un champ de quantité, ou
+- un champ de quantité global, ou
+- une entrée de `quantites` dans `ventilation`, ou
 - une entrée de `articles_libres`, ou
-- une heure, une date, un temps d'arrêt, un étage.
+- une heure, une date, un temps d'arrêt, une zone.
 
 Un nombre présent dans le message et absent de ta réponse est une **erreur**.
+Un nombre présent **deux fois** dans ta réponse — dans un champ global *et*
+dans une ventilation qui le détaille — est correct : le premier est le total
+annoncé, le second sa répartition.
+
+Relis aussi les **mots**, pas seulement les chiffres. Un blocage, un besoin, un
+nom d'équipe, un nom de chantier, une intention pour demain : rien de ce que le
+technicien a pris la peine de dire ne doit disparaître. Ce qui n'a pas de champ
+va dans `remarques`.
+
 Les longueurs sont les plus souvent oubliées : elles arrivent en fin de phrase,
 et parfois deux fois pour le même article.
 
@@ -177,6 +207,52 @@ Plusieurs valeurs par journée sont normales (« on a fait le RDC et le premier
 étage, les deux ailes »). N'invente **jamais** un étage ou un local qui n'existe
 pas dans ces listes : si tu entends autre chose, laisse le champ `null` et
 mentionne-le dans `remarques`.
+
+### Le détail par zone — `ventilation`
+
+**C'est la règle qui coûte le plus cher quand elle est ratée.** Un technicien
+qui travaille sur trois étages annonce trois chiffres, et les additionner
+détruit l'information que le directeur cherche : *où* le travail a avancé.
+
+Dès que le message rattache une quantité à une zone précise — un étage, une
+aile, un local technique — cette quantité va dans `ventilation`, **une entrée
+par zone** :
+
+```json
+"ventilation": [
+  {"zone": "E1", "libelle": "premier étage", "quantites": {"cables_installes_m": 30, "prises_connectees": 14}},
+  {"zone": "E2", "libelle": "deuxième", "quantites": {"cables_installes_m": 50}},
+  {"zone": "SR2", "libelle": "local SR2", "quantites": {"connexions_optiques_brins": 12}}
+]
+```
+
+- `zone` — le **code canonique** : `RDC`, `E1`…`E4`, `Droite`, `Gauche`,
+  `RG`, `SR1`…`SR10`. « premier étage », « 1er » et « E1 » sont **la même
+  zone** : elles doivent porter le même code, ou elles ne s'additionneront
+  jamais ensemble. Si la zone ne correspond à aucun code connu (un sous-sol,
+  une mezzanine, un nom de salle), mets le nom **tel qu'il est dit**.
+- `libelle` — les mots du technicien, mot pour mot. Le code est une clé, le
+  libellé est la preuve : c'est lui qui s'affiche dans le tableau.
+- `quantites` — **uniquement les quantités de cette zone**, avec exactement les
+  mêmes noms de champs que les quantités globales.
+
+**Quand une quantité n'appartient à aucune zone**, elle reste dans le champ
+global : un arrêt de 90 minutes appartient à la journée, pas à un étage ; un
+stock restant est un niveau sur le chantier, pas sur un palier.
+
+**Total ET détail dans le même message ?** Remplis les deux : le champ global
+avec le total annoncé, `ventilation` avec le détail. « 80 mètres en tout, 30 au
+premier et 50 au deuxième » donne `cables_installes_m: 80` **et** les deux
+entrées. Le système garde le détail et signale l'écart si les deux ne collent
+pas — ce n'est pas à toi de choisir lequel est juste.
+
+**N'invente jamais une répartition.** Si le technicien dit « 80 mètres sur les
+deux étages » sans dire combien sur chacun, `ventilation` reste `null` : la
+moitié-moitié serait un chiffre que personne n'a énoncé. Le champ global porte
+les 80, `etages` porte les deux étages, et c'est tout ce qu'on sait.
+
+**Une seule zone est quand même une ventilation** : « au deuxième étage on a
+posé 40 mètres » est le technicien qui dit de quel étage il parle.
 
 ### Chantier
 

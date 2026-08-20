@@ -44,7 +44,7 @@ from app import sheets
 # then raise AttributeError instead of catching anything.
 from app.sheets import SheetsError
 from app.config import settings
-from app.schemas import DATA_FIELDS, ExtractedReport
+from app.schemas import DATA_FIELDS, QUANTITY_FIELDS, ExtractedReport
 
 # --- the director's columns, in his order --------------------------------
 COL_DATE = "Date"
@@ -56,6 +56,11 @@ COL_DATE = "Date"
 # Unambiguous because a journal row is one message: a row that merged several
 # could not name a single send time.
 COL_HEURE = "Heure"
+# The zone a row's figures belong to, written verbatim as the technician said it
+# ("premier étage") with the canonical code beside it. Distinct from the ETAGE
+# list column, which answers "which floors did this message touch" — this one
+# answers "which floor is THIS row about", and only a split row has an answer.
+COL_ZONE = "Zone"
 COL_TECHNICIEN = "Technicien"
 COL_CHANTIER = "Chantier"
 
@@ -176,7 +181,7 @@ COL_CORRELATION = "Correlation id"
 COL_STT = "Moteur STT"
 
 HEADERS: Tuple[str, ...] = (
-    (COL_DATE, COL_HEURE, COL_TECHNICIEN, COL_CHANTIER)
+    (COL_DATE, COL_HEURE, COL_TECHNICIEN, COL_CHANTIER, COL_ZONE)
     + CHEF_COLUMNS
     + tuple(NUMERIC_COLUMNS.values())
     + tuple(LIST_COLUMNS.values())
@@ -467,7 +472,65 @@ def write_report(
             warnings.append("article_column_failed")
             print(f"[journal] ensure_columns({tab}) failed: {exc}"[:200], flush=True)
 
-    row = sheets.append_row(tab, cells, headers)
+    # One row per zone when the technician gave a figure per floor, otherwise
+    # the single row this has always written. The split is what stops "30 au
+    # premier, 50 au deuxième" collapsing into an 80 the technician never said:
+    # the director reads this file to know WHERE the work advanced, and a
+    # combined total cannot answer that.
+    #
+    # Totals stay correct for free: `qte_installee` and the totals line already
+    # sum every row on the tab, so N rows carrying a third each add to the same
+    # figure one row carrying the whole would have. That is also why the split
+    # REPLACES the quantities rather than sitting beside them — a total row plus
+    # its own breakdown would count every metre twice.
+    zones = _zone_lines(report)
+    if not zones:
+        row = sheets.append_row(tab, cells, headers)
+        rows_written = [row] if row else []
+    else:
+        warnings += _ventilation_gap(report, zones)
+        rows_written = []
+        for index, zone in enumerate(zones):
+            line = dict(cells)
+            # Every quantity is dropped first, then only this zone's are put
+            # back. Anything the technician stated as a whole-day total and did
+            # NOT break down (an arrêt, a stock level) stays on the first row
+            # alone, or it would be repeated once per floor and counted N times.
+            for column in NUMERIC_COLUMNS.values():
+                line.pop(column, None)
+            for field, qty in zone.quantites.items():
+                column = NUMERIC_COLUMNS.get(field)
+                if column:
+                    line[column] = _fmt(float(qty))
+            if index:
+                for column, _ in STOCK_COLUMNS.values():
+                    line.pop(column, None)
+                for column in (COL_RESUME, COL_RAPPORT, COL_LIEN_AUDIO):
+                    line.pop(column, None)
+            else:
+                for field, qty in _unsplit_totals(report, zones).items():
+                    column = NUMERIC_COLUMNS.get(field)
+                    if column:
+                        line[column] = _fmt(float(qty))
+            line[COL_ZONE] = zone.libelle or zone.zone
+            # The list column names the zone of THIS row, not of the message:
+            # a row that says "E1, E2" while carrying only E1's metres is the
+            # combining this whole split exists to end.
+            if zone.zone in ETAGE_CODES:
+                line[LIST_COLUMNS["etages"]] = zone.zone
+            written = sheets.append_row(tab, line, headers)
+            if written:
+                rows_written.append(written)
+        # One tint across the rows of a single message. The banding underneath
+        # alternates per row, which would make three rows of one report look
+        # like three separate reports -- the exact reading the split must not
+        # produce. Best-effort: a colour is never worth a row.
+        if len(rows_written) > 1:
+            try:
+                sheets.tint_rows(tab, rows_written)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[journal] tint_rows({tab}) skipped: {exc}"[:160], flush=True)
+        row = rows_written[0] if rows_written else None
 
     # If the day already had a row for this technician, this one adds to it, and
     # the sheet says so: the quantities are formatted +80 rather than 80. Only
@@ -475,9 +538,64 @@ def write_report(
     # and the bordereau are untouched. The stock columns are deliberately left
     # alone: stock is a level, not a flow, and "+2095 m left" would be a lie.
     follow_up, _ = find_row(tab, date, technicien, rows)
-    if row and follow_up is not None:
-        sheets.mark_increment(tab, row, list(NUMERIC_COLUMNS.values()))
+    if follow_up is not None:
+        for written in rows_written:
+            sheets.mark_increment(tab, written, list(NUMERIC_COLUMNS.values()))
     return row, warnings
+
+
+#: Floors, for deciding whether a zone belongs in the ETAGE column at all. A
+#: wing or a technical room is a zone too, and writing "RG" under ETAGE would
+#: be a floor that does not exist.
+ETAGE_CODES = frozenset(("RDC", "E1", "E2", "E3", "E4"))
+
+
+def _zone_lines(report) -> List:
+    """The report's zone breakdown, or [] when it reported a whole day.
+
+    A single zone is still a split: it is the technician saying which floor the
+    figures are for, which is information the combined row never carried.
+    """
+    zones = getattr(report, "ventilation", None) or []
+    return [z for z in zones if getattr(z, "quantites", None)]
+
+
+def _ventilation_gap(report, zones) -> List[str]:
+    """Warn when a stated total and its breakdown disagree.
+
+    The breakdown wins — it is the more specific claim, and the technician who
+    listed each floor was reading their own notes. But a disagreement is a fact
+    about the message, not noise to resolve silently: one of the two numbers is
+    wrong and only the person who was there can say which. Same contract as
+    `stock_ecart`, which reports the delta rather than choosing a number.
+    """
+    out = []
+    for field in QUANTITY_FIELDS:
+        stated = getattr(report, field, None)
+        if stated in (None, ""):
+            continue
+        split = sum(float(z.quantites.get(field, 0)) for z in zones)
+        if not split:
+            continue  # stated as a whole-day figure, never broken down
+        if abs(float(stated) - split) > 0.01:
+            out.append("ventilation_ecart:%s:%s" % (field, _fmt(split - float(stated))))
+    return out
+
+
+def _unsplit_totals(report, zones) -> Dict[str, float]:
+    """Quantities stated for the day that no zone line claims.
+
+    An arrêt of ninety minutes belongs to the day, not to a floor. Dropping it
+    because a ventilation exists would lose it; repeating it on every row would
+    count it N times. It goes on the first row, once.
+    """
+    claimed = {f for z in zones for f in z.quantites}
+    out = {}
+    for field in QUANTITY_FIELDS:
+        value = getattr(report, field, None)
+        if value not in (None, "") and field not in claimed:
+            out[field] = float(value)
+    return out
 
 
 def _last_stock(tab: str, rows: Optional[List[Dict[str, str]]] = None) -> Dict[str, str]:
@@ -524,6 +642,7 @@ WARNING_LABELS = {
     "chantier_cree_non_verifie": "Chantier non confirmé",
     "no_report_content": "Aucune donnée exploitable",
     "stock_ecart": "Écart de stock",
+    "ventilation_ecart": "Total annoncé ≠ somme par étage",
     "heure_non_dite": "Heure inventée, retirée",
     "date_declaree_illisible": "Date énoncée illisible",
     "date_declaree_hors_plage": "Date énoncée hors plage",
