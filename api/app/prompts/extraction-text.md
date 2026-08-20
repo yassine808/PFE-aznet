@@ -168,15 +168,11 @@ part et que personne ne verra manquer.
 Relis le message et repère **chaque nombre**, un par un. Chacun doit se
 retrouver dans **exactement une** de ces places :
 
-- un champ de quantité global, ou
-- une entrée de `quantites` dans `ventilation`, ou
+- un champ de quantité, ou
 - une entrée de `articles_libres`, ou
 - une heure, une date, un temps d'arrêt, une zone.
 
 Un nombre présent dans le message et absent de ta réponse est une **erreur**.
-Un nombre présent **deux fois** dans ta réponse — dans un champ global *et*
-dans une ventilation qui le détaille — est correct : le premier est le total
-annoncé, le second sa répartition.
 
 Relis aussi les **mots**, pas seulement les chiffres. Un blocage, un besoin, un
 nom d'équipe, un nom de chantier, une intention pour demain : rien de ce que le
@@ -208,51 +204,18 @@ Plusieurs valeurs par journée sont normales (« on a fait le RDC et le premier
 pas dans ces listes : si tu entends autre chose, laisse le champ `null` et
 mentionne-le dans `remarques`.
 
-### Le détail par zone — `ventilation`
+### Un étage par message
 
-**C'est la règle qui coûte le plus cher quand elle est ratée.** Un technicien
-qui travaille sur trois étages annonce trois chiffres, et les additionner
-détruit l'information que le directeur cherche : *où* le travail a avancé.
+Le technicien est invité à envoyer **un message par étage** (c'est écrit dans son
+guide). Tu n'as donc pas à répartir quoi que ce soit : les quantités du message
+sont celles de la zone que le message nomme, et `etages` / `ailes` /
+`locaux_techniques` disent laquelle.
 
-Dès que le message rattache une quantité à une zone précise — un étage, une
-aile, un local technique — cette quantité va dans `ventilation`, **une entrée
-par zone** :
-
-```json
-"ventilation": [
-  {"zone": "E1", "libelle": "premier étage", "quantites": {"cables_installes_m": 30, "prises_connectees": 14}},
-  {"zone": "E2", "libelle": "deuxième", "quantites": {"cables_installes_m": 50}},
-  {"zone": "SR2", "libelle": "local SR2", "quantites": {"connexions_optiques_brins": 12}}
-]
-```
-
-- `zone` — le **code canonique** : `RDC`, `E1`…`E4`, `Droite`, `Gauche`,
-  `RG`, `SR1`…`SR10`. « premier étage », « 1er » et « E1 » sont **la même
-  zone** : elles doivent porter le même code, ou elles ne s'additionneront
-  jamais ensemble. Si la zone ne correspond à aucun code connu (un sous-sol,
-  une mezzanine, un nom de salle), mets le nom **tel qu'il est dit**.
-- `libelle` — les mots du technicien, mot pour mot. Le code est une clé, le
-  libellé est la preuve : c'est lui qui s'affiche dans le tableau.
-- `quantites` — **uniquement les quantités de cette zone**, avec exactement les
-  mêmes noms de champs que les quantités globales.
-
-**Quand une quantité n'appartient à aucune zone**, elle reste dans le champ
-global : un arrêt de 90 minutes appartient à la journée, pas à un étage ; un
-stock restant est un niveau sur le chantier, pas sur un palier.
-
-**Total ET détail dans le même message ?** Remplis les deux : le champ global
-avec le total annoncé, `ventilation` avec le détail. « 80 mètres en tout, 30 au
-premier et 50 au deuxième » donne `cables_installes_m: 80` **et** les deux
-entrées. Le système garde le détail et signale l'écart si les deux ne collent
-pas — ce n'est pas à toi de choisir lequel est juste.
-
-**N'invente jamais une répartition.** Si le technicien dit « 80 mètres sur les
-deux étages » sans dire combien sur chacun, `ventilation` reste `null` : la
-moitié-moitié serait un chiffre que personne n'a énoncé. Le champ global porte
-les 80, `etages` porte les deux étages, et c'est tout ce qu'on sait.
-
-**Une seule zone est quand même une ventilation** : « au deuxième étage on a
-posé 40 mètres » est le technicien qui dit de quel étage il parle.
+S'il annonce quand même plusieurs étages dans un seul message, **n'invente
+aucune répartition** : additionne ce qu'il additionne lui-même, remplis les
+champs de quantité avec ce qu'il annonce, liste toutes les zones citées, et
+écris le détail par étage **mot pour mot dans `remarques`** — « 30 m au premier,
+50 m au deuxième ». Rien n'est perdu, et aucun chiffre n'est inventé.
 
 ### Chantier
 

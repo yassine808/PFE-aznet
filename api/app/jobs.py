@@ -274,10 +274,11 @@ def _notify_quota(item: dict) -> None:
     try:
         from app import reply
 
+        reply.set_reaction(item.get("channel") or "", chat,
+                           item.get("message_id") or "", "quota")
         reply.reply_to_identities(
             [{"channel": item.get("channel"), "external_id": chat}],
-            "Service momentanement sature. Votre rapport est en file d'attente "
-            "et sera enregistre automatiquement des que possible.",
+            reply.QUOTA_MESSAGE,
         )
     except Exception:  # noqa: BLE001 - best effort, never costs the job
         pass

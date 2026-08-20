@@ -65,11 +65,44 @@ def _whatsapp(external_id: str, text: str) -> None:
 
 
 # The reaction the technician sees on their own message, per pipeline state.
-# Reactions rather than chat messages for retries: the owner chose it (2026-08-20)
-# so a technician on a chantier is not pinged six times while a vendor recovers.
-# Values match what n8n already sets, so a message acked by the workflow and one
-# updated by the API never disagree about what ⏳ means.
-REACTIONS = {"working": "⏳", "queued": "🔄", "done": "✅", "failed": "❌"}
+#
+# PER CHANNEL, because Telegram only accepts reactions from a fixed whitelist —
+# ⏳, 🔄 and ❌ are not on it and `setMessageReaction` rejects them outright.
+# That is why n8n already uses 👀/👍/😢 on Telegram and ⏳/✅/❌ on WhatsApp, and
+# these tables match it: a message acked by the workflow and one updated by the
+# API must never disagree about what a symbol means.
+#
+# Five states, not three. "Waiting" used to cover everything that was not done
+# or failed, so a message blocked behind an exhausted quota sat on the loading
+# symbol indefinitely and looked identical to one being processed right now —
+# the technician cannot tell "working" from "stuck" and eventually resends,
+# which is how one day of work becomes two rows.
+REACTIONS = {
+    "whatsapp": {
+        "working": "⏳",   # received, being processed now
+        "queued": "🔄",    # a technical failure; it will be retried on its own
+        "quota": "🪫",     # the free tier is spent; waiting for the window
+        "done": "✅",
+        "failed": "❌",
+    },
+    "telegram": {
+        "working": "👀",
+        "queued": "🤔",
+        "quota": "😴",
+        "done": "👍",
+        "failed": "😢",
+    },
+}
+
+#: Sent alongside the quota reaction, because a symbol alone cannot say "this is
+#: not your fault and you do not have to do anything". Once per outage per
+#: technician — the throttle lives in `jobs._notify_quota`.
+QUOTA_MESSAGE = (
+    "🪫 Service momentanément saturé (quota du jour atteint)."
+    "\n\n"
+    "Ton rapport est bien reçu et en file d'attente : il sera enregistré "
+    "automatiquement dès que le service repart. Ne le renvoie pas."
+)
 
 
 def set_reaction(channel: str, chat_id: str, message_id: str, state: str) -> None:
@@ -84,7 +117,7 @@ def set_reaction(channel: str, chat_id: str, message_id: str, state: str) -> Non
     takes over for anything that outlives that HTTP call — 🔄 when a message is
     parked, ✅ or ❌ when the retry job finally settles it.
     """
-    emoji = REACTIONS.get(state)
+    emoji = REACTIONS.get(channel, {}).get(state)
     if not emoji or not chat_id or not message_id:
         return
     try:

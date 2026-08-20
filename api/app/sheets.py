@@ -827,39 +827,6 @@ FLAG_COLUMNS = ("Flag review", "flag_review")
 _FLAG_BG = {"red": 0.996, "green": 0.898, "blue": 0.894}
 _FLAG_FG = {"red": 0.702, "green": 0.078, "blue": 0.078}
 
-#: The tint laid over the rows of one multi-zone message. Very pale on purpose:
-#: it has to survive the banding underneath without competing with the red the
-#: flag column uses, which is the only colour in this file that means "look".
-_GROUP_TINT = {"red": 0.918, "green": 0.949, "blue": 0.988}
-
-
-def tint_rows(tab: str, rows: List[int]) -> None:
-    """Shade a run of rows so they read as one report, not several.
-
-    A message split per floor writes N rows. The banding alternates per row, so
-    without this the three rows of one report look exactly like three separate
-    reports filed minutes apart -- the reading the split exists to prevent.
-
-    Contiguous rows only: they are appended in one pass so they always are, and
-    a non-contiguous run would mean something else wrote between them, in which
-    case shading a span would colour a stranger's row.
-    """
-    if len(rows) < 2 or sorted(rows) != list(range(min(rows), max(rows) + 1)):
-        return
-    svc = _service()
-    sid = _sheet_id(svc, tab)
-    if sid is None:
-        return
-    svc.spreadsheets().batchUpdate(
-        spreadsheetId=settings.sheet_id,
-        body={"requests": [{"repeatCell": {
-            "range": {"sheetId": sid,
-                      "startRowIndex": min(rows) - 1, "endRowIndex": max(rows)},
-            "cell": {"userEnteredFormat": {"backgroundColor": _GROUP_TINT}},
-            "fields": "userEnteredFormat.backgroundColor"}}]},
-    ).execute(num_retries=_RETRIES)
-
-
 def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
     """Make one tab readable: frozen bold header, column widths, banding.
 

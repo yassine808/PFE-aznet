@@ -72,7 +72,6 @@ DATA_FIELDS = (
     "stock_cable_m", "stock_goulotte_m", "stock_fibre_m",
     "remarques", "temps_arret_min", "motif_arret",
     "besoins", "prochaines_etapes", "livraisons", "articles_libres",
-    "ventilation",
     "heure_entree", "heure_sortie", "equipe",
 ) + ARTICLE_FIELDS
 
@@ -119,60 +118,29 @@ def _squash(value: str) -> str:
                     .replace("é", "e").replace("ê", "e").split())
 
 
-class ZoneLine(BaseModel):
-    """One floor / wing / technical room, with only that zone's figures.
-
-    Deliberately not a copy of the 35 quantity fields: `quantites` is a dict
-    keyed by the same names, the shape `livraisons` already uses. A second
-    place that lists every field is a second place to forget one — which is
-    exactly how `RAPPORTS_COLUMNS` silently dropped eight of them for eleven
-    days before it was derived instead of hand-kept.
-    """
-
-    zone: str = Field(..., description="Zone canonique: RDC, E1..E4, Droite, Gauche, RG, SR1..SR10 — ou le nom tel quel s'il ne correspond à aucune")
-    libelle: Optional[str] = Field(default=None, description="Ce que le technicien a dit, mot pour mot (« premier étage », « 3ème »)")
-    quantites: Dict[str, float] = Field(default_factory=dict, description="Quantités de CETTE zone uniquement, mêmes noms de champs que les quantités globales")
-
-    @field_validator("quantites", mode="before")
-    @classmethod
-    def _known_fields(cls, v):
-        """A zone line may only carry quantities this schema tracks.
-
-        Raises on an unknown key rather than dropping it, the rule `livraisons`
-        and `etages` both follow: the extraction chain retries, instead of
-        writing a row whose figures cannot be joined to a contract line.
-        """
-        if not v:
-            return {}
-        if isinstance(v, str):
-            import json as _json
-
-            try:
-                v = _json.loads(v)
-            except ValueError as exc:
-                raise ValueError(f"quantites illisible: {v[:80]}") from exc
-        unknown = sorted(k for k in v if k not in QUANTITY_FIELDS)
-        if unknown:
-            raise ValueError(f"champ inconnu dans ventilation: {', '.join(unknown)}")
-        return {k: float(q) for k, q in v.items() if q is not None and float(q) != 0}
-
-    @field_validator("zone")
-    @classmethod
-    def _zone_not_blank(cls, v):
-        v = (v or "").strip()
-        if not v:
-            raise ValueError("zone vide dans ventilation")
-        return v
-
-
 class ExtractedReport(BaseModel):
     """Structured facts extracted from one daily report."""
 
     @field_validator("*", mode="before")
     @classmethod
-    def _null_strings_to_none(cls, v):
+    def _null_strings_to_none(cls, v, info):
         # LLM JSON mode (Groq/Llama) sometimes emits the *string* "null"
         # for absent fields; the prompt means None, so normalize before parsing.
+        #
+        # `resume` is the exception, and it has to be handled HERE rather than
+        # in a validator of its own: before-validators run bottom-up, so a
+        # field-specific one returning "" was undone by this one turning ""
+        # straight back into None. It is the only required string on the model,
+        # so a null there failed the ENTIRE report — on a degenerate message
+        # like a bare "test" the model does return null, and the chain then
+        # burned all three engines and parked the message in the retry queue to
+        # be replayed against a question none of them would answer differently.
+        # The empty string is honest: `has_data()` ignores `resume`, so such a
+        # message is still correctly recognised as carrying nothing and still
+        # gets `no_report_content`. It is filed and answered instead of retried
+        # to exhaustion.
+        if info.field_name == "resume":
+            return "" if v is None or (isinstance(v, str) and _is_nullish(v)) else v
         if isinstance(v, str) and _is_nullish(v):
             return None
         return v
@@ -438,33 +406,6 @@ class ExtractedReport(BaseModel):
     #: validating it against the list would throw away exactly the information
     #: this field exists to carry. It is normalised and registered downstream,
     #: where a new column and a confirmation step give it a home.
-    #: One zone's own figures, when the technician reported per floor.
-    #:
-    #: Added 2026-08-20. Until then `etages` was a bare list and the quantities
-    #: were a single total, so "30 m au premier, 50 m au deuxième" was stored as
-    #: `cables_installes_m = 80, etages = [E1, E2]` — arithmetic the technician
-    #: had not done, and the per-floor figures were gone for good. The director
-    #: reads this file to know *where* the work advanced; a combined total
-    #: cannot answer that.
-    #:
-    #: `zone` is canonical (E1..E4, RDC) so "1er étage", "premier" and "E1"
-    #: group together instead of becoming three zones that never add up.
-    #: `libelle` keeps what was actually said, because the canonical code is a
-    #: key and the technician's words are the evidence for it.
-    #:
-    #: `quantites` is keyed by the SAME field names as the top-level
-    #: quantities, exactly like `livraisons` — one vocabulary, so a zone line
-    #: and a whole-day line can never disagree about what a field means.
-    ventilation: Optional[List["ZoneLine"]] = Field(
-        default=None,
-        description=(
-            "Détail par zone quand le technicien donne un chiffre PAR étage ou "
-            "PAR local. Une entrée par zone : {\"zone\": \"E1\", \"libelle\": "
-            "\"premier étage\", \"quantites\": {\"cables_installes_m\": 30}}. "
-            "N'invente jamais une répartition : si le technicien ne donne qu'un "
-            "total, laisse ce champ null."
-        ),
-    )
     articles_libres: Optional[Dict[str, float]] = Field(
         default=None,
         description=(
@@ -481,32 +422,6 @@ class ExtractedReport(BaseModel):
         ..., description="Résumé professionnel en français (2-4 phrases)"
     )
 
-    @field_validator("ventilation", mode="before")
-    @classmethod
-    def _decode_json_array(cls, v):
-        """Accept the zone list the model handed back as a JSON *string*.
-
-        Same quirk `articles_libres` already had, same fix: `gpt-oss-120b`
-        returns `ventilation` as '[{"zone":"E1",...}]' rather than an array.
-        The content is right and the encoding is wrong, and Pydantic rejecting
-        it meant the whole extraction failed over to the next engine — which
-        answers without a ventilation at all, so a correct per-floor breakdown
-        was thrown away and replaced by a combined total. Strict on purpose: a
-        string that is not a JSON array still fails, because a silent None here
-        would look exactly like a technician who never split anything.
-        """
-        if isinstance(v, str):
-            text = v.strip()
-            if not text or _is_nullish(text):
-                return None
-            try:
-                v = json.loads(text)
-            except ValueError as exc:
-                raise ValueError(f"ventilation illisible: {text[:80]}") from exc
-        if isinstance(v, dict):
-            # A single zone returned unwrapped, the other shape seen in the wild.
-            v = [v]
-        return v
 
     @field_validator("articles_libres", "livraisons", mode="before")
     @classmethod

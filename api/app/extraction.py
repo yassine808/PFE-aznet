@@ -136,7 +136,35 @@ def _gemini_schema() -> dict:
     "values are numbers", which the prompt states anyway, so dropping it costs
     nothing — and the response is validated against the real model on the way
     back in, where it actually matters.
+
+    A nested model has to be INLINED before `$defs` is dropped, not merely
+    stripped alongside it. Pydantic renders `ventilation: List[ZoneLine]` as a
+    `$ref` into `$defs`, and removing the definitions while leaving the
+    reference produced a schema pointing at nothing: both Gemini engines died
+    with a bare `'ZoneLine'` KeyError on every call, which took out the entire
+    fallback chain the day the field shipped. Nothing referenced `$defs` before
+    that — every field was a scalar — so the omission had never once mattered.
     """
+    schema = ExtractedReport.model_json_schema()
+    defs = schema.get("$defs", {})
+
+    def inline(node, seen=()):
+        """Replace every `$ref` with the definition it names."""
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                name = ref.split("/")[-1]
+                # A model that refers to itself would recurse forever; Gemini
+                # has no way to express that anyway, so it degrades to a plain
+                # object rather than hanging the request.
+                if name in seen or name not in defs:
+                    return {"type": "object"}
+                return inline(defs[name], seen + (name,))
+            return {k: inline(v, seen) for k, v in node.items()}
+        if isinstance(node, list):
+            return [inline(v, seen) for v in node]
+        return node
+
     def strip(node):
         if isinstance(node, dict):
             return {k: strip(v) for k, v in node.items()
@@ -145,7 +173,7 @@ def _gemini_schema() -> dict:
             return [strip(v) for v in node]
         return node
 
-    return strip(ExtractedReport.model_json_schema())
+    return strip(inline(schema))
 
 
 def _call_gemini(

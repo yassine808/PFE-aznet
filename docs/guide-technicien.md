@@ -15,12 +15,17 @@ moins bien qu'une phrase.
 
 Tu reçois une réponse en moins d'une minute :
 
-| Ce que tu vois | Ce que ça veut dire |
-|---|---|
-| ⏳ | Reçu, en cours de traitement |
-| ✅ | Enregistré. Le résumé qui suit est ce qui a été retenu |
-| 🔄 | Un problème technique, ton rapport est en file d'attente. **Ne renvoie pas** |
-| ❌ | Non traité. Là oui, renvoie |
+| WhatsApp | Telegram | Ce que ça veut dire |
+|---|---|---|
+| ⏳ | 👀 | Reçu, en cours de traitement |
+| ✅ | 👍 | Enregistré. Le résumé qui suit est ce qui a été retenu |
+| 🔄 | 🤔 | Problème technique, ton rapport est en file d'attente. **Ne renvoie pas** |
+| 🪫 | 😴 | Service saturé pour aujourd'hui. Il partira tout seul. **Ne renvoie pas** |
+| ❌ | 😢 | Non traité. Là oui, renvoie |
+
+Les symboles diffèrent entre WhatsApp et Telegram parce que Telegram n'accepte
+qu'une liste fixe de réactions. La colonne du milieu est ce que tu verras si tu
+écris sur Telegram.
 
 **Relis toujours le résumé.** C'est exactement ce qui part dans le tableau du
 directeur. S'il manque un chiffre ou s'il y a une erreur, envoie un deuxième
@@ -50,20 +55,29 @@ marqué « à confirmer » — rien n'est perdu, le directeur valide après.
 Le premier rapport après un changement d'équipe, de site ou de retour de congé :
 **nomme le chantier**, même si tu crois que c'est évident.
 
-### 2. Un étage à la fois, avec son chiffre
+### 2. Un message par étage
 
-Si tu as travaillé sur plusieurs étages, **donne le chiffre de chaque étage
-séparément**. Ne fais pas l'addition toi-même.
+Si tu as travaillé sur plusieurs étages, **envoie un message par étage**. C'est
+la règle la plus simple du guide et celle qui change le plus le résultat.
 
-> ✅ « Au premier étage 30 mètres, au deuxième 50 mètres. »
-> ⚠️ « 80 mètres sur les deux étages. » *(le total est gardé, mais le détail
-> par étage est perdu)*
+> ✅ Message 1 : « Premier étage : 30 mètres de câble, 14 prises RJ45. »
+> ✅ Message 2 : « Deuxième étage : 50 mètres, 9 prises. »
+> ⚠️ Un seul message : « 80 mètres sur les deux étages. »
 
-Chaque étage devient sa propre ligne dans le tableau, sous ton nom et ta date.
-Le directeur voit d'un coup d'œil où le travail a avancé.
+Chaque message devient sa propre ligne, avec son étage. Le directeur voit où le
+travail a avancé — c'est exactement ce qu'il ouvre le fichier pour savoir.
 
-Si tu donnes le total **et** le détail, dis les deux — c'est le détail qui est
-retenu, et si les deux ne collent pas, la ligne est signalée pour vérification.
+Tu peux les envoyer coup sur coup, il n'y a rien à attendre entre les deux. Les
+totaux du chantier s'additionnent tout seuls : deux lignes de 30 et 50 font 80,
+personne n'a à le calculer.
+
+Si tu mets quand même plusieurs étages dans un message, rien n'est perdu — les
+quantités sont enregistrées et le détail que tu as dicté est gardé dans les
+remarques — mais **le chiffre par étage n'apparaît plus dans sa colonne**. Un
+message par étage, et le tableau est juste tout de suite.
+
+Même chose pour les ailes et les locaux techniques : un message pour l'aile
+droite, un pour l'aile gauche, un pour le SR2.
 
 ### 3. Ne dis jamais un chiffre « à peu près »
 
@@ -157,25 +171,31 @@ qui a **sa propre colonne** :
 
 ## Un bon rapport, en exemple
 
+**Message 1**
+
 > « Salam, 17-08-2026, on est à la DGH. Équipe : Dris, Brahim et moi.
 > Entrés à 7h30, sortis à 17h.
->
-> Au premier étage aile droite : 120 mètres de câble installés, 14 prises RJ45
+> Premier étage, aile droite : 120 mètres de câble installés, 14 prises RJ45
 > raccordées côté bureau.
-> Au deuxième étage : 80 mètres de câble, 9 prises.
-> Au local SR2 : 12 brins fusionnés et un tiroir optique 24 ports.
->
 > On a reçu 500 mètres de câble ce matin. Il reste environ 300 mètres de
 > goulotte sur le chantier.
->
-> On s'est arrêtés 45 minutes, coupure de courant. Il nous faut des connecteurs
-> RJ45 pour demain, on attaque le troisième étage. »
+> On s'est arrêtés 45 minutes, coupure de courant. »
 
-Tout est dedans : le site, la date, l'équipe, les heures, **le détail par
-étage**, la livraison séparée de la pose, le stock, l'arrêt avec sa raison, le
+**Message 2**
+
+> « Deuxième étage : 80 mètres de câble, 9 prises. »
+
+**Message 3**
+
+> « Local SR2 : 12 brins fusionnés et un tiroir optique 24 ports. Il nous faut
+> des connecteurs RJ45 pour demain, on attaque le troisième étage. »
+
+Tout est dedans : le site, la date, l'équipe, les heures, **un étage par
+message**, la livraison séparée de la pose, le stock, l'arrêt avec sa raison, le
 besoin, la suite.
 
-Ça prend **quarante secondes à dire**.
+Les heures, l'équipe et le chantier ne sont à dire qu'une fois, dans le premier
+message de la journée. Les trois ensemble prennent **moins d'une minute**.
 
 ---
 
@@ -184,7 +204,7 @@ besoin, la suite.
 | Erreur | Ce qui se passe |
 |---|---|
 | Ne pas nommer le chantier après un changement de site | Toute la journée part sur le mauvais chantier |
-| Additionner les étages soi-même | Le détail par étage est perdu pour toujours |
+| Mettre plusieurs étages dans un seul message | Le chiffre par étage n'a plus de ligne à lui |
 | Un chiffre approximatif dit comme un chiffre sûr | Il devient exact dans le tableau du marché |
 | Dire « prises » pour des prises électriques | Elles sont comptées comme des prises réseau |
 | Renvoyer le même rapport parce que ✅ tarde | Deux lignes pour une seule journée de travail |

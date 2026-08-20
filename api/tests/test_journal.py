@@ -176,7 +176,6 @@ class FakeSheet:
         self.written = []
         self.marked = []
         self.mirrored = []
-        self.tinted = []
         self.calls = []  # every Google round trip, in order
 
     def read_tab(self, tab):
@@ -199,12 +198,6 @@ class FakeSheet:
 
     def mark_increment(self, tab, row, columns):
         self.marked.append((tab, row, list(columns)))
-
-    def tint_rows(self, tab, rows):
-        """The one tint over the rows of a multi-zone message. Recorded rather
-        than ignored: without it the split's grouping is untestable, and the
-        real call is best-effort so a missing method fails silently."""
-        self.tinted.append((tab, list(rows)))
 
     def read_reports(self):
         """The flat Rapports mirror — read by the sticky-chantier fallback."""

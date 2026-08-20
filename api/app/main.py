@@ -692,10 +692,16 @@ async def _park(reason: str, audio, image, text, caption, provider,
         raise HTTPException(502, detail or "processing failed") from exc
     await _log("queued", "warn",
                message=f"{reason}: {detail}"[:400], payload={"queue_id": queue_id}, **ctx)
+    # 🪫 rather than 🔄 when every vendor is refusing on quota. Both mean "not
+    # your fault, do nothing" — but they are different waits: a retry is minutes
+    # and a spent free tier can be the rest of the day. Left on one symbol, a
+    # quota block looked exactly like a message being processed right now, so
+    # the technician eventually resends and one day of work becomes two rows.
+    quota = _is_quota(detail)
     if channel and message_id:
         await run_in_threadpool(reply.set_reaction, channel,
                                 str(ctx.get("chat_id") or "") or _chat_id_for(technicien, channel),
-                                message_id, "queued")
+                                message_id, "quota" if quota else "queued")
     # Shaped like a ProcessResponse, not like an error. n8n reads
     # `Process output.item.json.report.resume` on the success path, and a body
     # without `report` made that expression evaluate to undefined and the reply
@@ -711,7 +717,9 @@ async def _park(reason: str, audio, image, text, caption, provider,
         content={
             "queued": True, "queue_id": queue_id, "reason": reason,
             "detail": detail[:400],
-            "warnings": ["queued"],
+            # The reply text branches on warnings, so the distinction has to be
+            # visible there too, not only in the reaction.
+            "warnings": ["quota"] if quota else ["queued"],
             "report": {"resume": "Rapport reçu. Le service est momentanément "
                                  "indisponible : il sera enregistré "
                                  "automatiquement dès que possible."},
