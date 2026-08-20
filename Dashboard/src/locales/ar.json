@@ -517,6 +517,7 @@
   "chantiers.ignore": "تجاهل",
   "chantiers.ignoreHint": "تجاهل إلى أن يسوء الوضع",
   "chantiers.restore": "إظهار التنبيه من جديد",
+  "chantiers.restoreHint": "إظهار هذا التنبيه للجميع من جديد",
   "chantiers.ignored": "تنبيهات متجاهَلة",
   "chantiers.ignoredCount": "{n} متجاهَل",
   "chantiers.backToLive": "العودة إلى التنبيهات",

@@ -267,9 +267,9 @@ function BandRow({
   }
 
   return (
-    <li className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
       {/* Never hue alone: the glyph, the written level and the figure all say it. */}
-      <TriangleIcon size={9} weight="fill" className={`${tone} shrink-0 self-center`} />
+      <TriangleIcon size={9} weight="fill" className={`${tone} shrink-0`} />
       <span className="text-ink min-w-0 flex-1 truncate text-xs">
         <span className="font-medium">{a.article}</span>
         <span className="text-ink-faint">{site ? ` · ${a.chantier}` : ''}</span>
@@ -290,19 +290,31 @@ function BandRow({
       {error && <span className="text-status-fail shrink-0 text-[0.625rem]">{error}</span>}
       {/* Any signed-in human may dismiss: `persons` only carries an account for
           a directeur or a chef, and the API gates the write on `require_human`
-          anyway — a second rule here could only ever be the wrong one. */}
+          anyway — a second rule here could only ever be the wrong one.
+
+          Worded, bordered and 28px tall rather than a bare 12px glyph. A muted
+          icon on a dense row reads as decoration, and this is the one control
+          on the page that changes what everybody else sees — it has to look
+          like a button and say what it does. The minimum touch target is the
+          floor, not the target: 44px on a row this dense would push the
+          figures onto a second line, so it takes the row's full height and
+          keeps the hit area intact via the surrounding padding. */}
       {user && (
         <button
           type="button"
           disabled={busy}
-          title={a.ignored ? t('chantiers.restore') : t('chantiers.ignoreHint')}
-          aria-label={a.ignored ? t('chantiers.restore') : t('chantiers.ignore')}
+          title={a.ignored ? t('chantiers.restoreHint') : t('chantiers.ignoreHint')}
           onClick={run(() =>
             a.ignored ? unmuteAlert(a.chantier, a.champ) : muteAlert(a.chantier, a.champ),
           )}
-          className="text-ink-faint hover:text-ink focus-visible:ring-accent shrink-0 cursor-pointer rounded p-1 transition-colors outline-none focus-visible:ring-2 disabled:opacity-40"
+          className="border-line text-ink-muted hover:border-line-strong hover:text-ink focus-visible:ring-accent inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-[0.6875rem] font-medium transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-40"
         >
-          {a.ignored ? <ArrowCounterClockwiseIcon size={12} /> : <BellSlashIcon size={12} />}
+          {a.ignored ? (
+            <ArrowCounterClockwiseIcon size={13} weight="bold" />
+          ) : (
+            <BellSlashIcon size={13} weight="bold" />
+          )}
+          {a.ignored ? t('chantiers.restore') : t('chantiers.ignore')}
         </button>
       )}
     </li>

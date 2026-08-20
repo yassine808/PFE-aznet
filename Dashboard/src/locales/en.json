@@ -517,6 +517,7 @@
   "chantiers.ignore": "Ignore",
   "chantiers.ignoreHint": "Ignore until it gets worse",
   "chantiers.restore": "Show this alert again",
+  "chantiers.restoreHint": "Show this alert again for everyone",
   "chantiers.ignored": "Ignored alerts",
   "chantiers.ignoredCount": "{n} ignored",
   "chantiers.backToLive": "Back to alerts",
