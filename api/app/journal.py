@@ -831,6 +831,8 @@ def audio_link(payload: Dict) -> Optional[str]:
     correlation = str(payload.get("correlation_id") or "").strip()
     if not base or not correlation:
         raw = str(payload.get("lien_audio") or "").strip()
+        # NOSONAR - a scheme test on a link we already hold, not an outbound
+        # call: a Drive URL arrives as given and http:// must still be seen.
         return raw if raw.startswith(("http://", "https://", "=")) else None
     url = f"{base}/#/inbox?msg={quote(correlation, safe='')}"
     # A HYPERLINK formula rather than the bare URL: the cell then reads
@@ -857,7 +859,7 @@ def audio_link(payload: Dict) -> Optional[str]:
 JH_HEURES_JOUR = 8.0
 JH_PAUSE_MIN = 0.0
 
-_HHMM = re.compile(r"^\s*(\d{1,2})\s*[:hH]\s*(\d{1,2})?\s*$")
+_HHMM = re.compile(r"^\s*(\d{1,2})\s*[:hH]\s*(?:(\d{1,2})\s*)?$")
 
 
 def jh_limits() -> Dict[str, float]:
@@ -930,6 +932,33 @@ def compute_jh(report: ExtractedReport, limits: Optional[Dict[str, float]] = Non
     return round(jh, 2)
 
 
+def message_link(correlation: Optional[str]) -> str:
+    """A clickable "open this message" cell, on every row.
+
+    `audio_link` only fills for a voice note — it is a fact about a recording,
+    and a typed report has none — so most rows of the flat tab had no way in:
+    the reader had to copy a 60-character correlation id into the dashboard by
+    hand. Same destination, every row, with text a human can read.
+
+    `=HYPERLINK` rather than a bare URL, because Sheets renders only a formula
+    as a blue link; a URL written as text stays black and unclickable. The
+    argument separator is a semicolon — a comma makes the whole formula an
+    error string in this file's locale.
+
+    Empty when no dashboard origin is configured: a relative path in a
+    spreadsheet cell opens nothing, the rule `audio_link` and `correlation_cell`
+    already follow.
+    """
+    correlation = str(correlation or "").strip()
+    if not correlation:
+        return ""
+    base = (settings.dashboard_base_url or settings.dashboard_url or "").strip().rstrip("/")
+    if not base:
+        return ""
+    return '=HYPERLINK("{}/#/inbox?msg={}"; "🖥 Voir le message")'.format(
+        base, quote(correlation, safe=""))
+
+
 def correlation_cell(correlation: Optional[str]) -> str:
     """What the "Correlation id" cell should hold.
 
@@ -998,6 +1027,11 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
         "flag_review": bool(REVIEW_WARNINGS & set(warnings)),
         "motif_flag": flag_reason(warnings),
         "lien_audio": audio_link(payload),
+        # Every row gets a way in, not only the ones with a recording. The
+        # header is created on first use by `sheets.append_report`, so this
+        # needs no migration and no positional header change — the trap that
+        # bit twice today.
+        "voir_message": message_link(payload.get("correlation_id")),
         "STT_model": payload.get("stt_engine"),
         # The key the "Lien audio" address resolves against, and the join with
         # n8n's own logs. Mirrored so the inbox can find one message from a
@@ -1014,7 +1048,7 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
 
 
 def _mirror_postgres(payload: Dict, cells: Dict, chantier: str,
-                     warnings: List[str], rapports_row: Optional[int],
+                     _warnings: List[str], rapports_row: Optional[int],
                      journal_tab: Optional[str] = None,
                      journal_row: Optional[int] = None) -> None:
     """The same report, into the store the totals are computed from.
@@ -1113,7 +1147,7 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
 LIVRAISONS_TAB = "Livraisons"
 LIVRAISONS_HEADERS: Tuple[str, ...] = (
     "Date", "Chantier", "Technicien", "Article", "Quantité", "Unité",
-    "Canal", "Correlation id",
+    "Canal", COL_CORRELATION,
 )
 
 
@@ -1165,7 +1199,7 @@ def file_livraison(payload: Dict, report: ExtractedReport) -> Dict:
                 "Quantité": _fmt(float(qte)),
                 "Unité": unit,
                 "Canal": payload.get("canal"),
-                "Correlation id": payload.get("correlation_id"),
+                COL_CORRELATION: payload.get("correlation_id"),
             }, list(LIVRAISONS_HEADERS))
     except Exception as exc:  # noqa: BLE001 - the ledger already holds it
         logs.write_safe(
@@ -1180,6 +1214,26 @@ def file_livraison(payload: Dict, report: ExtractedReport) -> Dict:
         "enregistrees": recorded,
         "warnings": warnings,
     }
+
+
+def _row_of_message(rows: List[Dict], correlation: str) -> Optional[int]:
+    """The tab row this exact message already occupies, if any.
+
+    Rows are appended one per message since 2026-08-18, so a correlation id
+    identifies exactly one row and the whole tab has to be scanned for it. It
+    used to be enough to look inside the day's single merged row, whose
+    Correlation cell accumulated every message that touched it. Finding it
+    means this message already landed — a retry after a Sheets failure Google
+    actually committed — and filing again would double every quantity it
+    carried.
+    """
+    if not correlation:
+        return None
+    return next(
+        (i for i, row in enumerate(rows, start=2)
+         if correlation_of(row.get(COL_CORRELATION)) == correlation),
+        None,
+    )
 
 
 def file_report(payload: Dict) -> Dict:
@@ -1242,32 +1296,19 @@ def file_report(payload: Dict) -> Dict:
                          chantier, warnings, None)
         raise
     correlation = str(payload.get("correlation_id") or "").strip()
-    if correlation:
-        # Rows are appended one per message since 2026-08-18, so a message's
-        # correlation id identifies exactly one row and the whole tab has to be
-        # scanned for it. It used to be enough to look inside the day's single
-        # merged row, whose Correlation cell accumulated every message that
-        # touched it. Finding it means this exact message already landed — a
-        # retry after a Sheets failure Google actually committed — and filing
-        # again would double every quantity it carried.
-        already = next(
-            (i for i, row in enumerate(rows, start=2)
-             if correlation_of(row.get(COL_CORRELATION)) == correlation),
-            None,
-        )
-        if already is not None:
-            existing_row = already
-            # The mirror is the one thing the failed first write lost, so it
-            # still runs: exactly one Rapports row per message.
-            mirror_row = _mirror_rapports(payload, chantier, warnings)
-            return {
-                "row": existing_row,
-                "tab": tab,
-                "chantier": chantier,
-                "warnings": warnings,
-                "rapports_row": mirror_row,
-                "duplicate": True,
-            }
+    already = _row_of_message(rows, correlation)
+    if already is not None:
+        # The mirror is the one thing the failed first write lost, so it
+        # still runs: exactly one Rapports row per message.
+        mirror_row = _mirror_rapports(payload, chantier, warnings)
+        return {
+            "row": already,
+            "tab": tab,
+            "chantier": chantier,
+            "warnings": warnings,
+            "rapports_row": mirror_row,
+            "duplicate": True,
+        }
 
     metadata = {
         COL_RESUME: report.resume,
