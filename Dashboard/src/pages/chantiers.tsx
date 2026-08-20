@@ -51,10 +51,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
  */
 
 /** What the right-hand pane is showing. Exactly one thing, always. */
-type View =
-  | { readonly kind: 'site'; readonly id: number }
-  | { readonly kind: 'alerts' }
-  | { readonly kind: 'articles' }
+type View = { readonly kind: 'site'; readonly id: number } | { readonly kind: 'alerts' }
 
 const fade = {
   hidden: { opacity: 0, y: 6 },
@@ -86,6 +83,51 @@ const norm = (s: string) =>
     .replace(/\p{Diacritic}/gu, '')
     .trim()
     .toLowerCase()
+
+/**
+ * What one site in the list is waiting on, as two small numbers.
+ *
+ * Numbers rather than dots: "3" and "1" tell a reader which of two flagged
+ * sites to open first, and a dot cannot. Both carry a title, because a bare
+ * figure in a list of names is only legible once you have been told what it
+ * counts.
+ */
+function RowCounts({
+  unverified,
+  counts,
+}: {
+  readonly unverified: boolean
+  readonly counts?: { alerts: number; articles: number }
+}) {
+  const { t } = useI18n()
+  const alerts = counts?.alerts ?? 0
+  const articles = counts?.articles ?? 0
+  if (!unverified && alerts === 0 && articles === 0) return null
+
+  return (
+    <span className="flex shrink-0 items-center gap-1.5">
+      {alerts > 0 && (
+        <span
+          title={t('chantiers.alerts')}
+          className="text-status-fail tabular flex items-center gap-0.5 text-[0.625rem] font-medium"
+        >
+          <TriangleIcon size={8} weight="fill" />
+          {alerts}
+        </span>
+      )}
+      {articles > 0 && (
+        <span
+          title={t('chantiers.declared')}
+          className="text-status-warn tabular flex items-center gap-0.5 text-[0.625rem] font-medium"
+        >
+          <PencilSimpleIcon size={8} weight="bold" />
+          {articles}
+        </span>
+      )}
+      {unverified && <WarningIcon size={11} weight="fill" className="text-status-warn shrink-0" />}
+    </span>
+  )
+}
 
 /** Pane heading. A rule and a label — never a card. */
 function Head({ title, aside }: { readonly title: string; readonly aside?: string }) {
@@ -322,24 +364,36 @@ function BandRow({
 }
 
 /**
- * Articles a technician reported that no bordereau lists.
+ * What this site declared that its bordereau never listed — and the review of
+ * those names, done here.
  *
- * A review, not an approval gate. The column and its figures already exist by
- * the time a row appears here — the pipeline never makes a technician wait for
- * a human — so the three actions are about the *name*: accept it, correct it,
- * or reject a reading nobody recognises. Correcting onto an existing name
- * merges the two columns, which is the only way to join two spellings the
- * normaliser cannot: "prise 2P+T" and "prise industrielle 2P+T" are one socket
- * to an electrician and two different word sets to a machine.
+ * The review used to be one global queue: every unconfirmed article from every
+ * site, in a pane of its own. It listed names with no idea where they came
+ * from, so confirming one meant deciding on a word out of context — and it
+ * showed only the *unconfirmed* ones, which meant an article vanished from the
+ * page the moment somebody accepted it, the one action that proves it is real.
  *
- * It is the *only* place a name is changed. `SiteMaterials` below shows the
- * same articles per site and offers no actions, because a second place to
- * rewrite a column header is a second way for two spellings to diverge.
+ * Now the list lives on the site that reported it, complete: every free
+ * article that reached this site, confirmed or not, with the quantity summed
+ * across its reports and, for those still unreviewed, the three buttons that
+ * settle the name.
+ *
+ * The *action* stays global even though the entry point is not — the registry
+ * is keyed by slug so one physical thing keeps one spelling everywhere, and
+ * renaming onto an existing name merges the two columns. That is the only way
+ * to join two spellings the normaliser cannot: "prise 2P+T" and "prise
+ * industrielle 2P+T" are one socket to an electrician and two different word
+ * sets to a machine. The note under the heading says so, because a button
+ * whose reach is wider than the panel it sits in has to admit it.
  */
-function ReviewArticles({
+function SiteMaterials({
+  chantier,
   articles,
+  onChanged,
 }: {
-  readonly articles: ReturnType<typeof useApi<{ articles: FreeArticle[] }>>
+  readonly chantier: Chantier
+  readonly articles: readonly FreeArticle[]
+  readonly onChanged: () => void
 }) {
   const { t } = useI18n()
   const { user } = useAuth()
@@ -349,14 +403,29 @@ function ReviewArticles({
   const [pendingDelete, setPendingDelete] = useState<FreeArticle | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const pending = (articles.data?.articles ?? []).filter((a) => !a.confirmed)
+  // Matched on the site NAME, because that is what a report row snapshots —
+  // the chantier is frozen onto the row so a later reassignment never rewrites
+  // history, which means the id is not in the payload to match on.
+  const key = norm(chantier.nom)
+  const rows = articles
+    .map((a) => ({ a, site: a.sites?.find((s) => norm(s.chantier) === key) }))
+    .filter((r): r is { a: FreeArticle; site: NonNullable<FreeArticle['sites']>[number] } =>
+      Boolean(r.site),
+    )
+    // Unreviewed first — they are the only ones asking for anything — then by
+    // quantity, so the biggest number on the site is the first one read.
+    .sort((x, y) => Number(x.a.confirmed) - Number(y.a.confirmed) || y.site.qte - x.site.qte)
+
+  if (rows.length === 0) return null
+
+  const pending = rows.filter((r) => !r.a.confirmed).length
 
   const run = (slug: string, fn: () => Promise<void>) => async () => {
     setBusy(slug)
     setError(null)
     try {
       await fn()
-      articles.reload()
+      onChanged()
       setEditing(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -367,87 +436,105 @@ function ReviewArticles({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      <Head title={t('chantiers.materials')} aside={String(pending.length)} />
-      <p className="text-ink-muted max-w-[70ch] text-[0.6875rem] leading-relaxed">
-        {t('chantiers.materialsIntro')}
-      </p>
-      {pending.length === 0 ? (
-        <EmptyState body={t('chantiers.materialsNone')} />
-      ) : (
-        <ul className="border-line divide-line/60 divide-y border-t">
-          {pending.map((a) => (
-            <li key={a.slug} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2">
-              {editing === a.slug ? (
-                <>
-                  <input
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    placeholder={t('chantiers.renamePlaceholder')}
-                    aria-label={t('chantiers.rename')}
-                    className="border-line bg-surface text-ink focus-visible:ring-accent min-w-0 flex-1 rounded-md border px-2 py-1 text-sm outline-none focus-visible:ring-2"
-                  />
-                  <button
-                    type="button"
-                    disabled={busy === a.slug || !draft.trim()}
-                    onClick={run(a.slug, () => renameArticle(a.slug, draft.trim()))}
-                    className={btn}
-                  >
-                    {t('chantiers.save')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(null)}
-                    className="text-ink-faint hover:text-ink cursor-pointer text-xs transition-colors"
-                  >
-                    {t('chantiers.cancel')}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="text-ink min-w-0 flex-1 truncate text-sm">{a.designation}</span>
-                  <span className="tabular text-ink-faint shrink-0 text-[0.6875rem]">
-                    {t('chantiers.seen', { n: String(a.seen) })}
-                  </span>
-                  {user?.role === 'directeur' && (
-                    <span className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={busy === a.slug}
-                        onClick={run(a.slug, () => confirmArticle(a.slug))}
-                        className={btn}
-                      >
-                        <CheckIcon size={11} />
-                        {t('chantiers.confirm')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy === a.slug}
-                        onClick={() => {
-                          setEditing(a.slug)
-                          setDraft(a.designation)
-                        }}
-                        className={btn}
-                      >
-                        <PencilSimpleIcon size={11} />
-                        {t('chantiers.rename')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy === a.slug}
-                        onClick={() => setPendingDelete(a)}
-                        className={btnDanger}
-                      >
-                        {t('chantiers.delete')}
-                      </button>
+    <section className="flex min-w-0 flex-col gap-1.5">
+      <div className="border-line/60 flex items-baseline justify-between gap-3 border-b pb-1">
+        <h3 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
+          {t('chantiers.declared')}
+        </h3>
+        <span className="tabular text-ink-faint text-[0.625rem]">
+          {pending > 0
+            ? t('chantiers.pendingOf', { n: String(pending), all: String(rows.length) })
+            : String(rows.length)}
+        </span>
+      </div>
+      {pending > 0 && user?.role === 'directeur' && (
+        <p className="text-ink-muted max-w-[70ch] text-[0.625rem] leading-relaxed">
+          {t('chantiers.materialsSiteIntro')}
+        </p>
+      )}
+      <ul className="divide-line/40 divide-y">
+        {rows.map(({ a, site }) => (
+          <li key={a.slug} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
+            {editing === a.slug ? (
+              <>
+                <input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder={t('chantiers.renamePlaceholder')}
+                  aria-label={t('chantiers.rename')}
+                  className="border-line bg-surface text-ink focus-visible:ring-accent min-w-0 flex-1 rounded-md border px-2 py-1 text-xs outline-none focus-visible:ring-2"
+                />
+                <button
+                  type="button"
+                  disabled={busy === a.slug || !draft.trim()}
+                  onClick={run(a.slug, () => renameArticle(a.slug, draft.trim()))}
+                  className={btn}
+                >
+                  {t('chantiers.save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
+                  className="text-ink-faint hover:text-ink cursor-pointer text-xs transition-colors"
+                >
+                  {t('chantiers.cancel')}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-ink flex min-w-0 flex-1 items-baseline gap-2 text-xs">
+                  <span className="truncate">{a.designation}</span>
+                  {/* Colour never carries it alone — the word is there too. */}
+                  {!a.confirmed && (
+                    <span className="text-status-warn shrink-0 text-[0.625rem]">
+                      {t('chantiers.toCheck')}
                     </span>
                   )}
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+                </span>
+                <span className="tabular text-ink shrink-0 text-xs whitespace-nowrap">
+                  {num(site.qte, a.unite ?? undefined)}
+                </span>
+                <span className="tabular text-ink-faint shrink-0 text-[0.625rem] whitespace-nowrap">
+                  {t('chantiers.seen', { n: String(site.seen) })}
+                </span>
+                {!a.confirmed && user?.role === 'directeur' && (
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={busy === a.slug}
+                      onClick={run(a.slug, () => confirmArticle(a.slug))}
+                      className={btn}
+                    >
+                      <CheckIcon size={11} />
+                      {t('chantiers.confirm')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy === a.slug}
+                      onClick={() => {
+                        setEditing(a.slug)
+                        setDraft(a.designation)
+                      }}
+                      className={btn}
+                    >
+                      <PencilSimpleIcon size={11} />
+                      {t('chantiers.rename')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy === a.slug}
+                      onClick={() => setPendingDelete(a)}
+                      className={btnDanger}
+                    >
+                      {t('chantiers.delete')}
+                    </button>
+                  </span>
+                )}
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
       {error && <p className="text-status-fail text-xs">{error}</p>}
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -459,69 +546,6 @@ function ReviewArticles({
         }}
         onCancel={() => setPendingDelete(null)}
       />
-    </div>
-  )
-}
-
-/**
- * What this site declared that its bordereau never listed.
- *
- * The review queue only ever shows *unconfirmed* names, so an article
- * disappeared from the page the moment a director accepted or corrected it —
- * the one action that proves it is real. This is the opposite cut: every free
- * article that reached this site, confirmed or not, with the quantity summed
- * across its reports.
- */
-function SiteMaterials({
-  chantier,
-  articles,
-}: {
-  readonly chantier: Chantier
-  readonly articles: readonly FreeArticle[]
-}) {
-  const { t } = useI18n()
-
-  // Matched on the site NAME, because that is what a report row snapshots —
-  // the chantier is frozen onto the row so a later reassignment never rewrites
-  // history, which means the id is not in the payload to match on.
-  const key = norm(chantier.nom)
-  const rows = articles
-    .map((a) => ({ a, site: a.sites?.find((s) => norm(s.chantier) === key) }))
-    .filter((r): r is { a: FreeArticle; site: NonNullable<FreeArticle['sites']>[number] } =>
-      Boolean(r.site),
-    )
-    .sort((x, y) => y.site.qte - x.site.qte)
-
-  if (rows.length === 0) return null
-
-  return (
-    <section className="flex min-w-0 flex-col gap-1">
-      <h3 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
-        {t('chantiers.declared')}
-      </h3>
-      {/* Two columns where there is room: this list is short lines and long
-          gutters, and one column of it wastes half the pane's width. */}
-      <ul className="border-line/60 grid border-t sm:grid-cols-2 sm:gap-x-8">
-        {rows.map(({ a, site }) => (
-          <li
-            key={a.slug}
-            className="border-line/40 flex items-baseline justify-between gap-3 border-b py-1.5"
-          >
-            <span className="text-ink flex min-w-0 items-baseline gap-2 text-xs">
-              <span className="truncate">{a.designation}</span>
-              {/* Colour never carries it alone — the word is there too. */}
-              {!a.confirmed && (
-                <span className="text-status-warn shrink-0 text-[0.625rem]">
-                  {t('chantiers.toCheck')}
-                </span>
-              )}
-            </span>
-            <span className="tabular text-ink-muted shrink-0 text-xs whitespace-nowrap">
-              {num(site.qte, a.unite ?? undefined)}
-            </span>
-          </li>
-        ))}
-      </ul>
     </section>
   )
 }
@@ -668,12 +692,14 @@ function SiteDetail({
   articles,
   alerts,
   onAlertsChanged,
+  onArticlesChanged,
   onSettled,
 }: {
   readonly chantier: Chantier
   readonly articles: readonly FreeArticle[]
   readonly alerts: readonly MaterialAlert[]
   readonly onAlertsChanged: () => void
+  readonly onArticlesChanged: () => void
   readonly onSettled: () => void
 }) {
   const { t } = useI18n()
@@ -764,8 +790,16 @@ function SiteDetail({
         </section>
       )}
 
-      <Bordereau chantier={c} />
-      <SiteMaterials chantier={c} articles={articles} />
+      {/* Side by side from xl: the contract and what was declared outside it
+          are two readings of the same site, and stacking them means scrolling
+          past nineteen bordereau lines to find out whether anything was
+          reported that the contract never listed. Below xl they stack, because
+          the bordereau table alone needs 28rem before it starts scrolling
+          sideways and two of those in 900px would be unreadable. */}
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start">
+        <Bordereau chantier={c} />
+        <SiteMaterials chantier={c} articles={articles} onChanged={onArticlesChanged} />
+      </div>
 
       <ConfirmDialog
         open={confirmDelete}
@@ -796,14 +830,45 @@ export function ChantiersPage() {
   const sites = useMemo(() => chantiers.data?.chantiers ?? [], [chantiers.data])
   const registry = articles.data?.articles ?? []
   const rows = alerts.data?.alerts ?? []
-  const pendingArticles = registry.filter((a) => !a.confirmed).length
   const pendingSites = sites.filter((c) => c.verifie === false).length
+
+  /**
+   * What each site needs a human for, counted once for the whole list.
+   *
+   * Built as one map rather than per row: a list of twelve sites would
+   * otherwise walk the alert list and the registry twelve times each, and the
+   * counts are what make the list navigable — a reader picks the site with the
+   * red number, not the site whose name they happen to remember.
+   */
+  const attention = useMemo(() => {
+    const live = new Map<string, { alerts: number; articles: number }>()
+    const bump = (site: string, key: 'alerts' | 'articles') => {
+      const k = norm(site)
+      const cur = live.get(k) ?? { alerts: 0, articles: 0 }
+      cur[key] += 1
+      live.set(k, cur)
+    }
+    for (const a of rows) if (!a.ignored) bump(a.chantier, 'alerts')
+    for (const a of registry) {
+      if (a.confirmed) continue
+      for (const s of a.sites ?? []) bump(s.chantier, 'articles')
+    }
+    return live
+  }, [rows, registry])
 
   const shown = useMemo(() => {
     const q = norm(query)
-    if (!q) return sites
-    return sites.filter((c) => norm(c.nom).includes(q) || norm(c.client ?? '').includes(q))
-  }, [sites, query])
+    const found = q
+      ? sites.filter((c) => norm(c.nom).includes(q) || norm(c.client ?? '').includes(q))
+      : sites
+    const weight = (c: Chantier) => {
+      const a = attention.get(norm(c.nom))
+      // Unconfirmed sites first: until somebody says the site is real, every
+      // figure filed against it is filed against a name nobody has vouched for.
+      return (c.verifie === false ? 0 : 1000) - (a ? a.alerts * 10 + a.articles : 0)
+    }
+    return [...found].sort((x, y) => weight(x) - weight(y) || x.nom.localeCompare(y.nom))
+  }, [sites, query, attention])
 
   // The first site is selected for you. A master–detail that opens on an empty
   // pane costs the reader a click to reach the state the page exists for.
@@ -819,12 +884,7 @@ export function ChantiersPage() {
   const order = { depassement: 0, critique: 1, bas: 2 } as const
   const sortedAlerts = [...rows].sort((a, b) => order[a.niveau] - order[b.niveau])
 
-  const paneKey =
-    view?.kind === 'alerts'
-      ? 'alerts'
-      : view?.kind === 'articles'
-        ? 'articles'
-        : String(selected?.id ?? 'none')
+  const paneKey = view?.kind === 'alerts' ? 'alerts' : String(selected?.id ?? 'none')
 
   return (
     <div className="flex flex-col gap-4 pb-8">
@@ -840,13 +900,6 @@ export function ChantiersPage() {
             className="text-ink placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </label>
-        <Chip
-          label={t('chantiers.materials')}
-          n={pendingArticles}
-          tone="warn"
-          active={view?.kind === 'articles'}
-          onClick={() => setView(view?.kind === 'articles' ? null : { kind: 'articles' })}
-        />
         {/* Jumps to the first site awaiting a decision rather than opening a
             list of its own: the decision is taken on the site, in the pane. */}
         <Chip
@@ -915,9 +968,10 @@ export function ChantiersPage() {
                         <span className="text-ink-faint truncate text-[0.625rem]">{c.client}</span>
                       )}
                     </span>
-                    {c.verifie === false && (
-                      <WarningIcon size={11} weight="fill" className="text-status-warn shrink-0" />
-                    )}
+                    <RowCounts
+                      unverified={c.verifie === false}
+                      counts={attention.get(norm(c.nom))}
+                    />
                   </button>
                 </li>
               )
@@ -947,14 +1001,13 @@ export function ChantiersPage() {
                     ))}
                   </ul>
                 </div>
-              ) : view?.kind === 'articles' ? (
-                <ReviewArticles articles={articles} />
               ) : selected ? (
                 <SiteDetail
                   chantier={selected}
                   articles={registry}
                   alerts={rows}
                   onAlertsChanged={alerts.reload}
+                  onArticlesChanged={articles.reload}
                   onSettled={() => {
                     chantiers.reload()
                     setView(null)

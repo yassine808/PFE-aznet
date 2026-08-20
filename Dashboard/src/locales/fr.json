@@ -474,6 +474,8 @@
   "chantiers.materials": "Matériel à confirmer",
   "chantiers.materialsIntro": "Ces articles ont été déclarés par un technicien sans correspondre à aucune ligne de bordereau. Leur colonne existe déjà et leurs quantités sont comptées — un rapport n'attend jamais une validation. Confirmez le libellé, corrigez-le (un libellé qui en rejoint un autre fusionne les deux colonnes), ou supprimez-le si personne ne le reconnaît.",
   "chantiers.declared": "Matériel déclaré hors bordereau",
+  "chantiers.pendingOf": "{n} à confirmer sur {all}",
+  "chantiers.materialsSiteIntro": "Ces articles n'existent dans aucun bordereau. Le libellé est commun à tous les chantiers : le corriger vers un libellé existant fusionne les deux colonnes.",
   "chantiers.toCheck": "à confirmer",
   "chantiers.materialsNone": "Aucun nouvel article à confirmer.",
   "chantiers.seen": "{n} rapport(s)",
