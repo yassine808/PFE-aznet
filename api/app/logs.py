@@ -2963,7 +2963,6 @@ def create_task(title: str, notes: Optional[str] = None,
         cur.execute(
             "INSERT INTO tasks (title, notes, due_at, repeat, "
             "remind_before_value, remind_before_unit, repeat_every, repeat_unit, "
-            "repeat_anchor_day, "
             "repeat_anchor_day) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (title, notes, due_at, repeat, remind_before_value,

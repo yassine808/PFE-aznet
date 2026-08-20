@@ -873,7 +873,17 @@ export async function fail(res: Response): Promise<never> {
         .join(' ; ')
     }
   } catch {
-    /* not JSON — use the raw body */
+    // Not JSON. The body is then almost always an error page from something
+    // BETWEEN the browser and the API — nginx returning 502 while the API
+    // restarts, or a gateway timeout — and pasting its HTML into a panel gave
+    // the operator a wall of `<html><head><title>502 Bad Gateway</title>`
+    // followed by two comments about MSIE padding. True, and unreadable.
+    //
+    // The page's <title> is the one part written for a human, so that is what
+    // is kept; with no title, the status line says it plainly. A proxy error
+    // is not the API's message and must not masquerade as one.
+    const title = /<title>([^<]{1,120})<\/title>/i.exec(text)?.[1]?.trim()
+    detail = title || `${res.status} ${res.statusText}`.trim() || 'erreur réseau'
   }
   if (res.status === 401) {
     // The session died mid-use: expired, or its row was deleted (revoked). No
