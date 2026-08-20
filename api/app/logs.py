@@ -2886,7 +2886,7 @@ def record_report_row(row: dict, data: dict) -> None:
                 VALUES (%(correlation_id)s, %(date)s, %(heure)s, %(technicien)s,
                     %(chantier)s, %(canal)s, %(role)s, %(stt_engine)s, %(confidence)s,
                     %(flag_review)s, %(motif_flag)s, %(resume)s, %(rapport_complet)s,
-                    %(rapports_row)s, %(data)s)
+                    %(rapports_row)s, %(journal_tab)s, %(journal_row)s, %(data)s)
                 ON CONFLICT (correlation_id) DO UPDATE SET
                     date = EXCLUDED.date, heure = EXCLUDED.heure,
                     technicien = EXCLUDED.technicien, chantier = EXCLUDED.chantier,
@@ -2902,7 +2902,18 @@ def record_report_row(row: dict, data: dict) -> None:
                 {**row, "data": json.dumps(data, ensure_ascii=False, default=str)},
             )
     except Exception as exc:  # noqa: BLE001 — a mirror never costs a report
+        # Loudly, not only on stdout. This swallow hid a *permanent* fault for a
+        # day: on 2026-08-19 the column list gained `journal_tab`/`journal_row`
+        # and the VALUES list did not, so every insert raised "INSERT has more
+        # target columns than expressions" and every filed report stopped
+        # reaching the store the totals are computed from — while the Sheet, the
+        # reply and the Rapports mirror all still worked. A transient outage and
+        # a broken statement print the same line; only one of them stops on its
+        # own, so the operator has to be able to see it in the dashboard.
         print(f"[logs] report_rows mirror failed: {exc}"[:200], flush=True)
+        write_safe("sheet", "error",
+                   message=f"report_rows mirror failed: {exc}"[:400],
+                   correlation_id=row.get("correlation_id"))
 
 
 def list_report_rows(dates: Optional[Sequence[str]] = None,
