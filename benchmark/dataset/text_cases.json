@@ -334,6 +334,22 @@
         "pigtail_sc_u": null,
         "fibre_m": null
       }
+    },
+    {
+      "id": "t25_prises_electriques_pas_rj45",
+      "note": "Le mot « prise » ne suffit pas à remplir un champ prise. Rapport réel du 19-08-2026 : purement électrique, pas une seule RJ45 nommée. Envoyé deux fois, il a rempli `prises_connectees` avec 30 (13+12+3+2) puis 46 (les « doubles » comptées pour deux ports) — deux nombres faux dans la colonne d'un autre corps de métier. Les trois champs prise valent null et les 33 articles sont dans `articles_libres`, une désignation par type. La prise mixte « électrique et informatique » est ambiguë : elle reste en article, comme une jarretière sans type.",
+      "text": "Salam 17-08-2026\nÉquipe : dris,brahim,adil,yassine et houcine.\n_ Pose et raccordement de 2 prises industrielles 3P+N+T et d’une prise 2P+T.\n_ Pose et raccordement de 13 prises étanches doubles encastrées.\n_ Pose et raccordement de 12 prises simples encastrées.\n_ Pose et raccordement de 3 prises doubles apparentes.\n_ Pose et raccordement de 2 prises électriques et informatiques.\n_ Montage et câblage d’un tableau électrique, comprenant l’installation des protections, répartiteurs et dispositifs de raccordement, ainsi que le câblage et le raccordement des différents circuits.",
+      "expected": {
+        "prises_connectees": null,
+        "panneaux_prises_brassees": null,
+        "prises_testees": null,
+        "cables_installes_m": null,
+        "fiche_2p_t_u": null,
+        "bandeau_elec_12p_u": null,
+        "date_declaree": "17-08-2026",
+        "equipe": "dris, brahim, adil, yassine, houcine",
+        "chantier_mentionne": null
+      }
     }
   ]
 }

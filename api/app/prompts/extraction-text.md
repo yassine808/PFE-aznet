@@ -29,9 +29,11 @@ quantité dans un champ voisin « qui lui ressemble ».
   raccordés). « J'ai préparé 4 câbles : 49m, 48m, 41m, 33m » = 171.
 - `cables_installes_m` — mètres de câble **installés et raccordés**.
 - `goulotte_m` — mètres de goulotte posés.
-- `prises_connectees` — prises RJ45 raccordées **côté bureau**.
-- `panneaux_prises_brassees` — prises raccordées **côté panneau de brassage**.
-- `prises_testees` — prises **testées et étiquetées**.
+- `prises_connectees` — prises **RJ45 informatiques** raccordées **côté
+  bureau**. Jamais une prise électrique : voir « Le mot « prise » » plus bas.
+- `panneaux_prises_brassees` — prises **RJ45** raccordées **côté panneau de
+  brassage**.
+- `prises_testees` — prises **RJ45** testées et étiquetées.
 - `fibre_m` — mètres de câble fibre optique posés.
 - `interconnexions` — interconnexions installées entre locaux techniques.
 - `connexions_optiques_brins` — **brins** de fibre fusionnés ou connectés
@@ -41,12 +43,48 @@ Une même prise est comptée à trois étapes différentes : la poser côté bur
 brasser côté panneau, la tester. Le technicien peut annoncer trois nombres
 différents le même jour — ce sont trois champs, jamais une moyenne.
 
+### Le mot « prise » — trois champs réseau, et rien d'autre
+
+`prises_connectees`, `panneaux_prises_brassees` et `prises_testees` comptent
+**uniquement des prises RJ45 informatiques** (réseau, data, courant faible).
+Sur un chantier le mot « prise » désigne bien plus souvent une **prise
+électrique** : ce n'est ni le même corps de métier, ni la même ligne du marché,
+ni la même colonne.
+
+Une prise décrite par l'un de ces mots est **électrique** : *étanche*,
+*encastrée*, *apparente*, *industrielle*, *2P+T*, *3P+N+T*, *16A*, *20A*,
+*force*, *courant fort*. Elle ne va **jamais** dans un des trois champs
+ci-dessus : elle va dans `articles_libres`, sous sa désignation complète.
+
+Une prise n'est réseau que si le message le dit : *RJ45*, *informatique*,
+*data*, *réseau*, *cat 6*, *banalisée*, *brassée au panneau*.
+
+Une prise **mixte** — « prise électrique et informatique », « poste de travail
+double » — est ambiguë : elle va dans `articles_libres` sous sa désignation,
+jamais dans les champs réseau. Même règle que les jarretières sans type.
+
+**Ne fais jamais un total « toutes prises confondues ».** Le 19-08-2026 un
+rapport purement électrique — 13 prises étanches doubles encastrées, 12 simples
+encastrées, 3 doubles apparentes, 2 mixtes, 2 industrielles 3P+N+T, 1 prise
+2P+T — a rempli *Connexion des prises informatiques* avec **30** une fois et
+**46** la fois suivante, sur le même texte. La bonne réponse était `null` :
+pas une seule prise RJ45 n'était nommée. Les 33 articles électriques
+appartenaient tous à `articles_libres`, chacun sur sa désignation.
+
+**Une « prise double » compte pour 1.** Tu comptes les articles comme le
+technicien les compte, jamais les ports : « 13 prises doubles » vaut 13, pas
+26. C'est ce doublement qui a produit le 46.
+
+Et une prise déjà portée dans `articles_libres` n'est **pas** recomptée dans un
+champ de quantité : chaque nombre du message a exactement une place.
+
 ## Articles du bordereau
 
 Ces champs comptent le **matériel posé**, article par article, tel qu'il figure
 au bordereau du marché. Ils ne remplacent pas les champs de quantité ci-dessus :
-un mètre de câble reste dans `cables_installes_m`, une prise reste dans
-`prises_connectees`. Ne remplis un article que si le technicien le **nomme**.
+un mètre de câble reste dans `cables_installes_m`, une prise **RJ45** reste
+dans `prises_connectees` — une prise électrique, elle, va dans
+`articles_libres`. Ne remplis un article que si le technicien le **nomme**.
 
 Les trois chantiers appellent la même chose de trois façons — « câble UTP »,
 « câble CAT.6A » et « câble informatique cat 6 » sont tous

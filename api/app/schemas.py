@@ -143,14 +143,31 @@ class ExtractedReport(BaseModel):
     # The same physical port is counted three times in the director's file,
     # at three different stages, and a single day can report three different
     # numbers ("14 prises côté bureaux / 17 côté panneau / 15 testées").
+    #
+    # RJ45 is stated in all three descriptions, not just the first, because the
+    # word "prise" is overloaded: on site it names a power outlet far more often
+    # than a network socket. On 2026-08-19 one purely electrical report — 13
+    # étanches doubles, 12 simples, 3 apparentes, 2 mixtes, 2 industrielles, one
+    # 2P+T — filled `prises_connectees` with 30 on one run and 46 on the next
+    # (counting each "double" as two ports) off the identical text. Both belong
+    # in `articles_libres`; the right value here was None. A description that
+    # says only "prises testées" invites the same collapse.
     prises_connectees: Optional[int] = Field(
-        default=None, ge=0, description="Prises RJ45 raccordées côté bureau"
+        default=None, ge=0,
+        description=(
+            "Prises RJ45 informatiques raccordées côté bureau. JAMAIS une prise "
+            "électrique (étanche, encastrée, apparente, industrielle, 2P+T, "
+            "3P+N+T) ni une prise mixte : celles-là vont dans articles_libres. "
+            "Une prise double compte pour 1, pas pour 2 ports."
+        ),
     )
     panneaux_prises_brassees: Optional[int] = Field(
-        default=None, ge=0, description="Prises raccordées côté panneau de brassage"
+        default=None, ge=0,
+        description="Prises RJ45 raccordées côté panneau de brassage (jamais électriques)",
     )
     prises_testees: Optional[int] = Field(
-        default=None, ge=0, description="Prises testées et étiquetées"
+        default=None, ge=0,
+        description="Prises RJ45 testées et étiquetées (jamais électriques)",
     )
 
     # --- travaux fibre -------------------------------------------------
