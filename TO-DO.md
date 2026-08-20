@@ -670,6 +670,66 @@ par un ; ce bloc reste la trace de la demande d'origine.
 - [ ] when i send multiple messages the chatbot did reply to one of my messages, but the check emoji was never done, fix this bug
 - [ ] always respect the messages in chronical order, since sometimes old messages aren't seen by the chatbot, then the next day or something, it reads them again
 - [ ] the error messages should be a retry queue before going to the next one with a retrying message, unless there is a quota. then wait till quota comes back then resume reading messages, but show the retry queue in the dashboard
+
+### Design verrouillé au grill du 2026-08-20 (avec le propriétaire, question par question)
+
+Les trois items ci-dessus ne sont pas trois chantiers indépendants : le troisième
+signale son état **par réaction**, donc il est illisible tant que le premier n'est
+pas corrigé. Ordre imposé : 1 → 2 → 3.
+
+**Constat 1 — la réaction ✅ manquante est un problème d'appariement d'items n8n.**
+Tous les nœuds d'accusé visent le message par `$('Filtrer accès').item.json.message_id`.
+`Filtrer accès` tourne en `runOnceForAllItems`, retourne un tableau neuf **sans
+`pairedItem`**, et peut émettre *moins* d'items qu'il n'en reçoit (la branche
+« étranger » en supprime). À un message l'appariement retombe correctement sur
+l'unique item — vérifié sur l'exécution 54910, `WA ack done` a réussi. À N
+messages il lève « can't determine which item to use » ou s'effondre sur l'indice 0.
+Les deux nœuds d'accusé portent `onError=continueRegularOutput` : **l'échec est
+donc muet**. `Process output` et `Restore message` posent déjà `pairedItem` — la
+leçon avait été apprise là et pas propagée.
+→ **Correctif** : poser `pairedItem` dans `Extract TG msgs`, `Extract WA msgs`,
+`Sender`, `Correlate` et `Filtrer accès`. On répare la chaîne une fois, pas les
+seuls accusés : tous les `$('…').item` du workflow en dépendent.
+*À ne pas confondre* avec « WhatsApp ne cite pas une note vocale » (tranché
+2026-08-15) : là c'est le rendu de la bulle citée, ici l'appariement. On ne
+retouche pas le routage `chat_id`/`message_id` des réponses.
+
+**Constat 2 — l'ordre chronologique est déjà en place, sa cause racine non.**
+Le workflow actif trie déjà du plus ancien au plus récent par heure d'envoi,
+confirme l'offset Telegram **par update après traitement**, et dédoublonne dans
+Postgres (`POST /logs/claim`). Mais `Offset + token` lit encore `lastUpdateId`
+dans `$getWorkflowStaticData`, **que chaque push de workflow efface** : l'offset
+retombe à 0, Telegram rejoue jusqu'à 24 h d'updates, et ils meurent sur `Fresh?`.
+Le symptôme est masqué par le dédoublonnage, la cause est intacte.
+→ **Correctif** : déplacer l'offset dans Postgres, à côté du dédoublonnage.
+
+**Constat 3 — bloquant : un `/process` raté ne peut pas être rejoué.**
+`_audio_input` transcrit **puis** archive (`main.py:513`). Si la transcription
+échoue, `save_media` n'est jamais atteint : le blob n'existe nulle part, et les
+URL média de Telegram (~1 h) comme de Meta (minutes) expirent. Une file qui ne
+retient que « le message X a échoué » n'aurait rien à rejouer.
+→ **Persist-first** : archiver le blob **avant** le travail qui peut échouer.
+
+Décisions, telles qu'arrêtées :
+
+| Question | Réponse retenue |
+|---|---|
+| Blocage | **Par technicien.** Le journal fusionne par (date, technicien) ; l'ordre inter-techniciens n'a pas de sens. Rayon d'action : une personne. |
+| Périmètre de la file | **Échecs `/process` seulement.** Le chemin Sheet a déjà `failed_writes` + son drain et fonctionne. Deux files, une étape chacune. |
+| Propriétaire | **API + Postgres.** n8n passe la main une fois ; `jobs.py` réessaie, comme `drain_sheet_queue`. La staticData n8n est disqualifiée : un push l'efface (cf. constat 2). |
+| Abandon | Backoff 30 s → 2 min → 5 min → 10 min ×3 (~6 essais, ~40 min), puis ❌ « non traité », ligne marquée abandonnée, file du technicien libérée. Un refus de quota **ne consomme pas d'essai** (règle déjà posée dans `resolve_write(count_attempt=False)`). Un 422 — entrée malformée, jamais réparable — meurt au 1ᵉʳ essai. |
+| Quota | **On suspend le traitement, pas la réception.** Sonder Telegram et accepter les webhooks Meta coûte peu et ne perd rien ; c'est l'appel au modèle qu'on arrête. Suspendre le sondage perdrait les updates au-delà des ~24 h de rétention Telegram, et Meta pousse de toute façon. |
+| Déclencheur du quota | **Chaîne texte entièrement épuisée** (Groq *et* les deux Gemini). Groq seul épuisé ne bloque rien — la chaîne bascule, c'est pour cela qu'elle alterne les fournisseurs — mais c'est signalé au tableau de bord comme avertissement. |
+| Message de quota | Une fois par panne et par technicien, sur son canal, **et** l'état suspendu au tableau de bord. |
+| Signal de réessai | **Réaction seule, aucun message de chat** (choix du propriétaire contre ma recommandation) : ⏳ → 🔄 en file, ✅ ou ❌ à la fin. C'est ce qui rend le constat 1 bloquant. |
+| Réponse tardive | **L'API répond.** `POST /reply` existe déjà et prend `identity_id`. Le job de réessai l'appelle et pose ✅. Aucune exécution n8n maintenue ouverte 40 minutes. |
+| Portillon | **`/process` interroge la file lui-même** : si le technicien a un message non résolu, on met en file et on répond « queued ». Un seul portillon, à l'endroit par où tout passe déjà — Telegram, WhatsApp et le job de réessai compris. |
+| Tableau de bord | Section « Messages en attente » **sur la page Queue existante**, au-dessus de `failed_writes`. Pas de route ni d'entrée de navigation en plus. |
+
+Conséquence de périmètre repérée pendant le grill : `app/reply.py` sait envoyer du
+**texte** sur les deux canaux, pas des **réactions**. Le signal par réaction
+impose donc d'y ajouter `set_reaction()` — mêmes endpoints que ceux que n8n
+appelle déjà, charges utiles connues.
 - [x] Check and warns if we have too many in the stock , warns if we have too little aswell — **fait 2026-08-19**. `stock.py` ne disait que « il va manquer » ; il dit maintenant aussi « il y en a trop » (`surplus`) : plus du double de ce qu'il reste à poser, et seulement si l'excédent pèse une part visible du marché — 2 m de trop sur 1 m restant n'est pas une alerte. Vérifié **avant** les branches de pénurie, parce qu'en fin de chantier un article peut être sous deux jours de couverture *et* en excès, et « commandez-en » serait alors exactement la mauvaise phrase. Seuil `stock_surplus_facteur` dans `app_settings`, silence s'il n'y a pas de `qte_marche` ou moins de deux jours actifs.
 - [x] if the tech reports a new cable or "prise" or something new, then add it in new column But show the confirm (just like site confirming) in the Sites page — **fait 2026-08-19**. `ExtractedReport.articles_libres` porte les articles qu'aucun bordereau ne liste ; la colonne est créée **sur l'onglet du chantier qui l'a déclaré** et le nom est enregistré une fois pour toutes dans `article_registry`, si bien qu'un second chantier réutilise la formulation au lieu d'en inventer une deuxième. L'identité **trie les mots** : « prise double étanche encastrée » et « prise étanche double encastrée » étaient deux colonnes pour un article, 4 dans l'une et 13 dans l'autre, avec un total juste dans aucune des deux. Toujours pas de correspondance approximative — *étanche* est une vraie différence et un vrai prix. La page Chantiers relit les noms : confirmer, corriger (un libellé qui en rejoint un autre fusionne les deux colonnes **et** les deux stockages), ou rejeter.
 - [x] if i send a text, it shows in google sheets as "ecoutez", fix it — **fait 2026-08-19**. `journal.audio_link` construisait le lien `▶ Écouter` pour **tout** message ayant un `correlation_id`, y compris un rapport tapé qui n'a rien à jouer : la colonne dont le seul rôle est de dire s'il existe un enregistrement invitait à cliquer vers un lecteur inexistant. Le test honnête est `stt_engine`, que `/process` ne renseigne que si un moteur a réellement transcrit de l'audio — la même raison pour laquelle `STT_model` est vide sur exactement ces lignes. Sans audio : cellule vide.
@@ -685,5 +745,5 @@ par un ; ce bloc reste la trace de la demande d'origine.
 - [x] **La garde « rien extrait » jugeait sur les mauvaises données.** Gemini renvoyait `equipe` et `etages` — tous deux dans `DATA_FIELDS`, donc `has_data()` disait oui — pendant que le message énumérait sept articles chiffrés. La chaîne juge maintenant sur les **quantités** : un nom et un étage sont ce qu'un modèle réussit quand il a cessé de lire.
 - [x] **Deux collisions introduites le jour même.** `delete_article` défini deux fois, le second masquant silencieusement le premier ; et deux routes `DELETE /articles/{…}` où `{slug}` capture tout, rendant l'endpoint bordereau injoignable. Renommés en `delete_bordereau_article` et `DELETE /bordereau-articles/{id}`.
 - [x] **La grille Sheets ne grandissait qu'en largeur.** `_grow_columns` existait, pas son jumeau : un onglet vidé fait exactement deux lignes de haut (Google refuse de supprimer toutes les lignes non figées), la ligne 3 dépasse la grille, et le rapport part en 400. `_grow_rows` par tranches de 200.
-- [ ] **Rien ne remarque quand n8n cesse d'écouter.** Le 2026-08-19 à 06:48 les crons ont été désenregistrés après une série de `Bad request` Telegram ; le sondage et le webhook WhatsApp sont restés morts une heure pendant que l'API répondait `active: True` et que le tableau de bord affichait « Serveur actif ». Réactiver par l'API a tout relancé en quelques secondes. À surveiller : comparer l'horodatage de la dernière exécution n8n à l'intervalle de sondage, et le dire.
+- [x] **Rien ne remarque quand n8n cesse d'écouter.** — **fait 2026-08-20**, commit `060516c` : `GET /n8n/listening` compare l'horodatage de la dernière exécution à `n8n_stale_after_minutes` (30). La preuve honnête est le *travail*, pas la joignabilité : un n8n joignable avec un workflow actif ne prouve ni l'un ni l'autre. Le 2026-08-19 à 06:48 les crons ont été désenregistrés après une série de `Bad request` Telegram ; le sondage et le webhook WhatsApp sont restés morts une heure pendant que l'API répondait `active: True` et que le tableau de bord affichait « Serveur actif ». Réactiver par l'API a tout relancé en quelques secondes. À surveiller : comparer l'horodatage de la dernière exécution n8n à l'intervalle de sondage, et le dire.
 - [ ] **Le prompt d'extraction coûte ~5 300 jetons par appel** (14,7 Ko + le soul), soit ~37 appels par jour de quota gratuit. Suffisant en usage réel, épuisé en une journée de tests. À réduire — mais chaque règle du fichier a été payée par un bug, donc pas sans vérifier ensuite.
