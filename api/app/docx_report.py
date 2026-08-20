@@ -57,6 +57,19 @@ FONT = "Calibri"
 # renders as an empty box is worse than no marker.
 ALERT_MARK = "▲"
 
+# The label of the one tile and the one column that mean "someone has to do
+# something". A document label, so the string itself is part of the output.
+ALERT_LABEL = "À vérifier"
+
+# The separator between the facts on the header and provenance lines. The
+# spacing is the design, so it lives in one place.
+SEP = "   ·   "
+
+# OOXML tag names for a Word field. Named once so the three characters that
+# make up one field cannot drift apart.
+FLD_CHAR = "w:fldChar"
+FLD_CHAR_TYPE = "w:fldCharType"
+
 
 def _is_flagged(value: Any) -> bool:
     """`metrics.ts:isFlagged` — the Sheet holds whatever the writer typed."""
@@ -91,7 +104,7 @@ def compute_figures(rows: Sequence[dict]) -> Dict[str, str]:
         "Rapports": str(len(rows)),
         "Techniciens": str(len(techs - {""})),
         "Chantiers": str(len(sites - {""})),
-        "À vérifier": str(sum(1 for r in rows if _is_flagged(r.get("flag_review")))),
+        ALERT_LABEL: str(sum(1 for r in rows if _is_flagged(r.get("flag_review")))),
     }
 
 
@@ -240,17 +253,17 @@ def _page_field(paragraph):
     from docx.oxml import OxmlElement
 
     for instruction, literal in (("PAGE", "1"), ("NUMPAGES", "1")):
-        begin = OxmlElement("w:fldChar")
-        begin.set(qn("w:fldCharType"), "begin")
+        begin = OxmlElement(FLD_CHAR)
+        begin.set(qn(FLD_CHAR_TYPE), "begin")
         instr = OxmlElement("w:instrText")
         instr.set(qn("xml:space"), "preserve")
         instr.text = f" {instruction} "
-        separate = OxmlElement("w:fldChar")
-        separate.set(qn("w:fldCharType"), "separate")
+        separate = OxmlElement(FLD_CHAR)
+        separate.set(qn(FLD_CHAR_TYPE), "separate")
         value = OxmlElement("w:t")
         value.text = literal
-        end = OxmlElement("w:fldChar")
-        end.set(qn("w:fldCharType"), "end")
+        end = OxmlElement(FLD_CHAR)
+        end.set(qn(FLD_CHAR_TYPE), "end")
 
         run = _run(paragraph, "", size=8, color=MUTED)._r
         for node in (begin, instr, separate, value, end):
@@ -322,31 +335,20 @@ def _table(document, headers: Sequence[str], body: Sequence[Sequence[str]],
             # argument because the callers build their rows as plain tuples,
             # and a parallel grid of colours is a second thing to keep aligned.
             alert = value.startswith(ALERT_MARK)
+            if alert:
+                colour = ALERT
+            elif index == 0:
+                colour = INK
+            else:
+                colour = BODY
             _run(paragraph, value, size=9.5, bold=index == 0 or alert,
-                 color=ALERT if alert else (INK if index == 0 else BODY))
+                 color=colour)
 
 
-def build(
-    title: str,
-    body: str,
-    kind: str,
-    period: str,
-    rows: Sequence[dict],
-    author: Optional[str] = None,
-    alerts: Optional[Sequence[dict]] = None,
-) -> bytes:
-    """The whole document, as the bytes that get attached or downloaded.
-
-    `rows` are the Sheet rows the report covers — the figures are derived, not
-    passed. An empty `rows` simply prints no tables: a report generated for a
-    day whose rows were deleted underneath it is still the report someone wrote.
-    """
-    from docx import Document
-    from docx.enum.table import WD_TABLE_ALIGNMENT
+def _shell(document, kind: str, period: str) -> None:
+    """Page geometry and the two running lines Word repeats on every page."""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Cm, Pt
-
-    document = Document()
 
     normal = document.styles["Normal"].font  # type: ignore[attr-defined]
     normal.name = FONT
@@ -358,13 +360,18 @@ def build(
 
     header = section.header.paragraphs[0]
     _run(header, "AZNET", size=9, bold=True, color=ACCENT)
-    _run(header, "   ·   ", size=9, color=RULE)
+    _run(header, SEP, size=9, color=RULE)
     _run(header, kind, size=9, color=MUTED, caps=True)
 
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     _run(footer, f"{period}   ", size=8, color=MUTED)
     _page_field(footer)
+
+
+def _title_block(document, title: str, period: str, author: Optional[str]) -> None:
+    """The title, and the provenance line under it."""
+    from docx.shared import Pt
 
     heading = document.add_paragraph(style="Title")
     heading.paragraph_format.space_after = Pt(3)
@@ -379,20 +386,26 @@ def build(
     provenance.paragraph_format.space_after = Pt(4)
     by_hand = bool(author) and author != "automatique"
     _run(provenance, period, size=9, bold=True, color=BODY)
-    _run(provenance, "   ·   ", size=9, color=RULE)
+    _run(provenance, SEP, size=9, color=RULE)
     _run(
         provenance,
         f"établi par {author}" if by_hand else "rapport automatique",
         size=9,
         color=ACCENT if by_hand else MUTED,
     )
-    _run(provenance, "   ·   ", size=9, color=RULE)
+    _run(provenance, SEP, size=9, color=RULE)
     _run(
         provenance,
         f"document généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}",
         size=9,
         color=MUTED,
     )
+
+
+def _tiles(document, rows: Sequence[dict]) -> None:
+    """The headline grid. Nothing to draw when the period has no rows."""
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.shared import Pt
 
     figures = compute_figures(rows)
     if rows:
@@ -412,21 +425,16 @@ def build(
             # The one tile that means "someone has to do something" is drawn in
             # the alert colour, and only when it is not zero — a permanent red
             # tile reading 0 is exactly how a warning colour stops being read.
-            alert = label == "À vérifier" and value != "0"
+            alert = label == ALERT_LABEL and value != "0"
             _run(top, f"{ALERT_MARK} {value}" if alert else value,
                  size=15, bold=True, color=ALERT if alert else ACCENT)
             _run(cell.add_paragraph(), label, size=8,
                  color=ALERT if alert else MUTED, caps=True)
         document.add_paragraph().paragraph_format.space_after = Pt(12)
 
-    _body_blocks(document, body)
 
-    tech_rows = by_technician(rows)
-    site_rows = group_rows(rows, "chantier", "technicien")
-
-    # Every quantity the period actually carries, in the director's own column
-    # order and with his own labels, plus who contributed to each. This is the
-    # table that used to be four columns of Python literals.
+def _quantities_table(document, rows: Sequence[dict], tech_rows: Sequence[dict]) -> None:
+    """Every quantity the period carries, in the director's own labels."""
     totals = journal.rapports_totals(rows)
     if totals:
         # "déclarées", not "réalisées": `temps_arret_min` belongs in this table —
@@ -443,37 +451,25 @@ def build(
             right=(1,),
         )
 
-    if tech_rows:
-        _heading(document, "Activité par technicien")
-        _table(
-            document,
-            ("Technicien", "Rapports", "Chantiers", "À vérifier"),
-            [
-                (e["name"], str(e["count"]), ", ".join(sorted(e["others"])) or "—",
-                 _count(e["flagged"]))
-                for e in tech_rows
-            ],
-            right=(1, 3),
-        )
 
-    # Only when there is more than one: on a single-site day this table is one
-    # row restating the tile above it, and a report earns nothing by repeating
-    # itself in a different shape.
-    if len(site_rows) > 1:
-        _heading(document, "Activité par chantier")
-        _table(
-            document,
-            ("Chantier", "Rapports", "Techniciens", "À vérifier"),
-            [
-                (e["name"], str(e["count"]), ", ".join(sorted(e["others"])) or "—",
-                 _count(e["flagged"]))
-                for e in site_rows
-            ],
-            right=(1, 3),
-        )
+def _activity_table(document, heading: str, headers: Sequence[str],
+                    entries: Sequence[dict]) -> None:
+    """One activity split — by technician or by site. Same shape, same columns."""
+    _heading(document, heading)
+    _table(
+        document,
+        headers,
+        [
+            (e["name"], str(e["count"]), ", ".join(sorted(e["others"])) or "—",
+             _count(e["flagged"]))
+            for e in entries
+        ],
+        right=(1, 3),
+    )
 
-    # Above the review section and below the work: what has to be ordered is
-    # the one thing in this document with a deadline attached to it.
+
+def _alerts_table(document, alerts: Optional[Sequence[dict]]) -> None:
+    """What has to be ordered — the one thing here with a deadline on it."""
     if alerts:
         _heading(document, f"{ALERT_MARK} Alertes matériel", color=ALERT)
         _table(
@@ -492,9 +488,9 @@ def build(
             right=(2, 3),
         )
 
-    # Last, and only when there is something: the reader reaches it having
-    # already seen what was done, so an empty section here reads as "nothing to
-    # check" rather than as a heading with no content.
+
+def _review_table(document, rows: Sequence[dict]) -> None:
+    """The flagged rows and why. Silent when there is nothing to check."""
     review = flagged(rows)
     if review:
         _heading(document, f"{ALERT_MARK} Points à vérifier", color=ALERT)
@@ -503,6 +499,64 @@ def build(
             ("Heure", "Technicien", "Chantier", "Motif du flag"),
             [(r["heure"], r["technicien"], r["chantier"], r["motif"]) for r in review],
         )
+
+
+def build(
+    title: str,
+    body: str,
+    kind: str,
+    period: str,
+    rows: Sequence[dict],
+    author: Optional[str] = None,
+    alerts: Optional[Sequence[dict]] = None,
+) -> bytes:
+    """The whole document, as the bytes that get attached or downloaded.
+
+    `rows` are the Sheet rows the report covers — the figures are derived, not
+    passed. An empty `rows` simply prints no tables: a report generated for a
+    day whose rows were deleted underneath it is still the report someone wrote.
+    """
+    from docx import Document
+
+    document = Document()
+
+    _shell(document, kind, period)
+
+    _title_block(document, title, period, author)
+
+    _tiles(document, rows)
+
+    _body_blocks(document, body)
+
+    tech_rows = by_technician(rows)
+    site_rows = group_rows(rows, "chantier", "technicien")
+
+    # Every quantity the period actually carries, in the director's own column
+    # order and with his own labels, plus who contributed to each. This is the
+    # table that used to be four columns of Python literals.
+    _quantities_table(document, rows, tech_rows)
+
+    if tech_rows:
+        _activity_table(document, "Activité par technicien",
+                        ("Technicien", "Rapports", "Chantiers", ALERT_LABEL),
+                        tech_rows)
+
+    # Only when there is more than one: on a single-site day this table is one
+    # row restating the tile above it, and a report earns nothing by repeating
+    # itself in a different shape.
+    if len(site_rows) > 1:
+        _activity_table(document, "Activité par chantier",
+                        ("Chantier", "Rapports", "Techniciens", ALERT_LABEL),
+                        site_rows)
+
+    # Above the review section and below the work: what has to be ordered is
+    # the one thing in this document with a deadline attached to it.
+    _alerts_table(document, alerts)
+
+    # Last, and only when there is something: the reader reaches it having
+    # already seen what was done, so an empty section here reads as "nothing to
+    # check" rather than as a heading with no content.
+    _review_table(document, rows)
 
     document.core_properties.author = "aznet"
     document.core_properties.title = title

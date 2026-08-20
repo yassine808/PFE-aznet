@@ -358,6 +358,7 @@ function JobRow({
   const last = job.last
   const text = outcome(job)
   const what = t(`automation.job.${job.name}.what`)
+  const jobLabel = t(`automation.job.${job.name}`)
 
   return (
     /*
@@ -413,7 +414,7 @@ function JobRow({
           disabled={busy}
           aria-busy={busy}
           title={t('automation.job.run')}
-          aria-label={`${t('automation.job.run')} — ${t(`automation.job.${job.name}`)}`}
+          aria-label={`${t('automation.job.run')} — ${jobLabel}`}
           className="border-line text-ink-muted hover:text-ink hover:border-ink-faint focus-visible:ring-accent flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border transition-[color,border-color,transform] duration-150 outline-none focus-visible:ring-2 active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowClockwiseIcon size={14} className={busy ? 'animate-spin' : undefined} />

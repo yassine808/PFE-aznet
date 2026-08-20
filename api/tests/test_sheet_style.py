@@ -62,7 +62,8 @@ def test_style_tab_freezes_the_header_and_sizes_the_columns(monkeypatch):
     # Narrow stays narrow and free text stays wide, but the floor is derived
     # from the header rather than fixed: a column has to be able to show its
     # own title, and 90 px could not fit "ORDRE DU JOUR [Pose de câble cuivre]".
-    assert widths[0] == 100 and widths[2] == 420
+    assert widths[0] == 100
+    assert widths[2] == 420
 
 
 def test_banding_is_added_once(monkeypatch):

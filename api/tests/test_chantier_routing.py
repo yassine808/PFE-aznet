@@ -164,7 +164,8 @@ def test_file_report_routes_on_what_the_technician_said(chantier_table, monkeypa
         "report": {"cables_installes_m": 120, "resume": "Résumé.",
                    "chantier_mentionne": "la D.G.H"},
     })
-    assert result["tab"] == "DGH" and result["chantier"] == "DGH"
+    assert result["tab"] == "DGH"
+    assert result["chantier"] == "DGH"
     assert sheet.appended[0][0] == "DGH"
 
 

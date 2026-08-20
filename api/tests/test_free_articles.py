@@ -77,7 +77,8 @@ def test_exhausted_quota_says_so_in_words():
              "reset_requests": "2m59s"}
     verdict = usage._assess(entry)
     assert verdict["state"] == "epuise"
-    assert "épuisé" in verdict["message"] and "2m59s" in verdict["message"]
+    assert "épuisé" in verdict["message"]
+    assert "2m59s" in verdict["message"]
 
 
 def test_unknown_ceiling_is_not_a_full_tank():

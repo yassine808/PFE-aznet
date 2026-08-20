@@ -467,6 +467,26 @@ def write_report(
             warnings.append("article_column_failed")
             print(f"[journal] ensure_columns({tab}) failed: {exc}"[:200], flush=True)
 
+    # Resolve against the tab's REAL header, never the code's list alone.
+    #
+    # `append_row` writes positionally from the header it is handed, while reads
+    # resolve by name. A tab created before a schema change keeps its old header
+    # for good — `ensure_tab` deliberately never edits an existing one — so the
+    # code's 66 columns were being written into DGH's 45, and from the first
+    # missing column onward every value landed under the wrong name. That tab
+    # predates the 25 bordereau articles and `Arrêt (min)` added on 2026-08-15,
+    # which is exactly where its row content stopped making sense.
+    #
+    # `ensure_columns` appends whatever is missing and returns the live header,
+    # so the write is aligned with the sheet as it actually is. New columns land
+    # at the end rather than in the director's order — correct data out of order
+    # beats ordered data in the wrong columns, and it is self-healing: the tab
+    # catches up on the first report after any schema change.
+    try:
+        headers = sheets.ensure_columns(tab, headers)
+    except Exception as exc:  # noqa: BLE001 — a column is not worth the row
+        warnings.append("article_column_failed")
+        print(f"[journal] ensure_columns({tab}) base failed: {exc}"[:200], flush=True)
     row = sheets.append_row(tab, cells, headers)
 
     # If the day already had a row for this technician, this one adds to it, and
@@ -831,9 +851,9 @@ def audio_link(payload: Dict) -> Optional[str]:
     correlation = str(payload.get("correlation_id") or "").strip()
     if not base or not correlation:
         raw = str(payload.get("lien_audio") or "").strip()
-        # NOSONAR - a scheme test on a link we already hold, not an outbound
-        # call: a Drive URL arrives as given and http:// must still be seen.
-        return raw if raw.startswith(("http://", "https://", "=")) else None
+        # A scheme test on a link we already hold, not an outbound call: a
+        # Drive URL arrives as given and http:// must still be recognised.
+        return raw if raw.startswith(("http://", "https://", "=")) else None  # NOSONAR
     url = f"{base}/#/inbox?msg={quote(correlation, safe='')}"
     # A HYPERLINK formula rather than the bare URL: the cell then reads
     # "▶ Écouter" instead of 120 characters of base64 wamid, and the column can

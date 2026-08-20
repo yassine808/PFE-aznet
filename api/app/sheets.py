@@ -304,38 +304,47 @@ def rename_column(old: str, new: str) -> int:
     touched = 0
     for sheet in meta.get("sheets", []):
         tab = sheet["properties"]["title"]
-        sid = sheet["properties"]["sheetId"]
         try:
-            headers = _headers(svc, tab)
-            if old not in headers:
-                continue
-            at = headers.index(old)
-            if new not in headers:
-                svc.spreadsheets().values().update(
-                    spreadsheetId=settings.sheet_id,
-                    range=_a1(tab, f"{_col_letter(at + 1)}1"),
-                    valueInputOption="RAW",
-                    body={"values": [[new]]},
-                ).execute(num_retries=_RETRIES)
+            if _rename_column_on_tab(svc, tab, sheet["properties"]["sheetId"], old, new):
                 touched += 1
-                continue
-            for row in read_tab(tab):
-                spare = str(row.get(old) or "").strip()
-                if not spare:
-                    continue
-                kept = str(row.get(new) or "").strip()
-                total = (float(kept) if kept else 0.0) + float(spare)
-                update_report_fields(row["_row"], {new: total, old: ""}, tab)
-            svc.spreadsheets().batchUpdate(
-                spreadsheetId=settings.sheet_id,
-                body={"requests": [{"deleteDimension": {"range": {
-                    "sheetId": sid, "dimension": "COLUMNS",
-                    "startIndex": at, "endIndex": at + 1}}}]},
-            ).execute(num_retries=_RETRIES)
-            touched += 1
-        except Exception as exc:  # noqa: BLE001 — one tab must not stop the rest
+        except Exception as exc:  # noqa: BLE001  # one tab must not stop the rest
             print(f"[sheets] rename_column({tab}): {exc}"[:200], flush=True)
     return touched
+
+
+def _rename_column_on_tab(svc, tab: str, sid: int, old: str, new: str) -> bool:
+    """Rename (or fold) `old` into `new` on one tab. False when it has neither."""
+    headers = _headers(svc, tab)
+    if old not in headers:
+        return False
+    at = headers.index(old)
+    if new not in headers:
+        svc.spreadsheets().values().update(
+            spreadsheetId=settings.sheet_id,
+            range=_a1(tab, f"{_col_letter(at + 1)}1"),
+            valueInputOption="RAW",
+            body={"values": [[new]]},
+        ).execute(num_retries=_RETRIES)
+        return True
+    _fold_column_values(tab, old, new)
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=settings.sheet_id,
+        body={"requests": [{"deleteDimension": {"range": {
+            "sheetId": sid, "dimension": "COLUMNS",
+            "startIndex": at, "endIndex": at + 1}}}]},
+    ).execute(num_retries=_RETRIES)
+    return True
+
+
+def _fold_column_values(tab: str, old: str, new: str) -> None:
+    """Add every value of the duplicate column into the survivor, row by row."""
+    for row in read_tab(tab):
+        spare = str(row.get(old) or "").strip()
+        if not spare:
+            continue
+        kept = str(row.get(new) or "").strip()
+        total = (float(kept) if kept else 0.0) + float(spare)
+        update_report_fields(row["_row"], {new: total, old: ""}, tab)
 
 
 def delete_column(name: str) -> int:
@@ -670,7 +679,7 @@ def mark_increment(tab: str, row: int, columns: List[str]) -> None:
                 "cell": {"userEnteredFormat": {"numberFormat": _PLUS_FORMAT}},
                 "fields": "userEnteredFormat.numberFormat"}}]},
         ).execute(num_retries=_RETRIES)
-    except Exception as exc:  # noqa: BLE001 - cosmetic, never fatal
+    except Exception as exc:  # noqa: BLE001  # cosmetic, never fatal
         print(f"[sheets] increment format skipped ({tab} row {row}): {exc}")
 
 
@@ -1033,7 +1042,7 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
                             "firstBandColor": {"red": 1, "green": 1, "blue": 1},
                             "secondBandColor": _BAND_BG}}}}]},
                 ).execute(num_retries=_RETRIES)
-            except Exception as exc:  # noqa: BLE001 - already banded is fine
+            except Exception as exc:  # noqa: BLE001  # already banded is fine
                 print(f"[sheets] banding({tab}) skipped: {exc}"[:160], flush=True)
-    except Exception as exc:  # noqa: BLE001 — presentation is never fatal
+    except Exception as exc:  # noqa: BLE001  # presentation is never fatal
         print(f"[sheets] style_tab({tab}) skipped: {type(exc).__name__}: {exc}", flush=True)

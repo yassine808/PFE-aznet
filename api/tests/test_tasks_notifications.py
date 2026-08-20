@@ -564,7 +564,8 @@ def test_catch_up_skips_a_missed_backlog_in_one_step():
 
     stale = datetime.now() - _td(days=14)
     nxt = jobs._catch_up(stale, "daily")
-    assert nxt is not None and nxt > datetime.now()
+    assert nxt is not None
+    assert nxt > datetime.now()
     assert nxt - datetime.now() <= _td(days=1)
     # The step rule itself is unchanged: a future task advances by exactly one.
     future = datetime.now() + _td(days=3)

@@ -107,13 +107,15 @@ def test_build_produces_a_real_docx_carrying_the_report():
     # The quantity table, with the director's own labels — and specifically the
     # ones the four hardcoded columns could never have produced.
     assert "Quantités déclarées" in document
-    assert "Fibre installée" in document and "Pigtail SC" in document
+    assert "Fibre installée" in document
+    assert "Pigtail SC" in document
     assert "Yassine 210" in document  # the per-technician split of that total
     # Two sites in ROWS, so the per-site rollup earns its place.
     assert "Activité par chantier" in document
     # A live field, not a frozen page count: the footer stays right after the
     # document is edited or printed to another paper size.
-    assert "NUMPAGES" in footer and "2026-08-16" in footer
+    assert "NUMPAGES" in footer
+    assert "2026-08-16" in footer
     # The `## ` and `- ` markers are structure, not literal text: shipping them
     # verbatim is exactly what the mail did before `render_rich_text`.
     assert "## " not in document

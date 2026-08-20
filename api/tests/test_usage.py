@@ -44,7 +44,8 @@ def test_from_groq_reads_the_quota_headers_and_returns_the_parsed_body(monkeypat
     assert seen["args"] == ("groq", "llama-3.3-70b-versatile", "extraction")
     assert seen["kw"]["remaining_requests"] == 999
     assert seen["kw"]["limit_tokens"] == 12000
-    assert seen["kw"]["tokens_in"] == 11 and seen["kw"]["tokens_out"] == 7
+    assert seen["kw"]["tokens_in"] == 11
+    assert seen["kw"]["tokens_out"] == 7
     assert seen["kw"]["reset_requests"] == "1m26.4s"
 
 
@@ -57,7 +58,8 @@ def test_missing_headers_record_none_not_zero(monkeypatch):
     seen = {}
     monkeypatch.setattr(usage, "record", lambda *a, **k: seen.update(k))
     usage.from_groq(_raw({}), "m", "stt")
-    assert seen["limit_requests"] is None and seen["remaining_requests"] is None
+    assert seen["limit_requests"] is None
+    assert seen["remaining_requests"] is None
 
 
 def test_recording_never_raises(monkeypatch):
@@ -127,7 +129,8 @@ def test_snapshot_survives_an_unreachable_store(monkeypatch):
 
     monkeypatch.setattr(logs, "usage_since", _boom)
     out = usage.snapshot()
-    assert out["providers"] == [] and out["error"]
+    assert out["providers"] == []
+    assert out["error"]
 
 
 def _boom(*a, **k):

@@ -219,6 +219,24 @@ def _worst(states: List[str]) -> str:
     return "inconnu"
 
 
+def _assess_whatsapp(entry: Dict[str, Any], label: str) -> Dict[str, Any]:
+    """Meta gives a ceiling but not our consumption against it, so there is no
+    ratio to state — the honest signals are the quality rating and whether the
+    call answered at all."""
+    if entry.get("error"):
+        return {"state": "inconnu",
+                "message": f"{label} : quota inconnu — {entry['error']}"}
+    sent = entry.get("sent_24h")
+    tier = entry.get("tier") or "inconnu"
+    if str(entry.get("quality") or "").upper() == "RED":
+        return {"state": "bas",
+                "message": (f"{label} : qualité du numéro dégradée (RED) — Meta réduit "
+                            f"le palier {tier}. {sent} message(s) envoyés en 24 h.")}
+    return {"state": "ok",
+            "message": (f"{label} : palier {tier} (plafond Meta), "
+                        f"{sent} message(s) envoyés en 24 h d'après nos journaux.")}
+
+
 def _assess(entry: Dict[str, Any]) -> Dict[str, Any]:
     """State + French sentence for one provider. Adds nothing it cannot measure."""
     label = {"groq": "Groq", "gemini": "Gemini", "whatsapp": "WhatsApp"}.get(
@@ -229,21 +247,7 @@ def _assess(entry: Dict[str, Any]) -> Dict[str, Any]:
               "documented": "plafond documenté, non confirmé par le fournisseur"}.get(source, "")
 
     if entry["provider"] == "whatsapp":
-        # Meta gives a ceiling but not our consumption against it, so there is
-        # no ratio to state — the honest signals are the quality rating and
-        # whether the call answered at all.
-        if entry.get("error"):
-            return {"state": "inconnu",
-                    "message": f"{label} : quota inconnu — {entry['error']}"}
-        sent = entry.get("sent_24h")
-        tier = entry.get("tier") or "inconnu"
-        if str(entry.get("quality") or "").upper() == "RED":
-            return {"state": "bas",
-                    "message": (f"{label} : qualité du numéro dégradée (RED) — Meta réduit "
-                                f"le palier {tier}. {sent} message(s) envoyés en 24 h.")}
-        return {"state": "ok",
-                "message": (f"{label} : palier {tier} (plafond Meta), "
-                            f"{sent} message(s) envoyés en 24 h d'après nos journaux.")}
+        return _assess_whatsapp(entry, label)
 
     req = _ratio_state(entry.get("remaining_requests"), entry.get("limit_requests"))
     tok = _ratio_state(entry.get("remaining_tokens"), entry.get("limit_tokens"))
@@ -256,10 +260,11 @@ def _assess(entry: Dict[str, Any]) -> Dict[str, Any]:
     state = _worst(known)
     # "jetons restants" / "requêtes restantes" — the agreement is part of the
     # sentence, and this string is printed to the operator as it stands.
-    unit, agreed = ("requêtes", "restantes") if req == state else ("jetons", "restants")
-    left = entry.get("remaining_requests") if unit == "requêtes" else entry.get("remaining_tokens")
-    ceiling = entry.get("limit_requests") if unit == "requêtes" else entry.get("limit_tokens")
-    reset = entry.get("reset_requests") if unit == "requêtes" else entry.get("reset_tokens")
+    is_req = req == state
+    unit, agreed = ("requêtes", "restantes") if is_req else ("jetons", "restants")
+    left = entry.get("remaining_requests" if is_req else "remaining_tokens")
+    ceiling = entry.get("limit_requests" if is_req else "limit_tokens")
+    reset = entry.get("reset_requests" if is_req else "reset_tokens")
     tail = f" Réinitialisation dans {reset}." if reset else ""
     if state == "epuise":
         head = (f"Quota {label} épuisé : plus aucune {unit[:-1]} disponible "

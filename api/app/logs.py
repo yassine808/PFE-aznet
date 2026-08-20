@@ -23,6 +23,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from app.config import settings
 
+# The two clause joiners every filtered SELECT in this module builds its
+# WHERE with. Named so the SQL reads the same everywhere; the strings
+# themselves must keep their surrounding spaces.
+_SQL_WHERE = " WHERE "
+_SQL_AND = " AND "
+
 # Stages a message walks through. Free-form strings are accepted (the API logs
 # its own errors with stage="api"), this list documents the happy path.
 STAGES = (
@@ -1127,7 +1133,7 @@ def read(
 
     sql = "SELECT * FROM pipeline_logs"
     if where:
-        sql += " WHERE " + " AND ".join(where)
+        sql += _SQL_WHERE + _SQL_AND.join(where)
     sql += " ORDER BY ts DESC, id DESC LIMIT %s"
     args.append(max(1, min(limit, 1000)))
 
@@ -1466,7 +1472,7 @@ def list_messages(
             args.append("%" + search + "%")
         sql = "SELECT id, channel, external_id, message_id, text, created_at FROM chat_messages"
         if where:
-            sql += " WHERE " + " AND ".join(where)
+            sql += _SQL_WHERE + _SQL_AND.join(where)
         sql += " ORDER BY created_at DESC LIMIT %s"
         args.append(max(1, min(limit, 500)))
         cur.execute(sql, args)
@@ -1688,9 +1694,12 @@ def pending_writes(limit: int = 20, include_retired: bool = False) -> List[dict]
         # holding what `attempts` already says is a column that can disagree
         # with it.
         attempts = r.get("attempts") or 0
-        r["status"] = ("queued" if attempts == 0
-                       else "retrying" if attempts < MAX_WRITE_ATTEMPTS
-                       else "abandoned")
+        if attempts == 0:
+            r["status"] = "queued"
+        elif attempts < MAX_WRITE_ATTEMPTS:
+            r["status"] = "retrying"
+        else:
+            r["status"] = "abandoned"
     return rows
 
 
@@ -3142,13 +3151,23 @@ def list_report_rows(dates: Optional[Sequence[str]] = None,
         params["chantier"] = chantier
     sql = "SELECT * FROM report_rows"
     if where:
-        sql += " WHERE " + " AND ".join(where)
+        sql += _SQL_WHERE + _SQL_AND.join(where)
     sql += " ORDER BY date, heure, id"
     with _cursor() as cur:
         cur.execute(sql, params)
         out = []
         for r in cur.fetchall():
             row = dict(r)
+            # Timestamps out as ISO strings, the rule every other reader here
+            # follows. `SELECT *` brings `created_at` back as a datetime, and
+            # `daily_report._payload` json.dumps these rows straight into the
+            # model prompt — so the report job died with "Object of type
+            # datetime is not JSON serializable" and sent no mail at all.
+            #
+            # It surfaced only on 2026-08-20 because this table was empty until
+            # the report_rows mirror was repaired that morning: the query
+            # returned [] for eleven days and never reached a datetime.
+            row = _iso(row)
             data = row.pop("data", None) or {}
             row.pop("id", None)
             out.append({**row, **data})
@@ -3275,7 +3294,7 @@ def _rekey_free_article(slug: str, designation: Optional[str]) -> int:
             "SELECT id, data -> 'articles_libres' AS libres FROM report_rows "
             "WHERE data ? 'articles_libres'"
         )
-        for r in list(cur.fetchall()):
+        for r in cur.fetchall():
             libres = dict((r.get("libres") or {}))
             hits = [k for k in libres if _slug_article(k) == slug]
             if not hits:

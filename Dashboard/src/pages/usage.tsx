@@ -59,11 +59,17 @@ function verdict(p: ProviderUsage): 'exhausted' | 'near' | null {
   return worst
 }
 
+function meterTone(value: number): string {
+  if (value >= 0.9) return 'bg-status-fail'
+  if (value >= 0.75) return 'bg-status-warn'
+  return 'bg-accent'
+}
+
 function Meter({ value }: { readonly value: number }) {
   // Colour by headroom, not by activity: a busy day is not a problem, a nearly
   // empty quota is. Amber at 75%, red at 90% — the point where the fallback
   // chain is about to start carrying traffic it was not meant to carry.
-  const tone = value >= 0.9 ? 'bg-status-fail' : value >= 0.75 ? 'bg-status-warn' : 'bg-accent'
+  const tone = meterTone(value)
   return (
     <span className="bg-line block h-1 w-full overflow-hidden rounded-full">
       <span

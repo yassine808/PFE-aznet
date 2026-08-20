@@ -135,7 +135,8 @@ def test_no_executions_at_all_is_stale(monkeypatch):
     """Never having run is the worst version of not listening, not the best."""
     _patch(monkeypatch, _FakeResponse(200, {"data": []}))
     body = client.get("/n8n/listening").json()
-    assert body["stale"] is True and body["age_seconds"] is None
+    assert body["stale"] is True
+    assert body["age_seconds"] is None
 
 
 def test_unreadable_timestamp_is_stale_not_healthy(monkeypatch):
@@ -153,4 +154,5 @@ def test_naive_timestamp_is_stale_not_a_500(monkeypatch):
     and a crash here would take the status line down with it."""
     _patch(monkeypatch, _FakeResponse(200, {"data": [{"stoppedAt": "2026-08-19T06:48:00"}]}))
     r = client.get("/n8n/listening")
-    assert r.status_code == 200 and r.json()["stale"] is True
+    assert r.status_code == 200
+    assert r.json()["stale"] is True

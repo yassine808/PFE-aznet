@@ -216,7 +216,11 @@ function ReportBody({ corps }: { readonly corps: string }) {
         if (!line.trim()) return <span key={key} className="h-2" />
         // `[ \t]` rather than `\s`: the lines are already split on newlines, and
         // a `\s` that can match one makes the engine backtrack for nothing.
-        const heading = /^#{1,6}[ \t]+(.*)$/.exec(line)
+        // The capture is `([^ \t].*)?` rather than `(.*)`: those two can both
+        // match the same run of spaces, and that ambiguity is what lets the
+        // engine backtrack super-linearly. The same strings match — the greedy
+        // `[ \t]+` has already eaten every space before the group starts.
+        const heading = /^#{1,6}[ \t]+([^ \t].*)?$/.exec(line)
         if (heading) {
           return (
             <h3
@@ -227,7 +231,7 @@ function ReportBody({ corps }: { readonly corps: string }) {
             </h3>
           )
         }
-        const bullet = /^[ \t]*[-*•][ \t]+(.*)$/.exec(line)
+        const bullet = /^[ \t]*[-*•][ \t]+([^ \t].*)?$/.exec(line)
         if (bullet) {
           return (
             <p key={key} className="text-ink flex gap-2.5 text-sm leading-relaxed">

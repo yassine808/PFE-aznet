@@ -332,7 +332,8 @@ function IncomingBubble({
   const [fallback, setFallback] = useState(false)
   const [dead, setDead] = useState(false)
   const primary = audioSrc(r.lien_audio, r._row)
-  const src = dead ? null : fallback ? audioByRow(r._row) : primary
+  const source = fallback ? audioByRow(r._row) : primary
+  const src = dead ? null : source
   const voice = src !== null
 
   return (
@@ -393,6 +394,26 @@ function IncomingBubble({
  * the media blob in Postgres is the only copy, so the audio plays straight
  * from it, and the transcript is whatever shape the message took.
  */
+/**
+ * Which of the three shapes a message is, as one value.
+ *
+ * The icon and the label used to be two nested ternaries reading the same two
+ * booleans, so they could drift apart; one name keeps them honest and keeps the
+ * locale key (`inbox.photo` / `inbox.audio` / `inbox.text`) next to its icon.
+ */
+type MessageKind = 'photo' | 'audio' | 'text'
+
+const KIND_ICONS = {
+  photo: ImageIcon,
+  audio: SpeakerHighIcon,
+  text: TextAlignLeftIcon,
+} as const
+
+function messageKind(photo: boolean, voice: boolean): MessageKind {
+  if (photo) return 'photo'
+  return voice ? 'audio' : 'text'
+}
+
 function ExchangeIncoming({
   r,
   address,
@@ -412,6 +433,8 @@ function ExchangeIncoming({
   */
   const photo = (r.kind ?? '').trim().toLowerCase() === 'image'
   const voice = src !== null && !photo
+  const kind = messageKind(photo, voice)
+  const KindIcon = KIND_ICONS[kind]
 
   return (
     <div className="flex justify-start">
@@ -420,14 +443,8 @@ function ExchangeIncoming({
           <ChannelIcon channel={(r.canal ?? '').trim().toLowerCase()} size={12} />
           {address && <span className="tabular select-all">{address}</span>}
           <span className="flex items-center gap-1">
-            {photo ? (
-              <ImageIcon size={11} />
-            ) : voice ? (
-              <SpeakerHighIcon size={11} />
-            ) : (
-              <TextAlignLeftIcon size={11} />
-            )}
-            {photo ? t('inbox.photo') : voice ? t('inbox.audio') : t('inbox.text')}
+            <KindIcon size={11} />
+            {t(`inbox.${kind}`)}
           </span>
         </div>
 
@@ -921,7 +938,8 @@ export function InboxPage({
     return [...reports_, ...exchanges_].sort((a, b) => {
       const ka = `${toISODate(a.date) ?? ''} ${a.heure ?? ''}`
       const kb = `${toISODate(b.date) ?? ''} ${b.heure ?? ''}`
-      return kb < ka ? -1 : kb > ka ? 1 : 0
+      if (kb < ka) return -1
+      return kb > ka ? 1 : 0
     })
   }, [reports.data, exchanges.data])
 
@@ -974,10 +992,7 @@ export function InboxPage({
           // The last thing said, the way a conversation list shows it — far
           // more use than a raw count when picking who to open. An exchange
           // has no summary, so its own last line stands in.
-          preview: ('reply' in r
-            ? r.reply || r.text || ''
-            : r.resume || r.Message || ''
-          ).trim(),
+          preview: ('reply' in r ? r.reply || r.text || '' : r.resume || r.Message || '').trim(),
           channels: new Set(),
         }
         byName.set(name, p)

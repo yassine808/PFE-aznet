@@ -137,9 +137,11 @@ def test_a_site_running_low_is_reported_with_its_provenance(site):
     alert = next(a for a in found if a["champ"] == "cables_installes_m")
     assert alert["niveau"] == "critique"
     assert alert["reste"] == 160.0
-    assert alert["article"] == "Câble installé" and alert["unite"] == "m"
+    assert alert["article"] == "Câble installé"
+    assert alert["unite"] == "m"
     assert "stock relevé" in alert["source"]
-    assert "CRITIQUE" in stock.line(alert) and "160 m" in stock.line(alert)
+    assert "CRITIQUE" in stock.line(alert)
+    assert "160 m" in stock.line(alert)
 
 
 def test_over_the_contract_is_its_own_finding(site):

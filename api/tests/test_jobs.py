@@ -98,7 +98,8 @@ def test_drain_pauses_on_quota_and_spends_no_attempt(monkeypatch):
 
     out = jobs.drain_sheet_queue()
 
-    assert out["written"] == 0 and out["failed"][0]["quota"] is True
+    assert out["written"] == 0
+    assert out["failed"][0]["quota"] is True
     assert len(tried) == 1  # the batch stops at the first refusal, not per row
     assert resolved == [(7, False, {"count_attempt": False})]
     assert out["paused_until"] > time.time()
@@ -108,7 +109,8 @@ def test_drain_pauses_on_quota_and_spends_no_attempt(monkeypatch):
     monkeypatch.setattr(jobs.logs, "pending_writes",
                         lambda n: pytest.fail("must not read the queue while paused"))
     again = jobs.drain_sheet_queue()
-    assert again["written"] == 0 and again["paused_until"] > time.time()
+    assert again["written"] == 0
+    assert again["paused_until"] > time.time()
 
 
 def test_drain_resumes_once_the_window_passes(monkeypatch):
@@ -209,7 +211,8 @@ def test_run_refuses_to_overlap_a_still_running_job(monkeypatch):
     monkeypatch.setitem(jobs._TIMEOUT_SECONDS, "slow", 0.05)
 
     first = jobs.run("slow")
-    assert first["ok"] is False and "timed out" in first["error"]
+    assert first["ok"] is False
+    assert "timed out" in first["error"]
 
     second = jobs.run("slow")
     assert second["ok"] is False
@@ -218,7 +221,8 @@ def test_run_refuses_to_overlap_a_still_running_job(monkeypatch):
 
     time.sleep(0.5)  # the first worker finishes now...
     third = jobs.run("slow")
-    assert third["ok"] is False and "timed out" in third["error"]
+    assert third["ok"] is False
+    assert "timed out" in third["error"]
     assert calls == [1, 2]  # ...so the next fire runs again
 
 

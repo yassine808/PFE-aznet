@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   ArrowsClockwiseIcon,
@@ -479,6 +479,35 @@ function Chart({
 
 const DRAG_TYPE = 'application/x-aznet-person'
 
+/**
+ * The two native handlers that make a box accept a drop, or nothing when it
+ * cannot take one. Lifted out of the JSX: inline they were two conditional
+ * expressions wrapping two bodies, which is most of what made `Box` unreadable.
+ */
+function dropHandlers(
+  enabled: boolean,
+  personId: number,
+  onMove: (personId: number, managerId: number | null) => void,
+  setOver: (over: boolean) => void,
+) {
+  if (!enabled) return {}
+  return {
+    // preventDefault is what marks this a valid drop target; without it the
+    // browser refuses the drop and nothing happens.
+    onDragOver: (e: DragEvent) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setOver(true)
+    },
+    onDrop: (e: DragEvent) => {
+      e.preventDefault()
+      setOver(false)
+      const dragged = Number(e.dataTransfer.getData(DRAG_TYPE))
+      if (dragged && dragged !== personId) onMove(dragged, personId)
+    },
+  }
+}
+
 /** Border of a drop target: hovered wins over selected, both beat the default. */
 function dropBorder(over: boolean, selected: boolean): string {
   if (over) return 'border-accent ring-accent ring-2'
@@ -570,28 +599,8 @@ function Box({
           setTimeout(() => setLifting(true), 0)
         }}
         onDragEnd={() => setLifting(false)}
-        onDragOver={
-          canEdit && dropTarget
-            ? (e) => {
-                // preventDefault is what marks this a valid drop target; without
-                // it the browser refuses the drop and nothing happens.
-                e.preventDefault()
-                e.dataTransfer.dropEffect = 'move'
-                setOver(true)
-              }
-            : undefined
-        }
+        {...dropHandlers(Boolean(canEdit && dropTarget), person.id, onMove, setOver)}
         onDragLeave={() => setOver(false)}
-        onDrop={
-          canEdit && dropTarget
-            ? (e) => {
-                e.preventDefault()
-                setOver(false)
-                const dragged = Number(e.dataTransfer.getData(DRAG_TYPE))
-                if (dragged && dragged !== person.id) onMove(dragged, person.id)
-              }
-            : undefined
-        }
         // Only the hovered target lights up — never every valid chef at once.
         // DESIGN.md's Ten Percent Rule: two accented things on screen means one
         // of them is wrong, and a whole row of accent rings finds nothing.
@@ -1310,6 +1319,8 @@ function WorkerStats({ name }: { readonly name: string }) {
     [reports.data, name],
   )
 
+  const pending = reports.loading && !reports.data
+
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-ink-faint text-[0.6875rem] tracking-wide uppercase">
@@ -1318,11 +1329,11 @@ function WorkerStats({ name }: { readonly name: string }) {
       {/* Rows still in flight look exactly like a technician who never sent
           anything, and the page used to state the second. The skeleton carries
           the height of the table it replaces, so nothing moves when it lands. */}
-      {reports.loading && !reports.data ? (
-        <Skeleton className="h-56" />
-      ) : stats.count === 0 ? (
+      {pending && <Skeleton className="h-56" />}
+      {!pending && stats.count === 0 && (
         <p className="text-ink-faint text-xs italic">{t('equipe.noActivity')}</p>
-      ) : (
+      )}
+      {!pending && stats.count > 0 && (
         <>
           <ul className="divide-line flex flex-col divide-y">
             <Row label={t('equipe.messages')} value={stats.count} />

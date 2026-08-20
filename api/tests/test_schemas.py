@@ -176,7 +176,9 @@ def test_process_response_voice_mode():
 def test_null_string_in_a_list_field_is_absence():
     r = ExtractedReport(resume="x", etages="null", ailes="null",
                         locaux_techniques="none")
-    assert r.etages is None and r.ailes is None and r.locaux_techniques is None
+    assert r.etages is None
+    assert r.ailes is None
+    assert r.locaux_techniques is None
 
 
 def test_null_string_inside_a_list_is_dropped():

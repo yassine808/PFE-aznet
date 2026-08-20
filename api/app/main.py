@@ -419,7 +419,7 @@ def _stt_chain() -> str:
     """
     try:
         stored = (logs.get_settings() or {}).get("stt_chain")
-    except Exception:  # noqa: BLE001 — Postgres down must not stop transcription
+    except Exception:  # noqa: BLE001  # Postgres down must not stop transcription
         stored = None
     return stored if isinstance(stored, str) and stored.strip() else settings.stt_chain
 
@@ -593,7 +593,7 @@ async def _resolve_chantier(report, technicien: Optional[str]):
         nom, _tab, _warnings, source = await run_in_threadpool(
             journal.resolve_site, technicien, report.chantier_mentionne, False
         )
-    except Exception:  # noqa: BLE001 - a routing hint must never cost the reply
+    except Exception:  # noqa: BLE001  # a routing hint must never cost the reply
         return None, None
     return nom, source
 
@@ -662,7 +662,16 @@ def _queue_bypass(request: Request) -> bool:
     return request.headers.get(QUEUE_BYPASS_HEADER) == "1"
 
 
-async def _park(reason: str, audio, image, text, caption, provider,
+def _input_kind(audio, image) -> str:
+    """Which of the three shapes this message is, for the queue row."""
+    if audio is not None:
+        return "audio"
+    if image is not None:
+        return "image"
+    return "text"
+
+
+async def _park(reason: str, audio, image, text, caption,
                 correlation_id, channel, technicien, message_id, ctx,
                 detail: str = "") -> JSONResponse:
     """Queue this message for retry and answer 202, instead of failing it.
@@ -678,7 +687,7 @@ async def _park(reason: str, audio, image, text, caption, provider,
     """
     media_id = ctx.get("_media_id")
     item = _queue_item(
-        "audio" if audio is not None else "image" if image is not None else "text",
+        _input_kind(audio, image),
         correlation_id=correlation_id, technicien=technicien, channel=channel,
         message_id=message_id,
         text_input=text if isinstance(text, str) else None,
@@ -738,7 +747,7 @@ def _chat_id_for(technicien: Optional[str], channel: Optional[str]) -> str:
     """
     try:
         person = logs.person_by_name(technicien) if technicien else None
-    except Exception:  # noqa: BLE001 - a reaction must never break the path
+    except Exception:  # noqa: BLE001  # a reaction must never break the path
         return ""
     for ident in (person or {}).get("identities", []):
         if ident.get("channel") == channel and ident.get("active", True):
@@ -753,6 +762,59 @@ def _queue_item(kind: str, *, correlation_id, technicien, channel, message_id,
             "channel": channel, "message_id": message_id, "text_input": text_input,
             "caption": caption, "media_id": media_id, "mime": mime,
             "sent_date": sent_date, "sent_heure": sent_heure}
+
+
+async def _require_single_input(audio, image, text, ctx: dict) -> None:
+    """422 unless exactly one of audio / image / text was sent."""
+    provided = [name for name, value in (("audio", audio), ("image", image), ("text", text))
+                if value is not None]
+    if len(provided) == 1:
+        return
+    detail = f"Provide exactly one of 'audio', 'image' or 'text' (got: {provided or 'none'})"
+    await _log("api", "error", message=detail, **ctx)
+    raise HTTPException(422, detail)
+
+
+async def _blocking_message(request, technicien, correlation_id) -> Optional[str]:
+    """The correlation id this sender already has stuck in the queue, if any.
+
+    The ordering gate. A message whose sender already has one parked joins it
+    behind that one instead of being processed now — otherwise message 2 is
+    filed before message 1 the moment message 1 fails, and the journal records
+    the technician's day out of order. Checked here, in the one place every
+    message passes through, rather than in n8n: the retry job comes through the
+    same door and must obey the same rule.
+    `_queue_bypass` is how the retry job says "I *am* the head of that queue".
+    """
+    if request is None or _queue_bypass(request) or not settings.database_url:
+        return None
+    try:
+        blocked = await run_in_threadpool(logs.blocked_technician, technicien)
+    except logs.LogStoreError:
+        return None  # no store, no ordering to enforce — never fail closed
+    if blocked and blocked.get("correlation_id") != correlation_id:
+        return blocked["correlation_id"]
+    return None
+
+
+async def _route_report(report, technicien, rapport_complet, warnings, ctx) -> tuple:
+    """Site this report belongs to, and the bell that goes with it.
+
+    "salut" extracts to an all-null report. Without this the pipeline appends
+    an empty Sheet row and answers "✅ Rapport enregistré" for a greeting —
+    and nothing was extracted, so there is nothing to route: naming a site on
+    a message that filed no report would read as "filed to X".
+    """
+    if not report.has_data():
+        warnings.append("no_report_content")
+        return None, None
+    chantier, chantier_source = await _resolve_chantier(report, technicien)
+    # psycopg2 is synchronous, like every other DB call on this path: run it
+    # off the event loop so one technician's notification does not stall
+    # every other request in flight. Same reason as _log() above.
+    await run_in_threadpool(_notify_report_event, technicien,
+                            rapport_complet, warnings, ctx)
+    return chantier, chantier_source
 
 
 @app.post("/process", responses={422: {"description": "Invalid input"}, 502: {"description": "Upstream service error"}})
@@ -782,11 +844,7 @@ async def process(
     except logs.LogStoreError:
         sender_profile = None
 
-    provided = [name for name, value in (("audio", audio), ("image", image), ("text", text)) if value is not None]
-    if len(provided) != 1:
-        detail = f"Provide exactly one of 'audio', 'image' or 'text' (got: {provided or 'none'})"
-        await _log("api", "error", message=detail, **ctx)
-        raise HTTPException(422, detail)
+    await _require_single_input(audio, image, text, ctx)
 
     # A caption is auxiliary: it never satisfies the "exactly one input" rule,
     # but once an input exists it rides along as part of the message. Telegram
@@ -795,24 +853,12 @@ async def process(
 
     lien_audio = None  # set only by the audio branch (Drive upload)
 
-    # The ordering gate. A message whose sender already has one stuck in the
-    # queue joins it behind that one instead of being processed now — otherwise
-    # message 2 is filed before message 1 the moment message 1 fails, and the
-    # journal records the technician's day out of order. Checked here, in the
-    # one place every message passes through, rather than in n8n: the retry job
-    # comes through the same door and must obey the same rule.
-    # `_queue_bypass` is how the retry job says "I *am* the head of that queue".
-    blocked = None
-    if request is not None and not _queue_bypass(request) and settings.database_url:
-        try:
-            blocked = await run_in_threadpool(logs.blocked_technician, technicien)
-        except logs.LogStoreError:
-            blocked = None  # no store, no ordering to enforce — never fail closed
-    if blocked and blocked.get("correlation_id") != correlation_id:
+    ahead = await _blocking_message(request, technicien, correlation_id)
+    if ahead:
         return await _park(
-            "blocked", audio, image, text, caption, provider, correlation_id,
+            "blocked", audio, image, text, caption, correlation_id,
             channel, technicien, message_id, ctx,
-            detail=f"en attente derrière {blocked['correlation_id']}",
+            detail=f"en attente derrière {ahead}",
         )
 
     if audio is not None:
@@ -823,7 +869,7 @@ async def process(
         except HTTPException as exc:
             if exc.status_code != 502:
                 raise  # 422 is malformed input: it will never succeed, do not queue
-            return await _park("stt", audio, image, text, caption, provider,
+            return await _park("stt", audio, image, text, caption,
                                correlation_id, channel, technicien, message_id, ctx,
                                detail=str(exc.detail))
     elif image is not None:
@@ -851,23 +897,11 @@ async def process(
         # _park re-raises this as the 502 it replaces, so the wording is still
         # part of the endpoint's contract.
         return await _park("extraction", None, None, rapport_complet, caption,
-                           provider, correlation_id, channel, technicien,
+                           correlation_id, channel, technicien,
                            message_id, ctx, detail=f"extraction failed: {exc}")
 
-    # "salut" extracts to an all-null report. Without this the pipeline appends
-    # an empty Sheet row and answers "✅ Rapport enregistré" for a greeting.
-    if not report.has_data():
-        warnings.append("no_report_content")
-        # Nothing was extracted, so there is nothing to route: naming a site on
-        # a message that filed no report would read as "filed to X".
-        chantier, chantier_source = None, None
-    else:
-        chantier, chantier_source = await _resolve_chantier(report, technicien)
-        # psycopg2 is synchronous, like every other DB call on this path: run it
-        # off the event loop so one technician's notification does not stall
-        # every other request in flight. Same reason as _log() above.
-        await run_in_threadpool(_notify_report_event, technicien,
-                                rapport_complet, warnings, ctx)
+    chantier, chantier_source = await _route_report(
+        report, technicien, rapport_complet, warnings, ctx)
 
     await _log(
         "extracted", "info", message="ok",
@@ -975,7 +1009,7 @@ def list_reports(caller: dict = Depends(auth.require_human)) -> dict:
                     renames.get(field, field),
                     ", ".join(str(v) for v in value) if isinstance(value, list) else value,
                 )
-    except Exception as exc:  # noqa: BLE001 — figures are a bonus, the feed is not
+    except Exception as exc:  # noqa: BLE001  # figures are a bonus, the feed is not
         logs.write_safe("api", "error", message=f"/reports figure merge failed: {exc}")
     return {"reports": rows}
 
@@ -1450,7 +1484,10 @@ class JournalEntry(BaseModel):
     )
 
 
-@app.post("/journal", responses={502: {"description": "Sheets unreachable"}})
+@app.post("/journal", responses={
+    422: {"description": "Charge utile du journal invalide"},
+    502: {"description": "Sheets unreachable"},
+})
 async def file_journal_entry(
     entry: JournalEntry, caller: dict = Depends(auth.require_user)
 ) -> dict:
@@ -1500,6 +1537,31 @@ async def file_journal_entry(
 # ── Audio playback ─────────────────────────────────────────────────────────
 
 
+def _sniff_mime(data: bytes) -> str:
+    """The real content type, read from the magic bytes."""
+    if data[:4] == b"OggS":
+        return "audio/ogg"
+    if data[:3] == b"ID3" or data[:2] == b"\xff\xfb":
+        return "audio/mpeg"
+    if data[4:8] == b"ftyp":
+        return "audio/mp4"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    return "audio/mpeg"
+
+
+def _range_bounds(match, total: int) -> tuple:
+    """First and last byte a `Range:` header asks for."""
+    if match.group(1):
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else total - 1
+        return start, end
+    # `bytes=-N` is the *last* N bytes, not "from N".
+    return max(0, total - int(match.group(2))), total - 1
+
+
 def _media_response(data: bytes, mime: str, request: Request,
                     filename: Optional[str] = None) -> Response:
     """Bytes a media element can actually play, Range included.
@@ -1518,18 +1580,7 @@ def _media_response(data: bytes, mime: str, request: Request,
     """
     total = len(data)
     if not mime.startswith(("audio/", "image/")):
-        if data[:4] == b"OggS":
-            mime = "audio/ogg"
-        elif data[:3] == b"ID3" or data[:2] == b"\xff\xfb":
-            mime = "audio/mpeg"
-        elif data[4:8] == b"ftyp":
-            mime = "audio/mp4"
-        elif data[:8] == b"\x89PNG\r\n\x1a\n":
-            mime = "image/png"
-        elif data[:2] == b"\xff\xd8":
-            mime = "image/jpeg"
-        else:
-            mime = "audio/mpeg"
+        mime = _sniff_mime(data)
 
     headers = {"accept-ranges": "bytes", "cache-control": "private, max-age=3600"}
     if filename:
@@ -1538,13 +1589,7 @@ def _media_response(data: bytes, mime: str, request: Request,
     rng = request.headers.get("range", "")
     match = re.fullmatch(r"bytes=(\d*)-(\d*)", rng.strip()) if rng else None
     if match and (match.group(1) or match.group(2)):
-        if match.group(1):
-            start = int(match.group(1))
-            end = int(match.group(2)) if match.group(2) else total - 1
-        else:
-            # `bytes=-N` is the *last* N bytes, not "from N".
-            start = max(0, total - int(match.group(2)))
-            end = total - 1
+        start, end = _range_bounds(match, total)
         if start >= total:
             # 416 must advertise the real length or the player retries forever.
             return Response(
@@ -1558,7 +1603,10 @@ def _media_response(data: bytes, mime: str, request: Request,
     return Response(data, media_type=mime, headers=headers)
 
 
-@app.get("/audio/row/{rapports_row}", responses={404: {"description": "No audio archived"}})
+@app.get("/audio/row/{rapports_row}", responses={
+    404: {"description": "No audio archived"},
+    502: {"description": "Log store unreachable"},
+})
 async def stream_audio_for_row(
     rapports_row: int, request: Request, caller: dict = Depends(auth.require_user)
 ) -> Response:
@@ -2519,7 +2567,7 @@ def stt_status(days: int = 7, caller: dict = Depends(auth.require_human)) -> dic
     try:
         usage = logs.stt_usage(days)
         usage["error"] = None
-    except Exception as exc:  # noqa: BLE001 — the panel must render without Postgres
+    except Exception as exc:  # noqa: BLE001  # the panel must render without Postgres
         usage = {"engines": [], "days": days, "error": str(exc)}
 
     local_state = "not_configured" if not settings.stt_local_url else "unknown"

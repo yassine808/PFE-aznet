@@ -21,6 +21,13 @@ import { cn } from '@/lib/utils'
  * stuck, force a pass without waiting, and drop a dead letter that will never
  * succeed.
  */
+/** Border and text colour of a status pill. Only the two bad states are coloured. */
+function statusTone(status: string): string {
+  if (status === 'abandoned') return 'border-status-fail/40 text-status-fail'
+  if (status === 'retrying') return 'border-status-warn/40 text-status-warn'
+  return 'border-line text-ink-faint'
+}
+
 export function QueuePage() {
   const list = useApi('sheet-queue', api.queue)
   const msgs = useApi('message-queue', api.messageQueue)
@@ -148,11 +155,7 @@ export function QueuePage() {
                   <span
                     className={cn(
                       'rounded-full border px-2 py-0.5 text-[0.625rem]',
-                      m.status === 'abandoned'
-                        ? 'border-status-fail/40 text-status-fail'
-                        : m.status === 'retrying'
-                          ? 'border-status-warn/40 text-status-warn'
-                          : 'border-line text-ink-faint',
+                      statusTone(m.status),
                     )}
                   >
                     {t(`queue.status.${m.status}`)}
@@ -200,7 +203,11 @@ export function QueuePage() {
             busy !== null && 'cursor-not-allowed opacity-50',
           )}
         >
-          <ArrowClockwiseIcon size={13} weight="bold" className={busy === 'job' ? 'animate-spin' : ''} />
+          <ArrowClockwiseIcon
+            size={13}
+            weight="bold"
+            className={busy === 'job' ? 'animate-spin' : ''}
+          />
           {t('queue.runNow')}
         </button>
       </div>
@@ -241,11 +248,7 @@ export function QueuePage() {
                   <span
                     className={cn(
                       'rounded-full border px-2 py-0.5 text-[0.625rem]',
-                      item.status === 'abandoned'
-                        ? 'border-status-fail/40 text-status-fail'
-                        : item.status === 'retrying'
-                          ? 'border-status-warn/40 text-status-warn'
-                          : 'border-line text-ink-faint',
+                      statusTone(item.status),
                     )}
                   >
                     {t(`queue.status.${item.status}`)}

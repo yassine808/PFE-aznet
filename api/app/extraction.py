@@ -111,6 +111,34 @@ def _caption_block(caption: Optional[str]) -> str:
     )
 
 
+def _inline_refs(node, defs: dict, seen: tuple = ()):
+    """Replace every `$ref` with the definition it names."""
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            name = ref.split("/")[-1]
+            # A model that refers to itself would recurse forever; Gemini
+            # has no way to express that anyway, so it degrades to a plain
+            # object rather than hanging the request.
+            if name in seen or name not in defs:
+                return {"type": "object"}
+            return _inline_refs(defs[name], defs, seen + (name,))
+        return {k: _inline_refs(v, defs, seen) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_inline_refs(v, defs, seen) for v in node]
+    return node
+
+
+def _strip_unsupported(node):
+    """Drop the JSON Schema keywords Gemini's `response_schema` rejects."""
+    if isinstance(node, dict):
+        return {k: _strip_unsupported(v) for k, v in node.items()
+                if k not in ("additionalProperties", "$defs")}
+    if isinstance(node, list):
+        return [_strip_unsupported(v) for v in node]
+    return node
+
+
 @lru_cache(maxsize=1)
 def _gemini_schema() -> dict:
     """`ExtractedReport` as a JSON schema Gemini will actually accept.
@@ -146,34 +174,7 @@ def _gemini_schema() -> dict:
     that — every field was a scalar — so the omission had never once mattered.
     """
     schema = ExtractedReport.model_json_schema()
-    defs = schema.get("$defs", {})
-
-    def inline(node, seen=()):
-        """Replace every `$ref` with the definition it names."""
-        if isinstance(node, dict):
-            ref = node.get("$ref")
-            if isinstance(ref, str) and ref.startswith("#/$defs/"):
-                name = ref.split("/")[-1]
-                # A model that refers to itself would recurse forever; Gemini
-                # has no way to express that anyway, so it degrades to a plain
-                # object rather than hanging the request.
-                if name in seen or name not in defs:
-                    return {"type": "object"}
-                return inline(defs[name], seen + (name,))
-            return {k: inline(v, seen) for k, v in node.items()}
-        if isinstance(node, list):
-            return [inline(v, seen) for v in node]
-        return node
-
-    def strip(node):
-        if isinstance(node, dict):
-            return {k: strip(v) for k, v in node.items()
-                    if k not in ("additionalProperties", "$defs")}
-        if isinstance(node, list):
-            return [strip(v) for v in node]
-        return node
-
-    return strip(inline(schema))
+    return _strip_unsupported(_inline_refs(schema, schema.get("$defs", {})))
 
 
 def _call_gemini(

@@ -69,7 +69,8 @@ function Band({
 const num = (v: number | null | undefined, unit?: string) => {
   const n = v == null ? null : Number(v)
   if (n == null || Number.isNaN(n)) return '—'
-  return `${Number.isInteger(n) ? n : n.toFixed(1)}${unit ? ` ${unit}` : ''}`
+  const suffix = unit ? ` ${unit}` : ''
+  return `${Number.isInteger(n) ? n : n.toFixed(1)}${suffix}`
 }
 
 /**

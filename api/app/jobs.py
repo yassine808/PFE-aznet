@@ -121,50 +121,59 @@ def drain_sheet_queue() -> dict:
     written, failed = 0, []
     paused = None
     for item in pending:
-        payload = item.get("payload") or {}
-        try:
-            # Through `journal.file_report`, not a raw append: a parked row
-            # whose day already has a row on the sheet must merge into it, or
-            # the retry would create the duplicate the live path avoided.
-            filed = journal.file_report(payload)
-            appended_mirror = filed.get("rapports_row")
-        except sheets.SheetsError as exc:
-            if _QUOTA_SIGNS.search(str(exc)):
-                # The whole batch is behind the same ceiling: stop here, record
-                # the error without spending an attempt, and let the window pass.
-                _paused_until = paused = time.time() + QUOTA_PAUSE_SECONDS
-                logs.resolve_write(item["id"], False, str(exc), count_attempt=False)
-                failed.append({"id": item["id"], "error": str(exc), "quota": True})
-                logs.write_safe(
-                    "sheet", "warn",
-                    message=f"drain paused {QUOTA_PAUSE_SECONDS}s on quota: {exc}"[:400],
-                    correlation_id=item.get("correlation_id"),
-                )
-                break
-            # Left in the queue with the attempt counted, not dropped.
-            logs.resolve_write(item["id"], False, str(exc))
-            failed.append({"id": item["id"], "error": str(exc)})
+        outcome, info = _drain_one(item)
+        if outcome == "written":
+            written += 1
             continue
-        except Exception as exc:  # noqa: BLE001
-            # A payload the schema cannot parse will never parse: retrying it
-            # forever blocks the batch behind it, so it is resolved as failed
-            # and stays visible in the dashboard instead of stalling the drain.
-            logs.resolve_write(item["id"], False, f"unprocessable: {exc}", retry=False)
-            failed.append({"id": item["id"], "error": f"unprocessable: {exc}"})
-            continue
-        logs.resolve_write(item["id"], True)
-        # Link the parked message to the Rapports row it mirrored to, so the
-        # dashboard can still play its voice note even when the happy path's
-        # write is the one that failed.
-        message_id = payload.get("message_id")
-        if message_id and appended_mirror:
-            try:
-                logs.link_message_row(message_id, appended_mirror)
-            except logs.LogStoreError:
-                pass  # best-effort like the append itself
-        written += 1
+        failed.append(info)
+        if outcome == "quota":
+            # The whole batch is behind the same ceiling: stop here and let the
+            # window pass.
+            _paused_until = paused = time.time() + QUOTA_PAUSE_SECONDS
+            break
     return {"pending": len(pending), "written": written, "failed": failed,
             **({"paused_until": paused} if paused else {})}
+
+
+def _drain_one(item: dict) -> tuple:
+    """File one parked row. Returns ("written"|"failed"|"quota", failure info)."""
+    payload = item.get("payload") or {}
+    try:
+        # Through `journal.file_report`, not a raw append: a parked row
+        # whose day already has a row on the sheet must merge into it, or
+        # the retry would create the duplicate the live path avoided.
+        filed = journal.file_report(payload)
+    except sheets.SheetsError as exc:
+        if _QUOTA_SIGNS.search(str(exc)):
+            # Recorded without spending an attempt: nothing about this row failed.
+            logs.resolve_write(item["id"], False, str(exc), count_attempt=False)
+            logs.write_safe(
+                "sheet", "warn",
+                message=f"drain paused {QUOTA_PAUSE_SECONDS}s on quota: {exc}"[:400],
+                correlation_id=item.get("correlation_id"),
+            )
+            return "quota", {"id": item["id"], "error": str(exc), "quota": True}
+        # Left in the queue with the attempt counted, not dropped.
+        logs.resolve_write(item["id"], False, str(exc))
+        return "failed", {"id": item["id"], "error": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        # A payload the schema cannot parse will never parse: retrying it
+        # forever blocks the batch behind it, so it is resolved as failed
+        # and stays visible in the dashboard instead of stalling the drain.
+        logs.resolve_write(item["id"], False, f"unprocessable: {exc}", retry=False)
+        return "failed", {"id": item["id"], "error": f"unprocessable: {exc}"}
+    logs.resolve_write(item["id"], True)
+    # Link the parked message to the Rapports row it mirrored to, so the
+    # dashboard can still play its voice note even when the happy path's
+    # write is the one that failed.
+    message_id = payload.get("message_id")
+    appended_mirror = filed.get("rapports_row")
+    if message_id and appended_mirror:
+        try:
+            logs.link_message_row(message_id, appended_mirror)
+        except logs.LogStoreError:
+            pass  # best-effort like the append itself
+    return "written", None
 
 
 # -- Message retry queue ----------------------------------------------------
@@ -195,7 +204,7 @@ def _chat_of(item: dict) -> str:
     """The technician's address on the channel the message came in on."""
     try:
         person = logs.person_by_name(item.get("technicien") or "")
-    except Exception:  # noqa: BLE001 - a reaction never breaks the job
+    except Exception:  # noqa: BLE001  # a reaction never breaks the job
         return ""
     for ident in (person or {}).get("identities", []):
         if ident.get("channel") == item.get("channel") and ident.get("active", True):
@@ -225,12 +234,10 @@ def _replay(item: dict):
     if item.get("kind") == "text":
         data["text"] = item.get("text_input") or ""
     else:
-        blob = logs.get_media(item["media_id"]) if item.get("media_id") else None
-        if not blob or not blob.get("data"):
+        files = _replay_media(item)
+        if files is None:
             # Nothing left to replay, and no later attempt can change that.
             return False, "media absent - rien a rejouer", False
-        files = {"audio": ("queued-%s.ogg" % item["id"], bytes(blob["data"]),
-                           item.get("mime") or DEFAULT_QUEUE_MIME)}
     try:
         res = requests.post(
             base + "/process", data=data, files=files,
@@ -240,6 +247,20 @@ def _replay(item: dict):
         )
     except requests.RequestException as exc:
         return False, "API injoignable: %s" % exc, False
+    return _replay_outcome(res)
+
+
+def _replay_media(item: dict):
+    """The archived blob as a `requests` files mapping, or None if it is gone."""
+    blob = logs.get_media(item["media_id"]) if item.get("media_id") else None
+    if not blob or not blob.get("data"):
+        return None
+    return {"audio": ("queued-%s.ogg" % item["id"], bytes(blob["data"]),
+                      item.get("mime") or DEFAULT_QUEUE_MIME)}
+
+
+def _replay_outcome(res):
+    """Read one /process answer as (ok, detail, was_quota)."""
     if res.status_code == 202:
         # Parked again -- by the gate, or by another failure. A failed try.
         try:
@@ -280,7 +301,7 @@ def _notify_quota(item: dict) -> None:
             [{"channel": item.get("channel"), "external_id": chat}],
             reply.QUOTA_MESSAGE,
         )
-    except Exception:  # noqa: BLE001 - best effort, never costs the job
+    except Exception:  # noqa: BLE001  # best effort, never costs the job
         pass
 
 
@@ -925,40 +946,48 @@ def _hhmm(raw: Optional[str], fallback: tuple) -> tuple:
 def _settings_safe() -> dict:
     try:
         return logs.get_settings()
-    except Exception:  # noqa: BLE001 — DB down must not blank the panel
+    except Exception:  # noqa: BLE001  # DB down must not blank the panel
         return {}
 
 
 # ── The loop ───────────────────────────────────────────────────────────────
 
 
+#: Jobs that simply run every so often, and how often.
+_INTERVALS = {
+    "message_queue": timedelta(seconds=MESSAGE_RETRY_SECONDS),
+    "sheet_queue": timedelta(minutes=DRAIN_INTERVAL_MINUTES),
+    "refill_articles": timedelta(hours=1),
+    "reminders": timedelta(seconds=REMINDER_INTERVAL_SECONDS),
+}
+
+
 def _due(now: datetime, last: Optional[datetime], name: str) -> bool:
-    if name == "message_queue":
-        return last is None or now - last >= timedelta(seconds=MESSAGE_RETRY_SECONDS)
-    if name == "sheet_queue":
-        return last is None or now - last >= timedelta(minutes=DRAIN_INTERVAL_MINUTES)
-    if name == "refill_articles":
-        return last is None or now - last >= timedelta(hours=1)
-    if name == "reminders":
-        return last is None or now - last >= timedelta(seconds=REMINDER_INTERVAL_SECONDS)
+    every = _INTERVALS.get(name)
+    if every is not None:
+        return last is None or now - last >= every
     if name in ("prune_logs", "profiles"):
         return now.hour == NIGHTLY_HOUR and (last is None or last.date() < now.date())
 
+    at = _report_time(now, name)
+    if at is None or (now.hour, now.minute) < at:
+        return False
+    return last is None or last.date() < now.date()
+
+
+def _report_time(now: datetime, name: str) -> Optional[tuple]:
+    """(hour, minute) the report band is due at today, or None if not today."""
     row = _settings_safe()
     if name == "weekly_report":
         # Once on the chosen weekday. `last.date() < now.date()` alone would fire
         # again next week's same day, which is exactly what we want.
         if now.weekday() != _weekly_day(row):
-            return False
-        hour, minute = _hhmm(row.get("weekly_time"), (17, 0))
-    else:  # daily_report: Monday–Saturday, once per day
-        if now.weekday() == 6:  # Sunday: no site work, no report
-            return False
-        hour, minute = _hhmm(row.get("daily_time"), (18, 30))
-
-    if (now.hour, now.minute) < (hour, minute):
-        return False
-    return last is None or last.date() < now.date()
+            return None
+        return _hhmm(row.get("weekly_time"), (17, 0))
+    # daily_report: Monday–Saturday, once per day
+    if now.weekday() == 6:  # Sunday: no site work, no report
+        return None
+    return _hhmm(row.get("daily_time"), (18, 30))
 
 
 def _seed_last_run() -> Dict[str, Optional[datetime]]:
@@ -977,7 +1006,7 @@ def _seed_last_run() -> Dict[str, Optional[datetime]]:
     started = datetime.now()
     try:
         recorded = logs.last_job_runs()
-    except Exception as exc:  # noqa: BLE001 — the loop must start regardless
+    except Exception as exc:  # noqa: BLE001  # the loop must start regardless
         print(f"[jobs] could not read job history ({exc}) — seeding from process start")
         recorded = {}
     # The drain is the exception: it is idempotent and runs every 5 minutes, so

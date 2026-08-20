@@ -122,14 +122,16 @@ def test_a_delivery_writes_no_journal_row(wired, monkeypatch):
     })
 
     assert out["livraison"] is True
-    assert out["row"] is None and out["rapports_row"] is None
+    assert out["row"] is None
+    assert out["rapports_row"] is None
     assert ledger.calls[0][0] == "DGH"
     assert ledger.calls[0][1] == {"cables_installes_m": 500.0}
     # Mirrored to the flat Livraisons tab with the director's own label.
     tab, values = appended[0]
     assert tab == journal.LIVRAISONS_TAB
     assert values["Article"] == "Câble installé"
-    assert values["Quantité"] == "500" and values["Unité"] == "m"
+    assert values["Quantité"] == "500"
+    assert values["Unité"] == "m"
 
 
 def test_a_sheet_failure_never_costs_the_reception(wired, monkeypatch):
