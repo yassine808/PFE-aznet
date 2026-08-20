@@ -41,6 +41,9 @@ REMINDER_INTERVAL_SECONDS = 60  # task reminders fire within a minute of due
 # run inline (they are DB-only and fast).
 _TIMEOUT_SECONDS = {
     "sheet_queue": 120,
+    # One /process replay per technician, and a voice note can pay a cold
+    # local-STT load: sized above local_darija COLD_START_BUDGET_S.
+    "message_queue": 480,
     # One model call per report still missing its articles, capped at 25.
     "refill_articles": 600,
     # Sheet read + SMTP + one LLM call for the company digest *and one more per
@@ -162,6 +165,169 @@ def drain_sheet_queue() -> dict:
         written += 1
     return {"pending": len(pending), "written": written, "failed": failed,
             **({"paused_until": paused} if paused else {})}
+
+
+# -- Message retry queue ----------------------------------------------------
+# Runs on the scheduler tick (30 s) because a technician is waiting: the first
+# backoff step is 30 s, and a five-minute cadence like the Sheet drain would
+# make the fastest possible recovery five minutes.
+MESSAGE_RETRY_SECONDS = 30
+DEFAULT_QUEUE_MIME = "audio/ogg"
+#: Set while the whole text chain refuses on quota. Not a per-message failure:
+#: every message would fail identically, so we stop calling the model at all
+#: until the window passes. Reception keeps running -- Telegram is polled and
+#: Meta's webhooks are accepted -- because pausing intake loses updates
+#: (Telegram retains them ~24h) while pausing *processing* loses nothing.
+_quota_until = 0.0
+QUOTA_WINDOW_SECONDS = 300
+
+
+def message_quota_pause():
+    """Unix time the retry loop is quota-paused until, or None if running."""
+    return _quota_until if _quota_until > time.time() else None
+
+
+def _is_quota_text(detail: str) -> bool:
+    return bool(_QUOTA_SIGNS.search(detail or ""))
+
+
+def _chat_of(item: dict) -> str:
+    """The technician's address on the channel the message came in on."""
+    try:
+        person = logs.person_by_name(item.get("technicien") or "")
+    except Exception:  # noqa: BLE001 - a reaction never breaks the job
+        return ""
+    for ident in (person or {}).get("identities", []):
+        if ident.get("channel") == item.get("channel") and ident.get("active", True):
+            return str(ident.get("external_id") or "")
+    return ""
+
+
+def _replay(item: dict):
+    """Re-send one queued message through /process. (ok, detail, was_quota).
+
+    Over local HTTP rather than by calling the endpoint's internals: the retry
+    replays exactly what n8n sent, through the same validation, the same
+    extraction chain and the same journal write. A second code path that files
+    reports is a second place for them to be filed differently.
+    """
+    import requests
+
+    base = (settings.api_self_url or "http://127.0.0.1:8000").rstrip("/")
+    data = {k: v for k, v in (
+        ("correlation_id", item.get("correlation_id")),
+        ("channel", item.get("channel")),
+        ("technicien", item.get("technicien")),
+        ("message_id", item.get("message_id")),
+        ("caption", item.get("caption")),
+    ) if v}
+    files = None
+    if item.get("kind") == "text":
+        data["text"] = item.get("text_input") or ""
+    else:
+        blob = logs.get_media(item["media_id"]) if item.get("media_id") else None
+        if not blob or not blob.get("data"):
+            # Nothing left to replay, and no later attempt can change that.
+            return False, "media absent - rien a rejouer", False
+        files = {"audio": ("queued-%s.ogg" % item["id"], bytes(blob["data"]),
+                           item.get("mime") or DEFAULT_QUEUE_MIME)}
+    try:
+        res = requests.post(
+            base + "/process", data=data, files=files,
+            headers={"X-API-Key": settings.internal_api_key or "",
+                     "X-Queue-Retry": "1"},
+            timeout=_TIMEOUT_SECONDS.get("message_queue", 480) - 20,
+        )
+    except requests.RequestException as exc:
+        return False, "API injoignable: %s" % exc, False
+    if res.status_code == 202:
+        # Parked again -- by the gate, or by another failure. A failed try.
+        try:
+            body = res.json()
+        except ValueError:
+            body = {}
+        detail = str(body.get("detail") or "toujours en attente")
+        return False, detail, _is_quota_text(detail)
+    if res.ok:
+        return True, "", False
+    return False, "%s: %s" % (res.status_code, res.text[:300]), _is_quota_text(res.text)
+
+
+def _notify_quota(item: dict) -> None:
+    """Tell this technician ONCE per outage that the service is saturated.
+
+    Once per outage, not once per message: the point of the queue is that they
+    need do nothing, and six identical notices would undo that. The bookmark
+    doubles as the throttle, reusing the cursor store rather than adding state.
+    """
+    key = "quota-notice:%s" % (item.get("technicien") or "?")
+    try:
+        last = logs.get_cursor(key)
+        if last and float(last) > time.time() - QUOTA_WINDOW_SECONDS:
+            return
+        logs.set_cursor(key, time.time())
+    except Exception:  # noqa: BLE001
+        return
+    chat = _chat_of(item)
+    if not chat:
+        return
+    try:
+        from app import reply
+
+        reply.reply_to_identities(
+            [{"channel": item.get("channel"), "external_id": chat}],
+            "Service momentanement sature. Votre rapport est en file d'attente "
+            "et sera enregistre automatiquement des que possible.",
+        )
+    except Exception:  # noqa: BLE001 - best effort, never costs the job
+        pass
+
+
+def retry_messages() -> dict:
+    """Replay every queued message whose backoff has elapsed, oldest first.
+
+    One message per technician per pass (`due_messages` enforces it): running
+    two of one person's messages concurrently is the exact race the queue
+    exists to prevent.
+    """
+    global _quota_until
+    from app import reply
+
+    if _quota_until > time.time():
+        return {"paused_until": _quota_until, "retried": 0, "filed": 0, "abandoned": 0}
+    due = logs.due_messages(DRAIN_BATCH)
+    filed = abandoned = 0
+    for item in due:
+        ok, detail, was_quota = _replay(item)
+        if was_quota:
+            # Every message would fail the same way. Stop the pass, and do not
+            # spend this one's attempt on someone else's rate limit.
+            _quota_until = time.time() + QUOTA_WINDOW_SECONDS
+            logs.resolve_message(item["id"], False, detail, count_attempt=False)
+            logs.write_safe(
+                "queued", "warn",
+                message=("file en pause %ss (quota): %s" % (QUOTA_WINDOW_SECONDS, detail))[:400],
+                correlation_id=item.get("correlation_id"))
+            _notify_quota(item)
+            break
+        status = logs.resolve_message(item["id"], ok, detail)
+        chat = _chat_of(item)
+        if ok:
+            filed += 1
+            reply.set_reaction(item.get("channel") or "", chat,
+                               item.get("message_id") or "", "done")
+        elif status == "abandoned":
+            abandoned += 1
+            reply.set_reaction(item.get("channel") or "", chat,
+                               item.get("message_id") or "", "failed")
+            logs.write_safe(
+                "queued", "error",
+                message=("abandonne apres %s essais: %s" % (logs.MAX_MESSAGE_ATTEMPTS, detail))[:400],
+                correlation_id=item.get("correlation_id"))
+    out = {"retried": len(due), "filed": filed, "abandoned": abandoned}
+    if _quota_until > time.time():
+        out["paused_until"] = _quota_until
+    return out
 
 
 def prune_logs() -> dict:
@@ -580,6 +746,7 @@ def send_reminders() -> dict:
 
 JOBS: Dict[str, Callable[[], dict]] = {
     "sheet_queue": drain_sheet_queue,
+    "message_queue": retry_messages,
     "refill_articles": refill_articles,
     "prune_logs": prune_logs,
     "profiles": refresh_profiles,
@@ -721,6 +888,8 @@ DAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanch
 
 
 def _schedule_label(name: str) -> str:
+    if name == "message_queue":
+        return "toutes les %s s" % MESSAGE_RETRY_SECONDS
     if name == "sheet_queue":
         return f"toutes les {DRAIN_INTERVAL_MINUTES} min"
     if name == "refill_articles":
@@ -763,6 +932,8 @@ def _settings_safe() -> dict:
 
 
 def _due(now: datetime, last: Optional[datetime], name: str) -> bool:
+    if name == "message_queue":
+        return last is None or now - last >= timedelta(seconds=MESSAGE_RETRY_SECONDS)
     if name == "sheet_queue":
         return last is None or now - last >= timedelta(minutes=DRAIN_INTERVAL_MINUTES)
     if name == "refill_articles":
@@ -811,7 +982,7 @@ def _seed_last_run() -> Dict[str, Optional[datetime]]:
     # The drain is the exception: it is idempotent and runs every 5 minutes, so
     # "never run in this process" should fire it immediately.
     return {
-        name: (None if name == "sheet_queue" else recorded.get(name, started))
+        name: (None if name in ("sheet_queue", "message_queue") else recorded.get(name, started))
         for name in JOBS
     }
 

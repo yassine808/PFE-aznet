@@ -149,6 +149,27 @@ export interface PendingWrite {
   status?: 'queued' | 'retrying' | 'abandoned'
 }
 
+/** A message parked before it ever became a report — the stage upstream of
+ *  PendingWrite. That one holds a finished report Google refused; this one
+ *  holds a voice note or text the model could not read yet. */
+export interface QueuedMessage {
+  id: number
+  correlation_id?: string | null
+  technicien?: string | null
+  channel?: string | null
+  /** audio | image | text — decides whether a blob is replayed or the text is. */
+  kind: string
+  attempts: number
+  status: 'queued' | 'retrying' | 'abandoned'
+  last_error?: string | null
+  /** When the technician SENT it, not when we received it. */
+  sent_date?: string | null
+  sent_heure?: string | null
+  media_id?: number | null
+  next_try_at?: string | null
+  created_at?: string
+}
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { signal })
   if (!res.ok) await fail(res)
@@ -1013,6 +1034,13 @@ export const api = {
     // waiting for the window, not stuck. Unix seconds, or null.
     get<{ pending: PendingWrite[]; max_attempts?: number; paused_until?: number | null }>(
       '/sheet-queue',
+      s,
+    ),
+  messageQueue: (s?: AbortSignal) =>
+    // Messages that never became reports. `paused_until` here means the whole
+    // text chain is refusing on quota — the retry loop is waiting, not stuck.
+    get<{ pending: QueuedMessage[]; max_attempts?: number; paused_until?: number | null }>(
+      '/message-queue',
       s,
     ),
   jobs: (s?: AbortSignal) => get<{ jobs: JobStatus[] }>('/jobs', s),

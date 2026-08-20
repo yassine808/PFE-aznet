@@ -91,6 +91,43 @@ CREATE TABLE IF NOT EXISTS failed_writes (
     payload        JSONB NOT NULL
 );
 
+-- Messages whose /process failed and will be retried. Distinct from
+-- `failed_writes`, which holds an already-parsed report Google refused: this
+-- holds a message that never became a report at all, so it carries the raw
+-- input instead. Two queues, one per stage; merging them would put an audio
+-- blob and a finished report in the same row.
+--
+-- `media_id` rather than the bytes: /process archives the blob in media_files
+-- BEFORE transcribing (since 2026-08-20 — it used to archive after, so a failed
+-- voice note left nothing to retry and both channels' media URLs expire within
+-- the hour). One copy, referenced.
+--
+-- `technicien` is indexed because it is the blocking key: ordering is enforced
+-- per person, so every /process asks "does this technician already have
+-- something stuck?" before doing any work.
+CREATE TABLE IF NOT EXISTS message_queue (
+    id             BIGSERIAL PRIMARY KEY,
+    correlation_id TEXT UNIQUE,
+    technicien     TEXT NOT NULL,
+    channel        TEXT,
+    message_id     TEXT,
+    kind           TEXT NOT NULL,
+    text_input     TEXT,
+    caption        TEXT,
+    media_id       BIGINT,
+    mime           TEXT,
+    sent_date      TEXT,
+    sent_heure     TEXT,
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    next_try_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status         TEXT NOT NULL DEFAULT 'queued',
+    last_error     TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS message_queue_pending_idx
+    ON message_queue (technicien, created_at)
+    WHERE status IN ('queued', 'retrying');
+
 -- The human. Split from `technicians` (the channel identities) because one
 -- person reaches us on more than one channel: a WhatsApp number and a Telegram
 -- chat id are two identities, one colleague. Name, role and everything we
@@ -1468,6 +1505,154 @@ def queue_failed_write(payload: Dict[str, Any], error: str, correlation_id: Opti
 
 
 MAX_WRITE_ATTEMPTS = 10
+
+
+# ── Message retry queue ─────────────────────────────────────────────────────
+# Six attempts over roughly forty minutes, then the message is abandoned and the
+# technician is told. The cap exists for the same reason MAX_WRITE_ATTEMPTS
+# does, and it bites harder here: ordering is enforced per technician, so a
+# message that can never succeed would otherwise block every later report from
+# that person forever. Giving up is what releases them.
+MAX_MESSAGE_ATTEMPTS = 6
+#: Seconds to wait before attempt N+1. Front-loaded — most /process failures are
+#: a vendor hiccup that is over in seconds — then flat, because anything still
+#: failing at ten minutes is an outage and polling it faster changes nothing.
+RETRY_BACKOFF_S = (30, 120, 300, 600, 600, 600)
+
+
+def backoff_for(attempts: int) -> int:
+    return RETRY_BACKOFF_S[min(attempts, len(RETRY_BACKOFF_S) - 1)]
+
+
+def blocked_technician(technicien: Optional[str]) -> Optional[dict]:
+    """The oldest unresolved queued message for this technician, if any.
+
+    The gate for ordering. A new message arriving while one is stuck must join
+    the queue behind it, or it overtakes the message it followed and the journal
+    records the day out of order — which is the whole point of the queue.
+    Unknown sender (no name) is never blocked: there is nothing to order.
+    """
+    if not technicien:
+        return None
+    with _cursor() as cur:
+        cur.execute(
+            """SELECT id, correlation_id, attempts, status FROM message_queue
+               WHERE technicien = %s AND status IN ('queued','retrying')
+               ORDER BY created_at ASC LIMIT 1""",
+            (technicien,),
+        )
+        row = cur.fetchone()
+    return dict(cast(dict, row)) if row else None
+
+
+def enqueue_message(item: Dict[str, Any]) -> Optional[int]:
+    """Park a message for retry. Idempotent on correlation_id.
+
+    ON CONFLICT DO NOTHING rather than an upsert: n8n retries its HTTP call and
+    the drain replays, so the same message arrives more than once — and a second
+    row would be a second place the queue thinks work is pending, which both
+    blocks the technician twice and files the report twice when it drains.
+    """
+    fields = ("correlation_id", "technicien", "channel", "message_id", "kind",
+              "text_input", "caption", "media_id", "mime", "sent_date", "sent_heure")
+    cols = ", ".join(fields)
+    holders = ", ".join(f"%({f})s" for f in fields)
+    with _cursor() as cur:
+        cur.execute(
+            f"""INSERT INTO message_queue ({cols}, next_try_at)
+                VALUES ({holders}, now() + make_interval(secs => %(delay)s))
+                ON CONFLICT (correlation_id) DO NOTHING
+                RETURNING id""",
+            {**{f: item.get(f) for f in fields}, "delay": backoff_for(0)},
+        )
+        row = cur.fetchone()
+    return cast(dict, row)["id"] if row else None
+
+
+def due_messages(limit: int = 10) -> List[dict]:
+    """Messages ready for another attempt, oldest first, one per technician.
+
+    One per technician is the ordering rule expressed as a query: taking two
+    from the same person in one pass would run them concurrently and let the
+    later one win the race. DISTINCT ON picks each person's oldest.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """SELECT DISTINCT ON (technicien) *
+               FROM message_queue
+               WHERE status IN ('queued','retrying') AND next_try_at <= now()
+               ORDER BY technicien, created_at ASC
+               LIMIT %s""",
+            (max(1, min(limit, 50)),),
+        )
+        rows = [dict(cast(dict, r)) for r in cur.fetchall()]
+    rows.sort(key=lambda r: r["created_at"])
+    for r in rows:
+        for k in ("created_at", "next_try_at"):
+            if isinstance(r.get(k), datetime):
+                r[k] = r[k].isoformat()
+    return rows
+
+
+def resolve_message(queue_id: int, ok: bool, error: Optional[str] = None,
+                    count_attempt: bool = True) -> str:
+    """Close, reschedule or abandon one queued message. Returns the new status.
+
+    `count_attempt=False` is the quota case, the same rule `resolve_write`
+    follows: a vendor refusing everyone is not this message's fault, and burning
+    six attempts on a rate-limit window abandons a report that was never
+    malformed and would have succeeded ten minutes later.
+
+    Read-then-write rather than one clever UPDATE: the next delay depends on the
+    incremented attempt count, and SQL cannot read a column it is setting in the
+    same statement. Two plain statements beat three that hide the arithmetic.
+    """
+    if ok:
+        with _cursor() as cur:
+            cur.execute("DELETE FROM message_queue WHERE id = %s", (queue_id,))
+        return "done"
+    with _cursor() as cur:
+        cur.execute("SELECT attempts, status FROM message_queue WHERE id = %s", (queue_id,))
+        row = cur.fetchone()
+        if not row:
+            return "gone"
+        attempts = cast(dict, row)["attempts"] + (1 if count_attempt else 0)
+        status = "abandoned" if attempts >= MAX_MESSAGE_ATTEMPTS else "retrying"
+        if not count_attempt:
+            # A quota refusal buys the row a fresh wait and nothing else: not an
+            # attempt, and never a promotion to 'abandoned'.
+            status = cast(dict, row).get("status") or "queued"
+        cur.execute(
+            """UPDATE message_queue
+               SET attempts = %s, last_error = %s, status = %s,
+                   next_try_at = now() + make_interval(secs => %s)
+               WHERE id = %s""",
+            (attempts, (error or "")[:2000], status, backoff_for(attempts), queue_id),
+        )
+    return status
+
+
+def list_message_queue(limit: int = 50) -> List[dict]:
+    """The queue as the dashboard shows it — abandoned rows included.
+
+    Same rule as `pending_writes(include_retired=True)`: a message that stopped
+    being retried is precisely the one an operator has to act on, and hiding it
+    is how a lost report looks like an empty queue.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """SELECT id, correlation_id, technicien, channel, kind, attempts,
+                      status, last_error, sent_date, sent_heure, media_id,
+                      next_try_at, created_at
+               FROM message_queue ORDER BY created_at ASC LIMIT %s""",
+            (max(1, min(limit, 200)),),
+        )
+        rows = [dict(cast(dict, r)) for r in cur.fetchall()]
+    for r in rows:
+        for k in ("created_at", "next_try_at"):
+            if isinstance(r.get(k), datetime):
+                r[k] = r[k].isoformat()
+    return rows
 
 
 def pending_writes(limit: int = 20, include_retired: bool = False) -> List[dict]:

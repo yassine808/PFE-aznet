@@ -529,5 +529,15 @@
   "queue.paused": "الطابور متوقف مؤقتاً (حصة Google) حتى",
   "queue.status.queued": "في الانتظار",
   "queue.status.retrying": "إعادة المحاولة",
-  "queue.status.abandoned": "متروك"
+  "queue.status.abandoned": "متروك",
+  "queue.messages.title": "الرسائل قيد الانتظار",
+  "queue.messages.intro": "رسائل تم استلامها ولم تتحول بعد إلى تقرير: فشل النسخ أو الاستخراج. تتم إعادة معالجتها تلقائيًا حسب ترتيب الإرسال، واحدة في كل مرة لكل تقني.",
+  "queue.messages.empty": "لا توجد رسائل قيد الانتظار.",
+  "queue.messages.paused": "استُنفدت الحصة على كامل سلسلة النصوص: أُوقفت إعادة المحاولة، دون استهلاك محاولة، حتى",
+  "queue.messages.nextTry": "المحاولة التالية",
+  "queue.messages.runNow": "إعادة المحاولة الآن",
+  "queue.messages.kind.audio": "رسالة صوتية",
+  "queue.messages.kind.image": "صورة",
+  "queue.messages.kind.text": "نص",
+  "queue.sheet.title": "عمليات الكتابة المرفوضة في Google Sheets"
 }

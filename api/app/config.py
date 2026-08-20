@@ -196,6 +196,14 @@ class Settings(BaseSettings):
     # the day is the anomaly, not the lunch break).
     n8n_stale_after_minutes: int = 30
 
+    # Where the API reaches ITSELF, for the retry job's /process replay. Loopback
+    # by default because the job runs inside the same container; it goes through
+    # HTTP rather than calling the endpoint's internals so a retried message
+    # takes the identical path a live one takes — validation, extraction chain,
+    # journal write. A second in-process path that files reports is a second
+    # place for them to be filed differently.
+    api_self_url: str = "http://127.0.0.1:8000"  # NOSONAR - loopback, not reachable off-host
+
     # Where the dashboard answers, used to build the "open the report" link in
     # outgoing mail. It has to be an address the *recipient's* browser can
     # reach, which is why it is not derived from the request: the scheduler

@@ -64,6 +64,63 @@ def _whatsapp(external_id: str, text: str) -> None:
         raise ReplyError(f"WhatsApp a refusé ({res.status_code}): {res.text[:200]}")
 
 
+# The reaction the technician sees on their own message, per pipeline state.
+# Reactions rather than chat messages for retries: the owner chose it (2026-08-20)
+# so a technician on a chantier is not pinged six times while a vendor recovers.
+# Values match what n8n already sets, so a message acked by the workflow and one
+# updated by the API never disagree about what ⏳ means.
+REACTIONS = {"working": "⏳", "queued": "🔄", "done": "✅", "failed": "❌"}
+
+
+def set_reaction(channel: str, chat_id: str, message_id: str, state: str) -> None:
+    """React on the technician's message. Best-effort by design — never raises.
+
+    This is the ONLY progress signal a queued message gets, but it is still a
+    decoration on top of the real work: a Meta hiccup while reacting must not
+    fail a retry that actually succeeded, or the report would be filed and then
+    retried again on the next pass. Failures are logged, not propagated.
+
+    n8n sets ⏳ at reception and ✅/❌ at the end of a synchronous run; the API
+    takes over for anything that outlives that HTTP call — 🔄 when a message is
+    parked, ✅ or ❌ when the retry job finally settles it.
+    """
+    emoji = REACTIONS.get(state)
+    if not emoji or not chat_id or not message_id:
+        return
+    try:
+        if channel == "telegram":
+            token = settings.telegram_bot_token
+            if not token:
+                return
+            requests.post(
+                f"https://api.telegram.org/bot{token}/setMessageReaction",
+                json={"chat_id": chat_id, "message_id": int(message_id),
+                      "reaction": [{"type": "emoji", "emoji": emoji}]},
+                timeout=10,
+            )
+        elif channel == "whatsapp":
+            token = settings.whatsapp_access_token
+            number_id = settings.whatsapp_phone_number_id
+            if not token or not number_id:
+                return
+            requests.post(
+                f"https://graph.facebook.com/v23.0/{number_id}/messages",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "messaging_product": "whatsapp",
+                    "to": logs.normalize_external_id("whatsapp", chat_id),
+                    "type": "reaction",
+                    "reaction": {"message_id": message_id, "emoji": emoji},
+                },
+                timeout=10,
+            )
+    except (requests.RequestException, ValueError, TypeError) as exc:
+        # ValueError/TypeError too: Telegram wants an int message_id and a
+        # WhatsApp wamid is not one, so a channel mix-up must not crash a job.
+        logs.write_safe("api", "warn",
+                        message=f"reaction {state} failed on {channel}: {exc}"[:300])
+
+
 def reply_to_identities(identities: List[dict], text: str) -> Dict[str, list]:
     """Send `text` to every identity given. Returns the channels that took it.
 

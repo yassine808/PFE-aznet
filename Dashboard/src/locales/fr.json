@@ -529,5 +529,15 @@
   "queue.paused": "File en pause (quota Google) jusqu’à",
   "queue.status.queued": "en attente",
   "queue.status.retrying": "nouvelle tentative",
-  "queue.status.abandoned": "abandonné"
+  "queue.status.abandoned": "abandonné",
+  "queue.messages.title": "Messages en attente",
+  "queue.messages.intro": "Messages reçus mais pas encore transformés en rapport : la transcription ou l'extraction a échoué. Ils sont rejoués automatiquement, dans l'ordre d'envoi et un seul à la fois par technicien.",
+  "queue.messages.empty": "Aucun message en attente.",
+  "queue.messages.paused": "Quota épuisé sur toute la chaîne texte : les rejeux sont suspendus, sans consommer d'essai, jusqu'à",
+  "queue.messages.nextTry": "prochain essai",
+  "queue.messages.runNow": "Rejouer maintenant",
+  "queue.messages.kind.audio": "note vocale",
+  "queue.messages.kind.image": "photo",
+  "queue.messages.kind.text": "texte",
+  "queue.sheet.title": "Écritures Google Sheets refusées"
 }

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -86,7 +87,10 @@ async def _log(stage: str, level: str = "info", **kwargs) -> None:
     would block the event loop for the whole round-trip, stalling every other
     concurrent request. run_in_threadpool keeps the loop free.
     """
-    await run_in_threadpool(logs.write_safe, stage, level, **kwargs)
+    # Underscore keys are carry-state for the request (e.g. _media_id), not log
+    # fields: write_safe takes named columns and an extra kwarg would raise.
+    await run_in_threadpool(logs.write_safe, stage, level,
+                            **{k: v for k, v in kwargs.items() if not k.startswith("_")})
 
 
 def _notify_report_event(
@@ -340,10 +344,11 @@ def track_visit(payload: VisitIn, caller: dict = Depends(auth.require_human)) ->
     return {"ok": True}
 
 
-async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dict):
+async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dict,
+                            message_id: Optional[str] = None):
     """Audio branch of /process: STT then a couple of quality warnings.
 
-    Returns (transcription, rapport_complet, warnings, blob). Raises HTTPException
+    Returns (transcription, rapport_complet, warnings, blob, media_id). Raises HTTPException
     on empty/oversized input, an unknown provider name, or a transcription failure.
     """
     blob = await audio.read(MAX_AUDIO_BYTES + 1)
@@ -351,6 +356,24 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
         raise HTTPException(422, "Empty audio file")
     if len(blob) > MAX_AUDIO_BYTES:
         raise HTTPException(422, f"Audio too large (max {MAX_AUDIO_BYTES // (1024 * 1024)} MB)")
+    # Persist-first, since 2026-08-20. The archive used to happen *after* the
+    # transcription that can fail, so a failed voice note left no blob anywhere —
+    # and Telegram file paths (~1h) and Meta media URLs (minutes) both expire, so
+    # there was nothing left to retry with. The retry queue is only possible
+    # because the bytes are saved before anyone tries to read them.
+    # Best-effort: a log-store outage must not cost a report that would otherwise
+    # have been transcribed fine.
+    media_id = None
+    try:
+        media_id = await run_in_threadpool(
+            logs.save_media, ctx.get("channel"), None, message_id,
+            "audio", audio.content_type, blob,
+        )
+    except logs.LogStoreError as exc:
+        await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
+    # Where _park reads it if the STT call below raises: the queued row must
+    # point at the blob, and by then this frame is gone.
+    ctx["_media_id"] = media_id
     t0 = time.time()
     try:
         # STT is pure synchronous I/O (requests/genai/groq/httpx) — run it off the
@@ -382,7 +405,7 @@ async def _transcribe_audio(audio: UploadFile, provider: Optional[str], ctx: dic
         duration_ms=int((time.time() - t0) * 1000),
         payload={"engine": engine, "chars": len(rapport_complet)}, **ctx,
     )
-    return transcription, rapport_complet, warnings, blob
+    return transcription, rapport_complet, warnings, blob, media_id
 
 
 def _stt_chain() -> str:
@@ -511,19 +534,17 @@ async def _audio_input(
     `/process` so the endpoint reads as three input shapes, not one long
     branch — the archive and Drive steps are both best-effort, and their
     try/except pairs were most of that function's complexity."""
-    transcription, rapport_complet, warnings, blob = await _transcribe_audio(audio, provider, ctx)
+    transcription, rapport_complet, warnings, blob, media_id = await _transcribe_audio(
+        audio, provider, ctx, message_id)
     if caption:
         rapport_complet = f"{rapport_complet}\n\n{caption}"
     # Archive the voice note (Postgres) and mint its durable link (Drive).
     # Both are best-effort: a log store outage or a Drive hiccup must never
     # cost the technician their summary — the fallback is the previous
     # behavior where n8n stored the channel's own file ticket.
-    media_id = None
-    try:
-        media_id = await run_in_threadpool(logs.save_media, ctx.get("channel"), None, message_id,
-                                           "audio", audio.content_type, blob)
-    except logs.LogStoreError as exc:
-        await _log("api", "warn", message=f"media archive failed: {exc}", **ctx)
+    # media_id comes back from _transcribe_audio, which archived the blob before
+    # the STT call — see the persist-first comment there. Not saved again here:
+    # two rows for one voice note would show it twice in the dashboard.
     lien_audio = None
     try:
         if blob:
@@ -616,6 +637,98 @@ def _clean(value: Optional[str]) -> Optional[str]:
     return None if stripped.lower() in _NULLISH else stripped
 
 
+# What a vendor refusing on quota looks like, across Groq and Gemini. Matched on
+# text because the chain raises a combined ExtractionError carrying each engine's
+# own message and nothing more structured. Kept beside the endpoint that has to
+# tell "everyone is rate-limited" apart from "this message is broken": the first
+# must not spend a retry, the second must not get five more.
+_QUOTA_RE = re.compile(
+    r"429|quota|rate.?limit|RESOURCE_EXHAUSTED|exhausted|too many requests",
+    re.I,
+)
+
+
+def _is_quota(detail: str) -> bool:
+    return bool(_QUOTA_RE.search(detail or ""))
+
+
+#: Header the retry job sets on its own call so the ordering gate lets it past.
+#: It is the head of the queue by construction — gating it behind itself would
+#: deadlock the technician permanently on their first failure.
+QUEUE_BYPASS_HEADER = "X-Queue-Retry"
+
+
+def _queue_bypass(request: Request) -> bool:
+    return request.headers.get(QUEUE_BYPASS_HEADER) == "1"
+
+
+async def _park(reason: str, audio, image, text, caption, provider,
+                correlation_id, channel, technicien, message_id, ctx,
+                detail: str = "") -> JSONResponse:
+    """Queue this message for retry and answer 202, instead of failing it.
+
+    Returns 202 rather than 502 on purpose: nothing is lost, so this is not an
+    error — and n8n's error branch would send ❌ plus a failure message, which is
+    exactly the wrong thing to tell a technician whose report is safely parked
+    and will be filed. The reaction is set here, by the API, because n8n's
+    synchronous call is over long before the retry resolves.
+
+    Never raises: a queue that fails to accept a message must not also destroy
+    the 502 the caller would otherwise have seen, so the fallback is that 502.
+    """
+    media_id = ctx.get("_media_id")
+    item = _queue_item(
+        "audio" if audio is not None else "image" if image is not None else "text",
+        correlation_id=correlation_id, technicien=technicien, channel=channel,
+        message_id=message_id,
+        text_input=text if isinstance(text, str) else None,
+        caption=caption, media_id=media_id,
+        mime=getattr(audio or image, "content_type", None),
+    )
+    try:
+        queue_id = await run_in_threadpool(logs.enqueue_message, item)
+    except logs.LogStoreError as exc:
+        await _log("api", "error", message=f"queue refused the message: {exc}", **ctx)
+        raise HTTPException(502, detail or "processing failed") from exc
+    await _log("queued", "warn",
+               message=f"{reason}: {detail}"[:400], payload={"queue_id": queue_id}, **ctx)
+    if channel and message_id:
+        await run_in_threadpool(reply.set_reaction, channel,
+                                str(ctx.get("chat_id") or "") or _chat_id_for(technicien, channel),
+                                message_id, "queued")
+    return JSONResponse(
+        status_code=202,
+        content={"queued": True, "queue_id": queue_id, "reason": reason,
+                 "detail": detail[:400],
+                 "resume": "Rapport reçu, traitement différé — il sera enregistré automatiquement."},
+    )
+
+
+def _chat_id_for(technicien: Optional[str], channel: Optional[str]) -> str:
+    """The technician's own address on this channel, for a reaction.
+
+    n8n knows it at reception; the API has to look it up, because a retry that
+    resolves twenty minutes later has no request to read it from.
+    """
+    try:
+        person = logs.person_by_name(technicien) if technicien else None
+    except Exception:  # noqa: BLE001 - a reaction must never break the path
+        return ""
+    for ident in (person or {}).get("identities", []):
+        if ident.get("channel") == channel and ident.get("active", True):
+            return str(ident.get("external_id") or "")
+    return ""
+
+
+def _queue_item(kind: str, *, correlation_id, technicien, channel, message_id,
+                text_input=None, caption=None, media_id=None, mime=None,
+                sent_date=None, sent_heure=None) -> dict:
+    return {"kind": kind, "correlation_id": correlation_id, "technicien": technicien,
+            "channel": channel, "message_id": message_id, "text_input": text_input,
+            "caption": caption, "media_id": media_id, "mime": mime,
+            "sent_date": sent_date, "sent_heure": sent_heure}
+
+
 @app.post("/process", responses={422: {"description": "Invalid input"}, 502: {"description": "Upstream service error"}})
 async def process(
     audio: Optional[UploadFile] = File(None, description="Voice note (ogg/opus from WhatsApp)"),
@@ -627,6 +740,7 @@ async def process(
     channel: Optional[str] = Form(None, description="telegram | whatsapp | form"),
     technicien: Optional[str] = Form(None, description="Sender name, for log filtering"),
     message_id: Optional[str] = Form(None, description="Channel message id (dedupe key, e.g. 'tg:123:456')"),
+    request: Request = None,  # type: ignore[assignment]
     caller: dict = Depends(auth.require_user),
 ) -> ProcessResponse:
     caption = _clean(caption)
@@ -655,10 +769,37 @@ async def process(
 
     lien_audio = None  # set only by the audio branch (Drive upload)
 
-    if audio is not None:
-        transcription, rapport_complet, warnings, lien_audio = await _audio_input(
-            audio, provider, caption, message_id, correlation_id, ctx,
+    # The ordering gate. A message whose sender already has one stuck in the
+    # queue joins it behind that one instead of being processed now — otherwise
+    # message 2 is filed before message 1 the moment message 1 fails, and the
+    # journal records the technician's day out of order. Checked here, in the
+    # one place every message passes through, rather than in n8n: the retry job
+    # comes through the same door and must obey the same rule.
+    # `_queue_bypass` is how the retry job says "I *am* the head of that queue".
+    blocked = None
+    if request is not None and not _queue_bypass(request) and settings.database_url:
+        try:
+            blocked = await run_in_threadpool(logs.blocked_technician, technicien)
+        except logs.LogStoreError:
+            blocked = None  # no store, no ordering to enforce — never fail closed
+    if blocked and blocked.get("correlation_id") != correlation_id:
+        return await _park(
+            "blocked", audio, image, text, caption, provider, correlation_id,
+            channel, technicien, message_id, ctx,
+            detail=f"en attente derrière {blocked['correlation_id']}",
         )
+
+    if audio is not None:
+        try:
+            transcription, rapport_complet, warnings, lien_audio = await _audio_input(
+                audio, provider, caption, message_id, correlation_id, ctx,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 502:
+                raise  # 422 is malformed input: it will never succeed, do not queue
+            return await _park("stt", audio, image, text, caption, provider,
+                               correlation_id, channel, technicien, message_id, ctx,
+                               detail=str(exc.detail))
     elif image is not None:
         return await _extract_from_image(image, sender_profile, caption, ctx, message_id)
     else:
@@ -676,7 +817,16 @@ async def process(
             "extracted", "error", message=f"extraction failed: {exc}",
             duration_ms=int((time.time() - t1) * 1000), **ctx,
         )
-        raise HTTPException(502, f"extraction failed: {exc}") from exc
+        # The transcript survived even though extraction did not, so the retry
+        # replays text rather than audio: re-transcribing would spend an STT call
+        # to recompute something already in hand, and could yield a *different*
+        # transcript than the one the technician's summary was promised from.
+        # Prefix kept: with no log store the queue cannot accept the message and
+        # _park re-raises this as the 502 it replaces, so the wording is still
+        # part of the endpoint's contract.
+        return await _park("extraction", None, None, rapport_complet, caption,
+                           provider, correlation_id, channel, technicien,
+                           message_id, ctx, detail=f"extraction failed: {exc}")
 
     # "salut" extracts to an all-null report. Without this the pipeline appends
     # an empty Sheet row and answers "✅ Rapport enregistré" for a greeting.
@@ -1508,6 +1658,30 @@ def write_cursor(name: str, payload: CursorIn,
     try:
         logs.set_cursor(name, payload.value)
         return {"name": name, "value": logs.get_cursor(name)}
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/message-queue", responses={502: {"description": "Log store unreachable"}})
+def list_message_queue(
+    limit: int = Query(50, ge=1, le=200), caller: dict = Depends(auth.require_user)
+) -> dict:
+    """Messages parked before they ever became a report.
+
+    The companion of /sheet-queue, one stage earlier: that one holds a finished
+    report Google refused, this one holds a message the model could not read.
+    Abandoned rows are included for the same reason — the row that stopped being
+    retried is the one an operator has to act on, and hiding it makes a lost
+    report look like an empty queue.
+    """
+    try:
+        return {
+            "pending": logs.list_message_queue(limit),
+            "max_attempts": logs.MAX_MESSAGE_ATTEMPTS,
+            # Set while the text chain is refusing on quota: the queue is not
+            # stuck, it is waiting, and the panel has to be able to say which.
+            "paused_until": jobs.message_quota_pause(),
+        }
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
 

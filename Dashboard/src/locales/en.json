@@ -529,5 +529,15 @@
   "queue.paused": "Queue paused (Google quota) until",
   "queue.status.queued": "queued",
   "queue.status.retrying": "retrying",
-  "queue.status.abandoned": "abandoned"
+  "queue.status.abandoned": "abandoned",
+  "queue.messages.title": "Messages waiting",
+  "queue.messages.intro": "Messages received but not yet turned into a report: transcription or extraction failed. They are replayed automatically, in send order and one at a time per technician.",
+  "queue.messages.empty": "No messages waiting.",
+  "queue.messages.paused": "Quota exhausted across the whole text chain: replays are paused, spending no attempt, until",
+  "queue.messages.nextTry": "next try",
+  "queue.messages.runNow": "Replay now",
+  "queue.messages.kind.audio": "voice note",
+  "queue.messages.kind.image": "photo",
+  "queue.messages.kind.text": "text",
+  "queue.sheet.title": "Refused Google Sheets writes"
 }
