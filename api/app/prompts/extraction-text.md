@@ -64,20 +64,15 @@ Les trois chantiers appellent la même chose de trois façons — « câble UTP 
 - Électricité — `cable_elec_3x2_5_m` (mètres), `fiche_2p_t_u`,
   `disjoncteur_2x16a_u`, `bandeau_elec_12p_u`, `passe_cable_u`, `borne_2_5_u`.
 
-Un article **livré** n'est pas un article **posé** : « on a reçu 48 pigtails »
-ne remplit rien. Seul ce qui est installé compte.
-
 Distingue les variantes : un cordon de brassage 1 m et un cordon de liaison 3 m
 sont deux champs, un tiroir 24 ports et un tiroir 12 ports aussi. Si le
 technicien dit « des jarretières » sans préciser le type, laisse les trois
 champs `null` et écris-le dans `remarques` — un article rangé dans la mauvaise
 ligne du bordereau est pire qu'un article non compté.
 
-Cette règle vise l'article **ambigu**, pas l'article **absent du catalogue**.
-Quand l'article est parfaitement clair mais qu'aucun champ ne lui correspond —
-une prise électrique, un interrupteur, un tableau, une caméra — il ne reste pas
-dans `remarques` : il va dans `articles_libres`, décrit plus bas. Une quantité
-chiffrée ne doit jamais finir uniquement en prose.
+Cette règle vise l'article **ambigu**. L'article clair mais absent du catalogue
+— prise électrique, interrupteur, tableau, caméra — va dans `articles_libres`,
+décrit plus bas.
 
 ## Un article qui n'a pas de champ — `articles_libres`
 
@@ -120,21 +115,16 @@ exactement une de ces places :
 - une heure, une date, un temps d'arrêt, un étage.
 
 Un nombre présent dans le message et absent de ta réponse est une **erreur**.
-Les longueurs sont les plus souvent oubliées, parce qu'elles arrivent en fin de
-phrase et parfois deux fois : « Pose de 6 m de chemin de câbles … Pose de 2 m
-de chemin de câbles dans le deuxième chalet » fait **une** entrée à 8, pas
-zéro.
+Les longueurs sont les plus souvent oubliées : elles arrivent en fin de phrase,
+et parfois deux fois pour le même article.
 
 Exemple, sur un rapport d'électricité :
 
 ```json
 "articles_libres": {
   "prise double étanche encastrée": 4,
-  "prise simple étanche encastrée": 13,
   "prise simple étanche apparente": 3,
   "interrupteur simple étanche encastré": 9,
-  "interrupteur double allumage étanche": 1,
-  "tableau électrique": 2,
   "chemin de câbles (m)": 8
 }
 ```
@@ -245,26 +235,23 @@ matériel ou annonce la suite en est un aussi. Trois champs, distincts de
 3. **Additions énoncées** — si le technicien détaille des longueurs
    (« 1=52m / 2=53m / 3=64m »), additionne-les dans le champ correspondant.
 4. **Un article chiffré a toujours une place.** Un champ existant s'il y en a un,
-   sinon `articles_libres`. Le laisser seulement dans `remarques` le fait
-   disparaître de tous les totaux : c'est la seule erreur de ce document qui ne
-   se voit pas à la lecture de la ligne.
+   sinon `articles_libres` ; jamais `remarques` seul.
 5. **Absence** — une information non mentionnée vaut `null`. Jamais 0, jamais une
    estimation, jamais une valeur « typique ».
-5. **Autocorrection** — si le technicien se reprend (« 300… non, 350 »), retiens la
+6. **Autocorrection** — si le technicien se reprend (« 300… non, 350 »), retiens la
    **dernière** valeur énoncée.
-6. **Nombres qui ne sont pas des quantités** — un numéro de bureau, un effectif,
+7. **Nombres qui ne sont pas des quantités** — un numéro de bureau, un effectif,
    une date, une heure ne remplissent aucun champ de quantité. « On était 4
    techniciens au bureau 12 » ne donne aucune quantité.
-7. **Négation explicite ≠ absence.** « Pas de goulotte aujourd'hui » **énonce une
+8. **Négation explicite ≠ absence.** « Pas de goulotte aujourd'hui » **énonce une
    valeur** : le champ vaut `0`. Si le champ n'est jamais évoqué, il vaut `null`.
    `0` veut dire « rien fait », `null` veut dire « on ne sait pas ».
-8. **`remarques`** — problèmes, blocages, bureaux fermés, matériel manquant,
+9. **`remarques`** — problèmes, blocages, bureaux fermés, matériel manquant,
    accès refusé, incidents. Un arrêt énoncé avec sa durée va dans
    `temps_arret_min` + `motif_arret`, pas ici ; le détail qui n'entre dans
    aucun champ reste dans `remarques`. Une journée sans un seul mètre posé
    mais avec un blocage **est** un rapport : c'est celui qui compte le plus.
-9. **`resume`** — 2 à 4 phrases, français professionnel, 3e personne, destiné au chef
-   de chantier. Toujours rempli, même si tout le reste est `null` : dans ce cas il
+10. **`resume`** — 2 à 4 phrases destinées au chef de chantier. Toujours rempli, même si tout le reste est `null` : dans ce cas il
    explique pourquoi la journée n'a produit aucun chiffre. Sans mot de remplissage
    ni hésitation (« probablement », « il semble que », « je pense ») : soit le fait
    est établi, soit c'est une incertitude à porter dans `remarques`.

@@ -2,7 +2,7 @@
 import re
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
@@ -1487,7 +1487,16 @@ def list_queue(
     limit: int = Query(20, ge=1, le=500), caller: dict = Depends(auth.require_user)
 ) -> dict:
     try:
-        return {"pending": logs.pending_writes(limit)}
+        # The dashboard sees retired rows too: a payload that stopped being
+        # retried is the one an operator has to act on, and hiding it is how a
+        # lost report looks like an empty queue.
+        return {
+            "pending": logs.pending_writes(limit, include_retired=True),
+            "max_attempts": logs.MAX_WRITE_ATTEMPTS,
+            # Set while Google is refusing on quota: the queue is not stuck,
+            # it is waiting, and the panel must be able to say which.
+            "paused_until": jobs.sheet_queue_pause(),
+        }
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
 
@@ -1741,6 +1750,40 @@ async def n8n_executions(
     limit: int = Query(20, ge=1, le=250), caller: dict = Depends(auth.require_human)
 ) -> Any:
     return await _n8n_get(f"executions?limit={int(limit)}")
+
+
+@app.get("/n8n/listening", responses={502: {"description": "n8n unreachable or misconfigured"}})
+async def n8n_listening(caller: dict = Depends(auth.require_user)) -> dict:
+    """Is the orchestrator still *listening*, not merely running?
+
+    A reachable n8n with an active workflow proves neither: on 2026-08-19 the
+    crons were unregistered mid-run and both receptions went silent for an hour
+    while every status said healthy. The only honest evidence is work — the
+    timestamp of the last execution, compared against how often one is expected.
+    """
+    body = await _n8n_get("executions?limit=1")
+    items = (body or {}).get("data") or []
+    last = (items[0] or {}).get("stoppedAt") or (items[0] or {}).get("startedAt") if items else None
+    threshold = max(1, settings.n8n_stale_after_minutes) * 60
+    age = None
+    if last:
+        try:
+            seen = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+            age = max(0.0, (datetime.now(timezone.utc) - seen).total_seconds())
+        except (ValueError, TypeError):
+            # Unparseable, or parsed without a timezone (naive minus aware is a
+            # TypeError). Neither is evidence of freshness. Left as
+            # None, which reads as stale below rather than as healthy.
+            age = None
+    return {
+        "last_execution_at": last,
+        "age_seconds": age,
+        "threshold_seconds": threshold,
+        # No execution at all, an unreadable date, or one older than the
+        # window: all three mean nothing has been heard from, and none of them
+        # may be reported as listening.
+        "stale": age is None or age > threshold,
+    }
 
 
 # ── Technician directory ───────────────────────────────────────────────────

@@ -523,5 +523,11 @@
   "chantiers.level.depassement": "يتجاوز الصفقة",
   "chantiers.open": "فتح الجدول",
   "chantiers.close": "إغلاق الجدول",
-  "chantiers.tracked": "ورش متابَعة"
+  "chantiers.tracked": "ورش متابَعة",
+  "server.stale": "n8n لم يعد يستمع",
+  "server.lastExecution": "آخر تنفيذ",
+  "queue.paused": "الطابور متوقف مؤقتاً (حصة Google) حتى",
+  "queue.status.queued": "في الانتظار",
+  "queue.status.retrying": "إعادة المحاولة",
+  "queue.status.abandoned": "متروك"
 }

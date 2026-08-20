@@ -17,6 +17,7 @@ Threading rather than APScheduler: one loop, a 30-second tick and four due
 checks is the whole requirement, and a dependency would need pinning, mocking in
 tests and explaining in the mémoire.
 """
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -79,6 +80,26 @@ def refill_articles() -> dict:
     return journal.refill_missing_articles()
 
 
+# What a quota refusal looks like coming back from Google: a 429, a
+# RESOURCE_EXHAUSTED, or one of the Sheets rate-limit reasons. Matched on the
+# error text because `sheets.SheetsError` carries the vendor's message and
+# nothing more structured.
+_QUOTA_SIGNS = re.compile(
+    r"429|quota|rate.?limit|RESOURCE_EXHAUSTED|userRateLimitExceeded",
+    re.I,
+)
+# Google's Sheets quotas are per-minute windows and the error names no
+# retry-after, so the pause is a flat two minutes.
+# ponytail: one constant; read a retry-after if Google ever sends one.
+QUOTA_PAUSE_SECONDS = 120
+_paused_until = 0.0
+
+
+def sheet_queue_pause() -> Optional[float]:
+    """Unix time the drain is paused until, or None when it is running."""
+    return _paused_until if _paused_until > time.time() else None
+
+
 def drain_sheet_queue() -> dict:
     """Append every parked report the Sheet refused earlier.
 
@@ -86,8 +107,16 @@ def drain_sheet_queue() -> dict:
     summary. This is the other half of that bargain: without it the rows sit in
     `failed_writes` forever.
     """
+    global _paused_until
+    if _paused_until > time.time():
+        # A quota is not a per-row failure: retrying inside the window refuses
+        # every row, spends an attempt on each, and can retire a payload that
+        # was never malformed. Wait for the window instead.
+        return {"pending": 0, "written": 0, "failed": [],
+                "paused_until": _paused_until}
     pending = logs.pending_writes(DRAIN_BATCH)
     written, failed = 0, []
+    paused = None
     for item in pending:
         payload = item.get("payload") or {}
         try:
@@ -97,6 +126,18 @@ def drain_sheet_queue() -> dict:
             filed = journal.file_report(payload)
             appended_mirror = filed.get("rapports_row")
         except sheets.SheetsError as exc:
+            if _QUOTA_SIGNS.search(str(exc)):
+                # The whole batch is behind the same ceiling: stop here, record
+                # the error without spending an attempt, and let the window pass.
+                _paused_until = paused = time.time() + QUOTA_PAUSE_SECONDS
+                logs.resolve_write(item["id"], False, str(exc), count_attempt=False)
+                failed.append({"id": item["id"], "error": str(exc), "quota": True})
+                logs.write_safe(
+                    "sheet", "warn",
+                    message=f"drain paused {QUOTA_PAUSE_SECONDS}s on quota: {exc}"[:400],
+                    correlation_id=item.get("correlation_id"),
+                )
+                break
             # Left in the queue with the attempt counted, not dropped.
             logs.resolve_write(item["id"], False, str(exc))
             failed.append({"id": item["id"], "error": str(exc)})
@@ -119,7 +160,8 @@ def drain_sheet_queue() -> dict:
             except logs.LogStoreError:
                 pass  # best-effort like the append itself
         written += 1
-    return {"pending": len(pending), "written": written, "failed": failed}
+    return {"pending": len(pending), "written": written, "failed": failed,
+            **({"paused_until": paused} if paused else {})}
 
 
 def prune_logs() -> dict:

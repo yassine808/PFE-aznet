@@ -186,6 +186,15 @@ class Settings(BaseSettings):
     # sit behind require_human like the rest of the dashboard.
     n8n_url: str = "http://n8n:5678"  # NOSONAR — internal docker-compose service name, not internet-reachable
     n8n_api_key: Optional[str] = None
+    # How long n8n may go without finishing an execution before GET
+    # /n8n/listening calls it stale. On 2026-08-19 its crons were unregistered
+    # after a run of Telegram "Bad request": polling and the WhatsApp webhook
+    # were dead for an hour while everything green said "Serveur actif" —
+    # because n8n's *process* was up, only its listening was not. The default
+    # is generous against a quiet hour on site (Telegram polls on a minute
+    # scale; a workflow that has not completed anything in 30 minutes during
+    # the day is the anomaly, not the lunch break).
+    n8n_stale_after_minutes: int = 30
 
     # Where the dashboard answers, used to build the "open the report" link in
     # outgoing mail. It has to be an address the *recipient's* browser can

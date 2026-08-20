@@ -523,5 +523,11 @@
   "chantiers.level.depassement": "Au-dessus du marché",
   "chantiers.open": "Ouvrir le bordereau",
   "chantiers.close": "Fermer le bordereau",
-  "chantiers.tracked": "chantiers suivis"
+  "chantiers.tracked": "chantiers suivis",
+  "server.stale": "n8n n’écoute plus",
+  "server.lastExecution": "Dernière exécution",
+  "queue.paused": "File en pause (quota Google) jusqu’à",
+  "queue.status.queued": "en attente",
+  "queue.status.retrying": "nouvelle tentative",
+  "queue.status.abandoned": "abandonné"
 }

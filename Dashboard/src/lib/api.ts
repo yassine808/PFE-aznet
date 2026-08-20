@@ -144,6 +144,9 @@ export interface PendingWrite {
   correlation_id?: string | null
   created_at?: string
   attempts?: number
+  /** Derived server-side from `attempts`: queued (never tried), retrying, or
+   *  abandoned (past the cap, kept visible instead of retried forever). */
+  status?: 'queued' | 'retrying' | 'abandoned'
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -236,6 +239,29 @@ export async function n8nExecutions(signal?: AbortSignal): Promise<N8nExecution[
  * with every workflow deactivated is a real and dangerous state, so server
  * health and workflow activation are reported separately.
  */
+/**
+ * Is n8n still *listening*? A reachable process with an active workflow proves
+ * neither — on 2026-08-19 its crons were unregistered and both receptions were
+ * dead for an hour behind a green status. The API compares the last execution's
+ * timestamp against the expected interval; a failure here is reported as
+ * unknown (null), never as healthy.
+ */
+export async function n8nListening(
+  signal?: AbortSignal,
+): Promise<{ stale: boolean | null; last_execution_at: string | null; age_seconds: number | null }> {
+  try {
+    const res = await fetch(`${BASE}/n8n/listening`, { signal })
+    if (!res.ok) return { stale: null, last_execution_at: null, age_seconds: null }
+    return (await res.json()) as {
+      stale: boolean
+      last_execution_at: string | null
+      age_seconds: number | null
+    }
+  } catch {
+    return { stale: null, last_execution_at: null, age_seconds: null }
+  }
+}
+
 export async function n8nStatus(
   signal?: AbortSignal,
 ): Promise<{ reachable: boolean; workflows: N8nWorkflow[]; authError: boolean }> {
@@ -974,6 +1000,7 @@ export const api = {
   history,
   samples: (s?: AbortSignal) => get<{ samples: ServiceSample[] }>('/service-samples?hours=2', s),
   n8n: n8nStatus,
+  n8nListening,
   n8nExecutions,
   reports: (s?: AbortSignal) => get<{ reports: ReportRow[] }>('/reports', s),
   exchanges: (s?: AbortSignal) => get<{ exchanges: Exchange[] }>('/exchanges', s),
@@ -981,7 +1008,13 @@ export const api = {
   generatedReports: (s?: AbortSignal) =>
     get<{ reports: GeneratedReport[] }>('/reports/generated', s),
   logs: (s?: AbortSignal) => get<{ logs: LogEntry[]; stats: LogStats }>('/logs?limit=50', s),
-  queue: (s?: AbortSignal) => get<{ pending: PendingWrite[] }>('/sheet-queue', s),
+  queue: (s?: AbortSignal) =>
+    // `paused_until` is set while Google is refusing on quota: the drain is
+    // waiting for the window, not stuck. Unix seconds, or null.
+    get<{ pending: PendingWrite[]; max_attempts?: number; paused_until?: number | null }>(
+      '/sheet-queue',
+      s,
+    ),
   jobs: (s?: AbortSignal) => get<{ jobs: JobStatus[] }>('/jobs', s),
   notifications,
   tasks,

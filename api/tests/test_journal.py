@@ -938,3 +938,57 @@ def test_a_stated_date_that_cannot_be_trusted_falls_back(fake):
     assert resolve_date(None, "2026-08-19") == ("2026-08-19", [])
     # Sheets serials go through the one normalizer, like every other date here.
     assert resolve_date("46251", "2026-08-19")[0] == "2026-08-17"
+
+
+# --- the local copy (E: the Sheet is not the only place a report exists) ----
+
+
+def test_a_refused_journal_write_still_lands_in_postgres(fake, monkeypatch):
+    """A Sheets outage must not leave the report living only inside the parked
+    payload: `report_rows` is the local mirror the totals are computed from,
+    and it upserts on correlation_id, so the drain's later success overwrites
+    this copy instead of adding a second one."""
+    from app import journal as mod
+
+    recorded = []
+
+    def boom(tab, row, technicien, chantier, report, metadata, rows=None):
+        raise mod.SheetsError("503 backend error")
+
+    monkeypatch.setattr(mod, "write_report", boom)
+    monkeypatch.setattr(mod, "_mirror_postgres",
+                        lambda *a, **kw: recorded.append((a, kw)))
+
+    with pytest.raises(mod.SheetsError):
+        mod.file_report({
+            "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+            "correlation_id": "c-1",
+            "report": {"cables_installes_m": 120, "resume": "Résumé."},
+        })
+
+    assert len(recorded) == 1
+    args, kwargs = recorded[0]
+    assert args[3] == "DGH" or args[2] == "DGH"   # chantier travelled
+    assert args[4] is None                        # no Rapports row exists
+    assert kwargs["journal_tab"] == "DGH"
+
+
+def test_a_refused_tab_read_still_lands_in_postgres(fake, monkeypatch):
+    """The earlier failure point: Google refusing before anything is read."""
+    from app import journal as mod
+
+    recorded = []
+
+    def boom(tab):
+        raise mod.SheetsError("429 quota exceeded")
+
+    monkeypatch.setattr(mod.sheets, "read_tab", boom)
+    monkeypatch.setattr(mod, "_mirror_postgres",
+                        lambda *a, **kw: recorded.append(a))
+
+    with pytest.raises(mod.SheetsError):
+        mod.file_report({
+            "date": "2026-08-05", "technicien": "NAROUZE", "chantier": "DGH",
+            "report": {"cables_installes_m": 120, "resume": "Résumé."},
+        })
+    assert len(recorded) == 1

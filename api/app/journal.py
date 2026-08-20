@@ -39,6 +39,10 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 
 from app import sheets
+# Imported by name, not reached through the `sheets` module object: the tests
+# swap that object for a fake tab, and an `except sheets.SheetsError` would
+# then raise AttributeError instead of catching anything.
+from app.sheets import SheetsError
 from app.config import settings
 from app.schemas import DATA_FIELDS, ExtractedReport
 
@@ -1197,10 +1201,20 @@ def file_report(payload: Dict) -> Dict:
     # heard of is a 400 ("Unable to parse range"), not an empty list, so the
     # first message to a chantier added in the dashboard used to 502, park in
     # `failed_writes`, and fail identically on every drain thereafter.
-    sheets.ensure_tab(tab, list(HEADERS))
-    # One read serves all three: the retry idempotency test below, the merge
-    # lookup and the stock baseline inside write_report.
-    rows = sheets.read_tab(tab)
+    try:
+        sheets.ensure_tab(tab, list(HEADERS))
+        # One read serves all three: the retry idempotency test below, the merge
+        # lookup and the stock baseline inside write_report.
+        rows = sheets.read_tab(tab)
+    except SheetsError:
+        # Google is refusing. The report itself must not exist only inside the
+        # parked payload: mirror it locally first, then re-raise so the caller
+        # still parks it. `record_report_row` upserts on correlation_id, so the
+        # drain filling in the row numbers later overwrites this copy rather
+        # than adding a second one.
+        _mirror_postgres(payload, _rapports_cells(payload, chantier, warnings),
+                         chantier, warnings, None)
+        raise
     correlation = str(payload.get("correlation_id") or "").strip()
     if correlation:
         # Rows are appended one per message since 2026-08-18, so a message's
@@ -1250,11 +1264,16 @@ def file_report(payload: Dict) -> Dict:
     # writers need the answer and the tab has already been read, so it is
     # settled once here rather than scanned for twice.
     follow_up = find_row(tab, when, technicien, rows)[0] is not None
-    row, stock_warnings = write_report(
-        tab, when, technicien, chantier, report,
-        {k: v for k, v in metadata.items() if v not in (None, "")},
-        rows,
-    )
+    try:
+        row, stock_warnings = write_report(
+            tab, when, technicien, chantier, report,
+            {k: v for k, v in metadata.items() if v not in (None, "")},
+            rows,
+        )
+    except SheetsError:
+        _mirror_postgres(payload, _rapports_cells(payload, chantier, warnings),
+                         chantier, warnings, None, journal_tab=tab)
+        raise
     warnings = warnings + stock_warnings
     # After the journal write succeeded, so a mirror failure cannot cost the
     # row — but before the reply, because the dashboard shows it.

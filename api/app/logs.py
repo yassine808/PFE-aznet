@@ -1470,28 +1470,41 @@ def queue_failed_write(payload: Dict[str, Any], error: str, correlation_id: Opti
 MAX_WRITE_ATTEMPTS = 10
 
 
-def pending_writes(limit: int = 20) -> List[dict]:
+def pending_writes(limit: int = 20, include_retired: bool = False) -> List[dict]:
     """Drainable queue rows.
 
     The attempts cap matters: without it a permanently malformed payload is
     retried every 5 minutes forever AND, being the oldest row, permanently
     occupies the head of the window — starving newer recoverable reports.
     Rows past the cap stay in the table for inspection but stop being retried.
+
+    `include_retired=True` lifts that filter for the dashboard: a row that
+    stopped being retried is exactly the one an operator has to see, and the
+    drain's own view must stay the filtered one.
     """
+    sql = "SELECT * FROM failed_writes {} ORDER BY created_at ASC LIMIT %s".format(
+        "" if include_retired else "WHERE attempts < %s"
+    )
+    args: tuple = ((max(1, min(limit, 100)),) if include_retired
+                   else (MAX_WRITE_ATTEMPTS, max(1, min(limit, 100))))
     with _cursor() as cur:
-        cur.execute(
-            "SELECT * FROM failed_writes WHERE attempts < %s ORDER BY created_at ASC LIMIT %s",
-            (MAX_WRITE_ATTEMPTS, max(1, min(limit, 100))),
-        )
+        cur.execute(sql, args)
         rows = [dict(r) for r in cur.fetchall()]
     for r in rows:
         if isinstance(r.get("created_at"), datetime):
             r["created_at"] = r["created_at"].isoformat()
+        # The state a human reads, derived rather than stored: a second column
+        # holding what `attempts` already says is a column that can disagree
+        # with it.
+        attempts = r.get("attempts") or 0
+        r["status"] = ("queued" if attempts == 0
+                       else "retrying" if attempts < MAX_WRITE_ATTEMPTS
+                       else "abandoned")
     return rows
 
 
 def resolve_write(write_id: int, ok: bool, error: Optional[str] = None,
-                  retry: bool = True) -> None:
+                  retry: bool = True, count_attempt: bool = True) -> None:
     """Drop the row on success, otherwise bump attempts so the cron can back off.
 
     `retry=False` retires the row instead of counting one more attempt: a
@@ -1500,13 +1513,22 @@ def resolve_write(write_id: int, ok: bool, error: Optional[str] = None,
     batch for ten more drains — the starvation `MAX_WRITE_ATTEMPTS` exists to
     prevent, delayed rather than avoided. The row stays in the table with its
     error, so the dashboard still shows what was dropped and why.
+
+    `count_attempt=False` records the error without spending an attempt: a
+    Sheets quota refusal is not the row's fault, and burning ten of them on a
+    minute-long rate limit retires a payload that was never malformed.
     """
     with _cursor() as cur:
         if ok:
             cur.execute("DELETE FROM failed_writes WHERE id = %s", (write_id,))
-        elif retry:
+        elif retry and count_attempt:
             cur.execute(
                 "UPDATE failed_writes SET attempts = attempts + 1, last_error = %s WHERE id = %s",
+                (error, write_id),
+            )
+        elif retry:
+            cur.execute(
+                "UPDATE failed_writes SET last_error = %s WHERE id = %s",
                 (error, write_id),
             )
         else:

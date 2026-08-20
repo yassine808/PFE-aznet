@@ -20,6 +20,15 @@ main.app.dependency_overrides[main.auth.require_human] = lambda: {
     "id": 1, "name": "Test", "role": "directeur"
 }
 
+@pytest.fixture(autouse=True)
+def _no_pause():
+    """The drain's quota pause is module state; a test that sets it must not
+    silently disable the drain for every test that follows."""
+    jobs._paused_until = 0.0
+    yield
+    jobs._paused_until = 0.0
+
+
 QUEUED = {
     "id": 7,
     "correlation_id": "abc",
@@ -56,17 +65,57 @@ def test_drain_keeps_row_when_sheet_refuses(monkeypatch):
     resolved = []
 
     def boom(payload):
-        raise SheetsError("quota")
+        raise SheetsError("Sheet introuvable")
 
     monkeypatch.setattr(jobs.logs, "pending_writes", lambda n: [QUEUED])
     monkeypatch.setattr(jobs.journal, "file_report", boom)
-    monkeypatch.setattr(jobs.logs, "resolve_write", lambda i, ok, err=None: resolved.append((i, ok, err)))
+    monkeypatch.setattr(jobs.logs, "resolve_write",
+                        lambda i, ok, err=None, **kw: resolved.append((i, ok, err, kw)))
 
     out = jobs.drain_sheet_queue()
 
     assert out["written"] == 0
     assert out["failed"][0]["id"] == 7
-    assert resolved == [(7, False, "quota")]  # attempt counted, row still pending
+    # Attempt counted, row still pending: an ordinary refusal is the row's
+    # problem and the cap must eventually retire it.
+    assert resolved == [(7, False, "Sheet introuvable", {})]
+
+
+def test_drain_pauses_on_quota_and_spends_no_attempt(monkeypatch):
+    """A 429 is not the row's fault: retrying inside the window refuses every
+    row and would retire ten perfectly good payloads on one rate limit."""
+    resolved, tried = [], []
+
+    def boom(payload):
+        tried.append(payload)
+        raise SheetsError("429 RESOURCE_EXHAUSTED: quota exceeded")
+
+    monkeypatch.setattr(jobs.logs, "pending_writes", lambda n: [QUEUED, {**QUEUED, "id": 8}])
+    monkeypatch.setattr(jobs.journal, "file_report", boom)
+    monkeypatch.setattr(jobs.logs, "resolve_write",
+                        lambda i, ok, err=None, **kw: resolved.append((i, ok, kw)))
+    monkeypatch.setattr(jobs.logs, "write_safe", lambda *a, **k: None)
+
+    out = jobs.drain_sheet_queue()
+
+    assert out["written"] == 0 and out["failed"][0]["quota"] is True
+    assert len(tried) == 1  # the batch stops at the first refusal, not per row
+    assert resolved == [(7, False, {"count_attempt": False})]
+    assert out["paused_until"] > time.time()
+    assert jobs.sheet_queue_pause() is not None
+
+    # And the next drain does not even read the queue while the window holds.
+    monkeypatch.setattr(jobs.logs, "pending_writes",
+                        lambda n: pytest.fail("must not read the queue while paused"))
+    again = jobs.drain_sheet_queue()
+    assert again["written"] == 0 and again["paused_until"] > time.time()
+
+
+def test_drain_resumes_once_the_window_passes(monkeypatch):
+    monkeypatch.setattr(jobs, "_paused_until", time.time() - 1)
+    monkeypatch.setattr(jobs.logs, "pending_writes", lambda n: [])
+    assert jobs.sheet_queue_pause() is None
+    assert jobs.drain_sheet_queue() == {"pending": 0, "written": 0, "failed": []}
 
 
 def test_drain_does_not_stall_on_an_unprocessable_payload(monkeypatch):

@@ -93,3 +93,64 @@ def test_connection_error_is_502(monkeypatch):
     r = client.get("/n8n/workflows")
     assert r.status_code == 502
     assert "unreachable" in r.json()["detail"]
+
+
+# ── GET /n8n/listening ─────────────────────────────────────────────────────
+# 2026-08-19: n8n's crons were unregistered after a run of Telegram "Bad
+# request". Polling and the WhatsApp webhook were dead for an hour while the
+# process answered every health probe. Only finished work proves listening.
+
+main.app.dependency_overrides[main.auth.require_user] = lambda: {
+    "id": 1, "name": "Test", "role": "directeur"
+}
+
+
+def _ago(seconds: float) -> str:
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
+
+
+def test_recent_execution_is_not_stale(monkeypatch):
+    _patch(monkeypatch, _FakeResponse(200, {"data": [{"stoppedAt": _ago(60)}]}))
+    body = client.get("/n8n/listening").json()
+    assert body["stale"] is False
+    assert body["age_seconds"] < 120
+
+
+def test_old_execution_is_stale(monkeypatch):
+    _patch(monkeypatch, _FakeResponse(200, {"data": [{"stoppedAt": _ago(7200)}]}))
+    monkeypatch.setattr(main.settings, "n8n_stale_after_minutes", 30)
+    body = client.get("/n8n/listening").json()
+    assert body["stale"] is True
+    assert body["threshold_seconds"] == 1800
+
+
+def test_running_execution_falls_back_to_started_at(monkeypatch):
+    _patch(monkeypatch, _FakeResponse(200, {"data": [{"stoppedAt": None, "startedAt": _ago(30)}]}))
+    assert client.get("/n8n/listening").json()["stale"] is False
+
+
+def test_no_executions_at_all_is_stale(monkeypatch):
+    """Never having run is the worst version of not listening, not the best."""
+    _patch(monkeypatch, _FakeResponse(200, {"data": []}))
+    body = client.get("/n8n/listening").json()
+    assert body["stale"] is True and body["age_seconds"] is None
+
+
+def test_unreadable_timestamp_is_stale_not_healthy(monkeypatch):
+    _patch(monkeypatch, _FakeResponse(200, {"data": [{"stoppedAt": "hier"}]}))
+    assert client.get("/n8n/listening").json()["stale"] is True
+
+
+def test_unreachable_n8n_is_502(monkeypatch):
+    _patch(monkeypatch, raises=httpx.ConnectError("refused"))
+    assert client.get("/n8n/listening").status_code == 502
+
+
+def test_naive_timestamp_is_stale_not_a_500(monkeypatch):
+    """n8n has answered without a timezone; naive minus aware is a TypeError,
+    and a crash here would take the status line down with it."""
+    _patch(monkeypatch, _FakeResponse(200, {"data": [{"stoppedAt": "2026-08-19T06:48:00"}]}))
+    r = client.get("/n8n/listening")
+    assert r.status_code == 200 and r.json()["stale"] is True

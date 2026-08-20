@@ -21,6 +21,11 @@ export function QueuePage() {
   const [error, setError] = useState<string | null>(null)
 
   const pending = list.data?.pending ?? []
+  // Google refusing on quota is not the same as a stuck queue: the drain is
+  // waiting for the window and spends no attempt meanwhile. Saying so is the
+  // difference between "nothing is happening" and "nothing should be".
+  const pausedUntil = list.data?.paused_until ?? null
+  const paused = pausedUntil !== null && pausedUntil * 1000 > Date.now()
 
   const runNow = async () => {
     setBusy('job')
@@ -71,6 +76,15 @@ export function QueuePage() {
         </button>
       </div>
 
+      {paused && (
+        <p className="border-status-warn/40 text-status-warn rounded-md border border-dashed px-3 py-2 text-xs">
+          {t('queue.paused')}{' '}
+          {new Date((pausedUntil as number) * 1000).toLocaleTimeString(locale, {
+            hour12: settings.timeFormat === '12h',
+          })}
+        </p>
+      )}
+
       {error && <p className="text-status-fail text-xs break-all">{error}</p>}
 
       {list.error && <ErrorState message={list.error} onRetry={list.reload} />}
@@ -94,6 +108,20 @@ export function QueuePage() {
                       })
                     : '—'}
                 </span>
+                {item.status && (
+                  <span
+                    className={cn(
+                      'rounded-full border px-2 py-0.5 text-[0.625rem]',
+                      item.status === 'abandoned'
+                        ? 'border-status-fail/40 text-status-fail'
+                        : item.status === 'retrying'
+                          ? 'border-status-warn/40 text-status-warn'
+                          : 'border-line text-ink-faint',
+                    )}
+                  >
+                    {t(`queue.status.${item.status}`)}
+                  </span>
+                )}
                 {typeof item.attempts === 'number' && (
                   <span className="border-line text-ink-faint rounded-full border px-2 py-0.5 text-[0.625rem] tabular">
                     {item.attempts} {t('queue.attempts')}

@@ -523,5 +523,11 @@
   "chantiers.level.depassement": "Over contract",
   "chantiers.open": "Open the contract list",
   "chantiers.close": "Close the contract list",
-  "chantiers.tracked": "sites tracked"
+  "chantiers.tracked": "sites tracked",
+  "server.stale": "n8n stopped listening",
+  "server.lastExecution": "Last execution",
+  "queue.paused": "Queue paused (Google quota) until",
+  "queue.status.queued": "queued",
+  "queue.status.retrying": "retrying",
+  "queue.status.abandoned": "abandoned"
 }
