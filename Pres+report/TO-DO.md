@@ -697,3 +697,51 @@ redéployés et vérifiés dans les conteneurs.
       modifié n'atteint pas un conteneur déjà lancé — `up -d`, pas `restart`.
 - [ ] `DGH` ligne 4 : cellule « Lien audio » mêlant prose et neuf identifiants,
       héritée de l'ancienne fusion. À reprendre à la main.
+- [ ] **Documenter les avertissements dans `rapport-PFE.docx`.** Le système en
+      produit deux familles, elles ne vivent pas au même endroit, et le rapport
+      n'en décrit aucune. Recensé le 2026-08-20 pour ne pas être re-dérivé plus
+      tard :
+
+      **Famille A — alertes matière** (`api/app/stock.py`, clé `niveau`).
+      Recalculées à la demande depuis le journal, le registre `receptions` et le
+      bordereau ; **stockées nulle part**. Elles alimentent le corps du mail
+      quotidien/hebdomadaire, le tableau du `.docx` et `GET /alerts` (page
+      Chantiers). Quatre niveaux, classés dans cet ordre (`_ORDER`) :
+      - `depassement` — posé > `qte_marche`. Ne dépend pas du stock connu : sur-
+        consommation ou erreur de saisie, le directeur veut l'entendre dans les
+        deux cas.
+      - `critique` — ≤ 2 jours de couverture au rythme actuel, ou ≤ 5 % du
+        marché quand aucun rythme n'est exploitable.
+      - `bas` — ≤ 5 jours, ou ≤ 10 %.
+      - `surplus` — « trop » : plus de 2× ce qu'il reste à poser, **et** un
+        excédent supérieur à 10 % du marché. Testé **avant** les niveaux de
+        pénurie : en fin de chantier un article peut être sous deux jours de
+        couverture *et* en excès, et « commandez-en » serait alors la phrase
+        exactement inverse. Sous `MIN_ACTIVE_DAYS` (2) il n'y a pas de rythme,
+        donc repli sur le pourcentage ; sans `qte_marche`, silence.
+        Seuils surchargeables dans `app_settings` (`stock_jours_critique`,
+        `stock_jours_bas`, `stock_pct_critique`, `stock_pct_bas`,
+        `stock_surplus_facteur`).
+
+      **Famille B — avertissements de ligne** (`journal.WARNING_LABELS`).
+      Celles-ci **ont** une colonne : `Motif du flag` sur l'onglet du chantier
+      et `motif_flag` sur Rapports, plusieurs jointes par « · ». Elles viennent
+      de deux processus qui convergent — `/process` les passe via n8n
+      (`warnings: $('Process output').item.json.warnings ?? []`), `file_report`
+      y ajoute les siennes. Dix clés, dont **cinq seulement** lèvent
+      `Flag review` :
+      - lèvent le drapeau : `image_input`, `photo_zones_partielles`,
+        `low_confidence_transcription`, `short_transcription`,
+        `chantier_cree_non_verifie`.
+      - écrites sans lever le drapeau : `stock_ecart` (« Écart de stock »),
+        `no_report_content`, `heure_non_dite`, `date_declaree_illisible`,
+        `date_declaree_hors_plage`.
+
+      **Les deux points à faire ressortir dans le rapport**, parce qu'ils sont
+      des décisions et pas des détails : (1) la famille A n'a **aucune** colonne
+      — un chiffre dérivé de trois sources périmerait dans une cellule, même
+      raison que `qte_installee` recalculé à chaque appel ; (2) `stock_ecart`
+      est le seul avertissement portant sur une **contradiction numérique** et
+      il ne lève pas le drapeau : la ligne se justifie toute seule et personne
+      n'est invité à la regarder. Signalé au propriétaire le 2026-08-20, laissé
+      en l'état à sa demande — donc à présenter comme un choix, pas un oubli.
