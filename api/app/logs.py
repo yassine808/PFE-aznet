@@ -2255,25 +2255,28 @@ def find_technician(channel: str, external_id: str) -> Optional[dict]:
     whose number was keyed in differently than the directory would be denied
     — one form, stored and looked up alike.
 
-    The resolved chantier rides along: this lookup already happens on every
-    message, and the routing rule is one COALESCE (own site, else the chef's).
-    Fetching it here means the tab is known before the row is built, so the
-    reply to the technician can name the site it was filed to.
+    No chantier rides along any more. It used to: this lookup happens on every
+    message, so resolving the site here from `persons.chantier_id` (own, else
+    the chef's) meant the tab was known before the row was built. That column
+    was dropped on 2026-08-20 — nobody is assigned to a site — and the site is
+    now decided per message by `journal.resolve_site`, from the name the
+    technician said or their own last row.
+
+    The removal is why this docstring is long. The three columns lived on in
+    this query after the drop, and `find_technician` is called on EVERY inbound
+    message: for the time it took to notice, every WhatsApp and Telegram
+    message failed at `Lookup technicien` with "column p.chantier_id does not
+    exist" and the whole pipeline was down. The test suite runs without a
+    database and could not have caught it.
     """
     external_id = normalize_external_id(channel, external_id)
     with _cursor() as cur:
         cur.execute(
             """
             SELECT p.id AS person_id, p.name, p.role, p.profile,
-                   t.id, t.channel, t.external_id, t.active,
-                   COALESCE(p.chantier_id, m.chantier_id) AS chantier_id,
-                   COALESCE(c.nom, mc.nom)                AS chantier,
-                   COALESCE(c.sheet_tab, mc.sheet_tab)    AS sheet_tab
+                   t.id, t.channel, t.external_id, t.active
               FROM technicians t
-              JOIN persons p       ON p.id = t.person_id
-              LEFT JOIN persons m  ON m.id = p.manager_id
-              LEFT JOIN chantiers c  ON c.id = p.chantier_id
-              LEFT JOIN chantiers mc ON mc.id = m.chantier_id
+              JOIN persons p ON p.id = t.person_id
              WHERE t.channel = %s AND t.external_id = %s AND t.active
             """,
             (channel, external_id.strip()),
