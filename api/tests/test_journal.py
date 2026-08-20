@@ -162,6 +162,13 @@ def test_blocker_fields_land_in_their_own_columns():
 class FakeSheet:
     """Minimal stand-in: a tab is a header list plus rows of dicts."""
 
+    # The module constant the code reads off `sheets`, not just its methods.
+    # Without it `sheets.RAPPORTS_TAB` raises AttributeError straight into
+    # `_mirror_rapports`' best-effort except, and the mirror silently does
+    # nothing — which reads in the test as "no rows were mirrored" rather than
+    # as the broken fake it is.
+    RAPPORTS_TAB = "Rapports"
+
     def __init__(self, rows=None):
         self.rows = rows or []
         self.created = []
@@ -379,7 +386,10 @@ def test_rapports_cells_carry_the_index_and_none_of_the_figures():
     assert cells["technicien"] == "NAROUZE"
     assert cells["chantier"] == "DGH"
     assert cells["resume"] == "Résumé professionnel."
-    assert cells["rapport_complet"] == "…"
+    # The column is named `Message` since 2026-08-20: the key of this dict IS
+    # the Sheet header, while the *payload* key it reads stays rapport_complet.
+    assert cells["Message"] == "…"
+    assert "rapport_complet" not in cells
     # And the plumbing the dashboard runs on.
     assert cells["STT_model"] == "groq"
     assert cells["flag_review"] is True

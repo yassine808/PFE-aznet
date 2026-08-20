@@ -70,7 +70,10 @@ export interface ReportRow {
   besoins?: string
   prochaines_etapes?: string
   resume?: string
-  rapport_complet?: string
+  /** What the technician actually said: the transcript of a voice note, or
+   *  the text of a typed message. Column named `Message` in the Sheet since
+   *  2026-08-20 — the key here IS the header, so the two move together. */
+  Message?: string
   confidence?: string
   flag_review?: string
   lien_audio?: string
@@ -319,7 +322,7 @@ export async function patchReport(row: number, field: string, value: string): Pr
 
 /**
  * Correct the transcript of a logged exchange — a voice note that never became
- * a Sheet row. The Sheet-row equivalent is `patchReport(row, 'rapport_complet')`;
+ * a Sheet row. The Sheet-row equivalent is `patchReport(row, 'Message')`;
  * both record the previous text in the audit trail, which is what keeps a
  * corrected transcript from erasing what the engine actually heard.
  */

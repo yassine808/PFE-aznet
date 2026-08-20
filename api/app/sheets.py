@@ -923,8 +923,8 @@ def style_tab(tab: str, headers: Optional[List[str]] = None) -> None:
         # Both vocabularies, because the journal tab and the flat mirror name
         # them differently and matching only one would leave half the
         # spreadsheet with bold paragraphs.
-        for name in ("resume", "Résumé", "rapport_complet", "Rapport complet",
-                     "observations", "Remarques", "remarques"):
+        for name in ("resume", "Résumé", "Message", "rapport_complet",
+                     "Rapport complet", "observations", "Remarques", "remarques"):
             if name in headers:
                 at = headers.index(name)
                 requests.append({"repeatCell": {

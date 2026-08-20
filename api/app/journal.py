@@ -979,7 +979,13 @@ def _rapports_cells(payload: Dict, chantier: str, warnings: List[str]) -> Dict:
         # with a value nobody reads there.
         "chantier": chantier,
         "resume": report.resume,
-        "rapport_complet": payload.get("rapport_complet"),
+        # Header is `Message`, the payload key is still `rapport_complet`. The
+        # two are different vocabularies on purpose: the payload is the pipeline
+        # contract with n8n, the key here is what a human reads at the top of a
+        # spreadsheet column. Renamed 2026-08-20 — "rapport complet" described a
+        # report, but the cell holds what the technician actually said, which
+        # for a typed message is not a report at all.
+        "Message": payload.get("rapport_complet"),
         "confidence": payload.get("confidence"),
         "flag_review": bool(REVIEW_WARNINGS & set(warnings)),
         "motif_flag": flag_reason(warnings),
@@ -1028,7 +1034,10 @@ def _mirror_postgres(payload: Dict, cells: Dict, chantier: str,
         "flag_review": bool(cells.get("flag_review")),
         "motif_flag": cells.get("motif_flag"),
         "resume": cells.get("resume"),
-        "rapport_complet": cells.get("rapport_complet"),
+        # Reads the Sheet header name, not the payload one: `cells` is keyed by
+        # what the column is called, and this lookup silently returned None the
+        # moment those two drifted apart.
+        "rapport_complet": cells.get("Message"),
         "rapports_row": rapports_row,
         # Where the detail actually lives. Stored so a later pass can fill
         # in the cells of a row whose articles were lost to a quota outage,
@@ -1051,6 +1060,15 @@ def _mirror_rapports(payload: Dict, chantier: str, warnings: List[str],
     """
     cells = _rapports_cells(payload, chantier, warnings)
     try:
+        # Create Rapports the same way a chantier tab is created, on first use.
+        # `append_report` assumed the tab already existed and raised "Rapports
+        # tab has no header row" otherwise — true of this spreadsheet, false of
+        # a brand-new one. On a fresh Google account every journal tab appeared
+        # (they go through `ensure_tab`) and the flat mirror never did, so the
+        # dashboard, which reads only this tab, stayed empty while the Sheet
+        # filled up. Idempotent: it does not touch an existing header row, so
+        # a column the director renamed himself survives.
+        sheets.ensure_tab(sheets.RAPPORTS_TAB, list(cells.keys()))
         row = sheets.append_report(cells)
         # The dashboard reads this tab, so a follow-up has to read as one here
         # too -- same number format, same reason as the journal row. It costs no

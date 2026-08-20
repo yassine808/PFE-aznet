@@ -367,17 +367,17 @@ function IncomingBubble({
         {/* For a voice note the text below the player *is* the transcript, so
             it gets the correctable treatment; for a typed message it is what
             the technician wrote, and stays as written. */}
-        {r.rapport_complet &&
+        {r.Message &&
           (voice ? (
             <TranscriptBubble
               id={`row-${r._row}`}
-              text={r.rapport_complet}
+              text={r.Message}
               engine={r.STT_model}
-              save={(value) => patchReport(r._row, 'rapport_complet', value)}
+              save={(value) => patchReport(r._row, 'Message', value)}
               onSaved={onSaved}
             />
           ) : (
-            <p className="text-ink text-sm break-words whitespace-pre-wrap">{r.rapport_complet}</p>
+            <p className="text-ink text-sm break-words whitespace-pre-wrap">{r.Message}</p>
           ))}
 
         <Stamp heure={r.heure} />
@@ -976,7 +976,7 @@ export function InboxPage({
           // has no summary, so its own last line stands in.
           preview: ('reply' in r
             ? r.reply || r.text || ''
-            : r.resume || r.rapport_complet || ''
+            : r.resume || r.Message || ''
           ).trim(),
           channels: new Set(),
         }

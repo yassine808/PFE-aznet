@@ -89,7 +89,7 @@ function statsOf(rows: ReportRow[]): PersonStats {
     totals.bureaux += num(r.bureaux_termines)
     totals.panneaux += num(r.panneaux_raccordes)
 
-    for (const ch of (r.rapport_complet ?? '').replace(/\s+/g, '')) {
+    for (const ch of (r.Message ?? '').replace(/\s+/g, '')) {
       const code = ch.codePointAt(0) ?? 0
       if (code >= 0x0600 && code <= 0x06ff) arabic += 1
       else if (/[a-zA-ZàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]/.test(ch)) latin += 1
@@ -1290,7 +1290,7 @@ function Identities({
 /**
  * What the worker actually did, from their own rows in the Sheet.
  *
- * The language split reads the raw transcript (`rapport_complet`), not the
+ * The language split reads the raw transcript (`Message`), not the
  * French `resume` — the point is "how do they dictate", and that is only in
  * the original. Script-based detection: Arabic letters count as darija, Latin
  * as French. Darija written in latin letters (arabizi) reads as French here;
