@@ -452,16 +452,24 @@ function SiteMaterials({
           {t('chantiers.materialsSiteIntro')}
         </p>
       )}
+      {/* Two lines per article, not one.
+          Everything used to sit on a single flex row: the name with `flex-1
+          truncate`, then the quantity, the report count and three buttons, all
+          `shrink-0`. In a 2fr column that left the name about forty pixels and
+          every article on the site rendered as "pris…" — a review screen where
+          you cannot read what you are approving. The name now owns a full line
+          and wraps; everything that acts on it sits underneath. */}
       <ul className="divide-line/40 divide-y">
         {rows.map(({ a, site }) => (
-          <li key={a.slug} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
+          <li key={a.slug} className="flex flex-col gap-1.5 py-2">
             {editing === a.slug ? (
-              <>
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder={t('chantiers.renamePlaceholder')}
                   aria-label={t('chantiers.rename')}
+                  autoFocus
                   className="border-line bg-surface text-ink focus-visible:ring-accent min-w-0 flex-1 rounded-md border px-2 py-1 text-xs outline-none focus-visible:ring-2"
                 />
                 <button
@@ -479,57 +487,64 @@ function SiteMaterials({
                 >
                   {t('chantiers.cancel')}
                 </button>
-              </>
+              </div>
             ) : (
               <>
-                <span className="text-ink flex min-w-0 flex-1 items-baseline gap-2 text-xs">
-                  <span className="truncate">{a.designation}</span>
+                {/* The name gets the width and wraps. `break-words` rather than
+                    `truncate`: an article nobody can read is an article nobody
+                    can confirm, and two lines cost less than a lost word. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-ink min-w-0 text-xs leading-snug break-words">
+                    {a.designation}
+                  </span>
+                  <span className="tabular text-ink shrink-0 text-xs whitespace-nowrap">
+                    {num(site.qte, a.unite ?? undefined)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                   {/* Colour never carries it alone — the word is there too. */}
                   {!a.confirmed && (
                     <span className="text-status-warn shrink-0 text-[0.625rem]">
                       {t('chantiers.toCheck')}
                     </span>
                   )}
-                </span>
-                <span className="tabular text-ink shrink-0 text-xs whitespace-nowrap">
-                  {num(site.qte, a.unite ?? undefined)}
-                </span>
-                <span className="tabular text-ink-faint shrink-0 text-[0.625rem] whitespace-nowrap">
-                  {t('chantiers.seen', { n: String(site.seen) })}
-                </span>
-                {!a.confirmed && user?.role === 'directeur' && (
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      disabled={busy === a.slug}
-                      onClick={run(a.slug, () => confirmArticle(a.slug))}
-                      className={btn}
-                    >
-                      <CheckIcon size={11} />
-                      {t('chantiers.confirm')}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy === a.slug}
-                      onClick={() => {
-                        setEditing(a.slug)
-                        setDraft(a.designation)
-                      }}
-                      className={btn}
-                    >
-                      <PencilSimpleIcon size={11} />
-                      {t('chantiers.rename')}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy === a.slug}
-                      onClick={() => setPendingDelete(a)}
-                      className={btnDanger}
-                    >
-                      {t('chantiers.delete')}
-                    </button>
+                  <span className="tabular text-ink-faint shrink-0 text-[0.625rem] whitespace-nowrap">
+                    {t('chantiers.seen', { n: String(site.seen) })}
                   </span>
-                )}
+                  {!a.confirmed && user?.role === 'directeur' && (
+                    <span className="ms-auto flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={busy === a.slug}
+                        onClick={run(a.slug, () => confirmArticle(a.slug))}
+                        className={btn}
+                      >
+                        <CheckIcon size={11} />
+                        {t('chantiers.confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy === a.slug}
+                        onClick={() => {
+                          setEditing(a.slug)
+                          setDraft(a.designation)
+                        }}
+                        className={btn}
+                      >
+                        <PencilSimpleIcon size={11} />
+                        {t('chantiers.rename')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy === a.slug}
+                        onClick={() => setPendingDelete(a)}
+                        className={btnDanger}
+                      >
+                        {t('chantiers.delete')}
+                      </button>
+                    </span>
+                  )}
+                </div>
               </>
             )}
           </li>
