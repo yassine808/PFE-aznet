@@ -696,11 +696,29 @@ async def _park(reason: str, audio, image, text, caption, provider,
         await run_in_threadpool(reply.set_reaction, channel,
                                 str(ctx.get("chat_id") or "") or _chat_id_for(technicien, channel),
                                 message_id, "queued")
+    # Shaped like a ProcessResponse, not like an error. n8n reads
+    # `Process output.item.json.report.resume` on the success path, and a body
+    # without `report` made that expression evaluate to undefined and the reply
+    # node die on "undefined is not valid JSON" — which, with reply-first
+    # ordering, killed the run before /journal and lost the report entirely.
+    # 202 keeps n8n on the success path deliberately; the payload has to keep
+    # the promise that path makes.
+    #
+    # `queued` rides in `warnings` as well as at the top level, because the
+    # reply text branches on warnings and that is where it can see it.
     return JSONResponse(
         status_code=202,
-        content={"queued": True, "queue_id": queue_id, "reason": reason,
-                 "detail": detail[:400],
-                 "resume": "Rapport reçu, traitement différé — il sera enregistré automatiquement."},
+        content={
+            "queued": True, "queue_id": queue_id, "reason": reason,
+            "detail": detail[:400],
+            "warnings": ["queued"],
+            "report": {"resume": "Rapport reçu. Le service est momentanément "
+                                 "indisponible : il sera enregistré "
+                                 "automatiquement dès que possible."},
+            "transcription": None,
+            "chantier": None, "chantier_source": None,
+            "rapport_complet": text if isinstance(text, str) else None,
+        },
     )
 
 
