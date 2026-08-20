@@ -1,10 +1,19 @@
-"""Chantier routing — the voice wins, then the org chart, then the last report.
+"""Chantier routing — the voice wins, then the last report, then nothing.
 
-The hazard this covers: `resolve_tab` used to start with
-`if chantier: return chantier, chantier, []`, i.e. a passed-in name became a
-Google Sheet tab verbatim. Nothing reached that branch while routing came from
-the org chart; the moment the voice fills it, "la DGH", "d.g.h" and "DGH" would
-be three tabs, three split bordereaux and a totals line scattered across them.
+Two hazards, both paid for.
+
+`resolve_tab` used to start with `if chantier: return chantier, chantier, []`,
+i.e. a passed-in name became a Google Sheet tab verbatim. Nothing reached that
+branch while routing came from the org chart; the moment the voice fills it,
+"la DGH", "d.g.h" and "DGH" would be three tabs, three split bordereaux and a
+totals line scattered across them.
+
+And there is no third source any more. Routing by the `chantier_id` on a
+technician's chef was removed 2026-08-20: as a last resort it answered
+confidently on the one case where nothing is known — a first message — and that
+guess became the technician's sticky site and re-applied itself indefinitely.
+`Non affecté` is the honest answer, and `test_unrouted_when_nothing_is_known`
+is what keeps it from quietly acquiring a fourth source later.
 """
 import asyncio
 
@@ -69,9 +78,16 @@ def test_read_only_resolution_never_writes_a_site(chantier_table, mirror):
 
 # --- the fallbacks ---------------------------------------------------------
 
-def test_org_chart_routes_when_nothing_was_said(chantier_table, mirror):
-    chantier_table.org["NAROUZE"] = "DGH"
-    assert journal.resolve_site("NAROUZE") == ("DGH", "DGH", [], "org")
+def test_unrouted_when_nothing_is_known(chantier_table, mirror):
+    """Nothing said, nothing filed before: the answer is Non affecté.
+
+    Never a guess. This is the case the org chart used to answer, and answering
+    it wrongly was worse than not answering: the wrong site became sticky and
+    every later report inherited it in silence.
+    """
+    assert journal.resolve_site("NAROUZE") == (
+        journal.UNROUTED_TAB, journal.UNROUTED_TAB, ["chantier_non_defini"], "aucun",
+    )
 
 
 def test_sticky_reuses_the_site_of_the_last_report(chantier_table, mirror):
@@ -143,7 +159,6 @@ class FakeSheet:
 def test_file_report_routes_on_what_the_technician_said(chantier_table, monkeypatch):
     sheet = FakeSheet()
     monkeypatch.setattr(journal, "sheets", sheet)
-    chantier_table.org["NAROUZE"] = "ACAPS"   # the org chart says otherwise
     result = journal.file_report({
         "date": "2026-08-15", "technicien": "NAROUZE",
         "report": {"cables_installes_m": 120, "resume": "Résumé.",

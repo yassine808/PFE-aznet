@@ -103,7 +103,7 @@ def wired(monkeypatch):
     monkeypatch.setattr(logs, "record_receptions", ledger.record_receptions)
     monkeypatch.setattr(logs, "write_safe", ledger.write_safe)
     monkeypatch.setattr(journal, "resolve_site",
-                        lambda tech, spoken=None, create=True: ("DGH", "DGH", [], "org"))
+                        lambda tech, spoken=None, create=True: ("DGH", "DGH", [], "repris"))
     monkeypatch.setattr(journal.sheets, "ensure_tab", lambda *a, **k: None)
     monkeypatch.setattr(journal.sheets, "append_row",
                         lambda tab, values, headers: appended.append((tab, values)))

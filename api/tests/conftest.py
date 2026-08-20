@@ -11,7 +11,7 @@ import pytest
 
 @pytest.fixture
 def chantier_table(monkeypatch):
-    """In-memory `chantiers` table plus the org chart that points at it.
+    """In-memory `chantiers` table.
 
     The matching itself is NOT faked: `find` runs the real
     `logs.normalize_site_name`, so a test about "la DGH" tests the shipped
@@ -25,7 +25,6 @@ def chantier_table(monkeypatch):
                 {"id": 1, "nom": "DGH", "sheet_tab": "DGH", "verifie": True},
                 {"id": 2, "nom": "ACAPS", "sheet_tab": "ACAPS", "verifie": True},
             ]
-            self.org = {}       # technicien -> chantier nom
             self.created = []
 
         def find(self, nom):
@@ -49,15 +48,10 @@ def chantier_table(monkeypatch):
             self.created.append(row)
             return row
 
-        def person_by_name(self, name):
-            return {"id": name, "name": name} if name in self.org else None
-
-        def resolve_chantier(self, person_id):
-            return self.find(self.org[person_id]) if self.org.get(person_id) else None
-
     table = Table()
     monkeypatch.setattr(logs, "find_chantier_by_name", table.find)
     monkeypatch.setattr(logs, "create_chantier", table.create)
-    monkeypatch.setattr(logs, "person_by_name", table.person_by_name)
-    monkeypatch.setattr(logs, "resolve_chantier", table.resolve_chantier)
+    # No person_by_name / resolve_chantier fakes: routing no longer asks who the
+    # technician reports to. Leaving them would let a test pass against a
+    # resolver that had quietly regained an org-chart branch.
     return table

@@ -701,10 +701,14 @@ END $$;
 # own tab. A chantier is therefore a real entity, not a string typed into a
 # report: the tab a row lands in has to be decided before the row is written.
 #
-# `persons.chantier_id` is set on the *chef*; their technicians inherit it via
-# manager_id. That is one edit to move a crew, and it reuses the org chart
-# rather than adding a second place to forget to update. The chantier is then
-# snapshotted onto the row, so reassigning a chef never rewrites history.
+# A report's site comes from the technician who sent it: the name they say, else
+# the site on their own last row, else nothing. `persons.chantier_id` used to
+# add a third source -- set on the chef, inherited through manager_id -- and it
+# was dropped on 2026-08-20 (it held 3 rows: manager1->DGH, manager2->Extralait,
+# manager3->ACAPS). It answered confidently on the one case where nothing is
+# known, a technician's first message, and that guess then became their sticky
+# site and re-applied itself indefinitely. The chantier is still snapshotted
+# onto the row, so history is never rewritten.
 _MIGRATE_CHANTIERS = """
 CREATE TABLE IF NOT EXISTS chantiers (
     id          BIGSERIAL PRIMARY KEY,
@@ -715,8 +719,10 @@ CREATE TABLE IF NOT EXISTS chantiers (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-ALTER TABLE persons ADD COLUMN IF NOT EXISTS chantier_id BIGINT
-    REFERENCES chantiers(id) ON DELETE SET NULL;
+-- Re-runnable: IF EXISTS, so a database that never had the column is fine and
+-- a restart after the drop is a no-op. Placed here, in the chantiers migration
+-- that created it, so the column's whole life is readable in one place.
+ALTER TABLE persons DROP COLUMN IF EXISTS chantier_id;
 
 -- The bordereau (marché) per chantier. `qte_marche` is the contract quantity,
 -- entered once by the director. Installed quantity is never stored here: it is
@@ -1831,14 +1837,11 @@ def list_persons() -> List[dict]:
             """
             SELECT p.id, p.name, p.role, p.manager_id, p.email, p.active,
                    p.last_seen_at, p.profile, p.profile_updated_at, p.created_at,
-                   (p.password_hash IS NOT NULL) AS has_login,
-                   p.chantier_id, c.nom AS chantier,
-                   -- what their reports actually route to, own site or chef's
-                   COALESCE(c.nom, mc.nom) AS chantier_effectif
+                   (p.password_hash IS NOT NULL) AS has_login
+              -- No chantier column: a person is not assigned to a site any
+              -- more. Where their reports go is decided per message, from what
+              -- they said or from their own last row, and is on the row itself.
               FROM persons p
-              LEFT JOIN persons m    ON m.id = p.manager_id
-              LEFT JOIN chantiers c  ON c.id = p.chantier_id
-              LEFT JOIN chantiers mc ON mc.id = m.chantier_id
              ORDER BY p.name
             """
         )
@@ -2079,49 +2082,6 @@ def delete_chantier(chantier_id: int) -> bool:
     with _cursor() as cur:
         cur.execute("DELETE FROM chantiers WHERE id = %s", (chantier_id,))
         return cur.rowcount > 0
-
-
-def set_chantier(person_id: int, chantier_id: Optional[int]) -> bool:
-    """Assign a site to a person — in practice, to a chef.
-
-    Their technicians inherit it through manager_id, so this is the single edit
-    that moves a whole crew. Setting it on a technician is allowed and wins over
-    the chef's, which covers the one tech lent to another site without forcing a
-    reorganisation of the chart.
-    """
-    with _cursor() as cur:
-        cur.execute(
-            "UPDATE persons SET chantier_id = %s WHERE id = %s",
-            (chantier_id, person_id),
-        )
-        return cur.rowcount > 0
-
-
-def resolve_chantier(person_id: int) -> Optional[dict]:
-    """The site a person's reports belong to: their own, else their chef's.
-
-    Returns None when neither is set — deliberately, rather than guessing a
-    default site. A row filed to the wrong chantier is worse than a row the
-    dashboard shows as unrouted.
-    """
-    with _cursor() as cur:
-        cur.execute(
-            """
-            SELECT COALESCE(c.id, mc.id)               AS id,
-                   COALESCE(c.nom, mc.nom)             AS nom,
-                   COALESCE(c.sheet_tab, mc.sheet_tab) AS sheet_tab
-              FROM persons p
-              LEFT JOIN persons m    ON m.id = p.manager_id
-              LEFT JOIN chantiers c  ON c.id = p.chantier_id
-              LEFT JOIN chantiers mc ON mc.id = m.chantier_id
-             WHERE p.id = %s
-            """,
-            (person_id,),
-        )
-        row = _one(cur)
-    if row is None or row["id"] is None:
-        return None
-    return dict(row)
 
 
 def record_usage(provider: str, model: Optional[str] = None, kind: Optional[str] = None,

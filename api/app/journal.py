@@ -564,18 +564,23 @@ def resolve_site(
 ) -> Tuple[str, str, List[str], str]:
     """Which chantier (and tab) this report belongs to, and where that came from.
 
-    Order, decided with the owner 2026-08-15: **the voice wins** — the
-    technician standing on the site knows it better than the org chart — then
-    the site on their own most recent row, then the org chart, then
-    `Non affecté`.
+    Order, narrowed with the owner 2026-08-20: **the voice wins** — the
+    technician standing on the site knows it — then the site on their own most
+    recent row, then nothing. There is no third source.
 
-    Sticky deliberately outranks the org chart, which reads backwards until you
-    know why: the org chart is only correct while a manager maintains it, and
-    the owner's premise for this whole change is that managers will not open the
-    dashboard. A stale assignment ahead of a live signal would silently misfile
-    a crew that moved, and the "(repris du dernier rapport)" note would almost
-    never appear. The org chart keeps the case sticky cannot answer — a
-    technician's very first message, where there is no history to inherit.
+    The org chart used to sit last, routing a technician by the `chantier_id`
+    on their chef. It is gone, and the column with it. The reason is the one
+    that already justified putting sticky above it: the org chart is only
+    correct while a manager maintains it, and the owner's premise is that
+    managers do not open the dashboard. As a *last* resort it was worse than
+    having none, because it answered confidently on exactly the case where
+    nothing is known — a technician's first message — and that silent answer
+    then became their sticky site and re-applied itself forever. Yassine was
+    filed to DGH for days on that basis without anyone ever naming DGH.
+
+    Answering `Non affecté` instead is not a failure to route: it is the
+    honest, visible statement that nobody said where the work happened, and it
+    is fixed by one message naming the site.
 
     A spoken name is never trusted as a tab name. That was this function's
     first branch (`if chantier: return chantier, chantier, []`) and it was safe
@@ -591,7 +596,7 @@ def resolve_site(
     committed to yet.
 
     Returns (nom, tab, warnings, source) where source is one of
-    `voix` / `nouveau` / `org` / `repris` / `aucun`.
+    `voix` / `nouveau` / `repris` / `aucun`.
     """
     try:
         from app import logs
@@ -617,11 +622,6 @@ def resolve_site(
             tab = match["sheet_tab"] if match else sticky
             return nom, tab, ["chantier_repris:%s" % nom], "repris"
 
-        person = logs.person_by_name(technicien)
-        if person:
-            site = logs.resolve_chantier(person["id"])
-            if site:
-                return site["nom"], site["sheet_tab"], [], "org"
     except Exception:  # noqa: BLE001 - Postgres or Sheets down must not cost the row
         # Note this also swallows a spoken name: with the table unreachable we
         # cannot tell a known site from a mis-transcription, and writing an

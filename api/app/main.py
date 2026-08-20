@@ -2091,19 +2091,16 @@ def move_person(person_id: int, payload: NewManager, caller: dict = Depends(auth
 
 
 # ── Chantiers, routing and the bordereau ───────────────────────────────────
-# A site is a real entity: it owns a journal tab, a contract quantity list, and
-# the crews assigned to it. Routing lives on the chef (`chantier_id`), and their
-# technicians inherit it — one edit moves a whole crew.
+# A site is a real entity: it owns a journal tab and a contract quantity list.
+# It does NOT own a crew — nobody is assigned to a site. Which site a report
+# belongs to is decided per message (`journal.resolve_site`): the name the
+# technician said, else the site on their own last row, else `Non affecté`.
 
 
 class NewChantier(BaseModel):
     nom: str
     client: Optional[str] = None
     sheet_tab: Optional[str] = None
-
-
-class NewChantierAssignment(BaseModel):
-    chantier_id: Optional[int] = None
 
 
 class NewArticle(BaseModel):
@@ -2184,20 +2181,6 @@ def remove_chantier(chantier_id: int, caller: dict = Depends(auth.require_direct
         deleted = logs.delete_chantier(chantier_id)
         auth.record(caller, "chantier_removed", target=str(chantier_id))
         return {"deleted": deleted}
-    except logs.LogStoreError as exc:
-        raise HTTPException(502, str(exc)) from exc
-
-
-@app.patch("/persons/{person_id}/chantier", responses={404: {"description": "Person not found"}, 502: {"description": "Log store unreachable"}})
-def assign_chantier(person_id: int, payload: NewChantierAssignment,
-                    caller: dict = Depends(auth.require_director)) -> dict:
-    """Assign a site — in practice to a chef, whose technicians then inherit it."""
-    try:
-        if not logs.set_chantier(person_id, payload.chantier_id):
-            raise HTTPException(404, f"no person {person_id}")
-        auth.record(caller, "chantier_assigned", target=str(person_id),
-                    after=str(payload.chantier_id))
-        return {"id": person_id, "chantier_id": payload.chantier_id}
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
 
