@@ -18,7 +18,7 @@ No Sheets and no Postgres: both boundaries are faked.
 """
 import pytest
 
-from app import journal, stock
+from app import journal, logs, stock
 
 LIMITS = {"jours_critique": 2.0, "jours_bas": 5.0, "pct_critique": 5.0, "pct_bas": 10.0}
 
@@ -182,3 +182,56 @@ def test_one_broken_tab_does_not_cost_the_other_sites(monkeypatch, capsys):
                             {"id": 2, "nom": "OK", "sheet_tab": "ok"}])
     assert found == []
     assert "KO" in capsys.readouterr().out  # printed, never swallowed
+
+
+# --- muting: a dismissal that expires by itself ----------------------------
+
+
+def _muted(monkeypatch, alert, mute):
+    """Run one finding through `apply_mutes` against one stored mute."""
+    from app import stock as _stock
+    monkeypatch.setattr(logs, "list_alert_mutes", lambda: [mute] if mute else [])
+    return _stock.apply_mutes([alert])[0]["ignored"]
+
+
+def _alert(niveau="bas", reste=40.0):
+    return {"chantier": "DGH", "champ": "cables_installes_m", "article": "Câble",
+            "niveau": niveau, "reste": reste}
+
+
+def _mute(niveau="bas", reste=40.0):
+    return {"chantier": "DGH", "champ": "cables_installes_m",
+            "niveau": niveau, "reste": reste}
+
+
+def test_an_unchanged_finding_stays_dismissed(monkeypatch):
+    assert _muted(monkeypatch, _alert(), _mute()) is True
+
+
+def test_more_stock_does_not_resurface_it(monkeypatch):
+    """A delivery landed. The decision ("we ordered it") still holds."""
+    assert _muted(monkeypatch, _alert(reste=90.0), _mute(reste=40.0)) is True
+
+
+def test_less_stock_resurfaces_it(monkeypatch):
+    """The one case an ignore must never survive: it got worse."""
+    assert _muted(monkeypatch, _alert(reste=12.0), _mute(reste=40.0)) is False
+
+
+def test_a_worse_level_resurfaces_it(monkeypatch):
+    assert _muted(monkeypatch, _alert("critique", 5.0), _mute("bas", 40.0)) is False
+
+
+def test_another_site_is_not_covered_by_this_mute(monkeypatch):
+    other = {**_alert(), "chantier": "ACAPS"}
+    assert _muted(monkeypatch, other, _mute()) is False
+
+
+def test_an_unreadable_mute_table_never_hides_anything(monkeypatch):
+    from app import stock as _stock
+
+    def boom():
+        raise RuntimeError("postgres down")
+
+    monkeypatch.setattr(logs, "list_alert_mutes", boom)
+    assert _stock.apply_mutes([_alert()])[0]["ignored"] is False

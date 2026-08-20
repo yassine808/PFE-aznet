@@ -17,6 +17,7 @@ Threading rather than APScheduler: one loop, a 30-second tick and four due
 checks is the whole requirement, and a dependency would need pinning, mocking in
 tests and explaining in the mémoire.
 """
+import json
 import re
 import threading
 import time
@@ -55,6 +56,8 @@ _TIMEOUT_SECONDS = {
     "profiles": 300,       # one Sheet read + one LLM call per technician
     "prune_logs": 120,
     "reminders": 60,
+    # A full journal-tab read per site, same cost as GET /alerts uncached.
+    "watch_alerts": 300,
 }
 
 # name -> last result, newest wins. Read by GET /jobs.
@@ -350,6 +353,68 @@ def retry_messages() -> dict:
     if _quota_until > time.time():
         out["paused_until"] = _quota_until
     return out
+
+
+#: One row in the cursor store, holding {chantier|champ: signature} for every
+#: finding the bell has already announced. A dict rather than a key per alert
+#: so a finding that has gone away is pruned by the same write that records the
+#: others — a per-key store would leave a bookmark behind that silently
+#: suppressed the alert if it ever came back unchanged.
+ALERT_NOTICE_CURSOR = "alert-notices"
+
+
+def watch_alerts() -> dict:
+    """Ring the bell for material findings nobody has been told about yet.
+
+    The Sites page shows these permanently; this is for the person who is not
+    on it. Announced once per *state*, not once per run: the signature carries
+    the level and the remainder, so an unchanged shortage stays quiet and a
+    `bas` that became `critique` — or that lost another 200 m — rings again.
+    That is the same rule the mute follows, deliberately: a finding worth
+    hiding again is a finding worth announcing again.
+
+    Muted findings are skipped. Somebody said they had dealt with it, and a
+    bell that fires anyway makes the ignore button a lie.
+    """
+    found = stock.apply_mutes(stock.assess())
+    live = {
+        f"{a['chantier']}|{a['champ']}": _alert_signature(a)
+        for a in found
+        if not a.get("ignored")
+    }
+    try:
+        seen = json.loads(logs.get_cursor(ALERT_NOTICE_CURSOR) or "{}")
+        if not isinstance(seen, dict):
+            seen = {}
+    except (TypeError, ValueError):
+        seen = {}
+
+    fresh = [a for a in found
+             if not a.get("ignored")
+             and seen.get(f"{a['chantier']}|{a['champ']}") != _alert_signature(a)]
+    for a in fresh:
+        try:
+            logs.notify_accounts(
+                "review",
+                f"{a['article']} — {a['chantier']}",
+                stock.line(a),
+                "#/chantiers",
+                f"{a['chantier']}|{a['champ']}",
+            )
+        except Exception as exc:  # noqa: BLE001 — one bell is not worth the job
+            print(f"[jobs] alert notify failed: {exc}"[:200], flush=True)
+
+    # Written even when nothing was fresh: this is also how a finding that has
+    # been resolved drops out of the record.
+    logs.set_cursor(ALERT_NOTICE_CURSOR, json.dumps(live, ensure_ascii=False))
+    return {"alerts": len(found), "notified": len(fresh), "muted": len(found) - len(live)}
+
+
+def _alert_signature(alert: dict) -> str:
+    """Level plus remainder, rounded. Two readings of the same shortage that
+    differ by a decimal are the same fact and must not ring twice."""
+    reste = alert.get("reste")
+    return f"{alert['niveau']}:{'' if reste is None else round(float(reste))}"
 
 
 def prune_logs() -> dict:
@@ -771,6 +836,7 @@ JOBS: Dict[str, Callable[[], dict]] = {
     "message_queue": retry_messages,
     "refill_articles": refill_articles,
     "prune_logs": prune_logs,
+    "watch_alerts": watch_alerts,
     "profiles": refresh_profiles,
     "reminders": send_reminders,
     "daily_report": send_daily_report,
@@ -914,7 +980,7 @@ def _schedule_label(name: str) -> str:
         return "toutes les %s s" % MESSAGE_RETRY_SECONDS
     if name == "sheet_queue":
         return f"toutes les {DRAIN_INTERVAL_MINUTES} min"
-    if name == "refill_articles":
+    if name in ("refill_articles", "watch_alerts"):
         return "toutes les heures"
     if name == "reminders":
         return "chaque minute"
@@ -958,6 +1024,9 @@ _INTERVALS = {
     "message_queue": timedelta(seconds=MESSAGE_RETRY_SECONDS),
     "sheet_queue": timedelta(minutes=DRAIN_INTERVAL_MINUTES),
     "refill_articles": timedelta(hours=1),
+    # Hourly: a stock level moves at the speed of a working day, and the
+    # assessment costs a Sheets read per site on a free quota.
+    "watch_alerts": timedelta(hours=1),
     "reminders": timedelta(seconds=REMINDER_INTERVAL_SECONDS),
 }
 

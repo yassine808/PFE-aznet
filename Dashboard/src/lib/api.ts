@@ -272,7 +272,11 @@ export async function n8nExecutions(signal?: AbortSignal): Promise<N8nExecution[
  */
 export async function n8nListening(
   signal?: AbortSignal,
-): Promise<{ stale: boolean | null; last_execution_at: string | null; age_seconds: number | null }> {
+): Promise<{
+  stale: boolean | null
+  last_execution_at: string | null
+  age_seconds: number | null
+}> {
   try {
     const res = await fetch(`${BASE}/n8n/listening`, { signal })
     if (!res.ok) return { stale: null, last_execution_at: null, age_seconds: null }
@@ -515,6 +519,23 @@ export interface MaterialAlert {
   installe: number | null
   marche: number | null
   source: string | null
+  /** Somebody dismissed this finding and it has not got worse since.
+   *  Sent rather than filtered out server-side: a line that vanishes cannot be
+   *  un-ignored, and "we have dealt with this" is not "this stopped existing". */
+  ignored?: boolean
+}
+
+/** Dismiss a finding for everyone, until it gets worse. Director/manager only.
+ *  The level and remainder are snapshotted server-side from its own
+ *  assessment — a figure sent from here could be an hour stale. */
+export const muteAlert = (chantier: string, champ: string) =>
+  post<{ ok: boolean }>('/alerts/mute', { chantier, champ })
+
+/** Bring a dismissed finding back. */
+export async function unmuteAlert(chantier: string, champ: string): Promise<void> {
+  const q = `chantier=${encodeURIComponent(chantier)}&champ=${encodeURIComponent(champ)}`
+  const res = await fetch(`${BASE}/alerts/mute?${q}`, { method: 'DELETE' })
+  if (!res.ok) await fail(res)
 }
 
 /** A contract line, with what the journal says was installed against it. */

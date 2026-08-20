@@ -786,6 +786,31 @@ CREATE TABLE IF NOT EXISTS receptions (
     correlation_id TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- A material alert somebody decided not to see again.
+--
+-- Not a delete: the finding is arithmetic over the journal, the receptions
+-- ledger and the bordereau, recomputed from scratch on every read. What is
+-- stored is the *decision* — "we know, it is ordered" — together with the
+-- figure it was taken against, because a decision about 40 m of cable left is
+-- not a decision about 12 m left.
+--
+-- That snapshot is what makes the mute expire on its own. A mute holds only
+-- while the level is the one that was dismissed and the remainder has not
+-- fallen below what it was; any worsening surfaces the alert again. Without
+-- it, one click could silence a shortage permanently, which is the one thing
+-- an alert panel must never allow.
+--
+-- Keyed on (chantier, champ) and not on the level: re-muting a worsened alert
+-- replaces the snapshot rather than stacking a second row nobody would clear.
+CREATE TABLE IF NOT EXISTS alert_mutes (
+    chantier   TEXT NOT NULL,
+    champ      TEXT NOT NULL,
+    niveau     TEXT NOT NULL,
+    reste      NUMERIC,
+    muted_by   TEXT,
+    muted_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (chantier, champ)
+);
 -- Articles a technician reported that no bordereau lists.
 --
 -- The catalogue came from three cabling bordereaux, so electricity, CCTV and
@@ -3208,6 +3233,43 @@ def register_articles(items: Dict[str, float]) -> Dict[str, str]:
         print(f"[logs] register_articles failed: {exc}"[:200], flush=True)
         return {d: d.strip() for d in items}
     return out
+
+
+def mute_alert(chantier: str, champ: str, niveau: str,
+               reste: Optional[float], by: Optional[str] = None) -> None:
+    """Record that somebody has seen this finding and does not need it again.
+
+    The level and the remainder are stored with it, so `alert_is_muted` can let
+    the alert back through the moment either gets worse.
+    """
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO alert_mutes (chantier, champ, niveau, reste, muted_by, muted_at)
+            VALUES (%s, %s, %s, %s, %s, now())
+            ON CONFLICT (chantier, champ) DO UPDATE
+               SET niveau = EXCLUDED.niveau, reste = EXCLUDED.reste,
+                   muted_by = EXCLUDED.muted_by, muted_at = now()
+            """,
+            (chantier, champ, niveau, reste, by),
+        )
+
+
+def unmute_alert(chantier: str, champ: str) -> bool:
+    """Bring a dismissed finding back. True if there was one to bring back."""
+    with _cursor() as cur:
+        cur.execute(
+            "DELETE FROM alert_mutes WHERE chantier = %s AND champ = %s RETURNING chantier",
+            (chantier, champ),
+        )
+        return _one(cur) is not None
+
+
+def list_alert_mutes() -> List[dict]:
+    """Every live mute. Read on each `/alerts` call — the table is tiny."""
+    with _cursor() as cur:
+        cur.execute("SELECT * FROM alert_mutes")
+        return [dict(r) for r in cur.fetchall()]
 
 
 def list_article_registry(unconfirmed_only: bool = False) -> List[dict]:

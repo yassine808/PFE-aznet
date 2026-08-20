@@ -300,6 +300,55 @@ def _collect(chantiers: Sequence[dict]) -> List[dict]:
     )
 
 
+#: Worst first. Used to decide whether a muted finding has got worse — a
+#: `bas` that became `critique` is a different fact and must be heard again.
+_SEVERITY = {"depassement": 0, "critique": 1, "bas": 2, "surplus": 3}
+
+
+def apply_mutes(alerts: Sequence[dict]) -> List[dict]:
+    """Mark each finding `ignored`, rather than dropping the muted ones.
+
+    Nothing is removed from the payload. The dashboard hides an ignored line
+    from the panel that shouts and keeps it reachable in the full list, which
+    is the difference between "we have dealt with this" and "this stopped
+    existing" — and it is what lets somebody un-ignore a line they cannot see.
+
+    A mute expires by itself: it holds only while the level is the one that was
+    dismissed and the remainder has not fallen below what it was when the
+    decision was taken. Any worsening surfaces the alert again, so an ignore
+    can never bury a shortage that got worse. A missing remainder on either
+    side is not treated as a change — `None` means "not known", and a mute must
+    not evaporate because a tab briefly stopped reporting a figure.
+    """
+    from app import logs
+
+    try:
+        mutes = {(m["chantier"], m["champ"]): m for m in logs.list_alert_mutes()}
+    except Exception as exc:  # noqa: BLE001 — a panel is not worth a 502
+        print(f"[stock] list_alert_mutes failed: {exc}"[:200], flush=True)
+        mutes = {}
+
+    out: List[dict] = []
+    for a in alerts:
+        m = mutes.get((a["chantier"], a["champ"]))
+        out.append({**a, "ignored": bool(m) and not _worse_than(a, m)})
+    return out
+
+
+def _worse_than(alert: dict, mute: dict) -> bool:
+    """Has this finding deteriorated since somebody dismissed it?"""
+    if _SEVERITY.get(alert["niveau"], 9) < _SEVERITY.get(mute["niveau"], 9):
+        return True
+    if alert["niveau"] != mute["niveau"]:
+        # Improved, or a different kind of finding entirely. Either way the
+        # decision was taken about something else.
+        return True
+    left, was = alert.get("reste"), mute.get("reste")
+    if left is None or was is None:
+        return False
+    return float(left) < float(was)
+
+
 def alerts_for_rows(rows: Sequence[dict]) -> List[dict]:
     """The findings for the sites a report actually covers.
 

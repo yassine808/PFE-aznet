@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
+  ArrowCounterClockwiseIcon,
+  BellSlashIcon,
   BuildingsIcon,
-  CaretRightIcon,
+  CheckCircleIcon,
   CheckIcon,
+  MagnifyingGlassIcon,
   PencilSimpleIcon,
   TriangleIcon,
   WarningIcon,
@@ -15,7 +18,9 @@ import {
   deleteArticle,
   deleteChantier,
   freeArticles,
+  muteAlert,
   renameArticle,
+  unmuteAlert,
   useApi,
   verifyChantier,
   type BordereauArticle,
@@ -28,64 +33,33 @@ import { useI18n } from '@/lib/i18n'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 
-const rise = {
-  hidden: { opacity: 0, y: 6 },
-  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 100, damping: 20 } },
-}
-
 /**
- * Opening a site.
+ * Sites, as a master–detail rather than a scroll.
  *
- * Height is a layout property and DESIGN.md rules out animating one, so the
- * panel does not unroll — it arrives. The parent fades and lifts, then hands
- * off to its blocks, which come in one after another out of the disclosure's
- * own rule. The staircase is what reads as "opening": a single simultaneous
- * fade reads as a redraw. Closing runs without the stagger, because a reader
- * who has decided to close something should not watch it leave in instalments.
+ * The page used to be four stacked full-width bands — unverified sites, the
+ * article review queue, the alert list, then every site as an accordion — each
+ * with a paragraph of its own. Opening two sites pushed the third off the
+ * screen, and the two bands that ask for a decision sat above the list the
+ * reader actually came for. Nothing was wrong with any one band; the stack was
+ * the problem.
+ *
+ * Now: one list on the left, one pane on the right, and the two queues reached
+ * from a chip instead of occupying the top of the page. The pane shows exactly
+ * one thing at a time, so the page is about one screen tall whatever it holds.
+ * Nothing was removed — the queues, the alerts and the confirm/delete actions
+ * are all still here, one click away instead of one scroll.
  */
-const panel = {
-  hidden: { opacity: 0, y: -4 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: 'spring' as const,
-      stiffness: 140,
-      damping: 22,
-      staggerChildren: 0.06,
-      delayChildren: 0.04,
-    },
-  },
-  exit: { opacity: 0, y: -4, transition: { duration: 0.14 } },
-}
 
-/** One block inside an opened site. Slides in off the disclosure's rule. */
-const panelBlock = {
-  hidden: { opacity: 0, x: -8 },
-  show: { opacity: 1, x: 0, transition: { type: 'spring' as const, stiffness: 220, damping: 24 } },
-}
+/** What the right-hand pane is showing. Exactly one thing, always. */
+type View =
+  | { readonly kind: 'site'; readonly id: number }
+  | { readonly kind: 'alerts' }
+  | { readonly kind: 'articles' }
 
-/** Section heading. Same shape as Overview's: a rule and a label, no box. */
-function Band({
-  title,
-  aside,
-  children,
-}: {
-  readonly title: string
-  readonly aside?: string
-  readonly children: React.ReactNode
-}) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3">
-      <div className="border-line flex items-baseline justify-between gap-3 border-b pb-1.5">
-        <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
-          {title}
-        </h2>
-        {aside && <span className="tabular text-ink-faint text-[0.6875rem]">{aside}</span>}
-      </div>
-      {children}
-    </section>
-  )
+const fade = {
+  hidden: { opacity: 0, y: 6 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 140, damping: 22 } },
+  exit: { opacity: 0, y: -4, transition: { duration: 0.12 } },
 }
 
 /**
@@ -105,185 +79,233 @@ const num = (v: number | null | undefined, unit?: string) => {
   return `${Number.isInteger(n) ? n : n.toFixed(1)}${suffix}`
 }
 
-/**
- * What is running out, over the contract, or about to be.
- *
- * Read-only on purpose: every figure is arithmetic done in `app/stock.py` over
- * the journal, the receptions ledger and the bordereau. Nothing here recomputes
- * a quantity — a second arithmetic in the browser is a second answer to the
- * same question, and the mail already carries the first.
- */
-function MaterialAlerts() {
-  const { t } = useI18n()
-  // 60s: an assessment costs a Sheets read per site and the server caches for
-  // 120s anyway, so polling faster only spends the browser's battery.
-  const alerts = useApi('alerts', api.alerts, 60_000)
+/** Accent- and case-insensitive, because a spoken site name is neither. */
+const norm = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim()
+    .toLowerCase()
 
-  if (alerts.loading && !alerts.data) return <Skeleton className="h-24" />
-  if (alerts.error) return <ErrorState message={alerts.error} onRetry={alerts.reload} />
+/** Pane heading. A rule and a label — never a card. */
+function Head({ title, aside }: { readonly title: string; readonly aside?: string }) {
+  return (
+    <div className="border-line flex items-baseline justify-between gap-3 border-b pb-1.5">
+      <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
+        {title}
+      </h2>
+      {aside && <span className="tabular text-ink-faint text-[0.6875rem]">{aside}</span>}
+    </div>
+  )
+}
+
+/**
+ * A count that opens the pane on what it counts.
+ *
+ * Only a non-zero count is a chip. A zero shown as a dimmed pill is a button
+ * that leads to an empty page, and a row of them is a row of dead ends.
+ */
+function Chip({
+  label,
+  n,
+  tone,
+  active,
+  onClick,
+}: {
+  readonly label: string
+  readonly n: number
+  readonly tone: 'warn' | 'fail'
+  readonly active: boolean
+  readonly onClick: () => void
+}) {
+  if (n === 0) return null
+  const hue =
+    tone === 'fail'
+      ? 'text-status-fail border-status-fail/40'
+      : 'text-status-warn border-status-warn/40'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`focus-visible:ring-accent flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.6875rem] transition-colors outline-none focus-visible:ring-2 active:translate-y-px ${hue} ${
+        active ? 'bg-surface-raised' : 'hover:bg-surface-raised/60'
+      }`}
+    >
+      <span className="tabular font-medium">{n}</span>
+      {label}
+    </button>
+  )
+}
+
+const btn =
+  'border-line bg-surface text-ink hover:border-line-strong focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-50'
+const btnDanger =
+  'border-status-fail/40 text-status-fail hover:bg-status-fail focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors outline-none hover:text-white focus-visible:ring-2 active:translate-y-px disabled:opacity-50'
+
+/**
+ * What is running out — permanently on screen, above everything else.
+ *
+ * This used to be a chip you had to click. A material shortage is the one
+ * thing on this page with a deadline attached, and a count you have to open is
+ * a count you can walk past; the band states the finding itself, so nobody has
+ * to go looking for it.
+ *
+ * Bounded so it cannot become the scroll it replaced: three lines, then a
+ * button that opens the rest in the pane. Dismissed findings are hidden here
+ * and reachable one click away — never deleted, because a line you cannot see
+ * is a line you cannot bring back.
+ */
+function AlertsBand({
+  alerts,
+  onOpenAll,
+  showingAll,
+}: {
+  readonly alerts: ReturnType<typeof useApi<{ alerts: MaterialAlert[] }>>
+  readonly onOpenAll: () => void
+  readonly showingAll: boolean
+}) {
+  const { t } = useI18n()
+  const [showIgnored, setShowIgnored] = useState(false)
+
+  if (alerts.loading && !alerts.data) return <Skeleton className="h-12" />
 
   const rows = alerts.data?.alerts ?? []
-  if (rows.length === 0) {
+  const live = rows.filter((a) => !a.ignored)
+  const muted = rows.filter((a) => a.ignored)
+
+  // Nothing to say, said in one line. An empty panel that occupies the same
+  // space as a full one trains the reader to skip the space.
+  if (live.length === 0 && muted.length === 0) {
     return (
-      <Band title={t('chantiers.alerts')}>
-        <EmptyState body={t('chantiers.alertsNone')} />
-      </Band>
+      <p className="text-ink-faint flex items-center gap-2 text-[0.6875rem]">
+        <CheckCircleIcon size={12} className="text-status-ok shrink-0" />
+        {t('chantiers.alertsNone')}
+      </p>
     )
   }
 
-  // Worst first. An operator reads the top of a list, so ordering is the
-  // cheapest way to make the line that means "order today" the line they see.
-  const order = { depassement: 0, critique: 1, bas: 2 } as const
-  const sorted = [...rows].sort((a, b) => order[a.niveau] - order[b.niveau])
+  const visible = showIgnored ? muted : live.slice(0, 3)
+  const hidden = showIgnored ? 0 : live.length - visible.length
 
   return (
-    <Band title={t('chantiers.alerts')} aside={String(rows.length)}>
-      <p className="text-ink-muted max-w-[70ch] text-xs leading-relaxed">
-        {t('chantiers.alertsIntro')}
-      </p>
-      <ul className="border-line divide-line/70 divide-y border-t">
-        {sorted.map((a) => (
-          <AlertRow key={`${a.chantier}-${a.champ}`} alert={a} />
-        ))}
-      </ul>
-    </Band>
+    <section className="border-line/70 flex flex-col gap-1 border-y py-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-ink-faint flex items-center gap-1.5 text-[0.6875rem] font-medium tracking-wide uppercase">
+          <TriangleIcon
+            size={10}
+            weight="fill"
+            className={live.length > 0 ? 'text-status-fail' : 'text-ink-faint'}
+          />
+          {showIgnored ? t('chantiers.ignored') : t('chantiers.alerts')}
+          <span className="tabular">{showIgnored ? muted.length : live.length}</span>
+        </h2>
+        <span className="flex items-center gap-3 text-[0.6875rem]">
+          {muted.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowIgnored(!showIgnored)}
+              className="text-ink-faint hover:text-ink cursor-pointer transition-colors"
+            >
+              {showIgnored
+                ? t('chantiers.backToLive')
+                : t('chantiers.ignoredCount', { n: String(muted.length) })}
+            </button>
+          )}
+          {(hidden > 0 || showingAll) && !showIgnored && (
+            <button
+              type="button"
+              onClick={onOpenAll}
+              className="text-ink-muted hover:text-ink cursor-pointer transition-colors"
+            >
+              {showingAll ? t('chantiers.close') : t('chantiers.andMore', { n: String(hidden) })}
+            </button>
+          )}
+        </span>
+      </div>
+      {live.length === 0 && !showIgnored ? (
+        <p className="text-ink-faint text-[0.6875rem]">{t('chantiers.allIgnored')}</p>
+      ) : (
+        <ul className="divide-line/40 divide-y">
+          {visible.map((a) => (
+            <BandRow key={`${a.chantier}-${a.champ}`} alert={a} onDone={alerts.reload} />
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 
-function AlertRow({ alert }: { readonly alert: MaterialAlert }) {
-  const { t } = useI18n()
-  // The Ten Percent Rule: only the level that means "order today" takes the
-  // alarm colour. A page where everything is red is a page where nothing is.
-  const tone = alert.niveau === 'bas' ? 'text-status-warn' : 'text-status-fail'
-
-  return (
-    <li className="grid gap-x-4 gap-y-1 py-2.5 sm:grid-cols-[1fr_auto]">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-ink flex min-w-0 items-center gap-2 text-sm">
-          {/* Never hue alone: the glyph and the written level both carry it. */}
-          <TriangleIcon size={11} weight="fill" className={`${tone} shrink-0`} />
-          <span className="truncate font-medium">{alert.article}</span>
-          <span className={`${tone} shrink-0 text-[0.6875rem] font-medium`}>
-            {t(`chantiers.level.${alert.niveau}`)}
-          </span>
-        </span>
-        {/* The provenance travels with the number, always. */}
-        <span className="text-ink-faint ps-[1.15rem] text-[0.6875rem] leading-relaxed">
-          {alert.chantier}
-          {alert.source ? ` · ${alert.source}` : ''}
-        </span>
-      </div>
-      <div className="tabular flex items-baseline gap-4 ps-[1.15rem] text-xs sm:ps-0">
-        <span className={tone}>
-          {alert.niveau === 'depassement'
-            ? t('chantiers.over', { n: num(Math.abs(alert.reste ?? 0), alert.unite) })
-            : t('chantiers.remaining', { n: num(alert.reste, alert.unite) })}
-        </span>
-        {alert.jours != null && (
-          <span className="text-ink-muted whitespace-nowrap">
-            {t('chantiers.cover', { n: alert.jours.toFixed(1) })}
-          </span>
-        )}
-      </div>
-    </li>
-  )
-}
-
-/**
- * Sites the pipeline invented from a spoken name nobody has confirmed.
- *
- * Moved here from Overview (2026-08-16): a site is a real entity — it owns a
- * journal tab, a bordereau and a crew — and confirming one is site
- * administration, not a headline. Overview answers "what is happening today";
- * this page is where sites are looked after.
- *
- * It is the one framed surface on the page, and it is framed because it is the
- * only thing here that asks for a decision — and because as a plain band it
- * was indistinguishable from the list of real sites two bands below it.
- */
-function UnverifiedSites({
-  chantiers,
+/** One line of the band: the finding, and the one button that silences it. */
+function BandRow({
+  alert: a,
+  onDone,
+  site = true,
 }: {
-  readonly chantiers: ReturnType<typeof useApi<{ chantiers: Chantier[] }>>
+  readonly alert: MaterialAlert
+  readonly onDone: () => void
+  /** False on a pane that is already one site, where naming it again is noise. */
+  readonly site?: boolean
 }) {
   const { t } = useI18n()
   const { user } = useAuth()
-  const [busy, setBusy] = useState<number | null>(null)
-  // Deleting drops the bordereau with the site, so it goes through the same
-  // dialog every destructive action in this dashboard goes through.
-  const [pendingDelete, setPendingDelete] = useState<Chantier | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const tone = a.niveau === 'bas' ? 'text-status-warn' : 'text-status-fail'
 
-  const pending = (chantiers.data?.chantiers ?? []).filter((c) => c.verifie === false)
-  if (pending.length === 0) return null
-
-  const act = (id: number, fn: (id: number) => Promise<void>) => async () => {
-    setBusy(id)
+  const run = (fn: () => Promise<unknown>) => async () => {
+    setBusy(true)
     setError(null)
     try {
-      await fn(id)
-      chantiers.reload()
+      await fn()
+      onDone()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setBusy(null)
-      setPendingDelete(null)
+      setBusy(false)
     }
   }
 
   return (
-    <motion.div variants={rise}>
-      <section className="border-status-warn/30 bg-status-warn/5 flex flex-col gap-3 rounded-lg border p-4 sm:p-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-ink flex items-center gap-2 text-sm font-medium">
-            <WarningIcon size={14} weight="fill" className="text-status-warn shrink-0" />
-            {t('chantiers.unverified')}
-          </h2>
-          <span className="tabular text-ink-faint text-[0.6875rem]">{pending.length}</span>
-        </div>
-        <p className="text-ink-muted max-w-[70ch] text-xs leading-relaxed">
-          {t('chantiers.unverifiedIntro')}
-        </p>
-        <ul className="divide-line/70 border-line/70 divide-y border-t">
-          {pending.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <span className="text-ink min-w-0 truncate text-sm">{c.nom}</span>
-              {user?.role === 'directeur' && (
-                <span className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={busy === c.id}
-                    onClick={act(c.id, verifyChantier)}
-                    className="border-line bg-surface text-ink hover:border-line-strong focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-50"
-                  >
-                    {t('chantiers.confirm')}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy === c.id}
-                    onClick={() => setPendingDelete(c)}
-                    className="border-status-fail/40 text-status-fail hover:bg-status-fail focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors outline-none hover:text-white focus-visible:ring-2 active:translate-y-px disabled:opacity-50"
-                  >
-                    {t('chantiers.delete')}
-                  </button>
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-        {error && <p className="text-status-fail text-xs">{error}</p>}
-      </section>
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        target={pendingDelete?.nom ?? ''}
-        body={t('chantiers.deleteSure')}
-        busy={busy !== null}
-        onConfirm={() => {
-          if (pendingDelete) void act(pendingDelete.id, deleteChantier)()
-        }}
-        onCancel={() => setPendingDelete(null)}
-      />
-    </motion.div>
+    <li className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1">
+      {/* Never hue alone: the glyph, the written level and the figure all say it. */}
+      <TriangleIcon size={9} weight="fill" className={`${tone} shrink-0 self-center`} />
+      <span className="text-ink min-w-0 flex-1 truncate text-xs">
+        <span className="font-medium">{a.article}</span>
+        <span className="text-ink-faint">{site ? ` · ${a.chantier}` : ''}</span>
+      </span>
+      <span className={`${tone} shrink-0 text-[0.6875rem] font-medium`}>
+        {t(`chantiers.level.${a.niveau}`)}
+      </span>
+      <span className={`tabular shrink-0 text-[0.6875rem] ${tone}`}>
+        {a.niveau === 'depassement'
+          ? t('chantiers.over', { n: num(Math.abs(a.reste ?? 0), a.unite) })
+          : t('chantiers.remaining', { n: num(a.reste, a.unite) })}
+      </span>
+      {a.jours != null && (
+        <span className="tabular text-ink-muted shrink-0 text-[0.6875rem] whitespace-nowrap">
+          {t('chantiers.cover', { n: a.jours.toFixed(1) })}
+        </span>
+      )}
+      {error && <span className="text-status-fail shrink-0 text-[0.625rem]">{error}</span>}
+      {/* Any signed-in human may dismiss: `persons` only carries an account for
+          a directeur or a chef, and the API gates the write on `require_human`
+          anyway — a second rule here could only ever be the wrong one. */}
+      {user && (
+        <button
+          type="button"
+          disabled={busy}
+          title={a.ignored ? t('chantiers.restore') : t('chantiers.ignoreHint')}
+          aria-label={a.ignored ? t('chantiers.restore') : t('chantiers.ignore')}
+          onClick={run(() =>
+            a.ignored ? unmuteAlert(a.chantier, a.champ) : muteAlert(a.chantier, a.champ),
+          )}
+          className="text-ink-faint hover:text-ink focus-visible:ring-accent shrink-0 cursor-pointer rounded p-1 transition-colors outline-none focus-visible:ring-2 disabled:opacity-40"
+        >
+          {a.ignored ? <ArrowCounterClockwiseIcon size={12} /> : <BellSlashIcon size={12} />}
+        </button>
+      )}
+    </li>
   )
 }
 
@@ -297,8 +319,12 @@ function UnverifiedSites({
  * merges the two columns, which is the only way to join two spellings the
  * normaliser cannot: "prise 2P+T" and "prise industrielle 2P+T" are one socket
  * to an electrician and two different word sets to a machine.
+ *
+ * It is the *only* place a name is changed. `SiteMaterials` below shows the
+ * same articles per site and offers no actions, because a second place to
+ * rewrite a column header is a second way for two spellings to diverge.
  */
-function FreeArticles({
+function ReviewArticles({
   articles,
 }: {
   readonly articles: ReturnType<typeof useApi<{ articles: FreeArticle[] }>>
@@ -312,8 +338,6 @@ function FreeArticles({
   const [error, setError] = useState<string | null>(null)
 
   const pending = (articles.data?.articles ?? []).filter((a) => !a.confirmed)
-  if (articles.loading && !articles.data) return <Skeleton className="h-20" />
-  if (pending.length === 0) return null
 
   const run = (slug: string, fn: () => Promise<void>) => async () => {
     setBusy(slug)
@@ -331,14 +355,17 @@ function FreeArticles({
   }
 
   return (
-    <motion.div variants={rise}>
-      <Band title={t('chantiers.materials')} aside={String(pending.length)}>
-        <p className="text-ink-muted max-w-[70ch] text-xs leading-relaxed">
-          {t('chantiers.materialsIntro')}
-        </p>
-        <ul className="border-line divide-line/70 divide-y border-t">
+    <div className="flex min-w-0 flex-col gap-3">
+      <Head title={t('chantiers.materials')} aside={String(pending.length)} />
+      <p className="text-ink-muted max-w-[70ch] text-[0.6875rem] leading-relaxed">
+        {t('chantiers.materialsIntro')}
+      </p>
+      {pending.length === 0 ? (
+        <EmptyState body={t('chantiers.materialsNone')} />
+      ) : (
+        <ul className="border-line divide-line/60 divide-y border-t">
           {pending.map((a) => (
-            <li key={a.slug} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
+            <li key={a.slug} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2">
               {editing === a.slug ? (
                 <>
                   <input
@@ -352,7 +379,7 @@ function FreeArticles({
                     type="button"
                     disabled={busy === a.slug || !draft.trim()}
                     onClick={run(a.slug, () => renameArticle(a.slug, draft.trim()))}
-                    className="border-line bg-surface text-ink hover:border-line-strong cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors active:translate-y-px disabled:opacity-50"
+                    className={btn}
                   >
                     {t('chantiers.save')}
                   </button>
@@ -376,7 +403,7 @@ function FreeArticles({
                         type="button"
                         disabled={busy === a.slug}
                         onClick={run(a.slug, () => confirmArticle(a.slug))}
-                        className="border-line bg-surface text-ink hover:border-line-strong focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-50"
+                        className={btn}
                       >
                         <CheckIcon size={11} />
                         {t('chantiers.confirm')}
@@ -388,7 +415,7 @@ function FreeArticles({
                           setEditing(a.slug)
                           setDraft(a.designation)
                         }}
-                        className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-50"
+                        className={btn}
                       >
                         <PencilSimpleIcon size={11} />
                         {t('chantiers.rename')}
@@ -397,7 +424,7 @@ function FreeArticles({
                         type="button"
                         disabled={busy === a.slug}
                         onClick={() => setPendingDelete(a)}
-                        className="border-status-fail/40 text-status-fail hover:bg-status-fail focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors outline-none hover:text-white focus-visible:ring-2 active:translate-y-px disabled:opacity-50"
+                        className={btnDanger}
                       >
                         {t('chantiers.delete')}
                       </button>
@@ -408,8 +435,8 @@ function FreeArticles({
             </li>
           ))}
         </ul>
-        {error && <p className="text-status-fail text-xs">{error}</p>}
-      </Band>
+      )}
+      {error && <p className="text-status-fail text-xs">{error}</p>}
       <ConfirmDialog
         open={pendingDelete !== null}
         target={pendingDelete?.designation ?? ''}
@@ -420,20 +447,18 @@ function FreeArticles({
         }}
         onCancel={() => setPendingDelete(null)}
       />
-    </motion.div>
+    </div>
   )
 }
 
 /**
  * What this site declared that its bordereau never listed.
  *
- * The review queue two bands up only ever shows *unconfirmed* names, so an
- * article vanished from the page the moment a director accepted or corrected
- * it — the one action that proves it is real. This section is the opposite
- * cut: every free article that reached this site, confirmed or not, with the
- * quantity summed across its reports. Nothing here is an action; naming is
- * settled in the queue, and a second place to change a column header is a
- * second way for two spellings to diverge.
+ * The review queue only ever shows *unconfirmed* names, so an article
+ * disappeared from the page the moment a director accepted or corrected it —
+ * the one action that proves it is real. This is the opposite cut: every free
+ * article that reached this site, confirmed or not, with the quantity summed
+ * across its reports.
  */
 function SiteMaterials({
   chantier,
@@ -447,9 +472,9 @@ function SiteMaterials({
   // Matched on the site NAME, because that is what a report row snapshots —
   // the chantier is frozen onto the row so a later reassignment never rewrites
   // history, which means the id is not in the payload to match on.
-  const key = chantier.nom.trim().toLowerCase()
+  const key = norm(chantier.nom)
   const rows = articles
-    .map((a) => ({ a, site: a.sites?.find((s) => s.chantier.trim().toLowerCase() === key) }))
+    .map((a) => ({ a, site: a.sites?.find((s) => norm(s.chantier) === key) }))
     .filter((r): r is { a: FreeArticle; site: NonNullable<FreeArticle['sites']>[number] } =>
       Boolean(r.site),
     )
@@ -458,13 +483,18 @@ function SiteMaterials({
   if (rows.length === 0) return null
 
   return (
-    <motion.div variants={panelBlock} className="flex flex-col gap-1.5">
-      <h4 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
+    <section className="flex min-w-0 flex-col gap-1">
+      <h3 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
         {t('chantiers.declared')}
-      </h4>
-      <ul className="border-line/60 divide-line/50 divide-y border-t">
+      </h3>
+      {/* Two columns where there is room: this list is short lines and long
+          gutters, and one column of it wastes half the pane's width. */}
+      <ul className="border-line/60 grid border-t sm:grid-cols-2 sm:gap-x-8">
         {rows.map(({ a, site }) => (
-          <li key={a.slug} className="flex items-baseline justify-between gap-3 py-1.5">
+          <li
+            key={a.slug}
+            className="border-line/40 flex items-baseline justify-between gap-3 border-b py-1.5"
+          >
             <span className="text-ink flex min-w-0 items-baseline gap-2 text-xs">
               <span className="truncate">{a.designation}</span>
               {/* Colour never carries it alone — the word is there too. */}
@@ -480,7 +510,7 @@ function SiteMaterials({
           </li>
         ))}
       </ul>
-    </motion.div>
+    </section>
   )
 }
 
@@ -492,11 +522,11 @@ function ArticleRow({ article: a }: { readonly article: BordereauArticle }) {
   const over = pct != null && pct > 100
 
   return (
-    <tr className="border-line/60 border-b last:border-0">
-      <td className="text-ink-faint tabular hidden w-8 py-2 pe-2 align-top text-[0.6875rem] sm:table-cell">
+    <tr className="border-line/50 border-b last:border-0">
+      <td className="text-ink-faint tabular hidden w-7 py-1.5 pe-2 align-top text-[0.625rem] sm:table-cell">
         {a.numero ?? '—'}
       </td>
-      <td className="py-2 pe-3 align-top">
+      <td className="py-1.5 pe-3 align-top">
         <span className="text-ink block text-xs leading-snug">{a.designation}</span>
         {/* Keyed on `champ`, not on a null quantity. The API returns null for
             both "this line has no daily counterpart" (a switch, an onduleur)
@@ -514,13 +544,13 @@ function ArticleRow({ article: a }: { readonly article: BordereauArticle }) {
           </span>
         )}
       </td>
-      <td className="tabular text-ink-muted py-2 pe-3 text-end align-top text-xs whitespace-nowrap">
+      <td className="tabular text-ink-muted py-1.5 pe-3 text-end align-top text-xs whitespace-nowrap">
         {num(a.qte_marche, a.unite)}
       </td>
-      <td className="tabular text-ink py-2 pe-3 text-end align-top text-xs whitespace-nowrap">
+      <td className="tabular text-ink py-1.5 pe-3 text-end align-top text-xs whitespace-nowrap">
         {num(a.qte_installee)}
       </td>
-      <td className="w-28 py-2 align-top">
+      <td className="w-24 py-1.5 align-top">
         {pct == null ? (
           <span className="text-ink-faint block text-end text-xs">—</span>
         ) : (
@@ -578,25 +608,25 @@ function Bordereau({ chantier }: { readonly chantier: Chantier }) {
   const named = lots.size > 1 || !lots.has('')
 
   return (
-    <>
+    <section className="flex min-w-0 flex-col gap-4">
       {[...lots.entries()].map(([lot, rows]) => (
-        <motion.div variants={panelBlock} key={lot || '_'} className="flex flex-col gap-1.5">
+        <div key={lot || '_'} className="flex min-w-0 flex-col gap-1">
           {named && (
-            <h4 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
+            <h3 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
               {lot || t('chantiers.noTache')}
-            </h4>
+            </h3>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[30rem] text-xs">
+            <table className="w-full min-w-[28rem] text-xs">
               <thead>
                 <tr className="text-ink-faint border-line border-b text-[0.625rem] uppercase">
-                  <th className="hidden w-8 py-1.5 text-start font-medium sm:table-cell">
+                  <th className="hidden w-7 py-1 text-start font-medium sm:table-cell">
                     {t('chantiers.lineNo')}
                   </th>
-                  <th className="py-1.5 text-start font-medium">{t('chantiers.article')}</th>
-                  <th className="py-1.5 pe-3 text-end font-medium">{t('chantiers.marche')}</th>
-                  <th className="py-1.5 pe-3 text-end font-medium">{t('chantiers.installed')}</th>
-                  <th className="w-28 py-1.5 text-end font-medium">{t('chantiers.progress')}</th>
+                  <th className="py-1 text-start font-medium">{t('chantiers.article')}</th>
+                  <th className="py-1 pe-3 text-end font-medium">{t('chantiers.marche')}</th>
+                  <th className="py-1 pe-3 text-end font-medium">{t('chantiers.installed')}</th>
+                  <th className="w-24 py-1 text-end font-medium">{t('chantiers.progress')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -606,144 +636,325 @@ function Bordereau({ chantier }: { readonly chantier: Chantier }) {
               </tbody>
             </table>
           </div>
-        </motion.div>
+        </div>
       ))}
-    </>
+    </section>
   )
 }
 
-/** One site as a disclosure row: hairline rules, no card — DESIGN.md §4. */
-function SiteRow({
+/**
+ * One site, whole: what it is running out of, what it owes, what it declared,
+ * and — while nobody has confirmed it exists — the two buttons that settle it.
+ *
+ * The confirm/delete pair used to live in a framed band at the top of the
+ * page, above sites that needed no decision at all. It belongs on the site it
+ * decides, where the reader can see the bordereau they are about to keep or
+ * drop.
+ */
+function SiteDetail({
   chantier: c,
   articles,
-  open,
-  onToggle,
+  alerts,
+  onAlertsChanged,
+  onSettled,
 }: {
   readonly chantier: Chantier
   readonly articles: readonly FreeArticle[]
-  readonly open: boolean
-  readonly onToggle: () => void
+  readonly alerts: readonly MaterialAlert[]
+  readonly onAlertsChanged: () => void
+  readonly onSettled: () => void
 }) {
   const { t } = useI18n()
+  const { user } = useAuth()
+  const [busy, setBusy] = useState(false)
+  // Deleting drops the bordereau with the site, so it goes through the same
+  // dialog every destructive action in this dashboard goes through.
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   const unverified = c.verifie === false
+  const key = norm(c.nom)
+  // Dismissed findings included: this pane is the whole truth about one site,
+  // and the band above is the one that only shouts about what is still live.
+  const mine = alerts.filter((a) => norm(a.chantier) === key)
+  const meta = [c.client, c.sheet_tab && c.sheet_tab !== c.nom ? c.sheet_tab : null]
+    .filter(Boolean)
+    .join(' · ')
+
+  const act = (fn: (id: number) => Promise<void>) => async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn(c.id)
+      onSettled()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+      setConfirmDelete(false)
+    }
+  }
 
   return (
-    <li>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-label={open ? t('chantiers.close') : t('chantiers.open')}
-        className="group hover:bg-surface-raised/60 focus-visible:ring-accent flex w-full cursor-pointer items-center gap-3 py-3 text-start transition-colors outline-none focus-visible:ring-2"
-      >
-        {/* Rotation rather than a swapped glyph: the caret is the same object
-            before and after, so the row reads as opening, not as redrawing.
-            Mirrored under RTL, where "forward" points the other way. */}
-        <motion.span
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-          className="text-ink-faint group-hover:text-ink-muted flex shrink-0 rtl:-scale-x-100"
-        >
-          <CaretRightIcon size={13} weight="bold" />
-        </motion.span>
-        <BuildingsIcon
-          size={15}
-          className={`shrink-0 ${unverified ? 'text-status-warn' : 'text-ink-faint'}`}
-        />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-ink truncate text-sm font-medium">{c.nom}</span>
-          {c.client && <span className="text-ink-faint truncate text-[0.6875rem]">{c.client}</span>}
-        </span>
-        {unverified ? (
-          <span className="text-status-warn border-status-warn/40 flex shrink-0 items-center gap-1 rounded border px-1.5 py-px text-[0.625rem]">
-            <WarningIcon size={9} weight="fill" />
-            {t('chantiers.unverified')}
-          </span>
-        ) : (
-          <span className="text-ink-faint hidden shrink-0 text-[0.625rem] sm:inline">
-            {t('chantiers.verified')}
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="border-line flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b pb-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h2 className="text-ink flex min-w-0 items-center gap-2 text-base font-medium">
+            <span className="truncate">{c.nom}</span>
+            {unverified && (
+              <WarningIcon size={12} weight="fill" className="text-status-warn shrink-0" />
+            )}
+          </h2>
+          <p className="text-ink-faint truncate text-[0.6875rem]">
+            {meta || (unverified ? t('chantiers.unverified') : t('chantiers.verified'))}
+          </p>
+        </div>
+        {unverified && user?.role === 'directeur' && (
+          <span className="flex shrink-0 items-center gap-2">
+            <button type="button" disabled={busy} onClick={act(verifyChantier)} className={btn}>
+              <CheckIcon size={11} />
+              {t('chantiers.confirm')}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmDelete(true)}
+              className={btnDanger}
+            >
+              {t('chantiers.delete')}
+            </button>
           </span>
         )}
-        {/* The journal tab, and only when it differs from the site name —
-            which it usually does not, and a column repeating the label two
-            inches to its left is noise pretending to be data. */}
-        {c.sheet_tab && c.sheet_tab !== c.nom && (
-          <span className="text-ink-faint tabular hidden w-32 shrink-0 truncate text-end text-[0.6875rem] md:inline">
-            {c.sheet_tab}
-          </span>
-        )}
-      </button>
-      {/* Fades and lifts rather than unrolling: height is a layout property and
-          DESIGN.md rules out animating one. */}
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            variants={panel}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            className="border-line/70 ms-[1.65rem] flex flex-col gap-5 border-s ps-4 pb-4"
-          >
-            <Bordereau chantier={c} />
-            <SiteMaterials chantier={c} articles={articles} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </li>
+      </div>
+
+      {unverified && (
+        <p className="text-ink-muted max-w-[70ch] text-[0.6875rem] leading-relaxed">
+          {t('chantiers.unverifiedIntro')}
+        </p>
+      )}
+      {error && <p className="text-status-fail text-xs">{error}</p>}
+
+      {mine.length > 0 && (
+        <section className="flex min-w-0 flex-col gap-1">
+          <h3 className="text-ink-faint text-[0.625rem] font-medium tracking-wide uppercase">
+            {t('chantiers.alerts')}
+          </h3>
+          <ul className="border-line/60 divide-line/40 divide-y border-t">
+            {mine.map((a) => (
+              <BandRow
+                key={`${a.chantier}-${a.champ}`}
+                alert={a}
+                site={false}
+                onDone={onAlertsChanged}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <Bordereau chantier={c} />
+      <SiteMaterials chantier={c} articles={articles} />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        target={c.nom}
+        body={t('chantiers.deleteSure')}
+        busy={busy}
+        onConfirm={() => void act(deleteChantier)()}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </div>
   )
 }
 
 export function ChantiersPage() {
   const { t } = useI18n()
   const chantiers = useApi('chantiers', api.chantiers)
-  // Fetched once here rather than inside each row: the registry is global, and
-  // `useApi` would dedupe the key anyway, but passing it down keeps an open
-  // site from showing a skeleton for data the page already has.
+  // Fetched once here rather than inside the detail pane: `useApi` dedupes by
+  // key anyway, but holding it at the page keeps a selected site from showing
+  // a skeleton for data the page already has.
   const articles = useApi('free-articles', freeArticles)
-  const [open, setOpen] = useState<number | null>(null)
+  // 60s: an assessment costs a Sheets read per site and the server caches for
+  // 120s anyway, so polling faster only spends the browser's battery.
+  const alerts = useApi('alerts', api.alerts, 60_000)
 
-  const sites = chantiers.data?.chantiers ?? []
+  const [view, setView] = useState<View | null>(null)
+  const [query, setQuery] = useState('')
+
+  const sites = useMemo(() => chantiers.data?.chantiers ?? [], [chantiers.data])
   const registry = articles.data?.articles ?? []
+  const rows = alerts.data?.alerts ?? []
+  const pendingArticles = registry.filter((a) => !a.confirmed).length
+  const pendingSites = sites.filter((c) => c.verifie === false).length
+
+  const shown = useMemo(() => {
+    const q = norm(query)
+    if (!q) return sites
+    return sites.filter((c) => norm(c.nom).includes(q) || norm(c.client ?? '').includes(q))
+  }, [sites, query])
+
+  // The first site is selected for you. A master–detail that opens on an empty
+  // pane costs the reader a click to reach the state the page exists for.
+  const selected =
+    view?.kind === 'site'
+      ? (sites.find((c) => c.id === view.id) ?? null)
+      : view == null
+        ? (shown[0] ?? null)
+        : null
+
+  // Worst first. An operator reads the top of a list, so ordering is the
+  // cheapest way to make the line that means "order today" the line they see.
+  const order = { depassement: 0, critique: 1, bas: 2 } as const
+  const sortedAlerts = [...rows].sort((a, b) => order[a.niveau] - order[b.niveau])
+
+  const paneKey =
+    view?.kind === 'alerts'
+      ? 'alerts'
+      : view?.kind === 'articles'
+        ? 'articles'
+        : String(selected?.id ?? 'none')
 
   return (
-    <motion.div
-      initial="hidden"
-      animate="show"
-      variants={{ show: { transition: { staggerChildren: 0.05 } } }}
-      className="flex flex-col gap-8 pb-12"
-    >
-      {/* First, and only when it exists: it is the only band that asks the
-          director to do something, and it disappears once nothing is pending. */}
-      <UnverifiedSites chantiers={chantiers} />
+    <div className="flex flex-col gap-4 pb-8">
+      {/* One line: what to look at, and everything that wants a decision. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <label className="border-line bg-surface focus-within:ring-accent flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-1.5 focus-within:ring-2 sm:max-w-xs">
+          <MagnifyingGlassIcon size={13} className="text-ink-faint shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('chantiers.filter')}
+            aria-label={t('chantiers.filter')}
+            className="text-ink placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-sm outline-none"
+          />
+        </label>
+        <Chip
+          label={t('chantiers.materials')}
+          n={pendingArticles}
+          tone="warn"
+          active={view?.kind === 'articles'}
+          onClick={() => setView(view?.kind === 'articles' ? null : { kind: 'articles' })}
+        />
+        {/* Jumps to the first site awaiting a decision rather than opening a
+            list of its own: the decision is taken on the site, in the pane. */}
+        <Chip
+          label={t('chantiers.unverified')}
+          n={pendingSites}
+          tone="warn"
+          active={selected?.verifie === false}
+          onClick={() => {
+            const first = sites.find((c) => c.verifie === false)
+            if (first) setView({ kind: 'site', id: first.id })
+          }}
+        />
+      </div>
 
-      <FreeArticles articles={articles} />
+      {/* Always on screen: a shortage is the one thing here with a deadline. */}
+      <AlertsBand
+        alerts={alerts}
+        showingAll={view?.kind === 'alerts'}
+        onOpenAll={() => setView(view?.kind === 'alerts' ? null : { kind: 'alerts' })}
+      />
 
-      <motion.div variants={rise}>
-        <MaterialAlerts />
-      </motion.div>
-
-      <motion.div variants={rise}>
-        <Band title={t('chantiers.all')} aside={String(sites.length)}>
-          {chantiers.loading && !chantiers.data && <Skeleton className="h-24" />}
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[15rem_1fr] xl:grid-cols-[17rem_1fr]">
+        {/* Sticky rather than a second scrollbar: the shell scrolls the
+            document, and a nested overflow container would trap the wheel
+            everywhere except its own strip. */}
+        <div className="flex min-w-0 flex-col gap-2 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto lg:pe-1">
+          <Head title={t('chantiers.all')} aside={String(shown.length)} />
+          {chantiers.loading && !chantiers.data && <Skeleton className="h-32" />}
           {chantiers.error && <ErrorState message={chantiers.error} onRetry={chantiers.reload} />}
-          {!chantiers.loading && !chantiers.error && sites.length === 0 && (
-            <EmptyState body={t('chantiers.allNone')} />
+          {!chantiers.loading && !chantiers.error && shown.length === 0 && (
+            <EmptyState body={query ? t('chantiers.noMatch') : t('chantiers.allNone')} />
           )}
-          {sites.length > 0 && (
-            <ul className="divide-line/70 border-line divide-y border-b">
-              {sites.map((c) => (
-                <SiteRow
-                  key={c.id}
-                  chantier={c}
+          <ul className="divide-line/50 divide-y">
+            {shown.map((c) => {
+              const active = selected?.id === c.id
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => setView({ kind: 'site', id: c.id })}
+                    aria-current={active}
+                    className={`focus-visible:ring-accent relative flex w-full cursor-pointer items-center gap-2.5 py-2 ps-2.5 text-start transition-colors outline-none focus-visible:ring-2 ${
+                      active ? 'bg-surface-raised' : 'hover:bg-surface-raised/50'
+                    }`}
+                  >
+                    {/* Only the selected row takes the accent — DESIGN.md's Ten
+                        Percent Rule. `layoutId` slides the mark between rows
+                        rather than blinking it out and in, so the eye follows
+                        the selection instead of re-finding it. */}
+                    {active && (
+                      <motion.span
+                        layoutId="site-marker"
+                        className="bg-accent absolute inset-y-1 start-0 w-0.5 rounded-full"
+                        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                      />
+                    )}
+                    <BuildingsIcon
+                      size={14}
+                      className={`shrink-0 ${c.verifie === false ? 'text-status-warn' : 'text-ink-faint'}`}
+                    />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="text-ink truncate text-[0.8125rem] leading-tight">
+                        {c.nom}
+                      </span>
+                      {c.client && (
+                        <span className="text-ink-faint truncate text-[0.625rem]">{c.client}</span>
+                      )}
+                    </span>
+                    {c.verifie === false && (
+                      <WarningIcon size={11} weight="fill" className="text-status-warn shrink-0" />
+                    )}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+
+        {/* One thing at a time. Keyed on what is shown, so switching sites
+            replays the entrance instead of mutating a pane in place. */}
+        <div className="min-w-0">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={paneKey} variants={fade} initial="hidden" animate="show" exit="exit">
+              {view?.kind === 'alerts' ? (
+                <div className="flex min-w-0 flex-col gap-3">
+                  <Head title={t('chantiers.alerts')} aside={String(rows.length)} />
+                  <p className="text-ink-muted max-w-[70ch] text-[0.6875rem] leading-relaxed">
+                    {t('chantiers.alertsIntro')}
+                  </p>
+                  <ul className="border-line divide-line/40 divide-y border-t">
+                    {sortedAlerts.map((a) => (
+                      <BandRow
+                        key={`${a.chantier}-${a.champ}`}
+                        alert={a}
+                        site
+                        onDone={alerts.reload}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ) : view?.kind === 'articles' ? (
+                <ReviewArticles articles={articles} />
+              ) : selected ? (
+                <SiteDetail
+                  chantier={selected}
                   articles={registry}
-                  open={open === c.id}
-                  onToggle={() => setOpen(open === c.id ? null : c.id)}
+                  alerts={rows}
+                  onAlertsChanged={alerts.reload}
+                  onSettled={() => {
+                    chantiers.reload()
+                    setView(null)
+                  }}
                 />
-              ))}
-            </ul>
-          )}
-        </Band>
-      </motion.div>
-    </motion.div>
+              ) : (
+                !chantiers.loading && <EmptyState body={t('chantiers.pickSite')} />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
   )
 }

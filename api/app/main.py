@@ -2394,7 +2394,53 @@ async def list_alerts(caller: dict = Depends(auth.require_user)) -> dict:
     disappears when one tab is broken looks exactly like a panel with nothing to
     report.
     """
-    return {"alerts": await run_in_threadpool(stock.assess)}
+    found = await run_in_threadpool(stock.assess)
+    return {"alerts": stock.apply_mutes(found)}
+
+
+class AlertMuteIn(BaseModel):
+    chantier: str = Field(..., min_length=1, max_length=200)
+    champ: str = Field(..., min_length=1, max_length=80)
+
+
+@app.post("/alerts/mute", responses={404: {"description": "No such live alert"}, 502: {"description": "Log store unreachable"}})
+async def mute_alert(body: AlertMuteIn, caller: dict = Depends(auth.require_human)) -> dict:
+    """Dismiss a material finding until it gets worse.
+
+    The level and the remainder are taken from the **server's** own assessment,
+    never from the request. A client-supplied figure would let a stale tab mute
+    a shortage against a number that has not been true for an hour, and the
+    snapshot is the only thing standing between "ignore" and "silence forever".
+
+    A finding that is not currently live cannot be muted: there would be
+    nothing to snapshot, and the row would sit in the table pre-emptively
+    hiding an alert nobody has seen yet.
+    """
+    found = await run_in_threadpool(stock.assess)
+    live = next(
+        (a for a in found if a["chantier"] == body.chantier and a["champ"] == body.champ), None
+    )
+    if live is None:
+        raise HTTPException(404, f"no live alert for {body.champ!r} on {body.chantier!r}")
+    try:
+        logs.mute_alert(body.chantier, body.champ, live["niveau"], live.get("reste"),
+                        caller.get("name") or caller.get("email"))
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    auth.record(caller, "alert_muted", f"{body.chantier}/{body.champ}")
+    return {"ok": True}
+
+
+@app.delete("/alerts/mute", responses={502: {"description": "Log store unreachable"}})
+def unmute_alert(chantier: str, champ: str, caller: dict = Depends(auth.require_human)) -> dict:
+    """Bring a dismissed finding back for everyone."""
+    try:
+        removed = logs.unmute_alert(chantier, champ)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    if removed:
+        auth.record(caller, "alert_unmuted", f"{chantier}/{champ}")
+    return {"ok": True, "removed": removed}
 
 
 @app.get("/receptions", responses={502: {"description": "Log store unreachable"}})
