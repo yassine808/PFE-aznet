@@ -1180,7 +1180,8 @@ def article_label(field: str) -> Tuple[str, str]:
     return label, unit
 
 
-def file_livraison(payload: Dict, report: ExtractedReport) -> Dict:
+def file_livraison(payload: Dict, report: ExtractedReport,
+                   site: Optional[Tuple[str, List[str]]] = None) -> Dict:
     """A bon de livraison: ledger the quantities, write no journal row.
 
     A delivery is not a day's work. Merged into the journal it would add to the
@@ -1196,9 +1197,19 @@ def file_livraison(payload: Dict, report: ExtractedReport) -> Dict:
     from app import logs
 
     technicien = str(payload.get("technicien") or "").strip()
-    chantier, _tab, warnings, _source = resolve_site(
-        technicien, payload.get("chantier") or report.chantier_mentionne
-    )
+    # `site` is the answer `file_report` already paid for. Resolving again here
+    # is not just duplicated work: on the sticky path — the normal case, where
+    # the technician did not name the site — `resolve_site` reads the whole
+    # Rapports tab, so a message that both delivers and installs cost two full
+    # Sheets reads to answer one question that cannot have two answers within
+    # one request. Still resolved here when called on its own, so the function
+    # keeps working alone.
+    if site is not None:
+        chantier, warnings = site[0], list(site[1])
+    else:
+        chantier, _tab, warnings, _source = resolve_site(
+            technicien, payload.get("chantier") or report.chantier_mentionne
+        )
     date = str(payload.get("date") or "")
     lignes = report.livraisons or {}
     recorded = logs.record_receptions(
@@ -1278,7 +1289,17 @@ def file_report(payload: Dict) -> Dict:
     # Both entrances — the live `/journal` call and the retry drain — come
     # through here, so a parked delivery can never be replayed as installed
     # quantities.
-    livraison = file_livraison(payload, report) if report.livraisons else None
+    # Resolved once, before the branch, because both arms need it and the
+    # sticky path costs a full Rapports read.
+    technicien_for_site = str(payload.get("technicien") or "").strip()
+    site_nom, site_tab, site_warnings = resolve_tab(
+        technicien_for_site, payload.get("chantier") or report.chantier_mentionne
+    )
+    livraison = (
+        file_livraison(payload, report, site=(site_nom, site_warnings))
+        if report.livraisons
+        else None
+    )
     if report.nature == "livraison":
         return {
             **(livraison or {"chantier": None, "lignes": 0, "warnings": []}),
@@ -1286,16 +1307,15 @@ def file_report(payload: Dict) -> Dict:
             "row": None,
             "rapports_row": None,
         }
-    technicien = str(payload.get("technicien") or "").strip()
+    technicien = technicien_for_site
     warnings = list(payload.get("warnings") or []) + hour_warnings + date_warnings
 
     # The voice wins: what the technician said beats the org chart. `chantier`
     # on the payload stays supported (the drain re-files an already-routed row)
-    # and takes precedence over the extraction it was derived from.
-    chantier, tab, routing_warnings = resolve_tab(
-        technicien, payload.get("chantier") or report.chantier_mentionne
-    )
-    warnings.extend(routing_warnings)
+    # and takes precedence over the extraction it was derived from. Resolved
+    # above, before the delivery branch, so one message asks once.
+    chantier, tab = site_nom, site_tab
+    warnings.extend(site_warnings)
 
     # Create the tab before reading it. `read_tab` on a tab Google has never
     # heard of is a 400 ("Unable to parse range"), not an empty list, so the

@@ -57,15 +57,21 @@ def test_patch_unknown_column_is_422(monkeypatch):
 # one. What these guard is the period filter and the fact that the figures come
 # from the Sheet and not from the request body.
 
+# Shaped like `logs.list_report_rows`, not like a Rapports row: the export
+# reads Postgres because the Rapports tab deliberately carries no quantity
+# columns, so a Sheet-shaped fixture here would pass while the real document
+# came out empty. Row 3 keeps its `12/08/2026` spelling — `resolve_date` falls
+# back to the transmitted date unnormalised, so that spelling reaches the
+# store, and the week filter has to tolerate it.
 EXPORT_ROWS = [
-    {"_row": 2, "date": "2026-08-10", "technicien": "A", "goulottes_m": "10"},
-    {"_row": 3, "date": "12/08/2026", "technicien": "B", "goulottes_m": "5"},
-    {"_row": 4, "date": "2026-08-20", "technicien": "C", "goulottes_m": "999"},
+    {"_row": 2, "date": "2026-08-10", "technicien": "A", "goulotte_m": 10},
+    {"_row": 3, "date": "12/08/2026", "technicien": "B", "goulotte_m": 5},
+    {"_row": 4, "date": "2026-08-20", "technicien": "C", "goulotte_m": 999},
 ]
 
 
 def test_export_returns_a_docx_attachment(monkeypatch):
-    monkeypatch.setattr(main.sheets, "read_reports", lambda: EXPORT_ROWS)
+    monkeypatch.setattr(main.logs, "list_report_rows", lambda *a, **kw: EXPORT_ROWS)
     r = client.post("/reports/export", json={
         "title": "Rapport journalier — 2026-08-10",
         "body": "## Synthèse\nUne intervention.",
@@ -87,7 +93,7 @@ def test_export_covers_the_whole_week_and_nothing_outside_it(monkeypatch):
     it, and the document would disagree with the page that asked for it.
     """
     seen = {}
-    monkeypatch.setattr(main.sheets, "read_reports", lambda: EXPORT_ROWS)
+    monkeypatch.setattr(main.logs, "list_report_rows", lambda *a, **kw: EXPORT_ROWS)
     monkeypatch.setattr(
         main.docx_report, "build",
         lambda *a, **kw: seen.update(rows=a[4]) or b"PK\x03\x04",
@@ -99,11 +105,11 @@ def test_export_covers_the_whole_week_and_nothing_outside_it(monkeypatch):
     assert [row["_row"] for row in seen["rows"]] == [2, 3]
 
 
-def test_export_502_when_the_sheet_cannot_be_read(monkeypatch):
-    def boom():
-        raise SheetsError("no key")
+def test_export_502_when_the_store_cannot_be_read(monkeypatch):
+    def boom(*a, **kw):
+        raise main.logs.LogStoreError("postgres down")
 
-    monkeypatch.setattr(main.sheets, "read_reports", boom)
+    monkeypatch.setattr(main.logs, "list_report_rows", boom)
     r = client.post("/reports/export", json={
         "title": "T", "body": "x", "period": "2026-08-10",
     })

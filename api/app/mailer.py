@@ -405,7 +405,11 @@ def send(
     html_body: Optional[str] = None,
     attachments: Sequence[Tuple[str, bytes, str]] = (),
 ) -> List[str]:
-    """Send one message to every recipient. Returns the addresses served.
+    """Send one message to every recipient. Returns the addresses **accepted**.
+
+    The returned list is the server's answer, not the caller's request: an
+    address the SMTP server refused is dropped from it, so a caller that
+    records what it sent records what was actually taken.
 
     `body` is always the plain-text part — the fallback a text-only client and
     every spam filter reads. `html_body` is the rendered alternative when there
@@ -461,7 +465,22 @@ def send(
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
             smtp.starttls()
             smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg)
+            # The return value is the point, not decoration. `send_message`
+            # raises only when EVERY address is refused; when the server takes
+            # the message for one recipient and rejects another, it returns
+            # {address: (code, reason)} and raises nothing. Discarding it made
+            # a bounced chef indistinguishable from a served one: the job
+            # stored the full list as `sent_to`, the Automation panel showed
+            # the report delivered, and that chef simply stopped receiving
+            # anything until somebody asked them in person.
+            refused = smtp.send_message(msg) or {}
     except Exception as exc:  # noqa: BLE001
         raise MailError(f"envoi échoué: {exc}") from exc
-    return recipients
+
+    if refused:
+        # Printed AND removed from the answer. The caller records what it is
+        # told was served, so the honest answer is the addresses the server
+        # actually accepted — never the ones we hoped it would.
+        detail = ", ".join(f"{addr} ({code})" for addr, (code, _r) in refused.items())
+        print(f"[mail] refusé pour {detail}"[:300], flush=True)
+    return [r for r in recipients if r not in refused]

@@ -269,7 +269,16 @@ def ensure_columns(tab: str, names: List[str]) -> List[str]:
     """
     svc = _service()
     headers = _headers(svc, tab)
-    missing = [n for n in names if n and n not in headers]
+    # `dict.fromkeys` for the dedupe, because insertion order is the column
+    # order. `names` is a list and callers build it by mapping over their own
+    # input: `journal.write_report` maps each spoken article through the
+    # registry, and two different spellings in one message ("prises doubles
+    # étanches", "prise double étanche") resolve to the SAME registered name.
+    # Both then passed this filter — neither is in the header yet — and the tab
+    # grew two columns with identical titles. Every later read resolves
+    # `headers.index(name)` to the first of them, so that article's quantities
+    # split silently across two columns and every total under-counts.
+    missing = list(dict.fromkeys(n for n in names if n and n not in headers))
     if not missing:
         return headers
     _grow_columns(svc, tab, len(headers) + len(missing))

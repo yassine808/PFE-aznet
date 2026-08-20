@@ -1941,7 +1941,16 @@ def upsert_technician(
         raise LogStoreError("external_id and name are required")
 
     with _cursor() as cur:
-        cur.execute("SELECT * FROM persons WHERE name = %s", (name.strip(),))
+        # `lower(...)`, matching `auth.create_user`. The two lookups key the
+        # same table on the same field and the code says they must agree; they
+        # did not. Names arrive from a channel profile — Telegram's display
+        # name, a WhatsApp contact card — so the same human reaches this
+        # function as "Yassine" on one channel and "yassine" on the other, and
+        # a case-sensitive match minted a second `persons` row: two boxes on
+        # the org chart, a profile attached to one of them, and the manager
+        # link on the other. That is the identity split the 2026-08-01 fold was
+        # written to end, reopened through a different door.
+        cur.execute("SELECT * FROM persons WHERE lower(name) = lower(%s)", (name.strip(),))
         person = _one(cur)
         if person is None:
             # `or "tech"`: role is NOT NULL since accounts folded in, and an

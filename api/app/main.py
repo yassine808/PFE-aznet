@@ -1253,13 +1253,27 @@ def export_report(payload: ReportExportRequest, caller: dict = Depends(auth.requ
     start = journal.norm_date(first) or ""
     end = (journal.norm_date(last) if weekly else start) or start
 
+    # Postgres, not the Sheet. The Rapports tab deliberately carries **no
+    # quantity columns** since 2026-08-19 — it is the index a human reads, and
+    # the figures moved to `report_rows` where they cost no Google read. This
+    # handler kept reading the tab, so `rapports_totals` looked up schema-named
+    # keys that are not in those rows and every quantity in the exported
+    # document came back empty: an export and the scheduled mail for the same
+    # period disagreed, and only the mail was right. `jobs._period_report`
+    # already sources its rows this way; both paths now read the same store.
+    # Filtered here rather than by `dates=` in SQL, deliberately. `resolve_date`
+    # falls back to the transmitted date **unnormalised** when the stated one is
+    # unusable, so `report_rows.date` can hold `12/08/2026` beside `2026-08-12`;
+    # an exact `date = ANY(...)` match would drop those rows silently, which is
+    # the same class of bug the Sheet spelling caused and that `norm_date`
+    # exists to close.
     try:
         rows = [
-            r for r in sheets.read_reports()
+            r for r in logs.list_report_rows()
             if (day := journal.norm_date(r.get("date"))) and start <= day <= end
         ]
-    except sheets.SheetsError as exc:
-        raise HTTPException(502, f"lecture du Sheet impossible: {exc}") from exc
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, f"lecture des rapports impossible: {exc}") from exc
 
     blob = docx_report.build(
         payload.title,
