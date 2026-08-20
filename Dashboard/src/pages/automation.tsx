@@ -9,6 +9,8 @@ import {
   ClockCountdownIcon,
   EnvelopeSimpleIcon,
   PaperPlaneTiltIcon,
+  PauseIcon,
+  PlayIcon,
   PlusIcon,
   TrashIcon,
   UserFocusIcon,
@@ -32,11 +34,16 @@ import { cn } from '@/lib/utils'
 // though AppSettings has it: the save PUTs this whole object, and the director
 //'s live STT order lives in a different panel — a whole-object save here must
 // not reset it to a default it never chose.
-type EditableSettings = Required<Omit<AppSettings, 'stt_chain'>>
+// `paused_jobs` is excluded for the same reason `stt_chain` is: this form PUTs
+// its whole object, and a save carrying a stale list would silently undo a
+// pause the operator set on a row seconds earlier. It is written by the row's
+// own switch, one key at a time.
+type EditableSettings = Required<Omit<AppSettings, 'stt_chain' | 'paused_jobs'>>
 const DEFAULTS: EditableSettings = {
   daily_time: '18:30',
   weekly_day: 4,
   weekly_time: '17:00',
+  nightly_time: '03:00',
   emails: [],
 }
 
@@ -327,10 +334,13 @@ function useOutcome() {
 function JobRow({
   job,
   onRan,
+  pause,
   children,
 }: {
   readonly job: JobStatus
   readonly onRan: () => void
+  /** This job's own pause switch, rendered beside its Run button. */
+  readonly pause?: React.ReactNode
   readonly children?: React.ReactNode
 }) {
   const { t } = useI18n()
@@ -381,7 +391,7 @@ function JobRow({
         </span>
 
         <span className="text-ink-faint hidden shrink-0 text-[0.6875rem] sm:block">
-          {job.schedule}
+          {job.paused ? t('automation.pausedNote') : job.schedule}
         </span>
 
         {/* The outcome as a pill: it is the one thing scanned down a column, and
@@ -405,6 +415,8 @@ function JobRow({
         ) : (
           <span className="text-ink-faint shrink-0 text-[0.6875rem]">—</span>
         )}
+
+        {pause}
 
         {/* Icon-only: the label was the widest thing on the row and said the
             same thing six times. 32px with the padding, still a real target. */}
@@ -482,11 +494,145 @@ function Panel({
 
 const MAIL_JOBS = new Set(['daily_report', 'weekly_report'])
 
+/**
+ * When the nightly upkeep band runs.
+ *
+ * Writes on change rather than joining the settings form, for the same reason
+ * the pause switch does: the Save button lives in the other column, and a
+ * control an operator edits here should not depend on remembering to go there.
+ * `put_settings` upserts only this key, so nothing half-typed in that form is
+ * committed as a side effect.
+ */
+function NightlyTime({
+  value,
+  onChanged,
+}: {
+  readonly value: string
+  readonly onChanged: () => void
+}) {
+  const { t } = useI18n()
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  const save = async (next: string) => {
+    if (!next || next === value) return
+    setBusy(true)
+    setFailed(false)
+    try {
+      await putSettings({ nightly_time: next })
+      onChanged()
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <label htmlFor="nightly-time" className="text-ink-faint text-[0.6875rem]">
+        {failed ? t('automation.pauseFailed') : t('automation.nightlyAt')}
+      </label>
+      <input
+        id="nightly-time"
+        type="time"
+        defaultValue={value}
+        disabled={busy}
+        // On blur and on commit, not on every keystroke: a time input fires
+        // change as the hour digit is typed, which would PUT "0:00" on the way
+        // to "04:30" and briefly move the band to midnight.
+        onBlur={(e) => void save(e.target.value)}
+        className={cn(
+          'border-line bg-canvas text-ink tabular focus:border-accent w-24 rounded-md border px-2 py-1 text-xs outline-none transition-colors disabled:opacity-50',
+          failed && 'border-status-fail',
+        )}
+      />
+    </span>
+  )
+}
+
+/**
+ * Pause or resume one band of the scheduler.
+ *
+ * Writes immediately instead of joining the settings form: this is a switch,
+ * not a field. An operator pausing the nightly band because they are about to
+ * work on the Sheet should not then have to find a Save button — and the form
+ * beside it may hold half-typed edits that must not be committed as a side
+ * effect of flipping a switch. `put_settings` upserts only the keys it is
+ * given, so sending this one key touches nothing else.
+ */
+function PauseToggle({
+  name,
+  paused,
+  pausedList,
+  onChanged,
+}: {
+  readonly name: string
+  readonly paused: boolean
+  /** The whole list as the server last reported it. Sent back with one name
+   *  added or removed, because the setting is the list — writing a single
+   *  boolean would need one key per job and a migration every time a job is
+   *  added, and nine of them arrived this month. */
+  readonly pausedList: readonly string[]
+  readonly onChanged: () => void
+}) {
+  const { t } = useI18n()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(false)
+
+  const toggle = async () => {
+    setBusy(true)
+    setError(false)
+    try {
+      const next = paused
+        ? pausedList.filter((n) => n !== name)
+        : [...new Set([...pausedList, name])]
+      await putSettings({ paused_jobs: next })
+      onChanged()
+    } catch {
+      // Left visible rather than thrown away: a pause that silently failed
+      // would show "running" while the operator believes it is stopped.
+      setError(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={toggle}
+      aria-pressed={paused}
+      title={paused ? t('automation.resumeHint') : t('automation.pauseHint')}
+      className={cn(
+        'focus-visible:ring-accent inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-[0.6875rem] font-medium transition-colors outline-none focus-visible:ring-2 active:translate-y-px disabled:opacity-40',
+        paused
+          ? 'border-status-warn/40 text-status-warn'
+          : 'border-line text-ink-muted hover:border-line-strong hover:text-ink',
+      )}
+    >
+      {paused ? <PlayIcon size={12} weight="fill" /> : <PauseIcon size={12} weight="fill" />}
+      {error
+        ? t('automation.pauseFailed')
+        : paused
+          ? t('automation.resume')
+          : t('automation.pause')}
+    </button>
+  )
+}
+
 function JobsBand({
   jobs,
   ordered,
   controls,
+  onChanged,
+  pausedList,
+  nightlyTime,
 }: {
+  readonly onChanged: () => void
+  readonly pausedList: readonly string[]
+  readonly nightlyTime: string
   readonly jobs: Async<{ jobs: JobStatus[] }>
   readonly ordered: JobStatus[]
   readonly controls: Record<string, React.ReactNode>
@@ -509,7 +655,19 @@ function JobsBand({
   const rows = (list: JobStatus[]) => (
     <ul className="flex flex-col">
       {list.map((job) => (
-        <JobRow key={job.name} job={job} onRan={jobs.reload}>
+        <JobRow
+          key={job.name}
+          job={job}
+          onRan={jobs.reload}
+          pause={
+            <PauseToggle
+              name={job.name}
+              paused={Boolean(job.paused)}
+              pausedList={pausedList}
+              onChanged={onChanged}
+            />
+          }
+        >
           {controls[job.name]}
         </JobRow>
       ))}
@@ -537,7 +695,21 @@ function JobsBand({
         </Panel>
       )}
       {upkeep.length > 0 && (
-        <Panel title={t('automation.group.upkeep')} aside={health(upkeep)} index={2}>
+        <Panel
+          title={t('automation.group.upkeep')}
+          // The nightly hour sits on the band it governs, not in the card of
+          // send times: it decides when the log prune and the profile rebuild
+          // run, and nothing about when a report is mailed. Next to the thing
+          // it changes, an operator does not have to hold the connection in
+          // their head.
+          aside={
+            <span className="flex items-center gap-3">
+              <NightlyTime value={nightlyTime} onChanged={onChanged} />
+              {health(upkeep)}
+            </span>
+          }
+          index={2}
+        >
           {rows(upkeep)}
         </Panel>
       )}
@@ -581,6 +753,20 @@ export function AutomationPage() {
     setDirty(true)
     setSaved(false)
   }
+
+  // Straight off the server's copy, never mirrored into form state: the pause
+  // switches write one key at a time and this page's Save PUTs a whole object,
+  // so a mirrored copy would let a Save undo a pause set seconds earlier.
+  const pausedJobs = useMemo<string[]>(() => {
+    const raw = (stored.data?.settings as { paused_jobs?: unknown })?.paused_jobs
+    if (Array.isArray(raw)) return raw.map(String)
+    if (typeof raw === 'string')
+      return raw
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean)
+    return []
+  }, [stored.data])
 
   const days = useMemo(() => {
     const fmt = new Intl.DateTimeFormat(intlLocaleOf(locale), { weekday: 'long' })
@@ -724,7 +910,17 @@ export function AutomationPage() {
         fits one screen at 1440.
       */}
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,1fr)]">
-        <JobsBand jobs={jobs} ordered={ordered} controls={CONTROLS} />
+        <JobsBand
+          jobs={jobs}
+          ordered={ordered}
+          controls={CONTROLS}
+          onChanged={() => {
+            jobs.reload()
+            stored.reload()
+          }}
+          pausedList={pausedJobs}
+          nightlyTime={values.nightly_time}
+        />
 
         <div className="flex min-w-0 flex-col gap-4">
           <Panel title={t('automation.schedule')} index={1}>

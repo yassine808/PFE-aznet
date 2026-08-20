@@ -9,6 +9,32 @@ unreachable and every row lands (correctly) in `Non affecté`.
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _fresh_sheet_caches():
+    """Empty every Sheets cache around each test.
+
+    `sheets` keeps three process-wide caches — the Rapports rows, the header
+    row and, since the Chantiers page became slow, one entry per journal tab.
+    They exist to stop a dashboard poll paying for a Google round trip the last
+    poll already paid for, and in production they are dropped by
+    `invalidate_reports()` on every write.
+
+    A test suite has no writes, so without this a cache entry outlives the test
+    that created it: two tests that describe the SAME tab with different rows —
+    which is most of `test_stock_alerts.py` — see whichever ran first. It fails
+    as a wrong assertion in the second test, pointing at code that is correct,
+    which is the most expensive kind of test failure to read.
+
+    Autouse and both sides: `yield` guarantees a test cannot leak into the next
+    one even if it fails part-way through.
+    """
+    from app import sheets
+
+    sheets.invalidate_reports()
+    yield
+    sheets.invalidate_reports()
+
+
 @pytest.fixture
 def chantier_table(monkeypatch):
     """In-memory `chantiers` table.

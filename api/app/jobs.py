@@ -973,8 +973,20 @@ def status() -> List[dict]:
     """One entry per job, with its schedule and last outcome."""
     with _LOCK:
         last = dict(_STATUS)
+    # One settings read for the whole list, not one per job: `status()` answers
+    # a dashboard poll and each call would otherwise be nine Postgres round
+    # trips to read the same row nine times.
+    row = _settings_safe()
     return [
-        {"name": name, "schedule": _schedule_label(name), "last": last.get(name)}
+        {
+            "name": name,
+            "schedule": _schedule_label(name),
+            "last": last.get(name),
+            # Sent even when false, so the panel can say "paused" instead of
+            # showing a schedule that is not going to happen.
+            "group": group_of(name),
+            "paused": is_paused(name, row),
+        }
         for name in JOBS
     ]
 
@@ -992,7 +1004,8 @@ def _schedule_label(name: str) -> str:
     if name == "reminders":
         return "chaque minute"
     if name in ("prune_logs", "profiles"):
-        return f"chaque nuit à {NIGHTLY_HOUR:02d}:00"
+        h, m = nightly_hhmm()
+        return f"chaque nuit à {h:02d}:{m:02d}"
     row = _settings_safe()
     if name == "daily_report":
         return f"du lundi au samedi à {row.get('daily_time') or '18:30'}"
@@ -1026,6 +1039,61 @@ def _settings_safe() -> dict:
 # ── The loop ───────────────────────────────────────────────────────────────
 
 
+#: The two bands the Automation page shows, and the only grouping the
+#: scheduler knows about. Named here rather than inferred, because the
+#: dashboard groups by the same rule and a second copy of it would drift: pause
+#: "Rapports envoyés" in the UI and have the scheduler pause something else.
+#: Everything not a report is upkeep — the drains, the retries, the nightly
+#: band — which is exactly how `JobsBand` splits them.
+REPORT_JOBS = ("daily_report", "weekly_report")
+
+
+def group_of(name: str) -> str:
+    return "reports" if name in REPORT_JOBS else "upkeep"
+
+
+#: The jobs an operator has switched off, by name.
+#:
+#: A list of names rather than a flag per band: "pause the nightly profile
+#: rebuild while I reorganise the Sheet" is a real instruction, and pausing the
+#: whole upkeep band to say it would also stop the retry queue draining — which
+#: is the one job whose silence loses messages. Stored as a list because the
+#: set of jobs changes (six became nine this month) and a column per job would
+#: need a migration each time.
+PAUSED_KEY = "paused_jobs"
+
+
+def paused_jobs(row: Optional[dict] = None) -> set:
+    row = _settings_safe() if row is None else row
+    value = row.get(PAUSED_KEY) or []
+    # Tolerates a comma string as well as a list: the setting is hand-editable
+    # in the table, and a string there should not silently unpause everything.
+    if isinstance(value, str):
+        value = [v.strip() for v in value.split(",")]
+    return {str(v) for v in value if str(v).strip()}
+
+
+def is_paused(name: str, row: Optional[dict] = None) -> bool:
+    """Has this job been switched off?
+
+    Pausing stops the *scheduler*, never the operator: `POST /jobs/{name}/run`
+    still works, because "do not run this on its own" and "never run this
+    again" are different instructions and only the first one is being given.
+    """
+    return name in paused_jobs(row)
+
+
+def nightly_hhmm(row: Optional[dict] = None) -> tuple:
+    """When the nightly upkeep band runs. 03:00 unless an operator moved it.
+
+    Configurable because 03:00 is a guess about when nobody is sending, and
+    that guess belongs to whoever runs the company: a crew working nights wants
+    the profile rebuild somewhere else entirely.
+    """
+    row = _settings_safe() if row is None else row
+    return _hhmm(row.get("nightly_time"), (NIGHTLY_HOUR, 0))
+
+
 #: Jobs that simply run every so often, and how often.
 _INTERVALS = {
     "message_queue": timedelta(seconds=MESSAGE_RETRY_SECONDS),
@@ -1039,11 +1107,24 @@ _INTERVALS = {
 
 
 def _due(now: datetime, last: Optional[datetime], name: str) -> bool:
+    # Read once per check rather than per branch: the settings row is read from
+    # Postgres on every tick already, and an edited hour has to take effect
+    # without a restart — which is the whole reason these live in the table and
+    # not in the constants above.
+    row = _settings_safe()
+    if is_paused(name, row):
+        return False
     every = _INTERVALS.get(name)
     if every is not None:
         return last is None or now - last >= every
     if name in ("prune_logs", "profiles"):
-        return now.hour == NIGHTLY_HOUR and (last is None or last.date() < now.date())
+        at = nightly_hhmm(row)
+        # Same shape as the report bands below: due once the minute has passed,
+        # once per day. Comparing `now.hour == HOUR` alone missed the band
+        # entirely whenever the tick straddled the hour.
+        if (now.hour, now.minute) < at:
+            return False
+        return last is None or last.date() < now.date()
 
     at = _report_time(now, name)
     if at is None or (now.hour, now.minute) < at:

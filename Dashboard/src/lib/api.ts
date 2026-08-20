@@ -724,6 +724,13 @@ export async function refreshProfile(id: number): Promise<{ updated: boolean; re
 export interface JobStatus {
   name: string
   schedule: string
+  /** Which band of the Automation page it belongs to. Decided by the server so
+   *  the page and the scheduler cannot disagree about what "pause the reports"
+   *  means. */
+  group?: 'reports' | 'upkeep'
+  /** Its band is paused: the scheduler will not start it. Running it by hand
+   *  still works — "do not run this on its own" is not "never run this". */
+  paused?: boolean
   last: {
     ok: boolean
     at: string
@@ -763,6 +770,17 @@ export interface AppSettings {
   /** Ordre des moteurs STT, ex. `groq,gemini,local`. Écriture directeur
    *  uniquement — l'API renvoie 403 sinon, et 422 sur un moteur inconnu. */
   stt_chain?: string
+  /** Heure de la bande de nuit (purge des journaux, profils). 03:00 par
+   *  défaut — une supposition sur l'heure où personne n'envoie, qui appartient
+   *  à celui qui fait tourner l'entreprise. */
+  nightly_time?: string
+  /** Tâches suspendues, par nom. L'ordonnanceur ne les lance plus ; une
+   *  exécution manuelle reste possible — « ne pas lancer tout seul » n'est pas
+   *  « ne plus jamais lancer ». Une liste plutôt qu'un drapeau par bande :
+   *  suspendre la reconstruction des profils sans arrêter la file de reprise
+   *  est une consigne réelle, et c'est la file dont le silence perd des
+   *  messages. */
+  paused_jobs?: string[]
 }
 
 /** GET /stt/status — moteurs, ordre en vigueur, et usage réel. */

@@ -639,3 +639,48 @@ def test_moving_the_due_date_re_anchors_the_repeat(monkeypatch):
     logs.update_task(1, {"due_at": datetime(2026, 3, 15, 9, 0)})
     assert "repeat_anchor_day" in seen["sql"]
     assert 15 in seen["params"]
+
+
+# --- pausing a band, and moving the nightly hour ----------------------------
+
+
+def test_only_the_paused_job_stops(monkeypatch):
+    """Pause is per job, so its neighbours in the same band keep running.
+
+    That distinction is the point: pausing the whole upkeep band to silence the
+    nightly profile rebuild would also stop the retry queue draining, and that
+    is the one job whose silence loses messages.
+    """
+    monkeypatch.setattr(jobs, "_settings_safe", lambda: {"paused_jobs": ["profiles"]})
+    night = datetime(2026, 3, 10, 3, 0)
+    assert jobs._due(night, None, "profiles") is False
+    assert jobs._due(night, None, "prune_logs") is True
+    assert jobs._due(night, None, "sheet_queue") is True
+    assert jobs._due(datetime(2026, 3, 10, 19, 0), None, "daily_report") is True
+
+
+def test_pausing_one_report_leaves_the_other(monkeypatch):
+    monkeypatch.setattr(jobs, "_settings_safe", lambda: {"paused_jobs": ["daily_report"]})
+    assert jobs._due(datetime(2026, 3, 10, 19, 0), None, "daily_report") is False
+    # Friday, so the weekly band is due too.
+    assert jobs._due(datetime(2026, 3, 13, 19, 0), None, "weekly_report") is True
+
+
+def test_a_hand_edited_comma_string_still_pauses(monkeypatch):
+    """`app_settings` is hand-editable; a string there must not unpause all."""
+    monkeypatch.setattr(jobs, "_settings_safe", lambda: {"paused_jobs": "profiles, prune_logs"})
+    assert jobs.paused_jobs() == {"profiles", "prune_logs"}
+
+
+def test_the_nightly_hour_can_be_moved(monkeypatch):
+    """03:00 is a guess about when nobody sends; a night crew moves it."""
+    monkeypatch.setattr(jobs, "_settings_safe", lambda: {"nightly_time": "05:30"})
+    assert jobs._due(datetime(2026, 3, 10, 3, 0), None, "profiles") is False
+    assert jobs._due(datetime(2026, 3, 10, 5, 30), None, "profiles") is True
+
+
+def test_a_paused_job_can_still_be_run_by_hand(monkeypatch):
+    """Pause is "do not start this on your own", not "never run this again"."""
+    monkeypatch.setattr(jobs, "_settings_safe", lambda: {"paused_jobs": ["prune_logs"]})
+    monkeypatch.setitem(jobs.JOBS, "prune_logs", lambda: {"pruned": 0})
+    assert jobs.run("prune_logs")["ok"] is True

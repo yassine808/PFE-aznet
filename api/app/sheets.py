@@ -16,10 +16,11 @@ visible to the next poll instead of 30 seconds later.
   in-memory reads without ever serving stale edits.
 """
 import re
+import threading
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from app.config import settings
 
@@ -72,8 +73,23 @@ def _cached_service():
     return _build_service()
 
 
+#: One Sheets client per thread. `googleapiclient`'s underlying http object is
+#: documented as not thread-safe, and `stock._collect` now assesses sites in
+#: parallel — sharing one client across those threads corrupts responses
+#: intermittently rather than raising, which is the worst way to find out.
+#: The main thread keeps using the process-wide cached client, so nothing that
+#: was single-threaded pays for a second discovery build.
+_local = threading.local()
+
+
 def _service():
-    return _cached_service()
+    if threading.current_thread() is threading.main_thread():
+        return _cached_service()
+    svc = getattr(_local, "service", None)
+    if svc is None:
+        svc = _build_service()
+        _local.service = svc
+    return svc
 
 
 def read_reports() -> List[dict]:
@@ -125,9 +141,18 @@ def _set_reports_cache(rows: List[dict]) -> None:
 
 
 def invalidate_reports() -> None:
-    """Drop both caches. Every write path calls this, or the dashboard would
-    keep rendering the pre-edit state until the TTL expired."""
+    """Drop every cache. Every write path calls this, or the dashboard would
+    keep rendering the pre-edit state until the TTL expired.
+
+    The per-tab cache is cleared wholesale rather than for the tab that was
+    written, deliberately: a write reaches here through four different call
+    sites and a fifth will be added one day, and clearing one named tab makes
+    each of them responsible for naming the right one. Dropping all of them
+    costs a re-read of tabs nobody wrote — which is one Google call on the next
+    poll — and buys the guarantee that no write can leave a stale figure on
+    screen."""
     global _reports_cache, _reports_cached_at, _headers_cache, _headers_cached_at
+    _tab_cache.clear()
     _reports_cache = None
     _reports_cached_at = 0.0
     _headers_cache = None
@@ -541,6 +566,60 @@ def read_tab(tab: str) -> List[dict]:
         row["_row"] = i
         rows.append(row)
     return rows
+
+
+#: tab -> (read at, rows). Deliberately NOT inside `read_tab`.
+#:
+#: `read_tab` is uncached for a stated reason: the journal reads a tab to find
+#: the row it must merge into, and a stale hit there merges into the wrong row.
+#: That reason still holds, so the write path keeps calling `read_tab`.
+#:
+#: What changed is the premise that a tab is "not read on a dashboard poll".
+#: It is, twice over: `/alerts` assesses every site every 60 s (one tab read
+#: each) and `/chantiers/{id}/bordereau` reads the same tab again the moment a
+#: site is opened. Those two paths were paying 0.3-3.0 s per Google round trip
+#: for rows the other had just fetched, which is the whole of the Chantiers
+#: page's load time — everything else it does measures at 0 ms.
+_tab_cache: Dict[str, Tuple[float, List[dict]]] = {}
+
+#: Short enough that an operator who files a report and looks at the page sees
+#: it, long enough that opening three sites in a row is three cache hits. The
+#: write paths invalidate explicitly anyway, so this is the ceiling on
+#: staleness from a change made OUTSIDE the app — someone editing the
+#: spreadsheet by hand.
+TAB_TTL_SECONDS = 30.0
+
+
+def read_tab_cached(tab: str) -> List[dict]:
+    """`read_tab` for read-only callers, with a short TTL.
+
+    Only for paths that render a figure. Anything that then WRITES to the tab
+    must use `read_tab`, or it risks merging into a row that has moved.
+    """
+    now = time.monotonic()
+    hit = _tab_cache.get(tab)
+    if hit is not None and now - hit[0] < TAB_TTL_SECONDS:
+        # A copy of the list for the same reason `read_reports` copies: callers
+        # filter and sort these rows, and one in-place sort would corrupt what
+        # every other caller reads until the TTL expires.
+        return list(hit[1])
+    rows = read_tab(tab)
+    _tab_cache[tab] = (now, rows)
+    return rows
+
+
+def invalidate_tab(tab: Optional[str] = None) -> None:
+    """Drop one tab's cached rows, or all of them.
+
+    Called by every write path. Without it the dashboard would keep rendering
+    the pre-write state for up to `TAB_TTL_SECONDS` after a report lands —
+    which is exactly the "it says it saved but nothing changed" complaint that
+    `invalidate_reports` exists to prevent for the Rapports tab.
+    """
+    if tab is None:
+        _tab_cache.clear()
+    else:
+        _tab_cache.pop(tab, None)
 
 
 def ensure_tab(tab: str, headers: List[str]) -> None:

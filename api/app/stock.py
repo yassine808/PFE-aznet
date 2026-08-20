@@ -208,7 +208,7 @@ def assess_chantier(chantier: dict, limits: Optional[Dict[str, float]] = None) -
     from app import logs
 
     limits = limits or _thresholds()
-    rows = sheets.read_tab(chantier["sheet_tab"])
+    rows = sheets.read_tab_cached(chantier["sheet_tab"])
     installed = journal.totals(rows)
     followed = followed_stock(rows)
     rates = pace(rows)
@@ -283,17 +283,50 @@ def assess(chantiers: Optional[Sequence[dict]] = None) -> List[dict]:
     return _collect(chantiers)
 
 
+#: How many sites are assessed at once. Each one is a Google round trip that
+#: spends almost all of its 0.3-3.0 s waiting on the network, so the work is
+#: I/O and threads are the right tool; the cap exists so a company with thirty
+#: sites does not open thirty sockets to Sheets at once and meet a quota wall.
+_ASSESS_WORKERS = 5
+
+
 def _collect(chantiers: Sequence[dict]) -> List[dict]:
-    found: List[dict] = []
-    for chantier in chantiers:
+    """Assess every site, concurrently.
+
+    Sequentially this was the whole cost of the Chantiers page: five sites,
+    five tab reads, 5 s before the alert band could render. The reads do not
+    depend on each other — each site's findings are computed from its own tab —
+    so the only reason they were serial is that a `for` loop is serial.
+
+    Each worker builds its own Sheets client. `googleapiclient`'s http object
+    is explicitly not thread-safe, and sharing the process-wide cached one
+    across threads is the kind of bug that shows up as a scrambled response
+    once a week rather than an exception. A client costs a discovery build,
+    paid once per thread, against a round trip saved per site.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(chantier: dict) -> List[dict]:
         try:
-            found.extend(assess_chantier(chantier))
+            return assess_chantier(chantier)
         except Exception as exc:  # noqa: BLE001
             # One unreadable tab must not cost every other site its alerts —
             # and it is printed rather than swallowed, because a site that
             # silently stops being assessed looks exactly like a site with
             # nothing wrong.
             print(f"[stock] {chantier.get('nom')}: {exc}")
+            return []
+
+    found: List[dict] = []
+    if len(chantiers) <= 1:
+        # One site is not worth a pool, and the single-site path is the one the
+        # tests exercise without a network.
+        for chantier in chantiers:
+            found.extend(one(chantier))
+    else:
+        with ThreadPoolExecutor(max_workers=min(_ASSESS_WORKERS, len(chantiers))) as pool:
+            for result in pool.map(one, list(chantiers)):
+                found.extend(result)
     return sorted(
         found,
         key=lambda a: (_ORDER.get(a["niveau"], 9), a["jours"] if a["jours"] is not None else 1e9),

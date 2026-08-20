@@ -2363,7 +2363,7 @@ def get_bordereau(chantier_id: int, caller: dict = Depends(auth.require_user)) -
     except logs.LogStoreError as exc:
         raise HTTPException(502, str(exc)) from exc
     try:
-        rows = sheets.read_tab(chantier["sheet_tab"])
+        rows = sheets.read_tab_cached(chantier["sheet_tab"])
     except sheets.SheetsError as exc:
         raise HTTPException(502, str(exc)) from exc
 
