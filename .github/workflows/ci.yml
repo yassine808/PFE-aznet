@@ -166,9 +166,22 @@ jobs:
       # because this step was `continue-on-error`.
       #
       # The quality gate itself is deliberately NOT awaited (no
-      # -Dsonar.qualitygate.wait): its default demands ~80 % coverage on new
-      # code, a threshold §4.9.4 argues against for a suite that is offline by
-      # construction. Gate results are read on sonarcloud.io.
+      # -Dsonar.qualitygate.wait): gate results are read on sonarcloud.io.
+      #
+      # That gate is a project-specific one, "PFE Aznet", not Sonar way. Its
+      # only difference is coverage on new code at 60 % instead of 80 %, set on
+      # 2026-08-21 after the gate went red at 44.6 %. Two facts decided the
+      # number rather than taste: coverage was averaging the API's measured
+      # 66.6 % with the dashboard's 0 %, which measures the absence of a test
+      # runner and not the code (fixed separately, in sonar-project.properties);
+      # and the remaining 1342 uncovered API lines are concentrated in the four
+      # modules the suite is *designed* not to execute -- logs.py (Postgres),
+      # sheets.py (Google), jobs.py (the 03:00 daemon) and the endpoints in
+      # main.py that write through them -- because tests must pass with no API
+      # keys and no database. Reaching 80 % means either a postgres service
+      # container here (a real improvement, and a real change to that rule) or
+      # mocking psycopg2 deep enough to run SQL no database ever parses, which
+      # buys the number by spending its meaning. See §4.9.4.
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
