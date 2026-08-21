@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowUUpLeftIcon, FileTextIcon } from '@phosphor-icons/react'
-import {
-  api,
-  generateDailyReport,
-  useApi,
-  type DailyReportContent,
-} from '@/lib/api'
+import { api, generateDailyReport, useApi } from '@/lib/api'
 import { parseISODay, toISODate, todayISO } from '@/lib/metrics'
-import { useAuth } from '@/lib/auth'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -17,26 +11,21 @@ import { GenerateButton } from '@/components/generate-button'
 import { NextRun } from '@/components/next-run'
 import { PeriodPicker } from '@/components/period-picker'
 import { LastReportDocx } from '@/components/last-report-docx'
-import { ReportEditor } from '@/components/report-editor'
 import { computeReportStats } from '@/lib/report-stats'
 
 export function DailyReportPage({ initialDate }: { readonly initialDate?: string }) {
   const { t, locale } = useI18n()
-  const { user } = useAuth()
   const reports = useApi('reports', api.reports)
 
   // `#/daily?date=2026-08-05` — the target of the report mail's button. Only
   // the initial value: once the page is open the picker owns the date, so a
   // stale link cannot fight the operator for control of it.
   const [date, setDate] = useState(initialDate || todayISO())
-  const [content, setContent] = useState<DailyReportContent | null>(null)
-  // The day the report was generated for, frozen at generate time. The editor
-  // is keyed to this rather than to `date`: a draft deliberately survives a
-  // picker switch (see the comment in report-editor.tsx), and labelling a
-  // surviving Monday text with a Tuesday `period` would file it under the
-  // wrong `report_versions` key on Save and diff it against the wrong history.
-  const [contentPeriod, setContentPeriod] = useState<string | null>(null)
-  // saves it with the version.
+  // What Générer produces is a stored version, document and all — not a text
+  // this page holds on to. Bumping the token is how the panel below learns to
+  // go and fetch it; there is no draft in this component any more, and so
+  // nothing that can silently disagree with what the API stored.
+  const [reloadToken, setReloadToken] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -84,11 +73,9 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
   const generate = async () => {
     setBusy(true)
     setError(null)
-    setContent(null)
-    setContentPeriod(null)
     try {
-      setContent(await generateDailyReport(date, rows))
-      setContentPeriod(date)
+      await generateDailyReport(date, rows)
+      setReloadToken((n) => n + 1)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -96,9 +83,8 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
     }
   }
 
-  // A different day means a different report. The text is deliberately left
-  // alone — the draft survives the switch (report-editor's documented intent)
-  // — but a failed generate for the old day must not follow it over.
+  // A different day means a different report, and a failed generate for the old
+  // day must not follow it over.
   useEffect(() => {
     setError(null)
   }, [date])
@@ -159,8 +145,7 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
       )}
 
       {rows.length > 0 && (
-        <>
-          <div className="flex flex-wrap gap-x-12 gap-y-6">
+        <div className="flex flex-wrap gap-x-12 gap-y-6">
             {[
               [fmt.format(rows.length), t('metric.total')],
               [fmt.format(stats.techniciens), t('metric.techniciens')],
@@ -171,40 +156,21 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
                 <p className="tabular text-ink text-3xl leading-none font-medium">{v}</p>
                 <p className="text-ink-faint mt-1.5 text-xs">{l}</p>
               </div>
-            ))}
-          </div>
-
-        </>
+          ))}
+        </div>
       )}
 
       {/* The document that was actually produced for this day, in place of the
-          two panels that used to sit here. "Production du jour" and "Par
-          technicien" recomputed in the browser what the report already states
-          — and stated it in a different shape, so a manager comparing the page
-          with the Word file they had received was comparing two renderings of
-          one day and had no way to know which one the director read. The
-          report is the artefact; the tiles above are the index to it.
+          two panels that used to sit here and of the text editor that used to
+          appear under them after Générer. Those recomputed in the browser what
+          the report already states, in a different shape — so a manager
+          comparing the page with the Word file in their inbox was comparing two
+          renderings of one day with no way to know which one the director read.
+          The report is the artefact; the tiles above are its index, and
+          correcting it happens on the Reports page, where a report is chosen
+          from the list rather than from a date picker. */}
+      <LastReportDocx kind="daily" period={date} reloadToken={reloadToken} />
 
-          Hidden while the editor below is showing the same period: the editor
-          carries its own copy of this preview, and one document twice on one
-          page is a document the reader has to check against itself. */}
-      {contentPeriod !== date && <LastReportDocx kind="daily" period={date} />}
-
-      {content && (
-        <ReportEditor
-          kind="daily"
-          period={contentPeriod ?? date}
-          objet={content.objet}
-          corps={content.corps}
-          generatedBy={content.generated_by}
-          // The history is keyed by whoever the report belongs to, and a run
-          // started from this page is filed under the account that started it
-          // — the same id `POST /daily-report` writes. Passing 0 here would
-          // show an empty version list beside a report this page just
-          // generated and archived.
-          managerId={user?.id ?? 0}
-        />
-      )}
     </motion.div>
   )
 }

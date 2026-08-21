@@ -5,10 +5,8 @@ import {
   api,
   generateDailyReport,
   useApi,
-  type DailyReportContent,
 } from '@/lib/api'
 import { parseISODay, toISODate } from '@/lib/metrics'
-import { useAuth } from '@/lib/auth'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -17,7 +15,6 @@ import { GenerateButton } from '@/components/generate-button'
 import { NextRun } from '@/components/next-run'
 import { PeriodPicker } from '@/components/period-picker'
 import { LastReportDocx } from '@/components/last-report-docx'
-import { ReportEditor } from '@/components/report-editor'
 import { computeReportStats } from '@/lib/report-stats'
 import { cn } from '@/lib/utils'
 
@@ -25,7 +22,6 @@ const DAY_MS = 86_400_000
 
 export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: string }) {
   const { t, locale } = useI18n()
-  const { user } = useAuth()
   const reports = useApi('reports', api.reports)
   // Selected week as its Monday — `#/weekly?week=2026-08-03` from the report
   // mail, otherwise the current week. Initial value only, as on the Daily page.
@@ -33,14 +29,10 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
   const [year, setYear] = useState(
     () => Number(initialWeek?.slice(0, 4)) || new Date().getFullYear(),
   )
-  const [content, setContent] = useState<DailyReportContent | null>(null)
-  // The week the report was generated for, frozen at generate time. `label`
-  // recomputes with `selected`, and the editor is keyed on this snapshot
-  // instead: a surviving draft must keep its own period, or a Save after
-  // switching weeks would write the old text under the new week's key and —
-  // since `manager_reports` is keyed `(manager_id, period)` — silently
-  // overwrite the new week's real report (see the `label` comment below).
-  const [contentLabel, setContentLabel] = useState<string | null>(null)
+  // Générer stores a version with its document; this token is how the panel
+  // below is told to go and read it. No draft lives in this component, so
+  // nothing here can disagree with what the API stored.
+  const [reloadToken, setReloadToken] = useState(0)
   const [busy, setBusy] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
 
@@ -116,11 +108,9 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
   const generate = async () => {
     setBusy(true)
     setGenError(null)
-    setContent(null)
-    setContentLabel(null)
     try {
-      setContent(await generateDailyReport(label, week.rows))
-      setContentLabel(label)
+      await generateDailyReport(label, week.rows)
+      setReloadToken((n) => n + 1)
     } catch (err) {
       setGenError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -128,8 +118,7 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
     }
   }
 
-  // A different week means a different report. The text survives the switch
-  // (it keeps the week it was generated for), but a failed generate for the
+  // A different week means a different report, and a failed generate for the
   // old week must not follow it over.
   useEffect(() => {
     setGenError(null)
@@ -200,21 +189,6 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
 
       {genError && <ErrorState message={genError} onRetry={generate} />}
 
-      {content && (
-        <ReportEditor
-          kind="weekly"
-          period={contentLabel ?? label}
-          objet={content.objet}
-          corps={content.corps}
-          generatedBy={content.generated_by}
-          // The history is keyed by whoever the report belongs to, and a run
-          // started from this page is filed under the account that started it
-          // — the same id `POST /daily-report` writes. Passing 0 here would
-          // show an empty version list beside a report this page just
-          // generated and archived.
-          managerId={user?.id ?? 0}
-        />
-      )}
 
       {week.rows.length === 0 ? (
         <EmptyState
@@ -280,11 +254,10 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
         </>
       )}
 
-      {/* Same swap as the Daily page: the week's own document instead of two
-          browser-side recomputations of what it already says. */}
-      {contentLabel !== label && (
-        <LastReportDocx kind="weekly" period={label} />
-      )}
+      {/* Same swap as the Daily page: the week's own document, instead of two
+          browser-side recomputations of what it already says and of the text
+          editor that used to open under them after Générer. */}
+      <LastReportDocx kind="weekly" period={label} reloadToken={reloadToken} />
     </motion.div>
   )
 }

@@ -449,9 +449,25 @@
   background: #ffffff !important;
   color: #000000 !important;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
-  /* The page keeps its own printed width; it may be wider than the panel, and
-     the panel scrolls rather than the page being squeezed out of proportion. */
+  /* The page keeps its own printed width. It is scaled, never squeezed: a
+     reflowed page breaks its lines somewhere the printer will not. */
   flex: 0 0 auto;
+}
+/*
+  The scale is applied to the whole stack of pages, not to each page, and the
+  host's height is then set in JS to the scaled height. A transform does not
+  change the space an element reserves, so the panel would otherwise end in a
+  band of empty canvas exactly as tall as the scaling took away — and the
+  obvious CSS fix, a negative percentage margin, is wrong here: percentage
+  margins resolve against the containing block's *width*, so the correction
+  would be off by the page's aspect ratio and change with every window size.
+*/
+.docx-host {
+  --docx-scale: 1;
+}
+.docx-host > .docx-wrapper {
+  transform: scale(var(--docx-scale, 1));
+  transform-origin: top left;
 }
 .docx-wrapper .docx,
 .docx-wrapper .docx * {

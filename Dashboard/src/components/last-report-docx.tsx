@@ -30,6 +30,7 @@ export function LastReportDocx({
   kind,
   period,
   managerId = -1,
+  reloadToken = 0,
 }: {
   readonly kind: 'daily' | 'weekly'
   readonly period: string
@@ -37,18 +38,22 @@ export function LastReportDocx({
    *  this panel answers "what document went out for this period", and that has
    *  one answer whether the scheduler, a chef or a director produced it. */
   readonly managerId?: number
+  /** Bumped by the page after Générer. It is part of the cache key, so a run
+   *  that just stored a new version replaces the document on screen instead of
+   *  leaving the button looking like it did nothing. */
+  readonly reloadToken?: number
 }) {
   const { t } = useI18n()
   // The index without bodies: this panel needs one id and one label, and the
   // documents themselves are fetched one at a time by the viewer.
-  const history = useApi(`last-docx:${kind}:${period}:${managerId}`, (s) =>
+  const history = useApi(`last-docx:${kind}:${period}:${managerId}:${reloadToken}`, (s) =>
     reportVersions(kind, period, false, s, managerId),
   )
   // The stored reports, for the periods that have a text but no file: every
   // report generated before the document column existed, and any whose render
   // failed at the time. Without this the page of every past day would show
   // nothing and read as broken while the report itself existed all along.
-  const generated = useApi('reports/generated', api.generatedReports)
+  const generated = useApi(`reports/generated:${reloadToken}`, api.generatedReports)
 
   if ((history.loading && !history.data) || (generated.loading && !generated.data))
     return <Skeleton className="h-72 rounded-xl" />

@@ -49,6 +49,7 @@ export function ReportEditor({
   corps,
   generatedBy,
   managerId = 0,
+  showDocument = true,
 }: {
   readonly kind: 'daily' | 'weekly'
   readonly period: string
@@ -59,6 +60,10 @@ export function ReportEditor({
    *  chef's. It keys the history, so the Reports page can edit one chef's
    *  report without appending into another's. */
   readonly managerId?: number
+  /** Whether to render the document under the text. False where the page shows
+   *  it already — the Reports pane puts the document first, and the same file
+   *  twice on one screen is a file the reader has to check against itself. */
+  readonly showDocument?: boolean
 }) {
   const { t } = useI18n()
   const toast = useToast()
@@ -256,7 +261,7 @@ export function ReportEditor({
         />
       </div>
 
-      <DocxPanel version={docxVersion} />
+      {showDocument && <DocxPanel version={docxVersion} />}
 
       <AnimatePresence>
         {openVersion && (

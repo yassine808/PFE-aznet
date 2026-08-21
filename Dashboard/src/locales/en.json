@@ -379,6 +379,8 @@
   "editor.docxOf": "Document of v{version} — {author}",
   "editor.docxLast": "Latest report — {author}",
   "editor.docxNone": "No report generated for this period yet — use “Generate”.",
+  "editor.docxFull": "Actual size",
+  "editor.docxFit": "Fit width",
   "editor.downloadDocx": "Download .docx",
   "editor.showDocx": "Show the document of version {version}",
   "editor.kindDaily": "Daily report",

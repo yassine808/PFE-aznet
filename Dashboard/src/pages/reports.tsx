@@ -9,6 +9,7 @@ import {
   UserIcon,
 } from '@phosphor-icons/react'
 import { api, useApi, type GeneratedReport } from '@/lib/api'
+import { LastReportDocx } from '@/components/last-report-docx'
 import { ReportEditor } from '@/components/report-editor'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
@@ -296,13 +297,15 @@ function ReportPane({
         </div>
       </header>
 
-      {/* The same editor the Daily and Weekly pages use, keyed on this
-          report's own manager: correcting a chef's report, saving it as a new
-          version, and reading the .docx that version produced are the same
-          three actions wherever the report is opened from, so they are the
-          same component and not a second implementation that drifts. */}
-      <div className="p-4">
+      {/* The document first, because it is the thing that was sent. The editor
+          under it is now the only place in the app where a report can be
+          corrected — the Daily and Weekly pages became read-only views of the
+          document — so it stays, with its own copy of the preview suppressed. */}
+      <div className="flex flex-col gap-4 p-4">
+        <LastReportDocx kind={weekly ? 'weekly' : 'daily'} period={g.period} managerId={g.manager_id} />
+
         <ReportEditor
+          showDocument={false}
           kind={weekly ? 'weekly' : 'daily'}
           period={g.period}
           objet={g.objet}
