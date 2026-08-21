@@ -377,6 +377,7 @@
   "editor.docxPreview": "Word document, exactly as sent",
   "editor.docxMissing": "No document stored for this version.",
   "editor.docxOf": "Document of v{version} — {author}",
+  "editor.docxLast": "Latest report — {author}",
   "editor.downloadDocx": "Download .docx",
   "editor.showDocx": "Show the document of version {version}",
   "editor.kindDaily": "Daily report",

@@ -1815,7 +1815,7 @@ def resolve_write(write_id: int, ok: bool, error: Optional[str] = None,
 # earlier wording can always be recovered.
 
 def list_report_versions(
-    kind: str, period: str, with_body: bool = True, manager_id: int = 0
+    kind: str, period: str, with_body: bool = True, manager_id: Optional[int] = 0
 ) -> List[dict]:
     """Every saved version for one report, newest first.
 
@@ -1835,12 +1835,19 @@ def list_report_versions(
         if with_body
         else "id, kind, period, manager_id, version, objet, author, note, created_at"
     )
+    # `manager_id=None` is "whoever wrote it": the Daily and Weekly pages ask
+    # what document went out for a period, and that question has one answer
+    # whether the 18:00 job produced it, a chef corrected it, or a director
+    # pressed Générer. Only the editor scopes to one manager, because appending
+    # a version is where whose history it is actually matters.
+    scope = "" if manager_id is None else " AND manager_id = %s"
+    params = (kind, period) if manager_id is None else (kind, period, manager_id)
     with _cursor() as cur:
         cur.execute(
             "SELECT {}, (docx IS NOT NULL) AS has_docx FROM report_versions "
-            "WHERE kind = %s AND period = %s AND manager_id = %s "
-            "ORDER BY version DESC".format(columns),
-            (kind, period, manager_id),
+            "WHERE kind = %s AND period = %s{} "
+            "ORDER BY version DESC".format(columns, scope),
+            params,
         )
         return [_iso(dict(r)) for r in cur.fetchall()]
 

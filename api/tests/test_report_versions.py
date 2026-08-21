@@ -168,3 +168,45 @@ def test_the_stored_document_is_served_as_is(client, monkeypatch):
     assert client.get("/report-versions/12/docx?download=true").headers[
         "content-disposition"
     ].startswith("attachment;")
+
+
+def test_the_period_document_falls_back_to_the_stored_text(client, monkeypatch):
+    """A period whose report predates the `docx` column still has a document.
+
+    Otherwise the Daily page of every past day shows nothing and reads as
+    broken, while the report itself has been in `manager_reports` all along.
+    """
+    monkeypatch.setattr(logs, "list_report_versions", lambda *a, **k: [])
+    # The renderer derives its tables from the period's rows; none here.
+    monkeypatch.setattr(logs, "list_report_rows", lambda *a, **k: [])
+    monkeypatch.setattr(
+        logs,
+        "list_manager_reports",
+        lambda: [
+            {"period": "2026-08-04", "period_type": "weekly", "objet": "Semaine", "corps": "x"},
+            {"period": "2026-08-04", "period_type": "daily", "objet": "Jour",
+             "corps": "Texte", "generated_by": "Yassine"},
+        ],
+    )
+    res = client.get("/reports/document?kind=daily&period=2026-08-04")
+    assert res.status_code == 200
+    # A .docx is a zip; the weekly row above must not be the one picked.
+    assert res.content[:2] == b"PK"
+    assert "jour" in res.headers["content-disposition"].lower()
+
+
+def test_the_period_document_prefers_the_stored_bytes(client, monkeypatch):
+    """When a version has a file, that file is served — never a fresh render."""
+    monkeypatch.setattr(
+        logs, "list_report_versions", lambda *a, **k: [{"id": 5, "has_docx": True}]
+    )
+    monkeypatch.setattr(logs, "report_version_docx", lambda _id: ("Jour", b"PKstored"))
+    monkeypatch.setattr(logs, "list_manager_reports", lambda: [])
+    res = client.get("/reports/document?kind=daily&period=2026-08-04")
+    assert res.content == b"PKstored"
+
+
+def test_a_period_with_no_report_at_all_is_a_404(client, monkeypatch):
+    monkeypatch.setattr(logs, "list_report_versions", lambda *a, **k: [])
+    monkeypatch.setattr(logs, "list_manager_reports", lambda: [])
+    assert client.get("/reports/document?kind=daily&period=2026-08-04").status_code == 404

@@ -1042,7 +1042,10 @@ def list_report_versions(
     kind: str = Query(..., description="daily | weekly"),
     period: str = Query(..., description="La date, ou le premier jour de la semaine"),
     full: bool = Query(False, description="Inclure le corps et l'image de chaque version"),
-    manager_id: int = Query(0, description="0 = rapport de la société; sinon le chef concerné"),
+    manager_id: int = Query(
+        0,
+        description="0 = rapport de la société; -1 = tous; sinon le chef concerné",
+    ),
     caller: dict = Depends(auth.require_human),
 ) -> dict:
     """The editing history of one report, newest first.
@@ -1055,7 +1058,10 @@ def list_report_versions(
     try:
         return {
             "versions": logs.list_report_versions(
-                kind, period, with_body=full, manager_id=manager_id
+                kind, period, with_body=full,
+                # Negative means "any manager" — the Daily and Weekly panels ask
+                # which document went out for a period, not whose it was.
+                manager_id=None if manager_id < 0 else manager_id,
             )
         }
     except logs.LogStoreError as exc:
@@ -1406,6 +1412,59 @@ def _docx_response(name: str, blob: bytes, inline: bool = False) -> Response:
         media_type=DOCX_MIME,
         headers={"Content-Disposition": f'{disposition}; filename="{name}"'},
     )
+
+
+@app.get(
+    "/reports/document",
+    responses={
+        404: {"description": "No report stored for this period"},
+        422: {"description": "Unknown kind"},
+    },
+)
+def latest_report_document(
+    kind: str = Query(..., description="daily | weekly"),
+    period: str = Query(..., description="Jour (2026-08-16) ou plage (2026-08-10 → 2026-08-16)"),
+    caller: dict = Depends(auth.require_human),
+) -> Response:
+    """The document for a period, whoever produced it.
+
+    Stored bytes when a version has them — that is the file that was mailed and
+    it is served untouched. Otherwise the newest stored *text* for the period is
+    rendered now, which is the only way the reports that predate the `docx`
+    column (or whose render failed at the time) are visible at all: without this
+    fallback the Daily page of every past day would show nothing and read as
+    broken, when in fact the report exists and only its file does not.
+
+    The fallback's figures are recomputed from today's rows and can therefore
+    differ from what was originally sent; that is why it is a fallback and not
+    the path a version takes.
+    """
+    if kind not in KINDS:
+        raise HTTPException(422, f"kind must be one of {KINDS}")
+    try:
+        versions = logs.list_report_versions(kind, period, with_body=False, manager_id=None)
+        stored = next((v for v in versions if v.get("has_docx")), None)
+        if stored:
+            found = logs.report_version_docx(stored["id"])
+            if found:
+                objet, blob = found
+                return _docx_response(docx_report.filename(objet), blob, inline=True)
+
+        weekly = kind == "weekly"
+        row = next(
+            (
+                r for r in logs.list_manager_reports()
+                if r.get("period") == period and (r.get("period_type") == "weekly") == weekly
+            ),
+            None,
+        )
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, f"log store read failed: {exc}") from exc
+    if row is None:
+        raise HTTPException(404, "aucun rapport pour cette période")
+
+    blob = render_report_docx(row["objet"], row["corps"], period, row.get("generated_by"))
+    return _docx_response(docx_report.filename(row["objet"]), blob, inline=True)
 
 
 @app.post("/reports/export", responses={502: {"description": "Sheets read failed"}})

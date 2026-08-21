@@ -491,6 +491,12 @@ export const saveReportVersion = (input: {
 export const reportVersionDocxUrl = (id: number, download = false) =>
   `${BASE}/report-versions/${id}/docx${download ? '?download=true' : ''}`
 
+/** The document for a period whoever produced it: the stored bytes when a
+ *  version has them, otherwise the newest stored text rendered now. 404 when
+ *  the period has no report at all. */
+export const periodDocxUrl = (kind: 'daily' | 'weekly', period: string) =>
+  `${BASE}/reports/document?kind=${kind}&period=${encodeURIComponent(period)}`
+
 /**
  * One site. `verifie` is false only for a site the pipeline created from a name
  * heard in a voice note that matched nothing — the row is real and already has

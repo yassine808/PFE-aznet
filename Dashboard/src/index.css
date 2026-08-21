@@ -414,3 +414,53 @@
   background-image: radial-gradient(var(--color-line) 0.5px, transparent 0.5px);
   background-size: 1.25rem 1.25rem;
 }
+
+/*
+  The Word document, looking like Word.
+
+  `docx-preview` emits its own stylesheet from the file's own styles, but two
+  things around it have to be held or the preview stops being a preview.
+
+  First, the page is white and its text is black *in both themes*. A document
+  is a sheet of paper: tinting it to match a dark app would show the reader
+  something Word will not print, and the whole point of this panel is that what
+  is on screen is what the director opens. The app's own dark surface stays as
+  the canvas *around* the pages, which is exactly what Word does too.
+
+  Second, the font. The document is written in Calibri and the renderer asks
+  for it by name; a Linux browser has neither Calibri nor a metric-compatible
+  substitute unless one is named, so `Carlito` (metric-identical, the standard
+  free clone) is listed before the generic fallbacks. Without this the preview
+  reflows to whatever sans-serif the machine defaults to, and a line that wraps
+  differently from the printed document is a preview that lies about pagination.
+
+  `!important` is unusual here and deliberate: these rules exist to win against
+  the renderer's own inline theme, which is generated per document.
+*/
+.docx-wrapper {
+  background: transparent !important;
+  padding: 1.5rem 0 !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+.docx-wrapper > section.docx {
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  /* The page keeps its own printed width; it may be wider than the panel, and
+     the panel scrolls rather than the page being squeezed out of proportion. */
+  flex: 0 0 auto;
+}
+.docx-wrapper .docx,
+.docx-wrapper .docx * {
+  font-family: Calibri, Carlito, 'Segoe UI', system-ui, sans-serif;
+}
+/* Tables come out of the renderer with their own borders; the reset above must
+   not take the colour with it. */
+.docx-wrapper .docx table,
+.docx-wrapper .docx td,
+.docx-wrapper .docx th {
+  border-color: inherit;
+}

@@ -377,6 +377,7 @@
   "editor.docxPreview": "مستند Word، كما يُرسَل تمامًا",
   "editor.docxMissing": "لا يوجد مستند محفوظ لهذه النسخة.",
   "editor.docxOf": "مستند النسخة {version} — {author}",
+  "editor.docxLast": "آخر تقرير — {author}",
   "editor.downloadDocx": "تنزيل ‎.docx",
   "editor.showDocx": "عرض مستند النسخة {version}",
   "editor.kindDaily": "التقرير اليومي",

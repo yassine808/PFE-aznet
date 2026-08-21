@@ -16,8 +16,8 @@ import { ActivityGraphSection } from '@/components/activity-graph-section'
 import { GenerateButton } from '@/components/generate-button'
 import { NextRun } from '@/components/next-run'
 import { PeriodPicker } from '@/components/period-picker'
+import { LastReportDocx } from '@/components/last-report-docx'
 import { ReportEditor } from '@/components/report-editor'
-import { ReportPerTech, ReportTotals } from '@/components/report-panels'
 import { computeReportStats } from '@/lib/report-stats'
 
 export function DailyReportPage({ initialDate }: { readonly initialDate?: string }) {
@@ -174,11 +174,21 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
             ))}
           </div>
 
-          <ReportTotals totals={stats.totals} />
-
-          <ReportPerTech byTech={stats.byTech} />
         </>
       )}
+
+      {/* The document that was actually produced for this day, in place of the
+          two panels that used to sit here. "Production du jour" and "Par
+          technicien" recomputed in the browser what the report already states
+          — and stated it in a different shape, so a manager comparing the page
+          with the Word file they had received was comparing two renderings of
+          one day and had no way to know which one the director read. The
+          report is the artefact; the tiles above are the index to it.
+
+          Hidden while the editor below is showing the same period: the editor
+          carries its own copy of this preview, and one document twice on one
+          page is a document the reader has to check against itself. */}
+      {contentPeriod !== date && <LastReportDocx kind="daily" period={date} />}
 
       {content && (
         <ReportEditor

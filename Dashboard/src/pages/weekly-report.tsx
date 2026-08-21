@@ -16,8 +16,8 @@ import { ContributionGraph, isoOf as iso, weekStart } from '@/components/contrib
 import { GenerateButton } from '@/components/generate-button'
 import { NextRun } from '@/components/next-run'
 import { PeriodPicker } from '@/components/period-picker'
+import { LastReportDocx } from '@/components/last-report-docx'
 import { ReportEditor } from '@/components/report-editor'
-import { ReportPerTech, ReportTotals } from '@/components/report-panels'
 import { computeReportStats } from '@/lib/report-stats'
 import { cn } from '@/lib/utils'
 
@@ -277,10 +277,13 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
             </div>
           </section>
 
-          <ReportTotals totals={week.totals} />
-
-          <ReportPerTech byTech={week.byTech} />
         </>
+      )}
+
+      {/* Same swap as the Daily page: the week's own document instead of two
+          browser-side recomputations of what it already says. */}
+      {contentLabel !== label && (
+        <LastReportDocx kind="weekly" period={label} />
       )}
     </motion.div>
   )
