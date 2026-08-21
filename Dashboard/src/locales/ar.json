@@ -577,5 +577,9 @@
   "queue.messages.kind.audio": "رسالة صوتية",
   "queue.messages.kind.image": "صورة",
   "queue.messages.kind.text": "نص",
-  "queue.sheet.title": "عمليات الكتابة المرفوضة في Google Sheets"
+  "queue.sheet.title": "عمليات الكتابة المرفوضة في Google Sheets",
+  "panel.contact": "التواصل",
+  "contact.openWhatsapp": "فتح محادثة واتساب",
+  "contact.openTelegram": "فتح محادثة تيليجرام",
+  "contact.none": "لا توجد قناة متاحة"
 }

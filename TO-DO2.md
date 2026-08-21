@@ -1,4 +1,4 @@
-- [ ] in overview page, add whatsapp/telegram that opens the chat in the pc/phone
+- [x] in overview page, add whatsapp/telegram that opens the chat in the pc/phone
 - [ ] fix language % for each tech. (not accurate at all)
 - [ ] in the reports page, show the generated .docx (as it is) + add a download button + modify that saves it in the database, each time when someone does a modify, it'll save who made last change somewhere in the report (do a script), save all version (auto and generated + modified then add a button to see past .docx from the database)
 - [ ] in both daily/weekly reports pages, show the last generated .docx version undernearth the page

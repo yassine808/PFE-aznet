@@ -577,5 +577,9 @@
   "queue.messages.kind.audio": "voice note",
   "queue.messages.kind.image": "photo",
   "queue.messages.kind.text": "text",
-  "queue.sheet.title": "Refused Google Sheets writes"
+  "queue.sheet.title": "Refused Google Sheets writes",
+  "panel.contact": "Contact",
+  "contact.openWhatsapp": "Open the WhatsApp chat",
+  "contact.openTelegram": "Open the Telegram chat",
+  "contact.none": "No reachable channel"
 }

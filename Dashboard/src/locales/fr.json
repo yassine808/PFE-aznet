@@ -577,5 +577,9 @@
   "queue.messages.kind.audio": "note vocale",
   "queue.messages.kind.image": "photo",
   "queue.messages.kind.text": "texte",
-  "queue.sheet.title": "Écritures Google Sheets refusées"
+  "queue.sheet.title": "Écritures Google Sheets refusées",
+  "panel.contact": "Contacter",
+  "contact.openWhatsapp": "Ouvrir la discussion WhatsApp",
+  "contact.openTelegram": "Ouvrir la discussion Telegram",
+  "contact.none": "Aucun canal joignable"
 }

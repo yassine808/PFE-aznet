@@ -71,7 +71,10 @@ export function quantityColumns(rows: readonly ReportRow[]): string[] {
       if (cell && NUMERIC_CELL.test(cell)) extra.add(key)
     }
   }
-  return [...Object.keys(PRIMARY_QUANTITIES), ...[...extra].sort()]
+  // localeCompare, not the default sort: `Array.sort()` orders by UTF-16 code
+  // unit, so a column whose label starts with an accent sorts after every
+  // unaccented one. The vocabulary here is French.
+  return [...Object.keys(PRIMARY_QUANTITIES), ...[...extra].sort((a, b) => a.localeCompare(b))]
 }
 
 /** `m` for metres, `min` for minutes, nothing otherwise — the unit lives in the

@@ -9,6 +9,7 @@ import { Masthead, type SystemState } from '@/components/masthead'
 import { DayRibbon, type Tick } from '@/components/day-ribbon'
 import { ServicesPanel } from '@/components/services-panel'
 import { ContributionGraph } from '@/components/contribution-graph'
+import { ContactPanel } from '@/components/contact-panel'
 
 const rise = {
   hidden: { opacity: 0, y: 6 },
@@ -62,6 +63,9 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
   const { t, dir, locale } = useI18n()
   const { services, health, healthError, stats } = useOps()
   const reports = useApi('reports', api.reports)
+  // The team list is a separate call because it is a separate thing: a
+  // colleague exists whether or not they sent a report today.
+  const team = useApi('technicians', api.technicians)
 
   const m = useMemo(
     () => (reports.data ? computeMetrics(reports.data.reports) : null),
@@ -175,9 +179,20 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
       >
         {/* The aside states the coverage limit: this history is observed from
             this screen only, so gaps mean "unwatched", not "down". */}
-        <Band title={t('panel.services')} aside={t('panel.uptimeNote')}>
-          <ServicesPanel rows={services} />
-        </Band>
+        <div className="flex min-w-0 flex-col gap-5">
+          <Band title={t('panel.services')} aside={t('panel.uptimeNote')}>
+            <ServicesPanel rows={services} />
+          </Band>
+
+          {/* One click from "who is working" to "talk to them", on whichever
+              device is reading this. Hidden entirely while the list is loading
+              or empty rather than showing an empty box. */}
+          {team.data && team.data.technicians.length > 0 && (
+            <Band title={t('panel.contact')}>
+              <ContactPanel people={team.data.technicians} />
+            </Band>
+          )}
+        </div>
 
         {/* The year graph answers "when", the figures under it answer "how
             much" — same column because they are read together, and a reader
