@@ -1030,6 +1030,7 @@ def list_generated_reports(caller: dict = Depends(auth.require_human)) -> dict:
 
 
 KINDS = ("daily", "weekly")
+KIND_DESC = "daily | weekly"
 
 
 @app.get(
@@ -1040,7 +1041,7 @@ KINDS = ("daily", "weekly")
     },
 )
 def list_report_versions(
-    kind: str = Query(..., description="daily | weekly"),
+    kind: str = Query(..., description=KIND_DESC),
     period: str = Query(..., description="La date, ou le premier jour de la semaine"),
     full: bool = Query(False, description="Inclure le corps et l'image de chaque version"),
     manager_id: int = Query(
@@ -1071,7 +1072,10 @@ def list_report_versions(
 
 @app.get(
     "/report-versions/{version_id}/docx",
-    responses={404: {"description": "No stored document for this version"}},
+    responses={
+        404: {"description": "No stored document for this version"},
+        502: {"description": "Log store unreachable"},
+    },
 )
 def report_version_docx(
     version_id: int,
@@ -1097,7 +1101,7 @@ def report_version_docx(
 
 
 class ReportVersionIn(BaseModel):
-    kind: str = Field(..., description="daily | weekly")
+    kind: str = Field(..., description=KIND_DESC)
     period: str = Field(..., description="La date, ou le premier jour de la semaine")
     objet: str
     corps: str
@@ -1450,10 +1454,11 @@ def _docx_response(name: str, blob: bytes, inline: bool = False) -> Response:
     responses={
         404: {"description": "No report stored for this period"},
         422: {"description": "Unknown kind"},
+        502: {"description": "Log store or Sheets read failed"},
     },
 )
 def latest_report_document(
-    kind: str = Query(..., description="daily | weekly"),
+    kind: str = Query(..., description=KIND_DESC),
     period: str = Query(..., description="Jour (2026-08-16) ou plage (2026-08-10 → 2026-08-16)"),
     caller: dict = Depends(auth.require_human),
 ) -> Response:

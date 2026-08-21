@@ -123,7 +123,8 @@ def test_a_missing_mark_costs_the_image_never_the_message(monkeypatch, tmp_path,
 def test_the_real_mark_is_readable_and_cached():
     mailer.logo_png.cache_clear()
     blob = mailer.logo_png()
-    assert blob and blob[:4] == b"\x89PNG"
+    assert blob
+    assert blob[:4] == b"\x89PNG"
     assert mailer.logo_png() is blob
 
 

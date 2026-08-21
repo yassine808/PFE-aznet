@@ -239,7 +239,8 @@ def test_a_groq_refusal_is_recorded_as_a_possible_daily_ceiling(monkeypatch):
     _fake_groq(monkeypatch, error=RuntimeError("429 daily limit"))
     with pytest.raises(extraction.ExtractionError, match="groq/m: 429 daily limit"):
         extraction._call_groq("m", text="x")
-    assert noted and noted[0][:3] == ("groq", "m", "extraction")
+    assert noted
+    assert noted[0][:3] == ("groq", "m", "extraction")
 
 
 # --- _carries_figures ------------------------------------------------------

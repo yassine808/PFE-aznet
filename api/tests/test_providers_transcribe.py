@@ -95,22 +95,25 @@ def test_gemini_returns_the_stripped_text_with_no_invented_confidence(monkeypatc
 
 def test_an_empty_gemini_transcription_is_a_failure(monkeypatch):
     _fake_genai(monkeypatch, text="")
+    provider = gemini_audio.GeminiAudioProvider()
     with pytest.raises(TranscriptionError, match="empty transcription"):
-        gemini_audio.GeminiAudioProvider().transcribe(b"OGG", "audio/ogg")
+        provider.transcribe(b"OGG", "audio/ogg")
 
 
 def test_a_loop_is_refused_rather_than_summarised(monkeypatch):
     """Returning it would let the extraction chain turn 200k repeated
     characters into a confident lie."""
     _fake_genai(monkeypatch, text="ok. " + "de la ville de Rabat " * 60)
+    provider = gemini_audio.GeminiAudioProvider()
     with pytest.raises(TranscriptionError, match="degenerate repetition loop"):
-        gemini_audio.GeminiAudioProvider().transcribe(b"OGG", "audio/ogg")
+        provider.transcribe(b"OGG", "audio/ogg")
 
 
 def test_a_gemini_sdk_failure_is_named(monkeypatch):
     _fake_genai(monkeypatch, error=RuntimeError("503 unavailable"))
+    provider = gemini_audio.GeminiAudioProvider()
     with pytest.raises(TranscriptionError, match="gemini: 503 unavailable"):
-        gemini_audio.GeminiAudioProvider().transcribe(b"OGG", "audio/ogg")
+        provider.transcribe(b"OGG", "audio/ogg")
 
 
 # --- groq ------------------------------------------------------------------
@@ -179,8 +182,9 @@ def test_a_dict_result_is_read_the_same_way(monkeypatch):
 
 def test_a_groq_sdk_failure_is_named(monkeypatch):
     _fake_groq(monkeypatch, error=RuntimeError("429 rate limited"))
+    provider = groq_whisper.GroqWhisperProvider()
     with pytest.raises(TranscriptionError, match="groq: 429 rate limited"):
-        groq_whisper.GroqWhisperProvider().transcribe(b"OGG", "audio/ogg")
+        provider.transcribe(b"OGG", "audio/ogg")
 
 
 @pytest.mark.parametrize("segments,expected", [
@@ -223,8 +227,9 @@ class FakeHTTP:
 
 def test_the_local_engine_needs_its_url(monkeypatch):
     monkeypatch.setattr(local_darija.settings, "stt_local_url", "")
+    provider = local_darija.LocalDarijaProvider()
     with pytest.raises(TranscriptionError, match="STT_LOCAL_URL not configured"):
-        local_darija.LocalDarijaProvider().transcribe(b"OGG", "audio/ogg")
+        provider.transcribe(b"OGG", "audio/ogg")
 
 
 def test_the_local_engine_posts_the_bytes_and_reads_the_answer(monkeypatch):
@@ -250,8 +255,9 @@ def test_a_missing_confidence_stays_none_rather_than_becoming_zero(monkeypatch):
 def test_an_empty_local_transcription_is_a_failure(monkeypatch, payload):
     monkeypatch.setattr(local_darija, "_http", lambda: FakeHTTP(payload=payload))
     monkeypatch.setattr(local_darija.settings, "stt_local_url", "http://x:8100")
+    provider = local_darija.LocalDarijaProvider()
     with pytest.raises(TranscriptionError, match="empty transcription"):
-        local_darija.LocalDarijaProvider().transcribe(b"OGG", "audio/ogg")
+        provider.transcribe(b"OGG", "audio/ogg")
 
 
 def test_the_sidecar_being_down_is_a_normal_engine_failure(monkeypatch):
@@ -259,8 +265,9 @@ def test_the_sidecar_being_down_is_a_normal_engine_failure(monkeypatch):
     monkeypatch.setattr(local_darija, "_http",
                         lambda: FakeHTTP(error=OSError("connection refused")))
     monkeypatch.setattr(local_darija.settings, "stt_local_url", "http://x:8100")
+    provider = local_darija.LocalDarijaProvider()
     with pytest.raises(TranscriptionError, match="local: connection refused"):
-        local_darija.LocalDarijaProvider().transcribe(b"OGG", "audio/ogg")
+        provider.transcribe(b"OGG", "audio/ogg")
 
 
 def test_the_client_budget_stays_above_the_measured_cold_start(monkeypatch):

@@ -132,7 +132,8 @@ def test_save_carries_the_manager_and_the_document(sql):
     )
 
     statement, params = sql[0]
-    assert "manager_id" in statement and "docx" in statement
+    assert "manager_id" in statement
+    assert "docx" in statement
     # The numbering sub-select has to be scoped the same way, or two chefs on
     # one day would fight over the same version number.
     assert "WHERE kind = %s AND period = %s AND manager_id = %s" in statement
