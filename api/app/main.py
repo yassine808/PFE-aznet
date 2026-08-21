@@ -2395,6 +2395,19 @@ async def api_usage(caller: dict = Depends(auth.require_user)) -> dict:
     return await run_in_threadpool(usage.snapshot)
 
 
+@app.get("/bots")
+async def api_bots(caller: dict = Depends(auth.require_user)) -> dict:
+    """The two links that open a conversation with the bot itself.
+
+    Its own endpoint rather than a field on /usage: a reader opening a chat is
+    not asking about quotas, and /usage is polled. Both values are cached for
+    the process (`usage.bot_links`), so this costs a vendor round trip once per
+    container. A channel that cannot be resolved comes back null — a link that
+    goes nowhere is worse than no link.
+    """
+    return await run_in_threadpool(usage.bot_links)
+
+
 @app.get("/alerts")
 async def list_alerts(caller: dict = Depends(auth.require_user)) -> dict:
     """What is running out, over the contract, or about to be.

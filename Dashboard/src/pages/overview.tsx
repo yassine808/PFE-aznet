@@ -27,7 +27,7 @@ function Band({
   readonly children: React.ReactNode
 }) {
   return (
-    <section className="flex min-w-0 flex-col gap-3">
+    <section className="flex min-w-0 flex-col gap-2.5">
       <div className="border-line flex items-baseline justify-between gap-3 border-b pb-1.5">
         <h2 className="text-ink-faint text-[0.6875rem] font-medium tracking-wide uppercase">
           {title}
@@ -63,9 +63,9 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
   const { t, dir, locale } = useI18n()
   const { services, health, healthError, stats } = useOps()
   const reports = useApi('reports', api.reports)
-  // The team list is a separate call because it is a separate thing: a
-  // colleague exists whether or not they sent a report today.
-  const team = useApi('technicians', api.technicians)
+  // The bot's own addresses. Cached server-side for the life of the container,
+  // so this poll is cheap and the values never flicker.
+  const bots = useApi('bots', api.bots)
 
   const m = useMemo(
     () => (reports.data ? computeMetrics(reports.data.reports) : null),
@@ -98,7 +98,7 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
 
   if (reports.loading || !m) {
     return (
-      <div className="flex flex-col gap-5 pt-5">
+      <div className="flex flex-col gap-4 pt-4">
         <Skeleton className="h-32 rounded-xl" />
         <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <Skeleton className="h-28" />
@@ -125,7 +125,7 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
       variants={{ show: { transition: { staggerChildren: 0.05 } } }}
       initial="hidden"
       animate="show"
-      className="flex flex-col gap-5 pt-5"
+      className="flex flex-col gap-4 pt-4"
     >
       <motion.div variants={rise}>
         <Masthead
@@ -149,7 +149,7 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
       {/* Ribbon and totals share a row: the same day, read two ways. */}
       <motion.div
         variants={rise}
-        className="grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+        className="grid gap-x-8 gap-y-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
       >
         <Band title={t('ribbon.title')} aside={dayRibbonAside}>
           <DayRibbon ticks={ticks} dir={dir} />
@@ -175,30 +175,19 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
 
       <motion.div
         variants={rise}
-        className="grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+        className="grid gap-x-8 gap-y-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
       >
         {/* The aside states the coverage limit: this history is observed from
             this screen only, so gaps mean "unwatched", not "down". */}
-        <div className="flex min-w-0 flex-col gap-5">
-          <Band title={t('panel.services')} aside={t('panel.uptimeNote')}>
-            <ServicesPanel rows={services} />
-          </Band>
-
-          {/* One click from "who is working" to "talk to them", on whichever
-              device is reading this. Hidden entirely while the list is loading
-              or empty rather than showing an empty box. */}
-          {team.data && team.data.technicians.length > 0 && (
-            <Band title={t('panel.contact')}>
-              <ContactPanel people={team.data.technicians} />
-            </Band>
-          )}
-        </div>
+        <Band title={t('panel.services')} aside={t('panel.uptimeNote')}>
+          <ServicesPanel rows={services} />
+        </Band>
 
         {/* The year graph answers "when", the figures under it answer "how
             much" — same column because they are read together, and a reader
             who has just spotted a busy week wants the totals without moving
             their eye back across the page. */}
-        <div className="flex min-w-0 flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-4">
           <Band title={t('graph.year')} aside={fmt.format(m.total)}>
             {/* Clicking a day deep-links into the Inbox filtered to that date. */}
             <ContributionGraph rows={reports.data?.reports ?? []} onSelectDay={onOpenDay} />
@@ -221,6 +210,15 @@ export function OverviewPage({ onOpenDay }: { readonly onOpenDay: (iso: string) 
               />
             </div>
           </Band>
+
+          {/* Directly under the figures: the reader has just seen who worked
+              today, and this is how they reach them. Hidden while loading or
+              empty rather than reserving an empty box. */}
+          {bots.data && (bots.data.whatsapp || bots.data.telegram) && (
+            <Band title={t('panel.contact')}>
+              <ContactPanel bots={bots.data} />
+            </Band>
+          )}
         </div>
       </motion.div>
     </motion.div>

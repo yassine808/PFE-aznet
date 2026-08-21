@@ -413,6 +413,13 @@ export interface Identity {
  * people — the endpoint kept its name because the workflow calls it too, and
  * renaming a working URL to match an internal refactor buys nothing.
  */
+/** The bot's own public address on each channel. Null where the vendor could
+ *  not be asked or answered nothing — never a URL that goes nowhere. */
+export interface BotLinks {
+  whatsapp: { number: string; url: string } | null
+  telegram: { username: string; url: string } | null
+}
+
 export interface Technician {
   id: number
   name: string
@@ -1092,6 +1099,7 @@ export async function deleteTask(id: number): Promise<void> {
 export const api = {
   health: (s?: AbortSignal) => get<Health>('/health', s),
   technicians: (s?: AbortSignal) => get<{ technicians: Technician[] }>('/technicians', s),
+  bots: (s?: AbortSignal) => get<BotLinks>('/bots', s),
   chantiers: (s?: AbortSignal) => get<{ chantiers: Chantier[] }>('/chantiers', s),
   alerts: (s?: AbortSignal) => get<{ alerts: MaterialAlert[] }>('/alerts', s),
   usage: (s?: AbortSignal) => get<{ providers: ProviderUsage[] }>('/usage', s),

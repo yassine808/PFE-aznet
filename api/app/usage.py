@@ -31,8 +31,8 @@ not cost a technician their report. Every call site is wrapped accordingly.
 from __future__ import annotations
 
 import re
-import re
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 # Documented free-tier ceilings for the Gemini models this project calls.
@@ -346,3 +346,50 @@ def snapshot() -> Dict[str, Any]:
     states = [e["state"] for e in providers]
     return {"providers": providers, "window_hours": 24,
             "state": _worst(states), "hit": "epuise" in states}
+
+
+# ── Where the bot itself lives ──────────────────────────────────────────────
+
+
+@lru_cache(maxsize=1)
+def bot_links() -> Dict[str, Any]:
+    """The two addresses that open a conversation *with the bot*.
+
+    Not with a colleague: the dashboard's reader wants the same thread the
+    technicians write into, and the bot is the only endpoint both channels
+    agree on. WhatsApp answers with the number a human can dial
+    (`display_phone_number`), Telegram with the bot's @username — the one
+    Telegram identifier that IS addressable by URL, unlike the numeric user ids
+    the technicians are stored under.
+
+    Cached for the process: a bot username and a WABA number change roughly
+    never, and this would otherwise cost two vendor round trips per dashboard
+    poll.
+    """
+    import json
+    import urllib.request
+
+    from app.config import settings
+
+    out: Dict[str, Any] = {"telegram": None, "whatsapp": None}
+
+    number = (_whatsapp().get("number") or "").strip()
+    digits = "".join(c for c in number if c.isdigit())
+    if digits:
+        out["whatsapp"] = {"number": number, "url": f"https://wa.me/{digits}"}
+
+    token = settings.telegram_bot_token
+    if token:
+        try:
+            url = f"https://api.telegram.org/bot{token}/getMe"
+            with urllib.request.urlopen(url, timeout=15) as resp:  # noqa: S310 - fixed host
+                data = json.load(resp)
+            username = ((data.get("result") or {}).get("username") or "").lstrip("@")
+            if username:
+                out["telegram"] = {
+                    "username": f"@{username}",
+                    "url": f"https://t.me/{username}",
+                }
+        except Exception as exc:  # noqa: BLE001 - a link is never worth a 500
+            out["error_telegram"] = str(exc)[:200]
+    return out
