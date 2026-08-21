@@ -4,18 +4,25 @@ flowchart TD
     CHK -- oui --> TH["Fil unique, battement 30 s"]
 
     TH --> READ["Lire les horaires dans app_settings<br/>a chaque tick - pas de redemarrage"]
-    READ --> DUE{"Tache due ?"}
+    READ --> DUE{"Tache due et non mise en pause ?"}
     DUE -- non --> TH
     DUE -- oui --> RUN["Executer avec budget de temps"]
 
-    RUN --> J1["sheet_queue - 5 min - 120 s"]
-    RUN --> J2["prune_logs - 03:00 - 120 s"]
-    RUN --> J3["profiles - 03:00 - 300 s"]
-    RUN --> J4["reminders - 60 s"]
-    RUN --> J5["daily_report - lun-sam - 600 s"]
-    RUN --> J6["weekly_report - 600 s"]
+    RUN --> INT["A intervalle"]
+    RUN --> FIX["A heure fixe"]
 
-    J1 & J2 & J3 & J4 & J5 & J6 --> CLAIM{"Reclamer le droit<br/>d enregistrer - atomique"}
+    INT --> J1["message_queue - 30 s - 480 s"]
+    INT --> J2["sheet_queue - 5 min - 120 s"]
+    INT --> J3["watch_alerts - 1 min - 300 s"]
+    INT --> J4["refill_articles - 1 h - 600 s"]
+    INT --> J5["reminders - 1 min - 60 s"]
+
+    FIX --> J6["prune_logs - 03:00 - 120 s"]
+    FIX --> J7["profiles - 03:00 - 300 s"]
+    FIX --> J8["daily_report - lun-sam - 600 s"]
+    FIX --> J9["weekly_report - jour choisi - 600 s"]
+
+    J1 & J2 & J3 & J4 & J5 & J6 & J7 & J8 & J9 --> CLAIM{"Reclamer le droit<br/>d enregistrer - atomique"}
     CLAIM -- "obtenu" --> REC["Enregistrer le resultat<br/>_STATUS + pipeline_logs"]
     CLAIM -- "deja pris" --> SILENT["Silence<br/>l autre ecrivain a gagne"]
 

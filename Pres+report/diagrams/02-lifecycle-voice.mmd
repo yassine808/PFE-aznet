@@ -18,7 +18,7 @@ sequenceDiagram
         N8N-->>Tech: (silence, deja repondu)
     else message neuf
         N8N->>API: GET /technicians/lookup
-        API-->>N8N: personne + chantier + autorisation
+        API-->>N8N: personne + profil + autorisation
         N8N->>Canal: accuse de reception
         N8N->>Canal: telechargement du media
         N8N->>API: POST /process (multipart)

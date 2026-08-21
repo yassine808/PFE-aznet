@@ -1,7 +1,6 @@
 erDiagram
     PERSONS ||--o{ TECHNICIANS : "identites de canal"
     PERSONS ||--o{ PERSONS : "manager_id - organigramme"
-    PERSONS }o--|| CHANTIERS : "affecte a"
     CHANTIERS ||--o{ ARTICLES : "bordereau"
 
     PERSONS {
@@ -9,7 +8,6 @@ erDiagram
         string name
         string role "directeur | chef | tech"
         int manager_id FK
-        int chantier_id FK
         text profile "reecrit chaque nuit"
         string password_hash "NOT NULL = c est un compte"
     }

@@ -8,7 +8,7 @@ flowchart TB
     XWA --> CLAIM["Claim message<br/>POST /logs/claim"]
     CLAIM --> FRESH{"Fresh ?"}
     FRESH -- non --> DUP["Log duplicate<br/>fin silencieuse"]
-    FRESH -- oui --> LOOK["Lookup technicien<br/>identite + chantier"]
+    FRESH -- oui --> LOOK["Lookup technicien<br/>identite + profil"]
     LOOK --> AUTH{"Authorized ?"}
     AUTH -- non --> DENY["Log denied<br/>+ reponse de refus"]
     AUTH -- oui --> ACK["Accuse de reception"]

@@ -10,26 +10,26 @@ flowchart TB
     end
 
     subgraph orch["Orchestration"]
-        N8N["n8n - 65 noeuds<br/>reception, dedup, autorisation, reponses"]
+        N8N["n8n - 64 noeuds<br/>reception, dedup, autorisation, reponses"]
     end
 
-    subgraph coeur["Service applicatif - FastAPI - 66 routes"]
+    subgraph coeur["Service applicatif - FastAPI - 82 routes"]
         direction LR
         PROC["POST /process<br/>audio | image | texte"]
         STT["Chaine STT<br/>gemini - local - groq"]
         EXT["Chaine d extraction<br/>Gemini / Groq"]
-        JRN["POST /journal<br/>fusion + stock"]
-        JOBS["Ordonnanceur<br/>6 taches"]
+        JRN["POST /journal<br/>une ligne par message + stock"]
+        JOBS["Ordonnanceur<br/>9 taches"]
         AUTH["Authentification"]
     end
 
     subgraph gpu["Sidecar GPU"]
-        LOC["Morocco-Darija-STT-large<br/>RTX 3070 - chargement paresseux"]
+        LOC["Morocco-Darija-STT-large<br/>RTX 3070 - precharge au demarrage"]
     end
 
     subgraph stock["Persistance"]
         direction LR
-        PG[("PostgreSQL<br/>11 tables")]
+        PG[("PostgreSQL<br/>26 tables")]
         GS[("Google Sheets<br/>un onglet par chantier")]
     end
 

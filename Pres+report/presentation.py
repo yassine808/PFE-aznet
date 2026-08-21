@@ -702,7 +702,7 @@ def s08_architecture(prs, n):
         ("Réception", "Telegram Bot API\nWhatsApp Cloud API", GREEN),
         ("Orchestration", "n8n — 64 nœuds\nréception, déduplication,\nautorisation, réponses", GREEN),
         ("Service applicatif", "FastAPI — 82 routes\nSTT, extraction, journal,\nordonnanceur, comptes", BLUE),
-        ("Persistance", "PostgreSQL — 24 tables\nGoogle Sheets\nun onglet par chantier", BLUE),
+        ("Persistance", "PostgreSQL — 26 tables\nGoogle Sheets\nun onglet par chantier", BLUE),
     ]
     x = MARGIN
     for i, (title, sub, accent) in enumerate(chain):
@@ -715,7 +715,7 @@ def s08_architecture(prs, n):
     h2 = 1.05
     bw = (CONTENT_W - 0.5) / 2
     box(slide, MARGIN, y2, bw, h2, "Moteur local — sidecar GPU",
-        "Morocco-Darija-STT-large sur RTX 3070, chargé à la première demande",
+        "Morocco-Darija-STT-large sur RTX 3070, préchargé au démarrage",
         accent=RGBColor(0x8E, 0x44, 0xAD), title_size=12, sub_size=9.5)
     box(slide, MARGIN + bw + 0.5, y2, bw, h2, "Consultation",
         "Tableau de bord React FR / EN / AR  ·  rapports quotidien et hebdomadaire par e-mail",
@@ -789,7 +789,7 @@ def s10_flux(prs, n):
     steps = [
         ("1", "Envoi", "Le technicien envoie une note vocale, une photo ou un texte sur Telegram ou WhatsApp.", GREY),
         ("2", "Réclamation", "n8n réclame l'identifiant du message au service — WhatsApp re-livre un webhook non acquitté.", GREY),
-        ("3", "Identification", "L'expéditeur est retrouvé dans l'organigramme, son autorisation et son chantier vérifiés.", GREY),
+        ("3", "Identification", "L'expéditeur est retrouvé dans l'organigramme et son autorisation vérifiée ; le chantier, lui, vient du message.", GREY),
         ("4", "Traitement", "POST /process : transcription, extraction contrainte, résumé français, avertissements.", GREY),
         ("5", "Réponse", "n8n répond au technicien avec son résumé.", GREEN),
         ("6", "Journal", "Ensuite seulement : POST /journal ajoute la ligne dans l'onglet du chantier.", GREEN),
@@ -809,8 +809,8 @@ def s10_flux(prs, n):
         x = MARGIN + i * (w3 + gap)
         _step_card(slide, x, y2, w3, h, num, title, desc, accent)
 
-    note(slide, "L'ordre de 5 et 6 est un invariant, pas une préférence : une écriture Google Sheets qui échoue est garée dans une file de reprise et rejouée toutes les cinq minutes — elle ne coûte jamais au technicien son accusé de réception.",
-         y=5.52, accent=BLUE, size=13, h=0.72)
+    note(slide, "L'ordre de 5 et 6 est un invariant, pas une préférence. Deux files de reprise le rendent tenable : une écriture Google Sheets refusée est garée et rejouée toutes les cinq minutes ; un message qu'aucun moteur n'a pu traiter est garé lui aussi, le service répond 202 et non 502, et le technicien reçoit « rapport reçu, il sera enregistré » plutôt qu'un échec. Rien n'est perdu, et l'ordre des messages d'un même technicien est préservé.",
+         y=5.52, accent=BLUE, size=12, h=0.84)
     footer(slide, n)
 
 
@@ -870,8 +870,8 @@ def s11_journal(prs, n):
     tf = _txbox(slide, MARGIN, 5.10, lw, 1.1)
     p = _para(tf, first=True)
     p.line_spacing = 1.18
-    _run(p, "La fusion a été retirée le 18 août : elle détruisait de l'information. ", size=11.5, color=GREY)
-    _run(p, "Un chiffre faux dicté l'après-midi écrasait sur place un chiffre juste du matin. Rien ne lit une ligne isolée — les totaux somment l'onglet — et les JH se lisent au maximum, jamais en somme.", size=11.5, bold=True, color=INK)
+    _run(p, "Fusionner les deux messages détruirait de l'information : ", size=11.5, color=GREY)
+    _run(p, "un chiffre faux dicté l'après-midi écraserait sur place un chiffre juste du matin. Rien ne lit une ligne isolée — les totaux somment l'onglet — et les JH se lisent au maximum, jamais en somme.", size=11.5, bold=True, color=INK)
 
     rx = MARGIN + lw + 0.55
     rw = CONTENT_W - lw - 0.55
@@ -1132,7 +1132,7 @@ def s15b_extraction(prs, n):
     p.line_spacing = 1.15
     _run(p, "gemini-3.6-flash obtient 1,000 — sur les quatre cas traités avant l'épuisement du quota gratuit. Parfait puis muet : c'est un repli, pas un primaire.", size=11.5, color=GREY)
 
-    note(slide, "D'où la chaîne gpt-oss-120b → flash-lite → 3.6-flash : elle alterne les fournisseurs dès le second maillon, parce que Groq et Google comptent leurs quotas séparément. Sur l'image, quatre modèles de vision sur les mêmes dix cas : l'écart texte / image est quasi nul.",
+    note(slide, "La chaîne déployée est gpt-oss-120b → 3.5-flash-lite → flash-lite-latest : elle alterne les fournisseurs, Groq et Google comptant leurs quotas séparément. Le jeu de cas en compte vingt-cinq aujourd'hui, et une seconde campagne a montré ce qu'un repli ne rattrape pas : un modèle qui répond 200 avec un objet vide.",
          y=6.16, accent=BLUE, size=12, h=0.58)
     footer(slide, n)
 
@@ -1144,15 +1144,15 @@ def s18b_sonar(prs, n):
     stats(slide, [("0", "bogue"),
                   ("0", "vulnérabilité"),
                   ("A / A / A", "fiabilité · sécurité\nmaintenabilité"),
-                  ("60 %", "de couverture\nmesurée (service Python)")],
+                  ("63,1 %", "de couverture\nmesurée (service Python)")],
           y=BODY_TOP - 0.05, h=1.48)
 
     bullets(slide, [
-        ("Le portail est passé de rouge à vert.", "Fiabilité E, sécurité C au départ : une image de conteneur qui s'exécutait en root et installait depuis des sources non épinglées, et une clé de projet qui ne désignait aucun projet existant."),
+        ("Fiabilité, sécurité et maintenabilité : A.", "La première analyse rendait E et C : une image de conteneur qui s'exécutait en root et installait depuis des sources non épinglées. Trois défauts réels corrigés, un faux positif réfuté, un refus motivé et consigné."),
         ("Un signalement a été refusé, motif consigné.", "Verrouiller les empreintes des dépendances du service GPU tirerait la variante processeur de torch et casserait silencieusement l'inférence — la dépendance vient de l'image CUDA."),
         ("Un vrai bogue de test a été débusqué.", "Un test dépendait du fichier .env local : il passait sur la machine de développement et échouait en intégration continue. À lui seul, il maintenait la chaîne au rouge à chaque exécution."),
     ], y=3.72, size=13, gap=10)
-    note(slide, "Une dette de 121 minutes et 15 mauvaises odeurs subsistent : maintenabilité déjà notée A, aucun correctif bloquant.",
+    note(slide, "Cinq conditions du portail sur six sont satisfaites. La sixième exige 80 % de couverture sur le code nouveau : le projet en présente 66,6 %, et une suite hors ligne par construction ne franchira pas ce seuil — le seuil n'est donc pas bloquant en intégration continue.",
          y=6.16, accent=MUTE, size=12.5, h=0.58)
     footer(slide, n)
 
@@ -1161,13 +1161,15 @@ def s16_perimetre(prs, n):
     slide = new_slide(prs)
     header(slide, "5 — Réalisation", "Périmètre livré et en production")
     col = [
-        ["Réception Telegram", "Réception WhatsApp Cloud API",
-         "Transcription — 3 moteurs, chaîne de repli", "Extraction structurée — 4 chaînes de repli",
+        ["Réception Telegram", "Réception WhatsApp Cloud API — webhook signé",
+         "Transcription — 3 moteurs, chaîne de repli", "Extraction structurée — 3 chaînes de repli",
          "Entrée par photo — modèle de vision", "Journal de chantier par site — ajout, stock",
-         "Miroir plat pour le tableau de bord"],
-        ["Observabilité PostgreSQL", "Tableau de bord trilingue FR / EN / AR",
-         "Organigramme, comptes, chantiers, bordereau", "Ordonnanceur — 6 tâches, page Automatisation",
-         "Rapports quotidien et hebdomadaire par e-mail — document .docx joint",
+         "Miroir plat et table d'agrégation",
+         "Boîte de réception — réponse et transcription corrigeable"],
+        ["Observabilité PostgreSQL — 26 tables, deux files de reprise",
+         "Tableau de bord trilingue FR / EN / AR",
+         "Organigramme, comptes, chantiers, bordereau", "Ordonnanceur — 9 tâches, page Automatisation",
+         "Rapports quotidien et hebdomadaire — e-mail et document .docx",
          "Colonnes d'article créées à la volée, puis confirmées",
          "Réceptions de matériel et alertes de stock en jours de couverture",
          "Consommation des offres gratuites, mesurée",
@@ -1179,9 +1181,13 @@ def s16_perimetre(prs, n):
         tf = _txbox(slide, cx, BODY_TOP - 0.02, half, 3.4)
         for j, it in enumerate(items):
             p = _para(tf, first=(j == 0))
-            p.space_after = Pt(10)
-            _run(p, "✓  ", size=14, bold=True, color=GREEN)
-            _run(p, it, size=13.5, color=INK)
+            # 12.5 pt, not 13.5: the right-hand column carries nine lines and the
+            # panel below starts at 5.06 in. A textbox that overflows is not
+            # visibly wrong here -- the panel is drawn after it and covers the
+            # overflow -- so the size is what keeps the last item on screen.
+            p.space_after = Pt(9)
+            _run(p, "✓  ", size=13, bold=True, color=GREEN)
+            _run(p, it, size=12.5, color=INK)
 
     y = 5.06
     _rect(slide, MARGIN, y, CONTENT_W, 1.42, fill=WASH)
@@ -1207,7 +1213,7 @@ def s17_dashboard(prs, n):
         ("Trilingue", "Français, anglais, arabe. L'arabe impose le sens droite-à-gauche sur toute l'interface."),
         ("Sans dépendance d'UI", "React 19 et Tailwind v4, graphiques en SVG écrits à la main, aucune bibliothèque de composants."),
         ("Douze écrans", "Vue d'ensemble, réception, rapports, quotidien, hebdomadaire, automatisation, tâches, journaux, file de reprise, consommation, équipe, chantiers."),
-        ("Organigramme éditable", "Le rattachement d'un technicien à un chef détermine le chantier de ses rapports."),
+        ("Organigramme éditable", "Une personne, plusieurs canaux : le rattachement d'un technicien à un chef porte la hiérarchie, jamais le chantier de ses rapports."),
     ]):
         p = _para(tf, first=(i == 0))
         p.space_after = Pt(3)
@@ -1278,7 +1284,7 @@ def s15c_ia_lecture(prs, n):
         para.space_after = Pt(11)
         para.line_spacing = 1.16
         _run(para, d, size=11.5, color=GREY)
-    caption(slide, "Figure 4.14 — Les quatre sources d'une extraction et les trois issues.",
+    caption(slide, "Figure 3.14 — Les quatre sources d'une extraction et les trois issues.",
             MARGIN, 6.30, CONTENT_W * 0.53)
     footer(slide, n)
 
@@ -1323,7 +1329,7 @@ def s18_devops(prs, n):
     header(slide, "5 — Qualité", "La chaîne d'intégration continue")
     stats(slide, [("6 mois", "de développement\n(2 mars – 31 août 2026)"),
                   ("18", "contrôles automatiques\nà chaque push"),
-                  ("463", "tests, sans aucune\nclé d'API ni base"),
+                  ("475", "tests, sans aucune\nclé d'API ni base"),
                   ("38", "demandes Dependabot\nsur 5 écosystèmes")],
           y=BODY_TOP - 0.05, h=1.48)
 
@@ -1331,7 +1337,7 @@ def s18_devops(prs, n):
     tf = _txbox(slide, MARGIN, y, CONTENT_W, 0.3)
     _run(_para(tf, first=True), "Les 18 contrôles, par famille", size=14.5, bold=True, color=BLUE)
     fams = [
-        ("Correction", GREEN, "API — ruff, types, 463 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
+        ("Correction", GREEN, "API — ruff, types, 475 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
         ("Sécurité du code", BLUE, "CodeQL (python)  ·  CodeQL (javascript-typescript)  ·  Semgrep OWASP Top 10  ·  Bandit"),
         ("Dépendances et secrets", RGBColor(0x8E, 0x44, 0xAD), "Trivy filesystem  ·  Trivy config  ·  pip-audit  ·  npm audit  ·  gitleaks + check_secrets.py"),
         ("Conformité des fichiers", GREY, "Hadolint (api)  ·  Hadolint (Dashboard)  ·  actionlint"),
@@ -1382,7 +1388,7 @@ def s20_bilan(prs, n):
     for i, t in enumerate([
         "Une architecture hybride dont la frontière a été fixée par une contrainte fonctionnelle identifiée en cours de projet, non par préférence.",
         "Un banc d'essai de treize moteurs de transcription du darija, avec une critique argumentée du WER et une métrique applicative de substitution.",
-        "Un service d'extraction à sortie contrainte, quatre chaînes de repli alternant les fournisseurs, et une politique stricte d'absence de données inventées.",
+        "Un service d'extraction à sortie contrainte, des chaînes de repli alternant les fournisseurs, et une politique stricte d'absence de données inventées.",
         "Un modèle métier reconstruit sur le fichier réel du client : une ligne par message, jamais réécrite, et réconciliation de stock.",
         "Une conception indépendante du canal, démontrée par la mise en service de deux messageries aux contraintes opposées.",
     ]):
@@ -1528,6 +1534,9 @@ NOTES = {
     "s10_flux": """
 1:30 · Dérouler une fois, lentement.
 → La réponse part AVANT le Sheet : une panne Google ne coûte pas son résumé.
+→ Deux files, pas une : l'écriture refusée d'un côté, le message intraitable de
+  l'autre. Ce dernier répond 202 — un 502 ferait envoyer ❌ à un technicien dont
+  le rapport est en sécurité.
 """,
     "s11_journal": """
 1:30 · Une ligne par message, JAMAIS de réécriture.
@@ -1576,8 +1585,8 @@ NOTES = {
 1:00 · Ce qui tourne, ce qui reste. Rester factuel.
 """,
     "s17_dashboard": """
-1:00 · Trilingue, arabe RTL, graphiques écrits à la main.
-→ Vingt-deux captures en annexe H.
+1:00 · Trilingue, arabe RTL, graphiques écrits à la main. Douze écrans.
+→ Vingt-neuf captures en annexe H.
 """,
     "s17b_usage": """
 1:00 · Deux écrans ajoutés en dernier, pour deux angles morts.
@@ -1603,8 +1612,11 @@ NOTES = {
 → Honnêteté : Dependabot ouvre, rien n'est encore fusionné.
 """,
     "s18b_sonar": """
-0:45 · La porte qualité passe : 0 bogue, 0 vulnérabilité, A/A/A.
+0:45 · 0 bogue, 0 vulnérabilité, A/A/A, dette de 25 minutes.
 → Raconter le vrai bogue : un test qui dépendait du .env local.
+→ Si on demande le portail : cinq conditions sur six. La sixième veut 80 % de
+  couverture sur le code nouveau, seuil du référentiel par défaut, que je récuse
+  pour une suite hors ligne — et je le dis avant qu'on me le demande.
 """,
     "s19_demo": """
 3:00 · DÉMO. Note vocale → ⏳ → ✅ → Sheet → boîte de réception.
