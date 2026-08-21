@@ -334,7 +334,10 @@ def test_daily_report_is_per_manager(monkeypatch):
     assert ("2026-08-01", ["salle 1", "salle 2"]) in generated
     assert out["managers"] == 1
     assert out["reports"][0]["manager"] == "Chef A"
-    assert stored == [(2, "2026-08-01", "daily")]
+    # Manager 0 first: the company digest is a stored report too since
+    # 2026-08-21 — before that it was mailed to the directors and then existed
+    # nowhere, which made it the one report the dashboard could not show.
+    assert stored == [(0, "2026-08-01", "daily"), (2, "2026-08-01", "daily")]
     assert sorted(out["sent_to"]) == ["a@aznet.ma", "d@aznet.ma"]
 
 
@@ -371,7 +374,7 @@ def test_weekly_report_stores_period_type(monkeypatch):
     out = jobs.send_weekly_report("2026-07-31")
 
     assert out["managers"] == 1
-    assert stored == [(2, "weekly")]
+    assert stored == [(0, "weekly"), (2, "weekly")]
 
 
 def test_manager_buckets_ignore_unassigned_rows(monkeypatch):
@@ -446,7 +449,8 @@ def test_manager_without_email_does_not_abort_the_report_job(monkeypatch):
     assert result["sent_to"] == ["d@x.ma"]          # the director still got theirs
     assert result["managers"] == 1                   # the chef's report was still built
     assert stored                                    # …and stored for /rapport
-    assert stored[0][0] == 2
+    assert stored[0][0] == 0                         # the company digest
+    assert stored[1][0] == 2                         # then the chef's own
     assert result["reports"][0]["mail_error"]        # the failure is visible, not swallowed
 
 

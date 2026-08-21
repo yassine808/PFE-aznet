@@ -443,6 +443,7 @@
   "weekly.emptyTitle": "لا توجد تقارير للفترة {range}",
   "weekly.emptyBody": "تظهر مجاميع الأسبوع والتوزيع اليومي والملخّص الآلي بمجرد وصول أول تقرير.",
   "weekly.goLastWeek": "الانتقال إلى آخر أسبوع فيه بيانات",
+  "reports.company": "الشركة (كل الأوراش)",
   "reports.filter": "التصفية حسب النوع",
   "reports.filter.all": "الكل",
   "reports.filter.daily": "يومية",

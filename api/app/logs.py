@@ -293,6 +293,22 @@ CREATE TABLE IF NOT EXISTS manager_reports (
 );
 CREATE INDEX IF NOT EXISTS manager_reports_mgr_idx ON manager_reports (manager_id, generated_at DESC);
 
+-- Manager 0 is the company: the digest the scheduler mails to the director(s)
+-- covers every crew and belongs to no chef, and until 2026-08-21 it was the one
+-- report that existed nowhere in the dashboard — mailed, and then invisible.
+-- Filing it under a director's id instead would have been a lie of a different
+-- kind, since it is not that person's team report and two directors would have
+-- produced two identical rows.
+--
+-- The foreign key goes with it. It was never load-bearing: `list_manager_reports`
+-- already renders a report whose person row has vanished under a placeholder,
+-- which is the behaviour worth keeping — a chef leaving the company must not
+-- delete the reports their crew's work is recorded in. `report_versions` made
+-- the same choice for the same reason.
+DO $$ BEGIN
+    ALTER TABLE manager_reports DROP CONSTRAINT IF EXISTS manager_reports_manager_id_fkey;
+END $$;
+
 -- Edited report versions: the manager's own drafts of a daily or weekly
 -- report, one row per save, never overwritten.
 --
@@ -2762,7 +2778,12 @@ def list_manager_reports() -> List[dict]:
             """
             SELECT m.manager_id, m.period, m.period_type, m.objet, m.corps,
                    m.generated_at, m.generated_by,
-                   COALESCE(p.name, '—') AS manager_name
+                   -- The company digest has no person to name. Left empty
+                   -- rather than filled with a French word: the dashboard
+                   -- speaks three languages and a label is its job, not the
+                   -- store's.
+                   CASE WHEN m.manager_id = 0 THEN ''
+                        ELSE COALESCE(p.name, '—') END AS manager_name
             FROM manager_reports m
             LEFT JOIN persons p ON p.id = m.manager_id
             ORDER BY m.generated_at DESC

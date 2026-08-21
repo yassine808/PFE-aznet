@@ -443,6 +443,7 @@
   "weekly.emptyTitle": "No reports for {range}",
   "weekly.emptyBody": "Weekly totals, the per-day breakdown and the AI summary show up as soon as one report lands.",
   "weekly.goLastWeek": "Go to the last week with data",
+  "reports.company": "Company (all sites)",
   "reports.filter": "Filter by type",
   "reports.filter.all": "All",
   "reports.filter.daily": "Daily",

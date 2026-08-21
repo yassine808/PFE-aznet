@@ -210,3 +210,37 @@ def test_a_period_with_no_report_at_all_is_a_404(client, monkeypatch):
     monkeypatch.setattr(logs, "list_report_versions", lambda *a, **k: [])
     monkeypatch.setattr(logs, "list_manager_reports", lambda: [])
     assert client.get("/reports/document?kind=daily&period=2026-08-04").status_code == 404
+
+
+def test_the_fallback_render_is_cached_on_its_own_text(client, monkeypatch):
+    """Re-rendering the same report on every page open is pure waste.
+
+    Keyed on the text, so an edit changes the key and no invalidation path is
+    needed — the one way a cache like this goes wrong is by outliving a change
+    it cannot see.
+    """
+    from app import main
+
+    main._DOCX_CACHE.clear()
+    calls = []
+
+    def fake_render(title, body, period, author, edited=False):
+        calls.append(title)
+        return b"PKrendered"
+
+    monkeypatch.setattr(main, "render_report_docx", fake_render)
+    monkeypatch.setattr(logs, "list_report_versions", lambda *a, **k: [])
+    rows = [{"period": "2026-08-04", "period_type": "daily", "objet": "Jour",
+             "corps": "Texte", "generated_by": "Yassine"}]
+    monkeypatch.setattr(logs, "list_manager_reports", lambda: rows)
+
+    assert client.get("/reports/document?kind=daily&period=2026-08-04").content == b"PKrendered"
+    client.get("/reports/document?kind=daily&period=2026-08-04")
+    assert len(calls) == 1, "the second request must not re-render"
+
+    # An edited report is a different document, and must not be served the old
+    # bytes because the period is the same.
+    rows[0]["corps"] = "Texte corrigé"
+    client.get("/reports/document?kind=daily&period=2026-08-04")
+    assert len(calls) == 2
+    main._DOCX_CACHE.clear()

@@ -443,6 +443,7 @@
   "weekly.emptyTitle": "Aucun rapport du {range}",
   "weekly.emptyBody": "Les totaux de la semaine, la répartition par jour et le résumé IA s'affichent dès qu'un rapport est reçu.",
   "weekly.goLastWeek": "Voir la dernière semaine avec des données",
+  "reports.company": "Société (tous chantiers)",
   "reports.filter": "Filtrer par type",
   "reports.filter.all": "Tous",
   "reports.filter.daily": "Journaliers",

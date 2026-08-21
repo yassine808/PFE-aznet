@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   ArchiveIcon,
+  BuildingsIcon,
   CalendarBlankIcon,
   CalendarDotsIcon,
   MagnifyingGlassIcon,
@@ -17,6 +18,18 @@ import { EmptyState, ErrorState, Skeleton } from '@/components/states'
 import { cn } from '@/lib/utils'
 
 type Filter = 'all' | 'daily' | 'weekly'
+
+/**
+ * Whose report this is, as a label.
+ *
+ * Manager 0 is the company digest — the one the scheduler mails to the
+ * director(s), which covers every crew and belongs to no chef. The store
+ * deliberately leaves its name empty rather than writing a French word into a
+ * three-language dashboard, so the naming happens here.
+ */
+function nameOf(g: GeneratedReport, t: (k: string) => string): string {
+  return g.manager_id === 0 ? t('reports.company') : g.manager_name || '—'
+}
 
 /** Stable identity for a stored report — the table is keyed `(manager_id, period)`. */
 function keyOf(g: GeneratedReport): string {
@@ -79,7 +92,7 @@ export function ReportsPage({ initialPeriod }: { readonly initialPeriod?: string
       if (filter === 'daily' && weekly) return false
       if (filter === 'weekly' && !weekly) return false
       if (!q) return true
-      return `${g.manager_name} ${g.period} ${g.objet}`.toLowerCase().includes(q)
+      return `${nameOf(g, t)} ${g.period} ${g.objet}`.toLowerCase().includes(q)
     })
   }, [all, filter, query])
 
@@ -234,12 +247,12 @@ function ReportRow({
         <Icon size={15} className={cn('mt-0.5 shrink-0', active ? 'text-ink' : 'text-ink-faint')} />
         <span className="min-w-0 flex-1">
           <span className="text-ink block truncate text-sm">
-            {g.objet || `${g.manager_name} — ${g.period}`}
+            {g.objet || `${nameOf(g, t)} — ${g.period}`}
           </span>
           <span className="text-ink-faint mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.6875rem]">
             <span className="tabular">{g.period}</span>
             <span aria-hidden>·</span>
-            <span className="truncate">{g.manager_name}</span>
+            <span className="truncate">{nameOf(g, t)}</span>
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
@@ -278,7 +291,7 @@ function ReportPane({
     >
       <header className="border-line flex flex-col gap-3 border-b px-5 py-4">
         <h2 className="text-ink text-sm font-medium">
-          {g.objet || `${g.manager_name} — ${g.period}`}
+          {g.objet || `${nameOf(g, t)} — ${g.period}`}
         </h2>
         <div className="text-ink-faint flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
           <span className="flex items-center gap-1.5">
@@ -286,8 +299,8 @@ function ReportPane({
             <span className="tabular">{g.period}</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <UserIcon size={13} />
-            {g.manager_name}
+            {g.manager_id === 0 ? <BuildingsIcon size={13} /> : <UserIcon size={13} />}
+            {nameOf(g, t)}
           </span>
           <span className="tabular">{fmt.format(new Date(g.generated_at))}</span>
           {/* "automatique" is the backend's marker for a scheduled run, not a

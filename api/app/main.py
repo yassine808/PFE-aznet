@@ -1,6 +1,7 @@
 """FastAPI entrypoint — the single endpoint n8n and the web form call."""
 import re
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -1396,6 +1397,36 @@ def _safe_docx(
         return None
 
 
+# One rendered fallback document, keyed by the text it was rendered from.
+#
+# `GET /reports/document` re-renders every period that has no stored file, and
+# the Daily page asks for one on every open and every date switch — a Postgres
+# read plus ~40 KB of python-docx each time, for a document that is byte-for-byte
+# the same until somebody edits the report. Keying on the *text* rather than on
+# the period is what makes the cache safe without an invalidation path: an edit
+# changes `objet`/`corps`, which changes the key, so a stale document cannot be
+# served. The TTL is there only to bound memory over a long uptime; the cap is
+# what bounds it over a busy minute.
+_DOCX_CACHE: "OrderedDict[tuple, tuple[float, bytes]]" = OrderedDict()
+_DOCX_CACHE_TTL = 300.0
+_DOCX_CACHE_MAX = 8
+
+
+def _cached_docx(kind: str, period: str, objet: str, corps: str, author: Optional[str]) -> bytes:
+    key = (kind, period, objet, corps, author)
+    hit = _DOCX_CACHE.get(key)
+    now = time.monotonic()
+    if hit and now - hit[0] < _DOCX_CACHE_TTL:
+        _DOCX_CACHE.move_to_end(key)
+        return hit[1]
+    blob = render_report_docx(objet, corps, period, author)
+    _DOCX_CACHE[key] = (now, blob)
+    _DOCX_CACHE.move_to_end(key)
+    while len(_DOCX_CACHE) > _DOCX_CACHE_MAX:
+        _DOCX_CACHE.popitem(last=False)
+    return blob
+
+
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
@@ -1463,7 +1494,7 @@ def latest_report_document(
     if row is None:
         raise HTTPException(404, "aucun rapport pour cette période")
 
-    blob = render_report_docx(row["objet"], row["corps"], period, row.get("generated_by"))
+    blob = _cached_docx(kind, period, row["objet"], row["corps"], row.get("generated_by"))
     return _docx_response(docx_report.filename(row["objet"]), blob, inline=True)
 
 

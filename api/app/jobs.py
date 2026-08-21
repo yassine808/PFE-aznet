@@ -625,6 +625,15 @@ def _period_report(label: str, rows: List[dict], kind: str) -> dict:
     director_rcpts = [p["email"] for p in directors] or _report_recipients()
     company = _report_mail(director_rcpts, label, rows)
     if company.get("rows"):
+        # Stored under manager 0 — the company, not a chef. Without this the
+        # digest the directors receive is the one report that appears nowhere
+        # in the dashboard: mailed, and then gone.
+        try:
+            logs.save_manager_report(
+                0, label, company["objet"], company["corps"], company["generated_by"], kind
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[report] digest société non archivé ({exc}) — le mail est parti")
         _file_version(kind, label, company, 0)
 
     sent_all = set(company["sent_to"])
