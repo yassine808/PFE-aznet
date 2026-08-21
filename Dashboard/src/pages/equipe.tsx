@@ -65,16 +65,45 @@ export interface PersonStats {
   bureaux: number
   panneaux: number
   /**
-   * Share of the raw transcript written in Arabic script, or null when nothing
-   * was transcribed. Script-based: arabizi (darija in latin letters) reads as
-   * French here, which the label admits.
+   * Share of this person's messages dictated in Arabic script, or null when
+   * none of them carried enough text to classify. Counted per message and not
+   * per character: a language is a property of a message, and a character
+   * count lets one long note outvote ten short ones. Arabizi (darija in latin
+   * letters) reads as French here, which the label admits.
    */
   pctArabic: number | null
 }
 
-function statsOf(rows: ReportRow[]): PersonStats {
+/**
+ * Which script one message is written in, or null when there is not enough
+ * letter to tell. French technical loanwords are everywhere in a darija note
+ * ("goulotte", "switch"), so the test is a majority and not the presence of a
+ * single latin word. Digits carry no language and are excluded on both sides —
+ * a report that is mostly metres would otherwise classify on its numbers.
+ */
+const MIN_LETTERS = 4
+
+function scriptOf(text: string): 'ar' | 'fr' | null {
+  // A photo row's `Message` is the vision model's own French sentence, prefixed
+  // `[photo] ` — nobody dictated it, so it says nothing about the technician.
+  if (text.trimStart().startsWith('[photo]')) return null
   let arabic = 0
   let latin = 0
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0
+    // Arabic letters only: 0660-0669 and 06F0-06F9 are Arabic-Indic digits.
+    const isArabicDigit = (code >= 0x0660 && code <= 0x0669) || (code >= 0x06f0 && code <= 0x06f9)
+    if (code >= 0x0600 && code <= 0x06ff && !isArabicDigit) arabic += 1
+    else if (/[a-zA-ZàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]/.test(ch)) latin += 1
+  }
+  const letters = arabic + latin
+  if (letters < MIN_LETTERS) return null
+  return arabic * 2 >= letters ? 'ar' : 'fr'
+}
+
+function statsOf(rows: ReportRow[]): PersonStats {
+  let arabic = 0
+  let classified = 0
   let last: string | null = null
   const sites = new Set<string>()
   const totals = { goulottes: 0, cables: 0, bureaux: 0, panneaux: 0 }
@@ -89,21 +118,20 @@ function statsOf(rows: ReportRow[]): PersonStats {
     totals.bureaux += num(r.bureaux_termines)
     totals.panneaux += num(r.panneaux_raccordes)
 
-    for (const ch of (r.Message ?? '').replace(/\s+/g, '')) {
-      const code = ch.codePointAt(0) ?? 0
-      if (code >= 0x0600 && code <= 0x06ff) arabic += 1
-      else if (/[a-zA-ZàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]/.test(ch)) latin += 1
+    const script = scriptOf(r.Message ?? '')
+    if (script !== null) {
+      classified += 1
+      if (script === 'ar') arabic += 1
     }
   }
 
-  const script = arabic + latin
   return {
     count: rows.length,
     flagged: rows.filter((r) => isFlagged(r.flag_review)).length,
     last,
     sites: sites.size,
     ...totals,
-    pctArabic: script === 0 ? null : Math.round((arabic / script) * 100),
+    pctArabic: classified === 0 ? null : Math.round((arabic / classified) * 100),
   }
 }
 
