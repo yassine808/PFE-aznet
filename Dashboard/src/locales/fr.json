@@ -378,6 +378,7 @@
   "editor.docxMissing": "Document indisponible pour cette version.",
   "editor.docxOf": "Document de la v{version} — {author}",
   "editor.docxLast": "Dernier rapport — {author}",
+  "editor.docxNone": "Aucun rapport généré pour cette période — utilisez « Générer ».",
   "editor.downloadDocx": "Télécharger .docx",
   "editor.showDocx": "Afficher le document de la version {version}",
   "editor.kindDaily": "Rapport journalier",

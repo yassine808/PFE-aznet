@@ -378,6 +378,7 @@
   "editor.docxMissing": "لا يوجد مستند محفوظ لهذه النسخة.",
   "editor.docxOf": "مستند النسخة {version} — {author}",
   "editor.docxLast": "آخر تقرير — {author}",
+  "editor.docxNone": "لا يوجد تقرير لهذه الفترة بعد — استخدم «إنشاء».",
   "editor.downloadDocx": "تنزيل ‎.docx",
   "editor.showDocx": "عرض مستند النسخة {version}",
   "editor.kindDaily": "التقرير اليومي",

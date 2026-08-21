@@ -1,4 +1,4 @@
-import { DownloadSimpleIcon, FileDocIcon } from '@phosphor-icons/react'
+import { DownloadSimpleIcon, FileDocIcon, FileDashedIcon } from '@phosphor-icons/react'
 import {
   api,
   periodDocxUrl,
@@ -21,9 +21,10 @@ import { Skeleton } from '@/components/states'
  * directly, which means the answer to "what went out for this day" is on the
  * page before any button is touched.
  *
- * Nothing renders when no version carries a document: an empty frame reads as
- * a broken preview, while its absence next to the Générer button reads as "not
- * generated yet", which is the truth.
+ * A period with no report at all still renders — one line saying so. Rendering
+ * nothing was the first shape and it was wrong: an absence looks exactly like a
+ * feature that failed to load, and "today has no report yet" is a fact the page
+ * should state rather than leave the reader to infer from blank space.
  */
 export function LastReportDocx({
   kind,
@@ -56,7 +57,14 @@ export function LastReportDocx({
   const stored = (generated.data?.reports ?? []).find(
     (g) => g.period === period && (g.period_type === 'weekly') === (kind === 'weekly'),
   )
-  if (!version && !stored) return null
+  if (!version && !stored) {
+    return (
+      <section className="border-line text-ink-faint flex items-center gap-2.5 rounded-xl border border-dashed px-5 py-6 text-xs">
+        <FileDashedIcon size={15} className="shrink-0" />
+        {t('editor.docxNone')}
+      </section>
+    )
+  }
 
   const src = version ? reportVersionDocxUrl(version.id) : periodDocxUrl(kind, period)
   const label = version
