@@ -383,15 +383,27 @@ function JobRow({
       to run it now — stays on the surface.
     */
     <li className="border-line hover:bg-canvas/60 flex flex-col border-b transition-colors last:border-b-0">
-      <div className="flex items-center gap-3 py-2">
+      {/* Name over schedule, not name beside schedule. In one column there was
+          room for both on a line; in half of one the sentence squeezed the
+          controls until the time field clipped its own value. The second line
+          costs nothing — the row is already taller than one line of text
+          because of the controls — and the name is what the eye lands on
+          first either way. */}
+      <div className="flex items-center gap-2.5 py-2">
         <Icon size={15} className="text-ink-faint shrink-0" />
 
-        <span className="text-ink min-w-0 flex-1 truncate text-sm" title={what}>
-          {t(`automation.job.${job.name}`)}
-        </span>
-
-        <span className="text-ink-faint hidden shrink-0 text-[0.6875rem] sm:block">
-          {job.paused ? t('automation.pausedNote') : job.schedule}
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-ink truncate text-sm leading-tight" title={what}>
+            {jobLabel}
+          </span>
+          <span
+            className={cn(
+              'truncate text-[0.6875rem] leading-tight',
+              job.paused ? 'text-status-warn' : 'text-ink-faint',
+            )}
+          >
+            {job.paused ? t('automation.pausedNote') : job.schedule}
+          </span>
         </span>
 
         {/* The outcome as a pill: it is the one thing scanned down a column, and
@@ -725,17 +737,25 @@ function JobsBand({
           <DayPlan jobs={ordered} />
         </div>
       </Panel>
-      {mails.length > 0 && (
-        <Panel title={t('automation.sending')} aside={health(mails)} index={1}>
-          {rows(mails)}
-          {delivery}
-        </Panel>
-      )}
-      {upkeep.length > 0 && (
-        <Panel title={t('automation.group.upkeep')} aside={health(upkeep)} index={2}>
-          {rows(upkeep)}
-        </Panel>
-      )}
+      {/* Side by side from xl, upkeep first. Stacked, the two bands ran to about
+          two screens and the recipient list sat permanently below the fold — the
+          page asked you to scroll to answer "who gets the report?".
+          `items-start` so the shorter column stops at its own content instead of
+          stretching to match the taller one, which would draw a panel border
+          around a block of empty space. */}
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-2">
+        {upkeep.length > 0 && (
+          <Panel title={t('automation.group.upkeep')} aside={health(upkeep)} index={1}>
+            {rows(upkeep)}
+          </Panel>
+        )}
+        {mails.length > 0 && (
+          <Panel title={t('automation.sending')} aside={health(mails)} index={2}>
+            {rows(mails)}
+            {delivery}
+          </Panel>
+        )}
+      </div>
     </div>
   )
 }
