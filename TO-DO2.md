@@ -1,3 +1,3 @@
 - [ ] in overview page, add whatsapp/telegram that opens the chat in the pc/phone
 - [ ] fix language % for each tech. (not accurate at all)
-- [ ] in the reports page, show the generated .docx (as it is)
+- [ ] in the reports page, show the generated .docx (as it is) + add a download button + modify that saves it in the database, each time when someone does a modify, it'll save who made last change somewhere in the report (do a script)
