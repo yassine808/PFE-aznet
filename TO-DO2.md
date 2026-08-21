@@ -1,0 +1,2 @@
+- [ ] in overview page, add whatsapp/telegram that opens the chat in the pc/phone
+- [ ] fix language % for each tech. (not accurate at all)
