@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import {
   ArrowClockwiseIcon,
@@ -18,6 +18,7 @@ import {
 } from '@phosphor-icons/react'
 import {
   api,
+  BASE,
   putSettings,
   runJob,
   sendTestMail,
@@ -38,12 +39,11 @@ import { cn } from '@/lib/utils'
 // its whole object, and a save carrying a stale list would silently undo a
 // pause the operator set on a row seconds earlier. It is written by the row's
 // own switch, one key at a time.
-type EditableSettings = Required<Omit<AppSettings, 'stt_chain' | 'paused_jobs'>>
+type EditableSettings = Required<Omit<AppSettings, 'stt_chain' | 'paused_jobs' | 'job_schedules'>>
 const DEFAULTS: EditableSettings = {
   daily_time: '18:30',
   weekly_day: 4,
   weekly_time: '17:00',
-  nightly_time: '03:00',
   emails: [],
 }
 
@@ -495,31 +495,50 @@ function Panel({
 const MAIL_JOBS = new Set(['daily_report', 'weekly_report'])
 
 /**
- * When the nightly upkeep band runs.
+ * One job's own schedule, edited on its own row.
  *
- * Writes on change rather than joining the settings form, for the same reason
- * the pause switch does: the Save button lives in the other column, and a
- * control an operator edits here should not depend on remembering to go there.
- * `put_settings` upserts only this key, so nothing half-typed in that form is
- * committed as a side effect.
+ * There was a single "Entretien à 03:00" on the upkeep band header, which is
+ * the wrong shape twice over: it governed two of the seven jobs in that band
+ * and said nothing about the other five, and it put a control somewhere other
+ * than on the thing it controls. Every row now carries its own.
+ *
+ * The control follows the job's kind because the two kinds answer different
+ * questions. A job that runs at a moment gets a clock; a job that repeats gets
+ * a number of minutes. "At what time should the retry queue drain?" has no
+ * answer, and "how often should the daily report be sent?" has a misleading
+ * one.
+ *
+ * Writes on commit rather than joining the settings form: that form PUTs its
+ * whole object, so a Save carrying a stale schedule would undo an edit made
+ * here seconds earlier.
  */
-function NightlyTime({
-  value,
+function JobSchedule({
+  job,
+  schedules,
   onChanged,
 }: {
-  readonly value: string
+  readonly job: JobStatus
+  readonly schedules: Record<string, string | number>
   readonly onChanged: () => void
 }) {
   const { t } = useI18n()
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  const interval = job.kind === 'interval'
 
-  const save = async (next: string) => {
-    if (!next || next === value) return
+  const save = async (raw: string) => {
+    const next: string | number = interval ? Number(raw) : raw
+    if (raw === '' || (interval && (!Number.isFinite(next as number) || (next as number) < 1))) {
+      // Refused rather than stored: a zero interval makes the job due on every
+      // 30 s tick, and for the message retry that means hammering a provider
+      // that is already failing.
+      setFailed(true)
+      return
+    }
     setBusy(true)
     setFailed(false)
     try {
-      await putSettings({ nightly_time: next })
+      await putSettings({ job_schedules: { ...schedules, [job.name]: next } })
       onChanged()
     } catch {
       setFailed(true)
@@ -529,24 +548,29 @@ function NightlyTime({
   }
 
   return (
-    <span className="flex items-center gap-1.5">
-      <label htmlFor="nightly-time" className="text-ink-faint text-[0.6875rem]">
-        {failed ? t('automation.pauseFailed') : t('automation.nightlyAt')}
-      </label>
+    <span className="flex shrink-0 items-center gap-1">
       <input
-        id="nightly-time"
-        type="time"
-        defaultValue={value}
+        type={interval ? 'number' : 'time'}
+        min={interval ? 1 : undefined}
+        step={interval ? 1 : undefined}
+        defaultValue={interval ? (job.every_minutes ?? '') : (job.at ?? '')}
         disabled={busy}
-        // On blur and on commit, not on every keystroke: a time input fires
-        // change as the hour digit is typed, which would PUT "0:00" on the way
-        // to "04:30" and briefly move the band to midnight.
+        aria-label={`${t(`automation.job.${job.name}`)} — ${
+          interval ? t('automation.everyMinutes') : t('automation.runsAt')
+        }`}
+        // On blur, not on change: a time input fires as the hour digit is typed,
+        // which would store "0:00" on the way to "04:30".
         onBlur={(e) => void save(e.target.value)}
         className={cn(
-          'border-line bg-canvas text-ink tabular focus:border-accent w-24 rounded-md border px-2 py-1 text-xs outline-none transition-colors disabled:opacity-50',
+          'border-line bg-canvas text-ink tabular focus:border-accent rounded-md border px-2 py-1 text-xs outline-none transition-colors disabled:opacity-50',
+          // A 12-hour locale renders `18:30` as `06:30 PM`, and w-24 clipped
+          // the marker: the field showed "06:30 P" beside a label reading
+          // 18:30, which reads as two different times for one setting.
+          interval ? 'w-16' : 'w-[7.5rem]',
           failed && 'border-status-fail',
         )}
       />
+      {interval && <span className="text-ink-faint text-[0.625rem]">{t('automation.min')}</span>}
     </span>
   )
 }
@@ -628,11 +652,15 @@ function JobsBand({
   controls,
   onChanged,
   pausedList,
-  nightlyTime,
+  schedules,
+  delivery,
 }: {
   readonly onChanged: () => void
   readonly pausedList: readonly string[]
-  readonly nightlyTime: string
+  readonly schedules: Record<string, string | number>
+  /** When the weekly report goes out and who receives it — rendered under the
+   *  report rows, because it is the same subject as the rows above it. */
+  readonly delivery?: React.ReactNode
   readonly jobs: Async<{ jobs: JobStatus[] }>
   readonly ordered: JobStatus[]
   readonly controls: Record<string, React.ReactNode>
@@ -660,12 +688,20 @@ function JobsBand({
           job={job}
           onRan={jobs.reload}
           pause={
-            <PauseToggle
-              name={job.name}
-              paused={Boolean(job.paused)}
-              pausedList={pausedList}
-              onChanged={onChanged}
-            />
+            <>
+              {/* A job whose timing is not a preference shows none: the watch
+                  that notices a shortage is only useful if it runs often, and
+                  offering a control implies a choice that does not exist. */}
+              {job.editable !== false && (
+                <JobSchedule job={job} schedules={schedules} onChanged={onChanged} />
+              )}
+              <PauseToggle
+                name={job.name}
+                paused={Boolean(job.paused)}
+                pausedList={pausedList}
+                onChanged={onChanged}
+              />
+            </>
           }
         >
           {controls[job.name]}
@@ -690,26 +726,13 @@ function JobsBand({
         </div>
       </Panel>
       {mails.length > 0 && (
-        <Panel title={t('automation.group.mails')} aside={health(mails)} index={1}>
+        <Panel title={t('automation.sending')} aside={health(mails)} index={1}>
           {rows(mails)}
+          {delivery}
         </Panel>
       )}
       {upkeep.length > 0 && (
-        <Panel
-          title={t('automation.group.upkeep')}
-          // The nightly hour sits on the band it governs, not in the card of
-          // send times: it decides when the log prune and the profile rebuild
-          // run, and nothing about when a report is mailed. Next to the thing
-          // it changes, an operator does not have to hold the connection in
-          // their head.
-          aside={
-            <span className="flex items-center gap-3">
-              <NightlyTime value={nightlyTime} onChanged={onChanged} />
-              {health(upkeep)}
-            </span>
-          }
-          index={2}
-        >
+        <Panel title={t('automation.group.upkeep')} aside={health(upkeep)} index={2}>
           {rows(upkeep)}
         </Panel>
       )}
@@ -768,6 +791,13 @@ export function AutomationPage() {
     return []
   }, [stored.data])
 
+  const jobSchedules = useMemo<Record<string, string | number>>(() => {
+    const raw = (stored.data?.settings as { job_schedules?: unknown })?.job_schedules
+    return raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, string | number>)
+      : {}
+  }, [stored.data])
+
   const days = useMemo(() => {
     const fmt = new Intl.DateTimeFormat(intlLocaleOf(locale), { weekday: 'long' })
     // 2026-06-01 is a Monday, so index 0 lands on Monday — same base as the
@@ -775,7 +805,7 @@ export function AutomationPage() {
     return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2026, 5, 1 + i)))
   }, [locale])
 
-  const save = async () => {
+  const save = useCallback(async () => {
     setSaving(true)
     setError(null)
     try {
@@ -791,7 +821,49 @@ export function AutomationPage() {
     } finally {
       setSaving(false)
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values])
+
+  /**
+   * Save on its own, shortly after the last edit.
+   *
+   * The Save button was the last place on this page where a change did not
+   * take: the pause switches and the per-job schedules already write
+   * themselves, so an operator who changed the weekday and walked away left it
+   * unsaved next to two controls that had saved instantly. One page, two
+   * rules, and the inconsistent one silently loses the edit.
+   *
+   * Debounced rather than fired per keystroke: typing an address would
+   * otherwise PUT once per character. 900 ms is long enough to finish a word
+   * and short enough that nobody navigates away inside it — and `pagehide`
+   * below closes even that gap.
+   */
+  useEffect(() => {
+    if (!dirty || saving) return
+    const timer = window.setTimeout(() => void save(), 900)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values, dirty])
+
+  /**
+   * The last edit, when the tab is closing.
+   *
+   * `pagehide` and not `beforeunload`: the latter is unreliable on mobile and
+   * asks the browser to prompt. `sendBeacon` because a normal fetch is
+   * cancelled the moment the document goes away — the same reason the page
+   * timer in App.tsx uses it.
+   */
+  useEffect(() => {
+    const flush = () => {
+      if (!dirty) return
+      navigator.sendBeacon?.(
+        `${BASE}/settings`,
+        new Blob([JSON.stringify({ values })], { type: 'application/json' }),
+      )
+    }
+    window.addEventListener('pagehide', flush)
+    return () => window.removeEventListener('pagehide', flush)
+  }, [dirty, values])
 
   const addEmail = () => {
     const address = newEmail.trim()
@@ -824,42 +896,30 @@ export function AutomationPage() {
   const field =
     'border-line focus:border-accent text-ink bg-canvas rounded-md border px-3 py-2 text-sm outline-none transition-colors'
 
-  /*
-    Schedule controls used to be mounted inside the two mail job rows, which
-    made those rows three times the height of the other four and put a form in
-    the middle of a status list. They are three inputs that are edited together
-    and saved together, so they are one card in the settings column now — and
-    the job list is six rows of the same shape again.
-  */
-  const scheduleCard = (
-    <div className="flex flex-wrap items-end gap-3 py-3">
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="daily-time"
-          className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
-        >
-          {t('automation.dailyAt')}
-        </label>
-        <input
-          id="daily-time"
-          type="time"
-          value={values.daily_time}
-          onChange={(e) => set('daily_time', e.target.value)}
-          className={cn(field, 'tabular w-32')}
-        />
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+  const CONTROLS: Record<string, React.ReactNode> = {}
+
+  /* Everything about sending a report that is not a time on a row: which day
+     the weekly one goes out, and who receives both. It is rendered inside the
+     reports band rather than beside it, so one panel answers when, to whom,
+     and how the last run went. */
+  const DELIVERY = (
+    <div className="flex flex-col gap-3 py-3">
+      {/* The weekday is the one scheduling fact a time input cannot
+                  express, so it stays — beside the recipients whose cadence it
+                  decides, separated by a rule rather than boxed. */}
+      <div className="border-line/70 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b pb-3">
         <label
           htmlFor="weekly-day"
-          className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
+          className="text-ink-muted flex min-w-0 flex-col gap-0.5 text-xs"
         >
           {t('automation.weeklyOn')}
+          <span className="text-ink-faint text-[0.625rem]">{t('automation.timesOnRows')}</span>
         </label>
         <select
           id="weekly-day"
           value={values.weekly_day}
           onChange={(e) => set('weekly_day', Number(e.target.value))}
-          className={cn(field, 'w-full capitalize')}
+          className={cn(field, 'w-40 capitalize')}
         >
           {days.map((d, i) => (
             <option key={d} value={i}>
@@ -868,25 +928,116 @@ export function AutomationPage() {
           ))}
         </select>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="weekly-time"
-          className="text-ink-faint text-[0.6875rem] tracking-wide uppercase"
-        >
-          {t('automation.at')}
-        </label>
+
+      <div className="flex items-center gap-2">
         <input
-          id="weekly-time"
-          type="time"
-          value={values.weekly_time}
-          onChange={(e) => set('weekly_time', e.target.value)}
-          className={cn(field, 'tabular w-32')}
+          id="new-email"
+          type="email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              addEmail()
+            }
+          }}
+          placeholder="directeur@aznet.ma"
+          aria-label={t('automation.addEmail')}
+          className={cn(field, 'placeholder:text-ink-faint min-w-0 flex-1')}
         />
+        <button
+          type="button"
+          onClick={addEmail}
+          disabled={!newEmail.trim() || !newEmail.includes('@')}
+          title={t('access.add')}
+          aria-label={t('access.add')}
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-md transition-transform active:translate-y-px',
+            !newEmail.trim() || !newEmail.includes('@')
+              ? 'border-line text-ink-faint cursor-not-allowed border'
+              : 'bg-accent cursor-pointer text-white',
+          )}
+        >
+          <PlusIcon size={15} weight="bold" />
+        </button>
       </div>
+
+      {values.emails.length === 0 ? (
+        /* A red sentence, not the neutral empty state: an automation
+                   with no recipients runs every night and reaches nobody, which
+                   is a fault the page has to look like it is reporting. */
+        <p className="text-status-fail flex items-start gap-2 text-xs">
+          <WarningCircleIcon size={15} weight="fill" className="mt-px shrink-0" />
+          {t('automation.noEmails')}
+        </p>
+      ) : (
+        /* Rows, not bordered cards, and both controls are icons: the
+                   list is short, every entry is the same shape, and the
+                   addresses are the only thing worth reading in it. */
+        <ul className="flex flex-col">
+          {values.emails.map((address) => {
+            const result = testResult?.to === address ? testResult : null
+            return (
+              <li
+                key={address}
+                className="border-line flex items-center gap-2 border-b py-1.5 last:border-b-0"
+              >
+                <span className="text-ink min-w-0 flex-1 truncate text-sm">{address}</span>
+
+                {result && (
+                  <span
+                    title={result.ok ? t('automation.testSent') : t('automation.testFailed')}
+                    className={cn('shrink-0', result.ok ? 'text-status-ok' : 'text-status-fail')}
+                  >
+                    {result.ok ? (
+                      <CheckIcon size={14} weight="bold" />
+                    ) : (
+                      <WarningCircleIcon size={14} weight="fill" />
+                    )}
+                    <span className="sr-only">
+                      {result.ok ? t('automation.testSent') : t('automation.testFailed')}
+                    </span>
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => test(address)}
+                  disabled={testing === address}
+                  title={testing === address ? t('automation.testing') : t('automation.test')}
+                  aria-label={`${t('automation.test')} ${address}`}
+                  className="border-line text-ink-muted hover:text-ink flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border transition-colors active:translate-y-px disabled:opacity-50"
+                >
+                  <PaperPlaneTiltIcon size={12} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    set(
+                      'emails',
+                      values.emails.filter((e) => e !== address),
+                    )
+                  }
+                  aria-label={`${t('access.remove')} ${address}`}
+                  className="text-ink-faint hover:text-status-fail shrink-0 cursor-pointer transition-colors"
+                >
+                  <TrashIcon size={14} />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {/* The API names the missing env vars verbatim on a 422. */}
+      {testResult?.ok === false && testResult.message && (
+        <p className="text-status-fail text-xs break-all">{testResult.message}</p>
+      )}
+
+      <p className="text-ink-faint text-[0.6875rem]">{t('automation.recipientsHint')}</p>
     </div>
   )
-
-  const CONTROLS: Record<string, React.ReactNode> = {}
 
   const ordered = (jobs.data?.jobs ?? [])
     .slice()
@@ -909,7 +1060,12 @@ export function AutomationPage() {
         every housekeeping job. They are side by side now, and the whole page
         fits one screen at 1440.
       */}
-      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,1fr)]">
+      {/* One column. The right-hand column held exactly one panel — when the
+          reports go out and to whom — and that belongs to the reports band
+          itself, not beside it. Two columns existed to separate "status" from
+          "settings", a split this page stopped having the moment every row
+          started carrying its own controls. */}
+      <div className="flex min-w-0 flex-col gap-5">
         <JobsBand
           jobs={jobs}
           ordered={ordered}
@@ -919,169 +1075,43 @@ export function AutomationPage() {
             stored.reload()
           }}
           pausedList={pausedJobs}
-          nightlyTime={values.nightly_time}
+          schedules={jobSchedules}
+          delivery={DELIVERY}
         />
-
-        <div className="flex min-w-0 flex-col gap-4">
-          <Panel title={t('automation.schedule')} index={1}>
-            {scheduleCard}
-          </Panel>
-
-          <Panel
-            title={t('automation.recipients')}
-            aside={values.emails.length || undefined}
-            index={2}
-          >
-            <div className="flex flex-col gap-3 py-3">
-              <div className="flex items-center gap-2">
-                <input
-                  id="new-email"
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addEmail()
-                    }
-                  }}
-                  placeholder="directeur@aznet.ma"
-                  aria-label={t('automation.addEmail')}
-                  className={cn(field, 'placeholder:text-ink-faint min-w-0 flex-1')}
-                />
-                <button
-                  type="button"
-                  onClick={addEmail}
-                  disabled={!newEmail.trim() || !newEmail.includes('@')}
-                  title={t('access.add')}
-                  aria-label={t('access.add')}
-                  className={cn(
-                    'flex size-9 shrink-0 items-center justify-center rounded-md transition-transform active:translate-y-px',
-                    !newEmail.trim() || !newEmail.includes('@')
-                      ? 'border-line text-ink-faint cursor-not-allowed border'
-                      : 'bg-accent cursor-pointer text-white',
-                  )}
-                >
-                  <PlusIcon size={15} weight="bold" />
-                </button>
-              </div>
-
-              {values.emails.length === 0 ? (
-                /* A red sentence, not the neutral empty state: an automation
-                   with no recipients runs every night and reaches nobody, which
-                   is a fault the page has to look like it is reporting. */
-                <p className="text-status-fail flex items-start gap-2 text-xs">
-                  <WarningCircleIcon size={15} weight="fill" className="mt-px shrink-0" />
-                  {t('automation.noEmails')}
-                </p>
-              ) : (
-                /* Rows, not bordered cards, and both controls are icons: the
-                   list is short, every entry is the same shape, and the
-                   addresses are the only thing worth reading in it. */
-                <ul className="flex flex-col">
-                  {values.emails.map((address) => {
-                    const result = testResult?.to === address ? testResult : null
-                    return (
-                      <li
-                        key={address}
-                        className="border-line flex items-center gap-2 border-b py-1.5 last:border-b-0"
-                      >
-                        <span className="text-ink min-w-0 flex-1 truncate text-sm">{address}</span>
-
-                        {result && (
-                          <span
-                            title={
-                              result.ok ? t('automation.testSent') : t('automation.testFailed')
-                            }
-                            className={cn(
-                              'shrink-0',
-                              result.ok ? 'text-status-ok' : 'text-status-fail',
-                            )}
-                          >
-                            {result.ok ? (
-                              <CheckIcon size={14} weight="bold" />
-                            ) : (
-                              <WarningCircleIcon size={14} weight="fill" />
-                            )}
-                            <span className="sr-only">
-                              {result.ok ? t('automation.testSent') : t('automation.testFailed')}
-                            </span>
-                          </span>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => test(address)}
-                          disabled={testing === address}
-                          title={
-                            testing === address ? t('automation.testing') : t('automation.test')
-                          }
-                          aria-label={`${t('automation.test')} ${address}`}
-                          className="border-line text-ink-muted hover:text-ink flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border transition-colors active:translate-y-px disabled:opacity-50"
-                        >
-                          <PaperPlaneTiltIcon size={12} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            set(
-                              'emails',
-                              values.emails.filter((e) => e !== address),
-                            )
-                          }
-                          aria-label={`${t('access.remove')} ${address}`}
-                          className="text-ink-faint hover:text-status-fail shrink-0 cursor-pointer transition-colors"
-                        >
-                          <TrashIcon size={14} />
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-
-              {/* The API names the missing env vars verbatim on a 422. */}
-              {testResult?.ok === false && testResult.message && (
-                <p className="text-status-fail text-xs break-all">{testResult.message}</p>
-              )}
-
-              <p className="text-ink-faint text-[0.6875rem]">{t('automation.recipientsHint')}</p>
-            </div>
-          </Panel>
-        </div>
       </div>
 
       {error && <ErrorState message={error} onRetry={save} />}
 
       {/*
-        Sticky rather than at the end of the page: the schedule controls now live
-        inside job cards further up, and a save button below the fold means an
-        edited time silently not being saved.
+        A status line, not a button. Everything on this page saves itself now,
+        so the bar's job is to say which of the three states the form is in —
+        and to keep saying it in the same place, because a message that moves is
+        a message that gets missed. Sticky for the same reason it always was:
+        an edit made at the top must not report its outcome below the fold.
       */}
-      <div className="bg-canvas border-line sticky bottom-0 flex items-center gap-4 border-t py-4">
-        <button
-          type="button"
-          onClick={save}
-          disabled={!dirty || saving}
-          className={cn(
-            'rounded-md px-4 py-2 text-sm transition-transform active:translate-y-px',
-            !dirty || saving
-              ? 'border-line text-ink-faint cursor-not-allowed border'
-              : 'bg-accent text-white',
-          )}
+      <div className="bg-canvas border-line sticky bottom-0 flex items-center gap-3 border-t py-4">
+        <span
+          // Polite, not assertive: this narrates a background save, and a
+          // screen reader should finish the sentence it is on first.
+          aria-live="polite"
+          className="flex min-h-5 items-center gap-1.5 text-xs"
         >
-          {saving ? t('inbox.saving') : t('inbox.save')}
-        </button>
-        {saved && (
-          <span className="text-status-ok flex items-center gap-1.5 text-xs">
-            <CheckIcon size={13} weight="bold" />
-            {t('inbox.saved')}
-          </span>
-        )}
-        {dirty && !saving && (
-          <span className="text-ink-faint text-xs">{t('automation.unsaved')}</span>
-        )}
+          {saving ? (
+            <span className="text-ink-muted flex items-center gap-1.5">
+              <ArrowClockwiseIcon size={13} className="animate-spin" />
+              {t('inbox.saving')}
+            </span>
+          ) : saved ? (
+            <span className="text-status-ok flex items-center gap-1.5">
+              <CheckIcon size={13} weight="bold" />
+              {t('automation.savedAuto')}
+            </span>
+          ) : dirty ? (
+            <span className="text-ink-faint">{t('automation.savingSoon')}</span>
+          ) : (
+            <span className="text-ink-faint">{t('automation.autoSaveNote')}</span>
+          )}
+        </span>
         <p className="text-ink-faint ms-auto max-w-[46ch] text-end text-xs">
           {t('automation.enforceNote')}
         </p>

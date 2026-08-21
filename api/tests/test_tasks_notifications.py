@@ -684,3 +684,51 @@ def test_a_paused_job_can_still_be_run_by_hand(monkeypatch):
     monkeypatch.setattr(jobs, "_settings_safe", lambda: {"paused_jobs": ["prune_logs"]})
     monkeypatch.setitem(jobs.JOBS, "prune_logs", lambda: {"pruned": 0})
     assert jobs.run("prune_logs")["ok"] is True
+
+
+def test_each_job_carries_its_own_schedule(monkeypatch):
+    """One store, two shapes: a clock for a moment, minutes for a repeat."""
+    row = {"job_schedules": {"profiles": "05:30", "sheet_queue": 15, "daily_report": "19:45"}}
+    monkeypatch.setattr(jobs, "_settings_safe", lambda: row)
+    assert jobs.time_of("profiles", row) == (5, 30)
+    assert jobs.interval_of("sheet_queue", row) == timedelta(minutes=15)
+    assert jobs.time_of("daily_report", row) == (19, 45)
+    # Untouched jobs keep their shipped default rather than becoming unset.
+    assert jobs.time_of("prune_logs", row) == (3, 0)
+    assert jobs.interval_of("watch_alerts", row) == timedelta(minutes=1)
+
+
+def test_an_unusable_interval_falls_back_instead_of_firing_every_tick(monkeypatch):
+    """A zero would make the job due on every 30 s tick.
+
+    For the message retry that means hammering a provider that is already
+    failing, so an unusable value keeps the default rather than being obeyed —
+    and rather than disabling the job, which would stop the queue draining.
+    """
+    for bad in (0, -5, "", "soon", None):
+        row = {"job_schedules": {"message_queue": bad}}
+        assert jobs.interval_of("message_queue", row) == timedelta(
+            seconds=jobs.MESSAGE_RETRY_SECONDS
+        )
+
+
+def test_the_label_follows_the_live_schedule(monkeypatch):
+    """The panel prints what will happen, not what the constants once said."""
+    monkeypatch.setattr(
+        jobs, "_settings_safe",
+        lambda: {"job_schedules": {"sheet_queue": 90, "profiles": "04:15"}},
+    )
+    assert jobs._schedule_label("sheet_queue") == "toutes les 90 min"
+    assert jobs._schedule_label("profiles") == "chaque nuit à 04:15"
+
+
+def test_the_alert_watch_cannot_be_slowed_down(monkeypatch):
+    """Its schedule is a property of what it is for, not a preference.
+
+    A shortage noticed an hour late is a shortage nobody acted on, so an
+    override — stored before it was fixed, or written straight into
+    `app_settings` — is ignored rather than obeyed.
+    """
+    row = {"job_schedules": {"watch_alerts": 240}}
+    assert jobs.interval_of("watch_alerts", row) == timedelta(minutes=1)
+    assert "watch_alerts" in jobs.FIXED_SCHEDULE

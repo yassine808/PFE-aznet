@@ -986,6 +986,19 @@ def status() -> List[dict]:
             # showing a schedule that is not going to happen.
             "group": group_of(name),
             "paused": is_paused(name, row),
+            # What kind of control the row should show, and what it holds now.
+            # Decided here so the page never has to know which jobs run on a
+            # clock and which repeat — a second copy of that list would drift.
+            "kind": "interval" if is_interval_job(name) else "time",
+            # False hides the row's schedule control: this job's timing is a
+            # property of what it is for, not a preference.
+            "editable": name not in FIXED_SCHEDULE,
+            "every_minutes": (
+                round((interval_of(name, row) or timedelta()).total_seconds() / 60, 2)
+                if is_interval_job(name)
+                else None
+            ),
+            "at": (lambda t: f"{t[0]:02d}:{t[1]:02d}" if t else None)(time_of(name, row)),
         }
         for name in JOBS
     ]
@@ -995,22 +1008,35 @@ DAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanch
 
 
 def _schedule_label(name: str) -> str:
-    if name == "message_queue":
-        return "toutes les %s s" % MESSAGE_RETRY_SECONDS
-    if name == "sheet_queue":
-        return f"toutes les {DRAIN_INTERVAL_MINUTES} min"
-    if name in ("refill_articles", "watch_alerts"):
-        return "toutes les heures"
-    if name == "reminders":
-        return "chaque minute"
-    if name in ("prune_logs", "profiles"):
-        h, m = nightly_hhmm()
-        return f"chaque nuit à {h:02d}:{m:02d}"
+    """The sentence the panel prints. Derived from the live schedule, never
+    from the constants, or an operator's change would be invisible until
+    somebody edited this function to match."""
     row = _settings_safe()
+    every = interval_of(name, row)
+    if every is not None:
+        seconds = int(every.total_seconds())
+        if seconds < 60:
+            return f"toutes les {seconds} s"
+        minutes = seconds // 60
+        if minutes == 1:
+            return "chaque minute"
+        if minutes % 60 == 0:
+            hours = minutes // 60
+            return "toutes les heures" if hours == 1 else f"toutes les {hours} h"
+        return f"toutes les {minutes} min"
+    if name in NIGHTLY_JOBS:
+        h, m = time_of(name, row) or (NIGHTLY_HOUR, 0)
+        return f"chaque nuit à {h:02d}:{m:02d}"
+    # Through `time_of`, not off `daily_time` directly: a per-job schedule set
+    # on the row was already being obeyed by `_due` while this label still
+    # printed the old setting, so the panel said 18:30 about a report that
+    # would go at 19:15. A schedule an operator cannot see is one they cannot
+    # trust.
+    h, m = time_of(name, row) or (18, 30)
     if name == "daily_report":
-        return f"du lundi au samedi à {row.get('daily_time') or '18:30'}"
+        return f"du lundi au samedi à {h:02d}:{m:02d}"
     day = DAYS_FR[_weekly_day(row)]
-    return f"chaque {day} à {row.get('weekly_time') or '17:00'}"
+    return f"chaque {day} à {h:02d}:{m:02d}"
 
 
 def _weekly_day(row: dict) -> int:
@@ -1063,6 +1089,89 @@ def group_of(name: str) -> str:
 PAUSED_KEY = "paused_jobs"
 
 
+#: name -> the operator's own schedule for that job.
+#:
+#: One key for all nine rather than a setting per job, for the same reason
+#: `paused_jobs` is one key: the set of jobs changes — six became nine this
+#: month — and a column each would need a migration every time one is added.
+#:
+#: The value's shape follows the job's kind, because the two kinds answer
+#: different questions. A job that runs at a moment stores `"HH:MM"`; a job
+#: that runs *repeatedly* stores a number of minutes. Asking "at what time
+#: should the retry queue drain?" has no answer, and asking "how often should
+#: the daily report be sent?" has a misleading one.
+SCHEDULES_KEY = "job_schedules"
+
+#: The nightly pair: they run at a clock time rather than on an interval.
+NIGHTLY_JOBS = ("prune_logs", "profiles")
+
+#: Jobs whose schedule is not the operator's to set, and which therefore show
+#: no control on their row.
+#:
+#: `watch_alerts` is the only one: it is the thing that notices a shortage, and
+#: a shortage noticed an hour late is a shortage nobody acted on. Its cost is
+#: already bounded by two caches — `stock.assess` holds its findings for 120 s
+#: and `sheets.read_tab_cached` holds a tab for 30 s — so running every minute
+#: does not mean reading every site every minute. The bell still rings once per
+#: *state*, never once per run.
+FIXED_SCHEDULE = ("watch_alerts",)
+
+
+def schedules(row: Optional[dict] = None) -> dict:
+    row = _settings_safe() if row is None else row
+    value = row.get(SCHEDULES_KEY) or {}
+    return value if isinstance(value, dict) else {}
+
+
+def is_interval_job(name: str) -> bool:
+    return name in _INTERVALS
+
+
+def interval_of(name: str, row: Optional[dict] = None) -> Optional[timedelta]:
+    """How often this job repeats, the operator's value winning over the default.
+
+    Guarded rather than trusted: a zero or a negative would make `_due` true on
+    every 30 s tick, which for the message retry means hammering a provider
+    that is already failing. Anything unusable falls back to the shipped
+    default instead of disabling the job — a schedule nobody can parse should
+    not silently stop the queue from draining.
+    """
+    base = _INTERVALS.get(name)
+    if base is None:
+        return None
+    if name in FIXED_SCHEDULE:
+        # Not configurable, so a stored override from before it was fixed — or
+        # one written straight into `app_settings` — cannot slow it down.
+        return base
+    raw = schedules(row).get(name)
+    try:
+        minutes = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return base
+    return timedelta(minutes=minutes) if minutes >= 1 else base
+
+
+def time_of(name: str, row: Optional[dict] = None) -> Optional[tuple]:
+    """(hour, minute) for a job that runs at a moment, or None if it repeats.
+
+    The report bands keep reading `daily_time` / `weekly_time` when no per-job
+    value is set: those two settings predate this one and are what the existing
+    rows in `app_settings` hold, so ignoring them would silently move a
+    configured report back to its default the day this shipped.
+    """
+    row = _settings_safe() if row is None else row
+    if is_interval_job(name):
+        return None
+    own = schedules(row).get(name)
+    if own:
+        return _hhmm(own, (NIGHTLY_HOUR, 0))
+    if name == "daily_report":
+        return _hhmm(row.get("daily_time"), (18, 30))
+    if name == "weekly_report":
+        return _hhmm(row.get("weekly_time"), (17, 0))
+    return _hhmm(row.get("nightly_time"), (NIGHTLY_HOUR, 0))
+
+
 def paused_jobs(row: Optional[dict] = None) -> set:
     row = _settings_safe() if row is None else row
     value = row.get(PAUSED_KEY) or []
@@ -1083,25 +1192,12 @@ def is_paused(name: str, row: Optional[dict] = None) -> bool:
     return name in paused_jobs(row)
 
 
-def nightly_hhmm(row: Optional[dict] = None) -> tuple:
-    """When the nightly upkeep band runs. 03:00 unless an operator moved it.
-
-    Configurable because 03:00 is a guess about when nobody is sending, and
-    that guess belongs to whoever runs the company: a crew working nights wants
-    the profile rebuild somewhere else entirely.
-    """
-    row = _settings_safe() if row is None else row
-    return _hhmm(row.get("nightly_time"), (NIGHTLY_HOUR, 0))
-
-
 #: Jobs that simply run every so often, and how often.
 _INTERVALS = {
     "message_queue": timedelta(seconds=MESSAGE_RETRY_SECONDS),
     "sheet_queue": timedelta(minutes=DRAIN_INTERVAL_MINUTES),
     "refill_articles": timedelta(hours=1),
-    # Hourly: a stock level moves at the speed of a working day, and the
-    # assessment costs a Sheets read per site on a free quota.
-    "watch_alerts": timedelta(hours=1),
+    "watch_alerts": timedelta(minutes=1),
     "reminders": timedelta(seconds=REMINDER_INTERVAL_SECONDS),
 }
 
@@ -1114,11 +1210,12 @@ def _due(now: datetime, last: Optional[datetime], name: str) -> bool:
     row = _settings_safe()
     if is_paused(name, row):
         return False
-    every = _INTERVALS.get(name)
+    every = interval_of(name, row)
     if every is not None:
         return last is None or now - last >= every
-    if name in ("prune_logs", "profiles"):
-        at = nightly_hhmm(row)
+    if name in NIGHTLY_JOBS:
+        at = time_of(name, row)
+        assert at is not None
         # Same shape as the report bands below: due once the minute has passed,
         # once per day. Comparing `now.hour == HOUR` alone missed the band
         # entirely whenever the tick straddled the hour.
@@ -1140,11 +1237,11 @@ def _report_time(now: datetime, name: str) -> Optional[tuple]:
         # again next week's same day, which is exactly what we want.
         if now.weekday() != _weekly_day(row):
             return None
-        return _hhmm(row.get("weekly_time"), (17, 0))
+        return time_of(name, row)
     # daily_report: Monday–Saturday, once per day
     if now.weekday() == 6:  # Sunday: no site work, no report
         return None
-    return _hhmm(row.get("daily_time"), (18, 30))
+    return time_of(name, row)
 
 
 def _seed_last_run() -> Dict[str, Optional[datetime]]:

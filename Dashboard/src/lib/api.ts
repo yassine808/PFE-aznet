@@ -728,9 +728,20 @@ export interface JobStatus {
    *  the page and the scheduler cannot disagree about what "pause the reports"
    *  means. */
   group?: 'reports' | 'upkeep'
-  /** Its band is paused: the scheduler will not start it. Running it by hand
-   *  still works — "do not run this on its own" is not "never run this". */
+  /** Paused: the scheduler will not start it. Running it by hand still works —
+   *  "do not run this on its own" is not "never run this". */
   paused?: boolean
+  /** How this job is scheduled, decided server-side: `time` runs at a moment,
+   *  `interval` repeats. The page never has to know which is which — a second
+   *  copy of that list would drift from the scheduler's. */
+  kind?: 'time' | 'interval'
+  /** Its repeat, in minutes. Null on a `time` job. */
+  every_minutes?: number | null
+  /** Its clock time as `HH:MM`. Null on an `interval` job. */
+  at?: string | null
+  /** False when the schedule is a property of what the job is for rather than
+   *  a preference — the row then shows the schedule without a control. */
+  editable?: boolean
   last: {
     ok: boolean
     at: string
@@ -770,10 +781,11 @@ export interface AppSettings {
   /** Ordre des moteurs STT, ex. `groq,gemini,local`. Écriture directeur
    *  uniquement — l'API renvoie 403 sinon, et 422 sur un moteur inconnu. */
   stt_chain?: string
-  /** Heure de la bande de nuit (purge des journaux, profils). 03:00 par
-   *  défaut — une supposition sur l'heure où personne n'envoie, qui appartient
-   *  à celui qui fait tourner l'entreprise. */
-  nightly_time?: string
+  /** Horaire propre à chaque tâche : `"HH:MM"` pour celles qui tournent à un
+   *  moment, un nombre de minutes pour celles qui se répètent. Une seule clé
+   *  pour les neuf — le nombre de tâches change, une colonne par tâche
+   *  demanderait une migration à chaque ajout. */
+  job_schedules?: Record<string, string | number>
   /** Tâches suspendues, par nom. L'ordonnanceur ne les lance plus ; une
    *  exécution manuelle reste possible — « ne pas lancer tout seul » n'est pas
    *  « ne plus jamais lancer ». Une liste plutôt qu'un drapeau par bande :
