@@ -169,7 +169,9 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
           The report is the artefact; the tiles above are its index, and
           correcting it happens on the Reports page, where a report is chosen
           from the list rather than from a date picker. */}
-      <LastReportDocx kind="daily" period={date} reloadToken={reloadToken} />
+      <LastReportDocx kind="daily" period={date} reloadToken={reloadToken}
+        editHref={`#/reports?period=${encodeURIComponent(date)}`}
+      />
 
     </motion.div>
   )

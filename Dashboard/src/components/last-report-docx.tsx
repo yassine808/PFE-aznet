@@ -1,4 +1,9 @@
-import { DownloadSimpleIcon, FileDocIcon, FileDashedIcon } from '@phosphor-icons/react'
+import {
+  DownloadSimpleIcon,
+  FileDashedIcon,
+  FileDocIcon,
+  PencilSimpleIcon,
+} from '@phosphor-icons/react'
 import {
   api,
   periodDocxUrl,
@@ -31,6 +36,7 @@ export function LastReportDocx({
   period,
   managerId = -1,
   reloadToken = 0,
+  editHref,
 }: {
   readonly kind: 'daily' | 'weekly'
   readonly period: string
@@ -42,6 +48,10 @@ export function LastReportDocx({
    *  that just stored a new version replaces the document on screen instead of
    *  leaving the button looking like it did nothing. */
   readonly reloadToken?: number
+  /** Where correcting this report happens. Daily and Weekly only show the
+   *  document now, so without this the way to fix a wrong figure is to know
+   *  that the Reports page exists and to find the same report in its list. */
+  readonly editHref?: string
 }) {
   const { t } = useI18n()
   // The index without bodies: this panel needs one id and one label, and the
@@ -78,19 +88,30 @@ export function LastReportDocx({
 
   return (
     <section className="border-line bg-surface edge flex flex-col gap-3 rounded-xl border p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-ink-faint flex items-center gap-2 text-[0.6875rem] font-medium tracking-wide uppercase">
           <FileDocIcon size={13} />
           {label}
         </h2>
-        <a
-          href={version ? reportVersionDocxUrl(version.id, true) : src}
-          download
-          className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
-        >
-          <DownloadSimpleIcon size={13} />
-          {t('editor.downloadDocx')}
-        </a>
+        <div className="ms-auto flex flex-wrap items-center gap-2">
+          {editHref && (
+            <a
+              href={editHref}
+              className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
+            >
+              <PencilSimpleIcon size={13} />
+              {t('editor.edit')}
+            </a>
+          )}
+          <a
+            href={version ? reportVersionDocxUrl(version.id, true) : src}
+            download
+            className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
+          >
+            <DownloadSimpleIcon size={13} />
+            {t('editor.downloadDocx')}
+          </a>
+        </div>
       </div>
       <DocxView src={src} />
     </section>

@@ -257,7 +257,9 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
       {/* Same swap as the Daily page: the week's own document, instead of two
           browser-side recomputations of what it already says and of the text
           editor that used to open under them after Générer. */}
-      <LastReportDocx kind="weekly" period={label} reloadToken={reloadToken} />
+      <LastReportDocx kind="weekly" period={label} reloadToken={reloadToken}
+        editHref={`#/reports?period=${encodeURIComponent(label)}`}
+      />
     </motion.div>
   )
 }

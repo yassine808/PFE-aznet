@@ -36,7 +36,7 @@ function keyOf(g: GeneratedReport): string {
  * Under `lg` the pane moves below the list rather than beside it: at that width
  * a two-column split leaves neither column able to hold a paragraph.
  */
-export function ReportsPage() {
+export function ReportsPage({ initialPeriod }: { readonly initialPeriod?: string }) {
   const { t, locale } = useI18n()
   const { settings } = useSettings()
   const generated = useApi(
@@ -86,7 +86,11 @@ export function ReportsPage() {
   // The pane always shows something as long as the list does: an explicit
   // selection when there is one, otherwise the newest report in view. A blank
   // pane next to a full list reads as a loading failure.
-  const open = shown.find((g) => keyOf(g) === openKey) ?? shown[0] ?? null
+  // An explicit click wins; then the period a "Corriger" link asked for; then
+  // the newest report in view. The deep link is only a *default* — once the
+  // operator picks a row, a stale URL must not fight them for the pane.
+  const requested = initialPeriod ? shown.find((g) => g.period === initialPeriod) : undefined
+  const open = shown.find((g) => keyOf(g) === openKey) ?? requested ?? shown[0] ?? null
 
   if (generated.error) return <ErrorState message={generated.error} onRetry={generated.reload} />
 

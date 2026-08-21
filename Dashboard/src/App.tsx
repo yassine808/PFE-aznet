@@ -119,7 +119,10 @@ function RouteView({
     case 'inbox':
       return <InboxPage initialDate={params.date} initialMsg={params.msg} />
     case 'reports':
-      return <ReportsPage />
+      // `?period=2026-08-20` is the "Corriger ce rapport" link on the Daily and
+      // Weekly pages: those pages only *show* the document, and the correction
+      // has to land on this report rather than on the newest one in the list.
+      return <ReportsPage initialPeriod={params.period} />
     // Both take their period from the URL so the "Ouvrir le rapport" button in
     // the report mail lands on that exact day or week, not on today's.
     case 'daily':
