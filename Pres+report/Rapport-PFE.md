@@ -1183,9 +1183,10 @@ Le **Tableau 4.1** récapitule l'environnement de développement.
 | Git / GitHub Actions | Versionnage, intégration continue (18 contrôles), Dependabot, analyse SonarCloud |
 | PyTorch 2.5 / CUDA / transformers | Banc d'essai local sur GPU |
 | Groq API, Google AI Studio, Hugging Face | Inférence (offres gratuites) |
+| Obsidian | Base de connaissances du projet (§4.2.2), en Markdown dans le dépôt |
 
 
-Le dépôt est organisé en modules : `api/` (service), `Dashboard/` (tableau de bord), `n8n/` (workflow exporté et documentation), `benchmark/` (banc d'essai), `docs/` (cahier des charges, guides).
+Le dépôt est organisé en modules : `api/` (service), `Dashboard/` (tableau de bord), `n8n/` (workflow exporté et documentation), `benchmark/` (banc d'essai), `docs/` (cahier des charges, guides), `vault/` (base de connaissances, §4.2.2) et `Pres+report/` (source de ce document et du diaporama).
 
 ### 4.2.1 Déploiement : une seule origine
 
@@ -1207,6 +1208,31 @@ La **Figure 4.1** donne la topologie de déploiement retenue.
 ::: {custom-style="FigureCaption"}
 **Figure 4.1 :** Topologie de déploiement. Un seul service publie un port ; tout le reste n'existe que sur le réseau interne de la pile. C'est cette forme unique — identique en local, derrière le tunnel et sur le serveur — qui rend les questions d'origines croisées sans objet.
 :::
+
+
+### 4.2.2 La base de connaissances du projet
+
+Un projet de six mois produit deux sortes de savoir. Le premier tient dans le code et se relit : une fonction dit ce qu'elle fait. Le second ne tient nulle part — pourquoi cette chaîne de moteurs et pas une autre, ce qui a été essayé puis abandonné, ce qui casse si l'on touche à tel réglage — et c'est celui qui disparaît en premier. Le rapport en garde la partie défendable ; le reste vivait dans la mémoire du développeur, ce qui n'est pas un endroit.
+
+Le dépôt porte donc un **coffre Obsidian** (`vault/`) : **dix-huit notes**, environ **10 200 mots**, reliées entre elles par **79 liens internes**. Ce ne sont pas des chapitres en attente. Chaque note répond à une question opérationnelle — `architecture`, `extraction-pipeline`, `stt-benchmark`, `n8n-workflows`, `monitoring-observability`, `troubleshooting-runbook`, `security-secrets`, `testing-strategy` — et porte un en-tête structuré (`tags`, `type`, `priority`, `status`) qui permet de retrouver, par exemple, tout ce qui est marqué `status: current` et `priority: high`.
+
+Trois décisions le distinguent d'une simple prise de notes.
+
+**Il est versionné avec le code.** Les notes sont du Markdown dans le dépôt, révisées dans la même demande de fusion que le code qu'elles décrivent. Une base de connaissances hébergée ailleurs se désynchronise le jour où quelqu'un est pressé ; celle-ci ne peut pas plus dériver que le code lui-même, parce qu'elle voyage dans le même commit. Seule la configuration locale de l'éditeur (`.obsidian/`) est exclue : elle décrit une machine, pas un projet.
+
+**Il est relié, non hiérarchisé.** Les 79 liens `[[note]]` remplacent l'arborescence de dossiers qu'on aurait sinon construite, et qui aurait obligé à ranger `google-sheets-integration` sous « intégrations » ou sous « données » — un choix arbitraire fait une fois, subi ensuite. Un lecteur arrive par n'importe quelle note et suit les liens vers ce qui la contredit ou la complète, ce qui est la façon dont on lit vraiment une documentation technique : par question, pas par plan.
+
+**Il ne dit pas la même chose que les deux autres documents.** Le projet en compte trois, et leur séparation est délibérée :
+
+| Document | Public | Question à laquelle il répond |
+|---|---|---|
+| `CLAUDE.md` | l'assistant de développement | Quelles décisions ne doivent **pas** être re-prises ? |
+| `vault/` | le développeur suivant | Comment cette partie fonctionne-t-elle, et pourquoi ainsi ? |
+| Ce rapport | le jury | Qu'a-t-on construit, et qu'est-ce qui le justifie ? |
+
+Écrire une seule fois pour ces trois lecteurs produirait un texte qu'aucun des trois ne lit. Le coffre a d'ailleurs servi de brouillon à plusieurs sections de ce rapport — la comparaison des moteurs de transcription y était rangée avant d'être défendue au §4.3 — mais il reste ce qu'il est : la mémoire de travail du projet, pas sa vitrine.
+
+Il porte enfin sa propre part de dette, et il faut le dire : `vault/to-do.md` a vieilli plus vite que le reste, parce qu'une note d'état se périme là où une note d'explication ne se périme pas. C'est précisément pour cette raison que le suivi des tâches a fini par vivre dans `TO-DO.md` et `FIXED.md`, à la racine du dépôt et de son dossier de rédaction — deux fichiers, l'un pour ce qui reste, l'autre pour ce qui est fait, avec le raisonnement qui accompagnait chaque décision au moment où elle a été prise.
 
 
 ## 4.3 Les bancs d'essai comparatifs
