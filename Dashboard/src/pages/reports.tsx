@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import {
   ArchiveIcon,
   BuildingsIcon,
+  PencilSimpleIcon,
   CalendarBlankIcon,
   CalendarDotsIcon,
   MagnifyingGlassIcon,
@@ -208,7 +209,10 @@ export function ReportsPage({ initialPeriod }: { readonly initialPeriod?: string
             ))}
           </ul>
 
-          {open && <ReportPane g={open} fmt={dt} />}
+          {/* Keyed on the report so the pane is a fresh component per report:
+              its "corriger" state is about *this* report, and inheriting it
+              from the previous one would open an editor nobody asked for. */}
+          {open && <ReportPane key={keyOf(open)} g={open} fmt={dt} />}
         </div>
       )}
     </motion.div>
@@ -278,6 +282,11 @@ function ReportPane({
 }) {
   const { t } = useI18n()
   const weekly = g.period_type === 'weekly'
+  // Closed on every report, deliberately not remembered: opening one report to
+  // correct it says nothing about the next one, and a pane that opens straight
+  // into an editor because of a click three reports ago is a pane that has
+  // stopped answering "what does this report say".
+  const [editing, setEditing] = useState(false)
 
   return (
     <motion.article
@@ -314,22 +323,49 @@ function ReportPane({
         </div>
       </header>
 
-      {/* The document first, because it is the thing that was sent. The editor
-          under it is now the only place in the app where a report can be
-          corrected — the Daily and Weekly pages became read-only views of the
-          document — so it stays, with its own copy of the preview suppressed. */}
-      <div className="flex flex-col gap-4 p-4">
-        <LastReportDocx kind={weekly ? 'weekly' : 'daily'} period={g.period} managerId={g.manager_id} />
+      {/* The document, and only the document. The editor used to sit open
+          underneath it, which put the same report on the screen twice in two
+          different shapes — and the reader's first job became working out which
+          of the two the director had actually received.
 
-        <ReportEditor
-          showDocument={false}
+          It is still here, because this page is the only place in the app where
+          a report can be corrected (Daily and Weekly are read-only views of the
+          document). It is just closed until somebody says they want to change
+          something: reading is what this pane is for, and correcting is the
+          exception that has to be asked for. */}
+      <div className="flex flex-col gap-4 p-4">
+        <LastReportDocx
           kind={weekly ? 'weekly' : 'daily'}
           period={g.period}
-          objet={g.objet}
-          corps={g.corps}
-          generatedBy={g.generated_by}
           managerId={g.manager_id}
         />
+
+        <div>
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            aria-expanded={editing}
+            className={cn(
+              'focus-visible:ring-accent flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2 active:translate-y-px',
+              editing ? 'border-accent text-accent' : 'border-line text-ink-muted hover:text-ink',
+            )}
+          >
+            <PencilSimpleIcon size={13} />
+            {editing ? t('nav.close') : t('editor.edit')}
+          </button>
+        </div>
+
+        {editing && (
+          <ReportEditor
+            showDocument={false}
+            kind={weekly ? 'weekly' : 'daily'}
+            period={g.period}
+            objet={g.objet}
+            corps={g.corps}
+            generatedBy={g.generated_by}
+            managerId={g.manager_id}
+          />
+        )}
       </div>
     </motion.article>
   )
