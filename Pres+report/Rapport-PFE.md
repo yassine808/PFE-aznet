@@ -76,7 +76,7 @@ Enfin, je remercie ma famille et mes proches pour leur soutien constant durant l
 
 Dans le secteur du câblage réseau, le suivi de l'activité des techniciens repose encore largement sur des comptes rendus oraux ou manuscrits, hétérogènes et difficiles à exploiter. Ce projet de fin d'études, réalisé au sein de l'entreprise AZNET, automatise la production des rapports journaliers de chantier. Le technicien envoie, en fin de journée, une simple note vocale en arabe marocain (darija) — ou une photo de relevé — via Telegram ou WhatsApp ; le système transcrit l'audio, en extrait les données métier typées (mètres de goulotte, de câble préparé et installé, prises bureau, prises panneau, prises testées, mètres de fibre, interconnexions, brins optiques, étages et ailes concernés, stock, remarques), reformule le tout en un résumé professionnel en français, écrit la ligne dans le journal de chantier Google Sheets correspondant et notifie l'encadrement.
 
-L'architecture retenue est hybride : une plateforme d'orchestration low-code (n8n, 64 nœuds) assure la réception multicanale et les intégrations, tandis qu'un microservice développé en Python/FastAPI (82 routes, 14 932 lignes) prend en charge la transcription, l'extraction structurée par grands modèles de langage, la reformulation, la tenue du journal, l'ordonnancement des tâches périodiques et le service du tableau de bord. Un tableau de bord React (15 552 lignes) trilingue français/anglais/arabe complète l'ensemble. La méthodologie suivie est une démarche agile de type Scrum allégé.
+L'architecture retenue est hybride : une plateforme d'orchestration low-code (n8n, 64 nœuds) assure la réception multicanale et les intégrations, tandis qu'un microservice développé en Python/FastAPI (85 routes, 15 380 lignes) prend en charge la transcription, l'extraction structurée par grands modèles de langage, la reformulation, la tenue du journal, l'ordonnancement des tâches périodiques et le service du tableau de bord. Un tableau de bord React (16 139 lignes) trilingue français/anglais/arabe complète l'ensemble. La méthodologie suivie est une démarche agile de type Scrum allégé.
 
 Un banc d'essai comparatif de **treize** moteurs de transcription du darija — trois par API et douze en local sur GPU — a été conduit et a renversé l'hypothèse initiale : la **référence d'exactitude** n'est pas le service commercial de référence, mais un modèle open-source affiné sur le darija, `BounharAbdelaziz/Morocco-Darija-STT-large`, seul à préserver simultanément les quantités numériques et les emprunts techniques français dont dépend l'intégralité du schéma métier. Son coût — 7,7 s et 4 Go de mémoire graphique — lui vaut en production la position de repli au sein d'une chaîne de trois moteurs, arbitrage explicité au §4.3.5. La chaîne complète, de la note vocale à la réponse de confirmation, est opérationnelle depuis la phase de développement du cœur IA, une phase avant la date prévue. [À COMPLÉTER : résultats chiffrés du pilote en conditions réelles]
 
@@ -86,7 +86,7 @@ Un banc d'essai comparatif de **treize** moteurs de transcription du darija — 
 
 In the network cabling industry, tracking technicians' daily activity still relies heavily on oral or handwritten reports, which are inconsistent and hard to exploit. This graduation project, carried out at AZNET, automates the production of daily site reports. At the end of the day a technician sends a plain voice note in Moroccan Arabic (Darija) — or a photo of a hand-written tally — through Telegram or WhatsApp; the system transcribes the audio, extracts typed business data (metres of cable tray, of prepared and installed cable, office sockets, patch-panel sockets, tested sockets, metres of fibre, interconnections, optical strands, floors and wings involved, stock, remarks), rewrites everything into a professional French summary, writes the row into the matching Google Sheets site journal, and notifies management.
 
-The chosen architecture is hybrid: a low-code orchestration platform (n8n, 64 nodes) handles multi-channel reception and integrations, while a custom Python/FastAPI microservice (82 routes, 14,932 lines) performs transcription, LLM-based structured extraction, rewriting, journal bookkeeping, job scheduling and dashboard serving. A trilingual French/English/Arabic React dashboard (15,552 lines) completes the system. The project follows a lightweight Scrum methodology.
+The chosen architecture is hybrid: a low-code orchestration platform (n8n, 64 nodes) handles multi-channel reception and integrations, while a custom Python/FastAPI microservice (85 routes, 15,380 lines) performs transcription, LLM-based structured extraction, rewriting, journal bookkeeping, job scheduling and dashboard serving. A trilingual French/English/Arabic React dashboard (16,139 lines) completes the system. The project follows a lightweight Scrum methodology.
 
 A comparative benchmark of **thirteen** Darija speech-to-text engines — three via API and twelve locally on GPU — was carried out and overturned the initial hypothesis: the **accuracy reference** is not the leading commercial service but an open-source Darija fine-tune, `BounharAbdelaziz/Morocco-Darija-STT-large`, the only one preserving both numeric quantities and the French technical loanwords on which the entire business schema depends. Its cost — 7.7 s and 4 GB of GPU memory — places it in production as the fallback within a three-engine chain, a trade-off set out in §4.3.5. The full chain, from voice note to confirmation reply, has been operational since the core-AI phase, one phase ahead of the plan. [TO BE COMPLETED: field-pilot figures]
 
@@ -95,7 +95,7 @@ A comparative benchmark of **thirteen** Darija speech-to-text engines — three 
 ```{=openxml}
 <w:p><w:pPr><w:pStyle w:val="Heading1"/><w:bidi/><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial"/></w:rPr><w:t>ملخص</w:t></w:r></w:p>
 <w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">في قطاع التمديدات الشبكية، لا يزال تتبع النشاط اليومي للتقنيين يعتمد إلى حد كبير على تقارير شفوية أو مكتوبة بخط اليد، غير متجانسة ويصعب استغلالها. يقوم مشروع نهاية الدراسة هذا، المنجز داخل شركة AZNET، بأتمتة إعداد التقارير اليومية للأوراش. يرسل التقني في نهاية اليوم رسالة صوتية بسيطة بالدارجة المغربية — أو صورة لكشف مكتوب بخط اليد — عبر تيليغرام أو واتساب؛ فيقوم النظام بتحويل الصوت إلى نص، واستخراج المعطيات المهنية المصنّفة (أمتار القنوات، الكابلات المحضّرة والمركّبة، مآخذ المكاتب، مآخذ اللوحات، المآخذ المختبرة، أمتار الألياف، الوصلات البينية، الشعيرات البصرية، الطوابق والأجنحة المعنية، المخزون، الملاحظات)، ثم إعادة صياغتها في ملخص مهني بالفرنسية، وتسجيل السطر في دفتر الورش المناسب على Google Sheets وإشعار المسؤولين.</w:t></w:r></w:p>
-<w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">تعتمد البنية المختارة على مقاربة هجينة: منصة أتمتة منخفضة البرمجة (n8n، 64 عقدة) تتكفل بالاستقبال عبر قناتين وبالتكاملات، بينما تتولى خدمة مصغرة مطوّرة بلغة Python/FastAPI (82 مسارًا، 14932 سطرًا) تحويل الصوت إلى نص، والاستخراج المهيكل بواسطة النماذج اللغوية الكبيرة، وإعادة الصياغة، ومسك الدفتر، وجدولة المهام الدورية، وخدمة لوحة القيادة. وتكتمل المنظومة بلوحة قيادة React (15552 سطرًا) بثلاث لغات: الفرنسية والإنجليزية والعربية.</w:t></w:r></w:p>
+<w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">تعتمد البنية المختارة على مقاربة هجينة: منصة أتمتة منخفضة البرمجة (n8n، 64 عقدة) تتكفل بالاستقبال عبر قناتين وبالتكاملات، بينما تتولى خدمة مصغرة مطوّرة بلغة Python/FastAPI (85 مسارًا، 15380 سطرًا) تحويل الصوت إلى نص، والاستخراج المهيكل بواسطة النماذج اللغوية الكبيرة، وإعادة الصياغة، ومسك الدفتر، وجدولة المهام الدورية، وخدمة لوحة القيادة. وتكتمل المنظومة بلوحة قيادة React (16139 سطرًا) بثلاث لغات: الفرنسية والإنجليزية والعربية.</w:t></w:r></w:p>
 <w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">وقد أُجري اختبار مقارن لـ</w:t></w:r><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/><w:b/><w:bCs/></w:rPr><w:t xml:space="preserve">ثلاثة عشر</w:t></w:r><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve"> محركًا للتعرف على الكلام بالدارجة، ثلاثة عبر واجهات برمجية واثنا عشر محليًا على بطاقة رسومية، فقلب الفرضية الأولية: المرجع في الدقة ليس الخدمة التجارية المرجعية، بل نموذج مفتوح المصدر مُدرَّب على الدارجة، </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:szCs w:val="20"/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">BounharAbdelaziz/Morocco-Darija-STT-large</w:t></w:r><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">، وهو الوحيد الذي يحافظ في آن واحد على الكميات الرقمية وعلى المصطلحات التقنية الفرنسية المقترضة التي يقوم عليها المخطط المهني بأكمله. غير أن كلفته، 7,7 ثانية وقرابة أربعة غيغابايت من ذاكرة بطاقة الرسوميات، تجعله في التشغيل الفعلي محرك الاحتياط داخل سلسلة من ثلاثة محركات، وهي مفاضلة مشروحة في القسم 4.3.5. والسلسلة الكاملة، من الرسالة الصوتية إلى رد التأكيد، تشتغل منذ مرحلة تطوير نواة الذكاء الاصطناعي، أي قبل الموعد المقرر بمرحلة كاملة. [يُستكمل: النتائج الرقمية للتجربة الميدانية]</w:t></w:r></w:p>
 <w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/><w:b/><w:bCs/></w:rPr><w:t xml:space="preserve">الكلمات المفاتيح:</w:t></w:r><w:r><w:rPr><w:rtl/><w:rFonts w:cs="Arial" w:ascii="Arial" w:hAnsi="Arial"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve"> التعرف على الكلام، الدارجة، النماذج اللغوية الكبيرة، استخراج المعلومات، أتمتة سير العمل، لغة قليلة الموارد.</w:t></w:r></w:p>
 ```
@@ -453,7 +453,7 @@ Le **Tableau 2.3** situe le besoin d'AZNET face aux catégories d'outils existan
 | Effort du technicien | Formulaire à remplir | Formulaire à remplir | Envoi manuel | **Une note vocale** |
 | Extraction structurée métier | Oui, par formulaire | À construire | Non | **Oui, par LLM** |
 | Écriture dans le fichier du client | Export | Oui | Non | **Oui, fusion par chantier** |
-| Logique versionnée et testée | Non | Non | — | **Oui, 475 tests** |
+| Logique versionnée et testée | Non | Non | — | **Oui, 860 tests** |
 
 
 La conclusion n'est pas que ces produits sont mauvais, mais que le besoin d'AZNET a une contrainte que le marché ne traite pas : **l'entrée doit être de la parole spontanée en langue peu dotée**, et tout le reste en découle.
@@ -483,7 +483,7 @@ Le **Tableau 2.4** reprend les technologies retenues et, pour chacune, l'alterna
 | **Docker Compose** | Déploiement | Installation manuelle, Kubernetes | Cinq services reproductibles ; Kubernetes serait disproportionné pour une machine |
 | **PyTorch + Transformers** | Banc d'essai local | ONNX Runtime, llama.cpp | Seul écosystème où les treize points de contrôle évalués sont publiés |
 | **Playwright** | Contrôle visuel | Selenium, Cypress | Capture multi-navigateur scriptable ; sert aussi à produire les captures de ce rapport |
-| **pytest** | Tests | unittest | Fixtures et paramétrage ; 475 tests sans aucune clé d'API |
+| **pytest** | Tests | unittest | Fixtures et paramétrage ; 860 tests, dont 810 sans aucune clé d'API ni base |
 | **GitHub Actions** | Intégration continue | GitLab CI, Jenkins | Gratuit sur dépôt privé ; au plus près du dépôt |
 | **Mermaid** | Diagrammes | draw.io, Visio | Diagrammes en texte, donc versionnés et révisables comme du code |
 
@@ -782,7 +782,7 @@ Toutes les migrations sont idempotentes et rejouées à chaque démarrage. Celle
 
 Le service expose `POST /process`, acceptant **exactement une** de trois entrées : `audio`, `image` ou `text` — toute autre combinaison est un 422. L'aiguillage par type d'entrée est fait par n8n, jamais à l'intérieur du service. Les trois modes convergent vers le même pipeline d'extraction, ce qui rend la solution indépendante du canal.
 
-Le service compte **82 routes** et **14 932 lignes** de Python, organisées en modules : `main.py` (routes), `extraction.py`, `journal.py`, `sheets.py`, `logs.py`, `auth.py`, `jobs.py`, `memory.py`, `mailer.py`, `reply.py`, `daily_report.py`, `docx_report.py`, `drive.py`, `stock.py`, `usage.py`, `prompt_loader.py`, `schemas.py`, `config.py`.
+Le service compte **85 routes** et **15 380 lignes** de Python, organisées en modules : `main.py` (routes), `extraction.py`, `journal.py`, `sheets.py`, `logs.py`, `auth.py`, `jobs.py`, `memory.py`, `mailer.py`, `reply.py`, `daily_report.py`, `docx_report.py`, `drive.py`, `stock.py`, `usage.py`, `prompt_loader.py`, `schemas.py`, `config.py`.
 
 ### 3.4.2 Patron Stratégie pour la transcription
 
@@ -1086,7 +1086,7 @@ Le workflow se lit en sept bandes. Le détail ci-dessous explique ce que chacune
 
 ## 3.6 Conception du tableau de bord
 
-Le tableau de bord (15 552 lignes de TypeScript et de CSS) est une application React 19 servie en statique.
+Le tableau de bord (16 139 lignes de TypeScript et de CSS) est une application React 19 servie en statique.
 
 **Toutes les chaînes d'interface vivent dans `locales/{fr,en,ar}.json`**, le français faisant référence. L'arabe impose le sens droite-à-gauche, ce qui interdit les marges directionnelles au profit des propriétés logiques.
 
@@ -1240,7 +1240,7 @@ Le **Tableau 4.1** récapitule l'environnement de développement.
 | Outil | Rôle |
 |---|---|
 | Python 3.11 / FastAPI / Pydantic | Service applicatif |
-| pytest | Tests automatisés (475 tests) |
+| pytest | Tests automatisés (860 tests) |
 | PostgreSQL 16 | Journal d'événements, idempotence, sessions, organigramme |
 | React 19 / TypeScript / Vite / Tailwind v4 | Tableau de bord |
 | Docker / Docker Compose | Exécution de la pile complète (5 services) |
@@ -1640,11 +1640,13 @@ La migration de fusion des comptes lit une colonne qu'elle supprime elle-même. 
 
 ## 4.5 Stratégie de test et intégration continue
 
-La suite compte **475 tests** répartis en 35 fichiers (7 143 lignes), **exécutables sans aucune clé d'API et sans base de données**. Cette propriété est une règle du projet, obtenue par deux moyens : les bibliothèques externes sont importées paresseusement *à l'intérieur* des fonctions, et les appels externes sont simulés aux frontières.
+La suite compte **860 tests** répartis en 49 fichiers (10 916 lignes). **810 d'entre eux s'exécutent sans aucune clé d'API et sans base de données** ; c'est une règle du projet, obtenue par deux moyens : les bibliothèques externes sont importées paresseusement *à l'intérieur* des fonctions, et les appels externes sont simulés aux frontières.
+
+Les **50 restants** portent la marque `integration` et sont **ignorés** — jamais échoués — tant que la variable `TEST_DATABASE_URL` n'est pas définie. Ils éprouvent ce qu'aucune simulation ne peut éprouver : le comportement réel de PostgreSQL sur les migrations, les contraintes d'unicité et les transactions. La distinction est faite par un marqueur plutôt que par un dossier séparé, pour une raison précise : un test d'intégration rangé à part est un test que l'on oublie d'exécuter, alors qu'un test marqué apparaît dans chaque exécution, en clair, avec la mention *skipped* et le motif — l'absence de base est ainsi **visible** au lieu d'être silencieuse.
 
 Elle a un corollaire honnête, qu'il faut énoncer : **aucun test ne parcourt le chemin réseau réel**. Les défauts décrits en §4.4 sont précisément ceux qu'une suite hors ligne ne peut pas voir, et c'est pourquoi la vérification en conditions réelles reste une étape distincte et nécessaire.
 
-L'intégration continue (GitHub Actions) exécute la suite avec mesure de couverture, l'analyse statique interne et externe, et un contrôle de parité des trois fichiers de traduction — dix-huit contrôles au total, détaillés au §4.9.3. La suite complète tourne en **14 min 35 s** et sa dernière exécution est verte sur les 475 tests.
+L'intégration continue (GitHub Actions) exécute la suite avec mesure de couverture, l'analyse statique interne et externe, et un contrôle de parité des trois fichiers de traduction — dix-huit contrôles au total, détaillés au §4.9.3. La suite complète tourne en **8 min 59 s** — 810 succès, 50 ignorés, aucun échec — sur la machine de développement. La durée est dominée non par le calcul mais par les délais d'attente simulés des chaînes de repli : éprouver qu'un moteur indisponible cède la main au suivant suppose d'atteindre le délai que le code lui accorde.
 
 ## 4.6 Résultats
 
@@ -1709,11 +1711,11 @@ Le **Tableau 4.13** en donne les métriques.
 | Indicateur | Valeur |
 |---|---|
 | Durée du projet | 6 mois (2 mars – 31 août 2026) |
-| Lignes de Python (service) | 14 932 |
-| Lignes de tests | 7 143 (35 fichiers, 475 tests) |
-| Lignes de TypeScript et CSS (tableau de bord) | 15 552 |
+| Lignes de Python (service) | 15 380 |
+| Lignes de tests | 10 916 (49 fichiers, 860 tests) |
+| Lignes de TypeScript et CSS (tableau de bord) | 16 139 |
 | Clés d'interface traduites | 579 × 3 langues |
-| Routes d'API | 82 |
+| Routes d'API | 85 |
 | Nœuds n8n | 64 (dont 54 actifs) |
 | Pages du tableau de bord | 12 |
 | Instructions de modèles versionnées | 5 |
@@ -1787,7 +1789,7 @@ La page est reproduite en **Annexe H, Figure H.12**, avec les autres écrans.
 
 ### 4.9.1 Répartition du code
 
-Le **Tableau 4.15** donne la répartition du code du système livré. Le décompte porte sur les fichiers versionnés, hors fichiers générés (verrous de dépendances, artefacts de construction) et hors dossier de rédaction — la source de ce rapport et du diaporama en est donc exclue. Total : **46 827 lignes**.
+Le **Tableau 4.15** donne la répartition du code du système livré. Le décompte porte sur les fichiers versionnés, hors fichiers générés (verrous de dépendances, artefacts de construction) et hors dossier de rédaction — la source de ce rapport et du diaporama en est donc exclue. Total : **52 557 lignes**.
 
 ::: {custom-style="TableCaption"}
 **Tableau 4.15 :** Répartition du code par langage.
@@ -1795,12 +1797,12 @@ Le **Tableau 4.15** donne la répartition du code du système livré. Le décomp
 
 | Langage | Fichiers | Lignes | Part |
 |---|---|---|---|
-| Python | 77 | 25 237 | 53,9 % |
-| TypeScript | 59 | 15 188 | 32,4 % |
-| Markdown | 40 | 4 797 | 10,2 % |
-| YAML | 4 | 607 | 1,3 % |
-| JavaScript | 4 | 568 | 1,2 % |
-| CSS | 1 | 416 | 0,9 % |
+| Python | 89 | 29 458 | 56,0 % |
+| TypeScript | 63 | 15 709 | 29,9 % |
+| Markdown | 43 | 5 682 | 10,8 % |
+| YAML | 4 | 644 | 1,2 % |
+| JavaScript | 4 | 568 | 1,1 % |
+| CSS | 1 | 482 | 0,9 % |
 | HTML | 1 | 14 | 0,0 % |
 
 
@@ -1816,17 +1818,20 @@ Le **Tableau 4.16** rassemble les indicateurs de qualité mesurés.
 
 | Indicateur | Valeur |
 |---|---|
-| Tests automatisés | 475, répartis en 35 fichiers |
-| Lignes de test | 7 143 |
-| Ratio test / code applicatif | ≈ 1 ligne de test pour 2 lignes de service (7 143 / 14 932) |
-| Dépendances d'exécution requises pour les tests | **Aucune** — ni clé d'API, ni base de données |
-| Durée de la suite complète | 14 min 35 s (mesuré, 475 tests, suite verte) |
-| Couverture de ligne du service | 64 % (`pytest --cov=app`, 5 186 instructions) |
+| Tests automatisés | 860, répartis en 49 fichiers (810 hors ligne, 50 marqués `integration`) |
+| Lignes de test | 10 916 |
+| Ratio test / code applicatif | 0,71 ligne de test par ligne de service (10 916 / 15 380) |
+| Dépendances d'exécution requises pour les tests | **Aucune** pour 810 d'entre eux — ni clé d'API, ni base ; les 50 autres sont ignorés sans PostgreSQL |
+| Durée de la suite complète | 8 min 59 s (mesuré : 810 succès, 50 ignorés, 0 échec) |
+| Couverture d'instructions du service | 78 % (`pytest --cov=app`, 5 311 instructions) |
 | Contrôles d'intégration continue | **18** par *push* (détail au §4.9.3) |
 | Analyse statique externe | SonarCloud, sur chaque *push* (détail au §4.9.4) |
 | Mises à jour de dépendances automatisées | Dependabot, 5 écosystèmes (détail au §4.9.3) |
 | Période de développement | 2 mars – 31 août 2026, soit 26 semaines |
+| Activité versionnée | 376 commits, 15 juillet – 21 août 2026 (détail au §4.9.5) |
 
+
+Une précision s'impose sur la couverture, car **deux chiffres différents apparaissent dans ce chapitre** : 78 % ici et 80,7 % au Tableau 4.18. Ils ne se contredisent pas, ils ne comptent pas la même chose. `pytest --cov` rapporte un taux d'**instructions** (5 311 instructions, 1 189 non atteintes) ; SonarCloud rapporte un taux de **lignes exécutables**, une base plus large qui inclut des lignes qu'un instrumenteur Python ne compte pas comme instructions. Le second est le chiffre publié et opposable, puisque c'est celui que le portail qualité évalue ; le premier est celui que reproduit une exécution locale. Les deux sont donnés parce que **le lecteur qui lance la suite lui-même verra 78 %**, et qu'un rapport qui n'annonce que 80,7 % lui laisserait croire à une régression.
 
 ### 4.9.3 La chaîne d'intégration continue
 
@@ -1840,7 +1845,7 @@ Le **Tableau 4.17** en donne le détail, famille par famille.
 
 | Famille | Contrôles | Ce qu'ils attrapent |
 |---|---|---|
-| Correction | `API — lint, types & tests` (ruff, 475 tests), `Dashboard — types, lint & build` (tsc, oxlint), `n8n workflow`, `Docker compose config`, `Locale key parity` | Régressions de logique, dérive de types, workflow invalide, clé de traduction manquante dans l'une des trois langues |
+| Correction | `API — lint, types & tests` (ruff, 860 tests), `Dashboard — types, lint & build` (tsc, oxlint), `n8n workflow`, `Docker compose config`, `Locale key parity` | Régressions de logique, dérive de types, workflow invalide, clé de traduction manquante dans l'une des trois langues |
 | Sécurité du code | `CodeQL (python)`, `CodeQL (javascript-typescript)`, `Semgrep (OWASP Top 10)`, `Bandit SAST` | Injections, chemins de données non assainis, primitives cryptographiques faibles |
 | Dépendances et secrets | `Trivy filesystem scan`, `Trivy config scan`, `pip-audit`, `npm audit`, `Secret scan` (gitleaks + `scripts/check_secrets.py`) | Vulnérabilités connues des bibliothèques tierces, mauvaise configuration d'infrastructure, jeton commité |
 | Conformité des fichiers | `Hadolint (api/Dockerfile)`, `Hadolint (Dashboard/Dockerfile)`, `actionlint` | Images Docker non conformes aux bonnes pratiques, workflow GitHub Actions syntaxiquement fragile |
@@ -1875,20 +1880,21 @@ Il mesure cinq dimensions que les contrôles internes ne quantifient pas : la **
 
 | Indicateur | Valeur | Note |
 |---|---|---|
-| Lignes de code analysées | 21 091 (83 fichiers de source) | — |
+| Lignes de code analysées | 21 673 (87 fichiers de source) | — |
 | Fiabilité (*bugs*) | **0** | **A** |
 | Sécurité (vulnérabilités) | **0** | **A** |
 | Points sensibles de sécurité (*hotspots*) | 0, dont 100 % revus | **A** |
-| Maintenabilité (*code smells*) | 4 | **A** |
-| Dette technique estimée | 25 minutes | — |
+| Maintenabilité (*code smells*) | **0** | **A** |
+| Dette technique estimée | **0 minute** | — |
 | Taux de dette technique | 0,0 % | — |
-| Duplication de lignes | 0,3 % | — |
-| Densité de commentaires | 25,7 % | — |
-| Couverture de tests (rapport produit par `pytest --cov`) | 63,1 % | — |
-| Portail qualité (*quality gate*) | 5 conditions sur 6 satisfaites | — |
+| Duplication de lignes | **0,0 %** | — |
+| Densité de commentaires | 26,2 % | — |
+| Couverture de tests (rapport produit par `pytest --cov`) | **80,7 %** | — |
+| Couverture du *code nouveau* | **80,2 %** (seuil du portail : 80 %) | — |
+| Portail qualité (*quality gate*) | **6 conditions sur 6 satisfaites — *Passed*** | — |
 
 
-Trois de ces valeurs demandent une lecture honnête, faute de quoi le tableau se lit comme un satisfecit.
+Un tableau qui n'affiche que des zéros et des A se lit comme un satisfecit, et ne vaut rien tel quel. Trois de ces valeurs demandent donc d'être racontées : aucune n'a été obtenue du premier coup, et l'une d'elles a d'abord été argumentée avant d'être atteinte.
 
 **Les notes A n'ont pas été obtenues du premier coup.** L'analyse initiale rendait un verdict rouge : fiabilité **E**, sécurité **C**, portail qualité en échec. Quatre constats en étaient la cause, et leur traitement illustre les trois seules issues honnêtes devant un analyseur externe.
 
@@ -1898,11 +1904,19 @@ Trois de ces valeurs demandent une lecture honnête, faute de quoi le tableau se
 
 Cette distinction — corriger, réfuter, refuser en s'expliquant — est le seul usage défendable d'un tel outil. Une note A obtenue en désactivant les règles gênantes ne mesurerait plus rien.
 
-**La couverture est une valeur mesurée, pas un objectif atteint, et c'est la seule condition que le portail refuse.** Elle a été produite en instrumentant la suite, ce qui n'avait jamais été fait : le fichier de configuration désignait un rapport de couverture que rien ne générait. Elle doit être lue à la lumière du §4.5 : la suite est **hors ligne par construction**, donc les 37 % non couverts sont massivement les chemins d'appel externes — et les défauts réellement rencontrés en conditions réelles (§4.4) vivent précisément là. Une couverture de ligne élevée ne les aurait pas attrapés.
+**La dette est ensuite descendue à zéro, et cela méritait d'être fait en un seul passage.** Quatorze *code smells* subsistaient après le traitement des défauts de sécurité : des blocs `except` trop larges dans les tests, des assertions imbriquées, des littéraux répétés. Aucun n'était un défaut de comportement — c'est précisément pourquoi ils avaient survécu, chacun étant individuellement trop petit pour justifier un commit. Traités ensemble, ils portent la maintenabilité à **0 *code smell*, 0 minute de dette estimée**, et cet état a une propriété que « quatre restants » n'avait pas : **tout nouveau signalement est désormais visible immédiatement**, sans avoir à être distingué d'un fond permanent. Un compteur à zéro est un outil de détection ; un compteur à quatre est un bruit de fond que l'on cesse de regarder.
+
+**La couverture a d'abord été un argument, puis elle est devenue des tests.** Elle a été produite en instrumentant la suite, ce qui n'avait jamais été fait : le fichier de configuration désignait un rapport de couverture que rien ne générait. La première mesure donnait **63,1 %**, et ce rapport a d'abord soutenu — avec des arguments qui restent exacts — que le seuil de 80 % du référentiel par défaut n'était pas pertinent pour une suite **hors ligne par construction**, puisque les lignes non couvertes sont massivement les chemins d'appel externes, et que les défauts réellement rencontrés en conditions réelles (§4.4) vivent précisément là, hors d'atteinte d'une couverture de ligne.
+
+Cet argument a été maintenu, puis les tests manquants ont été écrits : la suite est passée de 475 à **860 tests** et la couverture de 63,1 % à **80,7 %**. Les deux positions ne se contredisent pas, et il faut le dire clairement pour que la seconde ne se lise pas comme un désaveu de la première. Écrire ces tests n'a pas rendu la suite capable d'attraper une rupture de contrat externe — elle en est toujours structurellement incapable, et le §4.5 reste vrai. Ce que l'écart de dix-sept points a réellement couvert, ce sont les branches internes : reconciliation de stock, normalisation des dates, fusion des lignes du journal, validation du schéma. Ces chemins-là sont de l'arithmétique et de la logique métier, ils sont testables hors ligne, et rien ne justifiait qu'ils ne le soient pas.
+
+La leçon est de méthode plus que de chiffre : **un seuil que l'on peut atteindre coûte moins cher à franchir qu'à défendre**. L'argument devait être re-plaidé devant chaque lecteur du tableau de bord ; les tests, eux, se plaident une fois.
 
 **Ce chiffre décrit le service Python, et lui seul.** Le tableau de bord est exclu du calcul de couverture — et de celui-là seulement, son code restant analysé pour la fiabilité, la sécurité et la maintenabilité. La raison est arithmétique : il n'a aucun exécuteur de tests, si bien que ses quelque deux mille lignes compteraient intégralement comme non couvertes et ramèneraient le résultat à 44,6 %. Ce ne serait pas une mesure basse, ce serait la moyenne d'une mesure et d'une **non**-mesure — un chiffre qui parle de l'absence d'exécuteur de tests et non du code. L'exclusion porte la condition de sa propre suppression : le jour où un exécuteur écrit le rapport que la configuration désigne déjà.
 
-**Le portail qualité échoue sur cette condition, et ce n'est pas dissimulé.** Cinq de ses six conditions sont satisfaites : fiabilité, sécurité et maintenabilité du code nouveau notées **A**, duplication à 0,2 %, points sensibles revus à 100 %. La sixième exige **80 % de couverture sur le code nouveau** ; le projet en présente 66,6 %. Le seuil est celui du référentiel par défaut de l'outil, non un objectif que ce projet se serait donné, et l'argument ci-dessus explique pourquoi il n'est pas pertinent ici. La conséquence est assumée dans la chaîne d'intégration : l'étape SonarCloud **n'attend délibérément pas le verdict du portail**. Elle échoue si l'analyse n'a pas pu tourner — jeton manquant, rapport de couverture illisible — car cela signifie que les chiffres publiés sont périmés pendant que l'intégration continue affiche du vert ; elle n'échoue pas sur un seuil de couverture que le §4.5 récuse. Poser ce seuil en bloquant récompenserait des tests qui traversent le code sans éprouver aucun contrat externe.
+**Le portail qualité satisfait aujourd'hui ses six conditions**, dont la sixième qui était en échec : fiabilité, sécurité et maintenabilité du code nouveau notées **A**, duplication du code nouveau à **0,0 %**, points sensibles revus à **100 %**, et couverture du code nouveau à **80,2 %** pour un seuil à 80,0 %. Cette dernière marge — deux dixièmes de point — mérite d'être nommée plutôt que célébrée : elle signifie que la condition est satisfaite, pas qu'elle est confortablement satisfaite, et qu'un module ajouté sans tests la fera repasser au rouge. C'est le comportement attendu d'un seuil, non un défaut du dispositif.
+
+Une décision de la chaîne d'intégration reste inchangée malgré ce passage au vert, et elle mérite d'être justifiée à nouveau : l'étape SonarCloud **n'attend délibérément pas le verdict du portail**. Elle échoue si l'analyse n'a pas pu tourner — jeton manquant, rapport de couverture illisible — car cela signifie que les chiffres publiés sont périmés pendant que l'intégration continue affiche du vert. Elle n'échoue pas sur le verdict lui-même. La raison n'est plus un désaccord avec le seuil, puisqu'il est franchi : c'est que le portail juge le **code nouveau** d'une demande de fusion, et qu'une demande légitime — la correction d'un défaut de production sur un module peu couvert — serait bloquée par un critère qui ne dit rien de la correction proposée. Le portail informe ; il ne garde pas la porte.
 
 **Un défaut de méthode a été révélé par cette mise en place**, et il mérite d'être rapporté parce qu'il invalidait une affirmation de ce rapport. La chaîne d'intégration continue était **rouge à chaque exécution** depuis plusieurs jours sans que cela soit vu. La cause : un test vérifiant qu'un dépassement de délai réseau se traduit bien en erreur de canal ne fournissait pas le jeton attendu par la fonction testée. Sur la machine de développement, le fichier d'environnement local en fournissait un et le test passait ; en intégration continue, où il n'y en a aucun, la fonction s'arrêtait sur son garde de configuration, bien avant le comportement que le test prétendait éprouver. **C'est la règle « les tests passent sans aucune clé d'API » violée par le test lui-même**, et masquée par l'environnement local — exactement le mode de défaillance silencieux décrit au §4.3.7 à propos du banc d'essai. Le test corrigé injecte son jeton, comme le faisait déjà son jumeau WhatsApp dans le même fichier. Les dix-huit contrôles passent depuis.
 
@@ -1914,16 +1928,65 @@ La **Figure 4.4** reproduit le tableau de bord de l'outil, tel qu'il est publié
 
 
 ::: {custom-style="FigureCaption"}
-**Figure 4.4 :** Le tableau de bord SonarCloud du projet. Les trois notes **A** portent sur l'ensemble du code ; le verdict « Failed » en tête ne les contredit pas — il porte sur le **code nouveau** et sur la seule condition que ce chapitre récuse, les 80 % de couverture exigés par le référentiel par défaut. La capture est donnée telle quelle, verdict compris : un tableau de bord recadré sur ses bonnes nouvelles ne mesurerait plus rien.
+**Figure 4.4 :** Le tableau de bord SonarCloud du projet, capturé le 21 août 2026 sur la branche principale. Le verdict « Passed » en tête porte sur le **code nouveau** ; les trois notes **A**, les trois zéros et la duplication à 0,0 % portent sur l'ensemble du code. La capture est donnée telle quelle, cadrage compris — la version précédente de ce rapport reproduisait la même page affichant « Failed », et la conserver alors aurait été le seul choix honnête, exactement comme la remplacer l'est aujourd'hui.
 :::
 
 
-### 4.9.5 Chronologie réelle du développement
+### 4.9.5 Activité du dépôt : rythme et volume
 
-Le planning prévisionnel du §1.6.2 annonçait un découpage ; le **Tableau 4.19** confronte cette annonce au déroulement constaté, phase par phase, et signale les écarts.
+La section précédente décrit *ce que* les contrôles vérifient ; celle-ci décrit *ce qui* leur a été soumis. Les chiffres proviennent de l'historique Git lui-même, non d'un décompte tenu à la main : le dépôt totalise **376 commits** entre le **15 juillet et le 21 août 2026**, soit 38 jours calendaires dont **34 actifs**, une moyenne de **9,9 commits par jour** et un maximum de **34** sur une seule journée. Le volume cumulé est de **+117 339 lignes ajoutées** pour **45 454 retirées**.
+
+Une précision doit précéder toute lecture de la **Figure 4.5**, sans quoi elle induirait en erreur : **le dépôt ne couvre pas les six mois du projet**. Il a été initialisé au début de la phase 3, et les phases 0 à 2 — cadrage, état de l'art, conception — lui sont antérieures ; leurs livrables sont des documents et des décisions, non du code. Le graphique mesure donc la **réalisation**, pas le projet.
+
+::: {custom-style="FigureImage"}
+![](diagrams/15-activite.png){ width=15.2cm }
+:::
+
+
+::: {custom-style="FigureCaption"}
+**Figure 4.5 :** Commits par jour, du 15 juillet au 21 août 2026. L'opacité suit l'intensité, et les quatre jours sans commit sont laissés visibles : le rythme d'un travail se lit autant à ses arrêts qu'à ses pointes.
+:::
+
+
+Trois lectures méritent d'être faites, et la troisième est une limite.
+
+**Le rythme n'est pas régulier, et il n'avait pas de raison de l'être.** Trois pointes se détachent : le 31 juillet (28 commits), le 15 août (34) et les 20-21 août (29 puis 28). Elles ne correspondent pas à des journées plus longues mais à des **fins de tâche**, où le travail se solde en autant de commits qu'il reste de points à traiter. Les deux dernières le montrent bien : le 15 août est la refonte du schéma métier sur les bordereaux réels et le reclassement des chaînes d'extraction ; les 20-21 août sont le durcissement final — cinq défauts trouvés par une revue croisée, la signature du webhook WhatsApp, puis la mise à zéro de la liste SonarCloud.
+
+Le 31 juillet dit autre chose, et il faut le dire plutôt que de l'habiller : **treize de ses vingt-huit commits sont hors convention** (`todo`, `opencode`, `2`, `new todo`), pour 5 904 lignes ajoutées dont l'essentiel est de la tenue de notes. Ce n'est pas une pointe de production, c'est une pointe de **journalisation**. Un compteur de commits mesure donc la **nature** du travail autant que sa quantité — raison pour laquelle il ne figure pas parmi les indicateurs du Tableau 4.16 : ce n'est pas un indicateur de qualité, et le présenter comme tel serait la première malhonnêteté que ce chapitre s'interdit.
+
+**Le rapport entre ajouts et suppressions dit quelque chose de la méthode.** Trente-neuf lignes ont été retirées pour cent ajoutées. Ce n'est pas du gaspillage : les suppressions massives sont identifiables et toutes justifiées au fil de ce rapport — la reconstruction complète du tableau de bord (§4.9.6), le retrait des commandes textuelles remplacées par le tableau de bord, et l'abandon du moteur `hf-darija` qui n'avait jamais transcrit un seul clip (§4.3.4). **Un projet qui n'efface rien est un projet qui n'a rien remis en cause.**
+
+**Le Tableau 4.19 donne la répartition par type de commit**, et fait apparaître un défaut de discipline qu'il serait malhonnête de taire.
 
 ::: {custom-style="TableCaption"}
-**Tableau 4.19 :** Déroulement constaté, comparé au planning prévisionnel.
+**Tableau 4.19 :** Répartition des 376 commits par type (convention *Conventional Commits*).
+:::
+
+| Type | Commits | Part | Ce qu'il désigne |
+|---|---|---|---|
+| `feat` | 112 | 29,8 % | Une capacité nouvelle |
+| `fix` | 79 | 21,0 % | Une correction de comportement |
+| `docs` | 54 | 14,4 % | Documentation, y compris les instructions versionnées des modèles |
+| `refactor` | 10 | 2,7 % | Réorganisation sans changement de comportement |
+| `chore` | 9 | 2,4 % | Outillage, dépendances |
+| `ci` | 7 | 1,9 % | Chaîne d'intégration continue |
+| `perf` | 5 | 1,3 % | Performance |
+| `test` | 4 | 1,1 % | Tests seuls |
+| `style` | 3 | 0,8 % | Mise en forme |
+| `revert`, `build` | 3 | 0,8 % | Annulation, construction |
+| **Hors convention** | **90** | **23,9 %** | Préfixes non normalisés (`to-do:`, `sonar fix:`…) |
+
+
+Le rapport `feat` / `fix` de **1,4 pour 1** est cohérent avec un projet dont l'essentiel du risque était en intégration : chaque capacité nouvelle a coûté en moyenne 0,7 correction, et les corrections ne se concentrent pas au début mais se répartissent sur toute la durée — c'est la signature d'un système qui rencontre ses défauts au contact de fournisseurs externes plutôt qu'à la compilation.
+
+Les **90 commits hors convention** — près d'un quart — sont un manquement réel. La convention *Conventional Commits* est annoncée dans les règles du projet, et un historique où un message sur quatre s'en écarte ne peut pas alimenter la génération automatique d'un journal des versions, qui est la seule raison pratique d'adopter cette convention. Ils sont concentrés sur les commits de suivi (`to-do:`) et de correction d'analyse statique, c'est-à-dire précisément les moments où l'attention était ailleurs. La correction n'est pas rétroactive — réécrire l'historique d'un dépôt pour le rendre présentable serait le contraire d'une mesure — mais un contrôle d'intégration continue sur le format du message aurait empêché le premier écart, et son absence est un oubli de la phase d'industrialisation.
+
+### 4.9.6 Chronologie réelle du développement
+
+Le planning prévisionnel du §1.6.2 annonçait un découpage ; le **Tableau 4.20** confronte cette annonce au déroulement constaté, phase par phase, et signale les écarts.
+
+::: {custom-style="TableCaption"}
+**Tableau 4.20 :** Déroulement constaté, comparé au planning prévisionnel.
 :::
 
 | Phase | Prévu | Constaté | Écart et cause |
@@ -1979,7 +2042,7 @@ La réalisation a concrétisé la conception et l'a confrontée au réel. Le ban
 4. **Un modèle métier reconstruit sur le fichier réel du client**, tenant un journal par chantier à raison d'une ligne par message, avec réconciliation de stock et création de colonne à la demande — trois règles sans lesquelles le seul chiffre que lit le directeur, la ligne de totaux, serait faux ou incomplet.
 5. **Une conception indépendante du canal**, démontrée en pratique par la mise en service successive de deux messageries aux contraintes opposées, sans modification du cœur du système.
 
-**Résultats.** La chaîne complète est opérationnelle depuis la phase 3, avec un mécanisme de repli validé en conditions réelles. Le système compte 82 routes, 64 nœuds d'orchestration, 26 tables et 475 tests automatisés exécutables sans aucune clé d'API. *[À COMPLÉTER : latence de bout en bout mesurée et bilan du pilote.]*
+**Résultats.** La chaîne complète est opérationnelle depuis la phase 3, avec un mécanisme de repli validé en conditions réelles. Le système compte 85 routes, 64 nœuds d'orchestration, 26 tables et 860 tests automatisés exécutables sans aucune clé d'API. *[À COMPLÉTER : latence de bout en bout mesurée et bilan du pilote.]*
 
 **Limites.** Trois limites doivent être énoncées sans détour. D'abord, **le WER et le CER n'ont pas été calculés** : le choix d'une métrique applicative est argumenté au §4.3.2, mais il prive la comparaison d'un chiffre unique et universellement reconnu, et le classement final repose sur un jugement humain — rigoureux, mais non reproductible par un tiers sans le même locuteur. Ensuite, **la suite de tests ne parcourt jamais le réseau réel** ; elle sécurise les régressions de logique, non les ruptures de contrat des fournisseurs, qui ont été la source de la majorité des défauts rencontrés. Enfin, *[À COMPLÉTER : bilan du pilote en conditions réelles]*.
 
@@ -2520,7 +2583,7 @@ redémarrage de la machine.
 
 ```bash
 cd api
-.venv/Scripts/python.exe -m pytest              # 475 tests, sans aucune clé d'API
+.venv/Scripts/python.exe -m pytest              # 860 tests (810 hors ligne, 50 marqués integration)
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload
 ```
 

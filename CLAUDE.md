@@ -28,7 +28,7 @@ All Python work happens in `api/` with its venv (Python 3.11, matching the API i
 
 ```bash
 cd api
-.venv/Scripts/python.exe -m pytest              # run all tests (371, no API keys and no database needed; ~9 min)
+.venv/Scripts/python.exe -m pytest              # run all tests (860: 810 pass with no API key and no DB, 50 `integration` skip without TEST_DATABASE_URL; ~9 min)
 .venv/Scripts/python.exe -m pytest tests/test_process_endpoint.py -k test_voice_mode   # single test
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload   # dev server on :8000
 ```
