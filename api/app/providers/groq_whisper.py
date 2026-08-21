@@ -85,7 +85,15 @@ class GroqWhisperProvider(TranscriptionProvider):
         except Exception as exc:  # noqa: BLE001 — surface as domain error
             raise TranscriptionError(f"groq: {exc}") from exc
         latency = time.perf_counter() - start
-        text = result if isinstance(result, str) else getattr(result, "text", str(result))
+        if isinstance(result, str):
+            text = result
+        elif isinstance(result, dict):
+            # Symmetric with the `segments` line below, which has always read
+            # both shapes: a dict falling through to `str(result)` would put
+            # the whole repr into the transcript rather than the transcription.
+            text = str(result.get("text", ""))
+        else:
+            text = getattr(result, "text", str(result))
         segments = result.get("segments") if isinstance(result, dict) else getattr(result, "segments", None)
         confidence = _confidence_from_segments(segments or [])
         return TranscriptionInfo(

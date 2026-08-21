@@ -18,8 +18,18 @@ class MailError(RuntimeError):
 
 
 def _escape(text: str) -> str:
+    """HTML-escape one caller-supplied string.
+
+    The quote is escaped as well as the three angle characters, because this
+    is interpolated into attribute values too — `render_document` builds the
+    call-to-action as `href="{_escape(url)}"`, and a value carrying a double
+    quote would close the attribute and open a new one. In a text node it
+    renders as a plain quote either way, so nothing is lost by doing it
+    unconditionally.
+    """
     return (
         text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace('"', "&quot;")
     )
 
 

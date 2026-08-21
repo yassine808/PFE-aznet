@@ -121,19 +121,28 @@ def create_user(email: str, name: str, password: str, role: str = "chef") -> dic
         # push people towards "Password1!" and buy less than length does.
         raise AuthError("password must be at least 8 characters")
     email, name = email.strip().lower(), name.strip()
+    # The conflict is detected inside the cursor and raised OUTSIDE it.
+    # `logs._cursor` wraps every exception that escapes its block in
+    # LogStoreError, so an AuthError raised in here reached the caller as
+    # "postgres query failed: Karim already has an account" — and `POST /users`,
+    # which maps LogStoreError to 502, answered "the store is unreachable" to
+    # what is plainly the caller's own mistake.
+    conflict = False
     with logs._cursor() as cur:
         cur.execute("SELECT id, password_hash FROM persons WHERE lower(name) = lower(%s)", (name,))
-        existing = logs._one(cur)
-        if existing is not None:
-            if dict(existing)["password_hash"] is not None:
-                raise AuthError(f"{name} already has an account")
+        found = logs._one(cur)
+        existing = dict(found) if found is not None else None
+        if existing is not None and existing["password_hash"] is not None:
+            conflict, row = True, None
+        elif existing is not None:
             cur.execute(
                 """
                 UPDATE persons SET email = %s, password_hash = %s, role = %s, active = true
                  WHERE id = %s RETURNING *
                 """,
-                (email, hash_password(password), role, dict(existing)["id"]),
+                (email, hash_password(password), role, existing["id"]),
             )
+            row = logs._one(cur)
         else:
             cur.execute(
                 """
@@ -144,7 +153,9 @@ def create_user(email: str, name: str, password: str, role: str = "chef") -> dic
                 """,
                 (email, name, role, hash_password(password)),
             )
-        row = logs._one(cur)
+            row = logs._one(cur)
+    if conflict:
+        raise AuthError(f"{name} already has an account")
     if row is None:
         raise AuthError(f"an account already exists for {email}")
     return _public(dict(row))

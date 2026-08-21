@@ -35,8 +35,19 @@ main.app.dependency_overrides[main.auth.require_user] = lambda: {
 # The /process audio path uploads to Google Drive for the durable lien_audio.
 # The real key exists on this machine and would trigger a network discovery
 # fetch on every voice test — these tests are about transcription, not Drive.
-# Drive behavior itself is covered in test_media_and_modify.py.
-main.drive.upload_audio = lambda filename, mime, data: "https://drive.google.com/uc?id=test"
+# Drive behaviour itself is covered in test_drive.py.
+#
+# An autouse fixture rather than a module-level assignment: pytest imports every
+# test module during collection, so `main.drive.upload_audio = …` at import time
+# replaced the real function for the WHOLE session and could never be undone.
+# `test_drive.py`'s own upload tests then exercised this stub instead of the
+# module they were written for — they passed alone and failed in the full run.
+@pytest.fixture(autouse=True)
+def _no_drive_upload(monkeypatch):
+    monkeypatch.setattr(
+        main.drive, "upload_audio",
+        lambda filename, mime, data: "https://drive.google.com/uc?id=test",
+    )
 
 REPORT = ExtractedReport(
     etages=["E2"],

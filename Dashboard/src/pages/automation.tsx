@@ -537,6 +537,7 @@ function JobSchedule({
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const interval = job.kind === 'interval'
+  const jobLabel = t(`automation.job.${job.name}`)
 
   const save = async (raw: string) => {
     const next: string | number = interval ? Number(raw) : raw
@@ -567,9 +568,7 @@ function JobSchedule({
         step={interval ? 1 : undefined}
         defaultValue={interval ? (job.every_minutes ?? '') : (job.at ?? '')}
         disabled={busy}
-        aria-label={`${t(`automation.job.${job.name}`)} — ${
-          interval ? t('automation.everyMinutes') : t('automation.runsAt')
-        }`}
+        aria-label={`${jobLabel} — ${interval ? t('automation.everyMinutes') : t('automation.runsAt')}`}
         // On blur, not on change: a time input fires as the hour digit is typed,
         // which would store "0:00" on the way to "04:30".
         onBlur={(e) => void save(e.target.value)}
@@ -634,6 +633,10 @@ function PauseToggle({
     }
   }
 
+  let pauseLabelKey = 'automation.pause'
+  if (error) pauseLabelKey = 'automation.pauseFailed'
+  else if (paused) pauseLabelKey = 'automation.resume'
+
   return (
     <button
       type="button"
@@ -649,11 +652,7 @@ function PauseToggle({
       )}
     >
       {paused ? <PlayIcon size={12} weight="fill" /> : <PauseIcon size={12} weight="fill" />}
-      {error
-        ? t('automation.pauseFailed')
-        : paused
-          ? t('automation.resume')
-          : t('automation.pause')}
+      {t(pauseLabelKey)}
     </button>
   )
 }
@@ -1063,6 +1062,25 @@ export function AutomationPage() {
     .slice()
     .sort((a, b) => JOB_ORDER.indexOf(a.name) - JOB_ORDER.indexOf(b.name))
 
+  let saveStatus = <span className="text-ink-faint">{t('automation.autoSaveNote')}</span>
+  if (saving) {
+    saveStatus = (
+      <span className="text-ink-muted flex items-center gap-1.5">
+        <ArrowClockwiseIcon size={13} className="animate-spin" />
+        {t('inbox.saving')}
+      </span>
+    )
+  } else if (saved) {
+    saveStatus = (
+      <span className="text-status-ok flex items-center gap-1.5">
+        <CheckIcon size={13} weight="bold" />
+        {t('automation.savedAuto')}
+      </span>
+    )
+  } else if (dirty) {
+    saveStatus = <span className="text-ink-faint">{t('automation.savingSoon')}</span>
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -1116,21 +1134,7 @@ export function AutomationPage() {
           aria-live="polite"
           className="flex min-h-5 items-center gap-1.5 text-xs"
         >
-          {saving ? (
-            <span className="text-ink-muted flex items-center gap-1.5">
-              <ArrowClockwiseIcon size={13} className="animate-spin" />
-              {t('inbox.saving')}
-            </span>
-          ) : saved ? (
-            <span className="text-status-ok flex items-center gap-1.5">
-              <CheckIcon size={13} weight="bold" />
-              {t('automation.savedAuto')}
-            </span>
-          ) : dirty ? (
-            <span className="text-ink-faint">{t('automation.savingSoon')}</span>
-          ) : (
-            <span className="text-ink-faint">{t('automation.autoSaveNote')}</span>
-          )}
+          {saveStatus}
         </span>
         <p className="text-ink-faint ms-auto max-w-[46ch] text-end text-xs">
           {t('automation.enforceNote')}

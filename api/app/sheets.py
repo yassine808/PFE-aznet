@@ -605,7 +605,10 @@ def read_tab_cached(tab: str) -> List[dict]:
         return list(hit[1])
     rows = read_tab(tab)
     _tab_cache[tab] = (now, rows)
-    return rows
+    # A copy on the miss path too, for the reason the hit path copies: handing
+    # back the stored list lets the first caller's in-place sort or clear
+    # rewrite what every later caller reads until the TTL expires.
+    return list(rows)
 
 
 def invalidate_tab(tab: Optional[str] = None) -> None:

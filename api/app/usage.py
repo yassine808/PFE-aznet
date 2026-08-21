@@ -97,7 +97,11 @@ def note_quota_refusal(provider: str, model: str, kind: str, error: object) -> b
             # refusal that is zero or near it, and zero is the honest number:
             # the call did not happen.
             remaining_tokens=max(0, limit - used),
-            reset_tokens=(reset.group(1) if reset else None),
+            # `.strip(".")` because the delay can be fractional ("1.5s") so the
+            # class has to allow a dot, which then swallows the sentence's own
+            # full stop — and `_assess` appends one of its own, so the operator
+            # read "Réinitialisation dans 2h31m12s..".
+            reset_tokens=(reset.group(1).strip(".") if reset else None),
         )
         return True
     except Exception:  # noqa: BLE001 — instrumentation never costs a report
