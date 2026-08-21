@@ -45,6 +45,28 @@ jobs:
     defaults:
       run:
         working-directory: api
+    # A real Postgres, not a psycopg2 fake. `logs.py` is 915 coverable lines the
+    # offline suite cannot reach — with no DATABASE_URL every function raises
+    # before it reaches SQL — and mocking the driver would execute those lines
+    # without any database ever parsing the statements. The tests that use it
+    # are marked `integration` and key on TEST_DATABASE_URL, a variable the
+    # application never reads: `pytest` on a developer box still needs no
+    # database, which is the rule this repository is built on.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pfe
+          POSTGRES_PASSWORD: pfe
+          POSTGRES_DB: pfe_test
+        ports: ["5432:5432"]
+        # Without this the job races the container: psycopg2 connects to a
+        # port that is open before Postgres is accepting queries.
+        options: >-
+          --health-cmd "pg_isready -U pfe"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -63,6 +85,8 @@ jobs:
       # coverage gate would reward tests that touch code without exercising the
       # network contracts where the real defects have all been (see §4.4).
       - name: Pytest
+        env:
+          TEST_DATABASE_URL: postgresql://pfe:pfe@localhost:5432/pfe_test
         run: python -m pytest -q --tb=short --cov=app --cov-report=xml
       - name: Upload coverage
         uses: actions/upload-artifact@v4

@@ -6,6 +6,8 @@ table before it becomes a Google Sheet tab. Tests run with no database, so a
 test that files a report needs this stand-in — without it Postgres is
 unreachable and every row lands (correctly) in `Non affecté`.
 """
+import os
+
 import pytest
 
 
@@ -81,3 +83,59 @@ def chantier_table(monkeypatch):
     # technician reports to. Leaving them would let a test pass against a
     # resolver that had quietly regained an org-chart branch.
     return table
+
+
+# --- Integration: the one fixture that talks to a real database ------------
+#
+# `logs.py` is 915 coverable lines that the offline suite cannot reach: with no
+# DATABASE_URL every function raises before it touches SQL. Faking psycopg2
+# would execute those lines without a database ever parsing the statements —
+# coverage that proves nothing. So the DB tests use a real Postgres, and the
+# rule that `pytest` needs no database survives by keying on a SEPARATE
+# variable: TEST_DATABASE_URL. Unset (the default, and every developer box that
+# has not opted in) skips them; the API's own `DATABASE_URL` is never read here,
+# so a running production database cannot be truncated by a stray test run.
+#
+#   docker compose up -d postgres
+#   TEST_DATABASE_URL=postgresql://pfe:pfe@localhost:5432/pfe_test pytest -m integration
+
+
+def _test_database_url() -> str | None:
+    return os.environ.get("TEST_DATABASE_URL")
+
+
+@pytest.fixture
+def db(monkeypatch):
+    """A schema-fresh database, torn down by rebuild rather than by DELETE.
+
+    DROP SCHEMA + init_schema() instead of truncating a list of tables: the list
+    would be a second copy of the schema, and the day someone adds a table
+    without adding it here, tests start leaking rows into each other and fail in
+    whichever test happens to run second — the most expensive failure to read.
+
+    The pool is reset on both sides. It is a module-level global built once per
+    process, so a pool opened against the previous test's connection settings
+    would outlive it and quietly serve the next one.
+    """
+    url = _test_database_url()
+    if not url:
+        pytest.skip("TEST_DATABASE_URL is not set")
+
+    from app import logs
+
+    monkeypatch.setattr(logs.settings, "database_url", url, raising=False)
+    _reset_pool(logs)
+    with logs._cursor() as cur:
+        cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+    logs.init_schema()
+    yield logs
+    _reset_pool(logs)
+
+
+def _reset_pool(logs) -> None:
+    pool, logs._pool = logs._pool, None
+    if pool is not None:
+        try:
+            pool.closeall()
+        except Exception:  # pragma: no cover - already closed
+            pass
