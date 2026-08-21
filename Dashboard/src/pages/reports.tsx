@@ -9,6 +9,7 @@ import {
   UserIcon,
 } from '@phosphor-icons/react'
 import { api, useApi, type GeneratedReport } from '@/lib/api'
+import { ReportEditor } from '@/components/report-editor'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useSettings } from '@/lib/settings'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -196,60 +197,6 @@ export function ReportsPage() {
   )
 }
 
-/**
- * The report's own three shapes, drawn as three shapes.
- *
- * The prompt writes `## Synthèse` headings and `- ` bullets, and rendering the
- * whole thing as one pre-wrapped block showed the operator the hashes and the
- * dashes — the report's structure was present but had to be decoded. This is
- * not a Markdown parser and must not become one: three line shapes, no
- * dependency, and anything it does not recognise falls through as a paragraph,
- * which is the same thing the old code did to every line.
- */
-function ReportBody({ corps }: { readonly corps: string }) {
-  const lines = corps.split('\n')
-  return (
-    <div className="flex max-w-[75ch] flex-col gap-1.5">
-      {lines.map((raw, i) => {
-        const line = raw.trimEnd()
-        const key = `${i}-${line.slice(0, 24)}`
-        if (!line.trim()) return <span key={key} className="h-2" />
-        // `[ \t]` rather than `\s`: the lines are already split on newlines, and
-        // a `\s` that can match one makes the engine backtrack for nothing.
-        // The capture is `([^ \t].*)?` rather than `(.*)`: those two can both
-        // match the same run of spaces, and that ambiguity is what lets the
-        // engine backtrack super-linearly. The same strings match — the greedy
-        // `[ \t]+` has already eaten every space before the group starts.
-        const heading = /^#{1,6}[ \t]+([^ \t].*)?$/.exec(line)
-        if (heading) {
-          return (
-            <h3
-              key={key}
-              className="text-ink-faint mt-3 text-[0.6875rem] font-medium tracking-wide uppercase first:mt-0"
-            >
-              {heading[1]}
-            </h3>
-          )
-        }
-        const bullet = /^[ \t]*[-*•][ \t]+([^ \t].*)?$/.exec(line)
-        if (bullet) {
-          return (
-            <p key={key} className="text-ink flex gap-2.5 text-sm leading-relaxed">
-              <span aria-hidden className="bg-ink-faint mt-2 size-1 shrink-0 rounded-full" />
-              <span className="min-w-0">{bullet[1]}</span>
-            </p>
-          )
-        }
-        return (
-          <p key={key} className="text-ink text-sm leading-relaxed">
-            {line}
-          </p>
-        )
-      })}
-    </div>
-  )
-}
-
 /** One line in the list: what it is, whose it is, when it was made. */
 function ReportRow({
   g,
@@ -349,8 +296,20 @@ function ReportPane({
         </div>
       </header>
 
-      <div className="max-h-[30rem] overflow-y-auto px-5 py-4">
-        <ReportBody corps={g.corps} />
+      {/* The same editor the Daily and Weekly pages use, keyed on this
+          report's own manager: correcting a chef's report, saving it as a new
+          version, and reading the .docx that version produced are the same
+          three actions wherever the report is opened from, so they are the
+          same component and not a second implementation that drifts. */}
+      <div className="p-4">
+        <ReportEditor
+          kind={weekly ? 'weekly' : 'daily'}
+          period={g.period}
+          objet={g.objet}
+          corps={g.corps}
+          generatedBy={g.generated_by}
+          managerId={g.manager_id}
+        />
       </div>
     </motion.article>
   )

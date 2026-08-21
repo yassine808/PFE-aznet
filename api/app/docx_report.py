@@ -369,7 +369,8 @@ def _shell(document, kind: str, period: str) -> None:
     _page_field(footer)
 
 
-def _title_block(document, title: str, period: str, author: Optional[str]) -> None:
+def _title_block(document, title: str, period: str, author: Optional[str],
+                 edited: bool = False) -> None:
     """The title, and the provenance line under it."""
     from docx.shared import Pt
 
@@ -385,11 +386,16 @@ def _title_block(document, title: str, period: str, author: Optional[str]) -> No
     provenance = document.add_paragraph()
     provenance.paragraph_format.space_after = Pt(4)
     by_hand = bool(author) and author != "automatique"
+    # "établi par" and "modifié par" are not the same claim, and a document
+    # that says the first about a corrected report hides the one fact a reader
+    # needs to weigh it: somebody changed what the pipeline wrote, and this
+    # names them. Set on the path that stores an edited version.
+    signature = f"modifié par {author}" if edited else f"établi par {author}"
     _run(provenance, period, size=9, bold=True, color=BODY)
     _run(provenance, SEP, size=9, color=RULE)
     _run(
         provenance,
-        f"établi par {author}" if by_hand else "rapport automatique",
+        signature if by_hand else "rapport automatique",
         size=9,
         color=ACCENT if by_hand else MUTED,
     )
@@ -509,6 +515,7 @@ def build(
     rows: Sequence[dict],
     author: Optional[str] = None,
     alerts: Optional[Sequence[dict]] = None,
+    edited: bool = False,
 ) -> bytes:
     """The whole document, as the bytes that get attached or downloaded.
 
@@ -522,7 +529,7 @@ def build(
 
     _shell(document, kind, period)
 
-    _title_block(document, title, period, author)
+    _title_block(document, title, period, author, edited)
 
     _tiles(document, rows)
 

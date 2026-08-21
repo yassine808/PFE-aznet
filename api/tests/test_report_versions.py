@@ -117,3 +117,54 @@ def test_empty_body_is_rejected(client, monkeypatch):
         json={"kind": "daily", "period": "2026-08-04", "objet": "x", "corps": "   "},
     )
     assert res.status_code == 422
+
+
+def test_save_carries_the_manager_and_the_document(sql):
+    """A chef's history is their own, and the version stores the file it made.
+
+    Both are one statement's parameters, so the check is on the parameters: a
+    version filed under the wrong manager appends into somebody else's history,
+    and a version with no document is one the Reports page cannot show as it
+    was sent.
+    """
+    logs.save_report_version(
+        "daily", "2026-08-04", "Rapport", "Texte", manager_id=7, docx=b"PK\x03\x04"
+    )
+
+    statement, params = sql[0]
+    assert "manager_id" in statement and "docx" in statement
+    # The numbering sub-select has to be scoped the same way, or two chefs on
+    # one day would fight over the same version number.
+    assert "WHERE kind = %s AND period = %s AND manager_id = %s" in statement
+    assert 7 in params
+
+
+def test_listing_is_scoped_to_one_manager_and_never_selects_the_file(sql):
+    """Ten stored documents must not travel to draw a list of ten dates."""
+    logs.list_report_versions("daily", "2026-08-04", with_body=True, manager_id=7)
+
+    statement, params = sql[0]
+    assert "(docx IS NOT NULL) AS has_docx" in statement
+    assert ", docx" not in statement, "the bytes themselves must stay in the row"
+    assert "manager_id = %s" in statement
+    assert params[-1] == 7
+
+
+def test_a_version_with_no_document_is_a_404(client, monkeypatch):
+    """Versions stored before the column existed have none; 404 says so."""
+    monkeypatch.setattr(logs, "report_version_docx", lambda _id: None)
+    assert client.get("/report-versions/12/docx").status_code == 404
+
+
+def test_the_stored_document_is_served_as_is(client, monkeypatch):
+    """Served from the row, never re-rendered: a re-render is a different file."""
+    monkeypatch.setattr(logs, "report_version_docx", lambda _id: ("Rapport", b"PK\x03\x04zip"))
+    res = client.get("/report-versions/12/docx")
+    assert res.status_code == 200
+    assert res.content == b"PK\x03\x04zip"
+    # Inline by default so the dashboard's preview can render it; the download
+    # button asks for the other disposition explicitly.
+    assert res.headers["content-disposition"].startswith("inline;")
+    assert client.get("/report-versions/12/docx?download=true").headers[
+        "content-disposition"
+    ].startswith("attachment;")

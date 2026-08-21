@@ -449,12 +449,18 @@ export interface ReportVersion {
   id: number
   kind: 'daily' | 'weekly'
   period: string
+  /** 0 for the company-wide report; a person id for a chef's own team report. */
+  manager_id: number
   version: number
   objet: string
   corps?: string
   author: string
   note?: string | null
   created_at: string
+  /** Whether the stored .docx exists for this version. The bytes are never in
+   *  the list — a history of ten documents is megabytes — so this is what says
+   *  the preview and the download have something to open. */
+  has_docx?: boolean
 }
 
 export const reportVersions = (
@@ -462,9 +468,11 @@ export const reportVersions = (
   period: string,
   full = false,
   signal?: AbortSignal,
+  managerId = 0,
 ) =>
   get<{ versions: ReportVersion[] }>(
-    `/report-versions?kind=${kind}&period=${encodeURIComponent(period)}&full=${full}`,
+    `/report-versions?kind=${kind}&period=${encodeURIComponent(period)}&full=${full}` +
+      `&manager_id=${managerId}`,
     signal,
   )
 
@@ -474,7 +482,14 @@ export const saveReportVersion = (input: {
   objet: string
   corps: string
   note?: string | null
+  manager_id?: number
 }) => post<ReportVersion>('/report-versions', input)
+
+/** Where a stored version's Word document lives — the exact bytes that were
+ *  rendered when it was saved, never a re-render. `download` flips the
+ *  disposition; the preview asks for it inline. */
+export const reportVersionDocxUrl = (id: number, download = false) =>
+  `${BASE}/report-versions/${id}/docx${download ? '?download=true' : ''}`
 
 /**
  * One site. `verifie` is false only for a site the pipeline created from a name

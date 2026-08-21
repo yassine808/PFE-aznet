@@ -1042,6 +1042,7 @@ def list_report_versions(
     kind: str = Query(..., description="daily | weekly"),
     period: str = Query(..., description="La date, ou le premier jour de la semaine"),
     full: bool = Query(False, description="Inclure le corps et l'image de chaque version"),
+    manager_id: int = Query(0, description="0 = rapport de la société; sinon le chef concerné"),
     caller: dict = Depends(auth.require_human),
 ) -> dict:
     """The editing history of one report, newest first.
@@ -1052,9 +1053,40 @@ def list_report_versions(
     if kind not in KINDS:
         raise HTTPException(422, f"kind must be one of {KINDS}")
     try:
-        return {"versions": logs.list_report_versions(kind, period, with_body=full)}
+        return {
+            "versions": logs.list_report_versions(
+                kind, period, with_body=full, manager_id=manager_id
+            )
+        }
     except logs.LogStoreError as exc:
         raise HTTPException(502, f"log store read failed: {exc}") from exc
+
+
+@app.get(
+    "/report-versions/{version_id}/docx",
+    responses={404: {"description": "No stored document for this version"}},
+)
+def report_version_docx(
+    version_id: int,
+    download: bool = Query(False, description="Télécharger plutôt qu'afficher"),
+    caller: dict = Depends(auth.require_human),
+) -> Response:
+    """The .docx exactly as it was rendered when this version was saved.
+
+    Read from the row, never re-rendered: the figures come from the rows the
+    period covers and those keep changing, so a re-render of an old version is
+    a document nobody ever received. A version stored before the column existed
+    (or whose render failed) has none, and 404 is the honest answer — the
+    dashboard falls back to exporting the current text, and says so.
+    """
+    try:
+        found = logs.report_version_docx(version_id)
+    except logs.LogStoreError as exc:
+        raise HTTPException(502, f"log store read failed: {exc}") from exc
+    if found is None:
+        raise HTTPException(404, "aucun document stocké pour cette version")
+    objet, blob = found
+    return _docx_response(docx_report.filename(objet), blob, inline=not download)
 
 
 class ReportVersionIn(BaseModel):
@@ -1064,6 +1096,9 @@ class ReportVersionIn(BaseModel):
     corps: str
     image: Optional[str] = Field(default=None, description="Carte illustrée, en data: URI")
     note: Optional[str] = None
+    manager_id: int = Field(
+        default=0, description="0 = rapport de la société; sinon le chef concerné"
+    )
 
 
 @app.post(
@@ -1082,6 +1117,19 @@ def save_report_version(payload: ReportVersionIn, caller: dict = Depends(auth.re
         raise HTTPException(422, "objet must not be empty")
     if not payload.corps.strip():
         raise HTTPException(422, "corps must not be empty")
+    author = caller.get("name") or "inconnu"
+
+    # The document is rendered here and stored with the text it came from, so
+    # the version *is* the .docx and not a promise to rebuild one later. The
+    # provenance line inside it carries `author`, which is how "who made the
+    # last change" ends up in the report itself rather than only in a table
+    # beside it. Best-effort: a renderer that fails must not cost the operator
+    # the edit they just made — the version is still saved, without a document,
+    # and the dashboard falls back to exporting the current text.
+    # `edited=True`: this render is a human's correction, and the provenance
+    # line inside the document says "modifié par" rather than "établi par".
+    blob = _safe_docx(payload.objet, payload.corps, payload.period, author, edited=True)
+
     try:
         version = logs.save_report_version(
             kind=payload.kind,
@@ -1089,8 +1137,10 @@ def save_report_version(payload: ReportVersionIn, caller: dict = Depends(auth.re
             objet=payload.objet,
             corps=payload.corps,
             image=payload.image,
-            author=caller.get("name") or "inconnu",
+            author=author,
             note=payload.note,
+            manager_id=payload.manager_id,
+            docx=blob,
         )
     except logs.LogStoreError as exc:
         raise HTTPException(502, f"log store write failed: {exc}") from exc
@@ -1100,14 +1150,22 @@ def save_report_version(payload: ReportVersionIn, caller: dict = Depends(auth.re
     # the manager was looking at their corrected text. The version history is
     # the append-only record; this is the "current text" the rest of the app
     # reads, so the newest save wins here.
-    if caller.get("id"):
+    # Filed under the manager the report belongs to, not under whoever typed
+    # the correction: `manager_reports` is keyed (manager, period) and is what
+    # the Reports page and the technicians read, so mirroring an edit of a
+    # chef's report onto the editor's own id would leave the chef's row showing
+    # the model's draft and create a second, duplicate report under the editor.
+    # `generated_by` still names the person who changed it — that is the "who
+    # made the last change" the report itself prints.
+    owner = payload.manager_id or caller.get("id")
+    if owner:
         try:
             logs.save_manager_report(
-                caller["id"],
+                owner,
                 payload.period,
                 payload.objet,
                 payload.corps,
-                caller.get("name") or "inconnu",
+                author,
                 payload.kind,
             )
         except logs.LogStoreError as exc:
@@ -1211,6 +1269,27 @@ def daily_report_endpoint(payload: DailyReportRequest, caller: dict = Depends(au
             # but it does cost the Reports page this row — so it is printed.
             print(f"[reports] storing the generated report failed: {exc}")
 
+    # …and as version 1 of that period's history, with the document it renders
+    # to. Filed under the *same* id as the `manager_reports` row above, because
+    # the two are one report seen from two pages: the Reports page lists the
+    # row and the editor beside it reads this history, and keying them
+    # differently is how a report shows "no versions" next to a version it
+    # generated itself. Without this the history began at the first human
+    # correction, so the model's own wording — the thing an edit is judged
+    # against — was the one version never stored.
+    try:
+        logs.save_report_version(
+            kind=period_type,
+            period=payload.date,
+            objet=content.objet,
+            corps=content.corps,
+            author=caller.get("name") or "automatique",
+            manager_id=caller.get("id") or 0,
+            docx=_safe_docx(content.objet, content.corps, payload.date, caller.get("name")),
+        )
+    except logs.LogStoreError as exc:
+        print(f"[reports] archiving the generated version failed: {exc}")
+
     # The scheduled mail is signed "automatique"; a manual run is signed by the
     # account that asked — the dashboard shows it next to the panel.
     return DailyReportResponse(
@@ -1234,8 +1313,9 @@ class ReportExportRequest(BaseModel):
     author: Optional[str] = Field(None, description="Qui l'a établi; absent = automatique")
 
 
-@app.post("/reports/export", responses={502: {"description": "Sheets read failed"}})
-def export_report(payload: ReportExportRequest, caller: dict = Depends(auth.require_human)) -> Response:
+def render_report_docx(
+    title: str, body: str, period: str, author: Optional[str], edited: bool = False
+) -> bytes:
     """The report as a .docx — the same bytes the scheduled mail attaches.
 
     The renderer lives in the backend (`docx_report.py`) because `jobs.py` sends
@@ -1243,13 +1323,18 @@ def export_report(payload: ReportExportRequest, caller: dict = Depends(auth.requ
     The dashboard therefore downloads this rather than assembling its own copy:
     two renderers of one document drift, and only one of them is ever the one
     the director received.
+
+    A function rather than only a handler since 2026-08-21: saving a version
+    stores the document it produced, and a stored version has to be rendered on
+    exactly the path the download uses or the two would be different documents
+    under one version number.
     """
-    weekly = "→" in payload.period
+    weekly = "→" in period
     # A weekly label carries its two ends (`2026-08-10 → 2026-08-16`) and every
     # day between them belongs; a daily one is the single day. Both sides go
     # through `norm_date` because the Sheet hands back `10/08/2026` once the
     # column is formatted as a date, and a string compare would drop the week.
-    first, _, last = payload.period.partition("→")
+    first, _, last = period.partition("→")
     start = journal.norm_date(first) or ""
     end = (journal.norm_date(last) if weekly else start) or start
 
@@ -1275,24 +1360,62 @@ def export_report(payload: ReportExportRequest, caller: dict = Depends(auth.requ
     except logs.LogStoreError as exc:
         raise HTTPException(502, f"lecture des rapports impossible: {exc}") from exc
 
-    blob = docx_report.build(
-        payload.title,
-        payload.body,
+    return docx_report.build(
+        title,
+        body,
         "Rapport hebdomadaire" if weekly else "Rapport journalier",
-        payload.period,
+        period,
         rows,
-        author=payload.author or caller.get("name"),
+        author=author,
+        edited=edited,
         # The same assessment the mail carries, so a document exported by
         # hand and one attached by the scheduler say the same thing.
         alerts=stock.alerts_for_rows(rows),
     )
-    auth.record(caller, "report_exported", target=payload.period)
-    name = docx_report.filename(payload.title)
+
+
+def _safe_docx(
+    title: str, body: str, period: str, author: Optional[str], edited: bool = False
+) -> Optional[bytes]:
+    """`render_report_docx`, but a failure costs the document and nothing else.
+
+    Used on the paths where the document is a by-product — archiving a version
+    — as opposed to the download, where a failure *is* the answer and has to
+    reach the operator.
+    """
+    try:
+        return render_report_docx(title, body, period, author, edited)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[reports] .docx render failed: {exc}")
+        return None
+
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _docx_response(name: str, blob: bytes, inline: bool = False) -> Response:
+    """One document, as a download or as something a viewer can render.
+
+    `inline` is what the dashboard's preview asks for: the same bytes, but the
+    browser is told to show them rather than to save them — the preview and the
+    download must never be two different renders of one report.
+    """
+    disposition = "inline" if inline else "attachment"
     return Response(
         blob,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        media_type=DOCX_MIME,
+        headers={"Content-Disposition": f'{disposition}; filename="{name}"'},
     )
+
+
+@app.post("/reports/export", responses={502: {"description": "Sheets read failed"}})
+def export_report(payload: ReportExportRequest, caller: dict = Depends(auth.require_human)) -> Response:
+    """The Export button: render the current text and hand it back as a file."""
+    blob = render_report_docx(
+        payload.title, payload.body, payload.period, payload.author or caller.get("name")
+    )
+    auth.record(caller, "report_exported", target=payload.period)
+    return _docx_response(docx_report.filename(payload.title), blob)
 
 
 # ── Pipeline logs (dashboard "Logs / n8n" panel) ────────────────────────────

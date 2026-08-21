@@ -8,6 +8,7 @@ import {
   type DailyReportContent,
 } from '@/lib/api'
 import { parseISODay, toISODate } from '@/lib/metrics'
+import { useAuth } from '@/lib/auth'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -24,6 +25,7 @@ const DAY_MS = 86_400_000
 
 export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: string }) {
   const { t, locale } = useI18n()
+  const { user } = useAuth()
   const reports = useApi('reports', api.reports)
   // Selected week as its Monday — `#/weekly?week=2026-08-03` from the report
   // mail, otherwise the current week. Initial value only, as on the Daily page.
@@ -205,6 +207,12 @@ export function WeeklyReportPage({ initialWeek }: { readonly initialWeek?: strin
           objet={content.objet}
           corps={content.corps}
           generatedBy={content.generated_by}
+          // The history is keyed by whoever the report belongs to, and a run
+          // started from this page is filed under the account that started it
+          // — the same id `POST /daily-report` writes. Passing 0 here would
+          // show an empty version list beside a report this page just
+          // generated and archived.
+          managerId={user?.id ?? 0}
         />
       )}
 

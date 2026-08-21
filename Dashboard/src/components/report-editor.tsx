@@ -5,10 +5,18 @@ import {
   CheckIcon,
   ClockCounterClockwiseIcon,
   DownloadSimpleIcon,
+  FileDocIcon,
   FloppyDiskIcon,
   PencilSimpleIcon,
 } from '@phosphor-icons/react'
-import { reportVersions, saveReportVersion, useApi, type ReportVersion } from '@/lib/api'
+import {
+  reportVersionDocxUrl,
+  reportVersions,
+  saveReportVersion,
+  useApi,
+  type ReportVersion,
+} from '@/lib/api'
+import { DocxView } from '@/components/docx-view'
 import { diffCounts, diffLines } from '@/lib/diff'
 import { useI18n } from '@/lib/i18n'
 import { exportReport } from '@/lib/report-export'
@@ -40,16 +48,23 @@ export function ReportEditor({
   objet,
   corps,
   generatedBy,
+  managerId = 0,
 }: {
   readonly kind: 'daily' | 'weekly'
   readonly period: string
   readonly objet: string
   readonly corps: string
   readonly generatedBy?: string
+  /** Whose report this is: 0 for the company-wide one, a person id for a
+   *  chef's. It keys the history, so the Reports page can edit one chef's
+   *  report without appending into another's. */
+  readonly managerId?: number
 }) {
   const { t } = useI18n()
   const toast = useToast()
-  const history = useApi(`report-versions:${kind}:${period}`, (s) => reportVersions(kind, period, true, s))
+  const history = useApi(`report-versions:${kind}:${period}:${managerId}`, (s) =>
+    reportVersions(kind, period, true, s, managerId),
+  )
 
   const [draft, setDraft] = useState(corps)
   const [title, setTitle] = useState(objet)
@@ -58,6 +73,10 @@ export function ReportEditor({
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [openVersion, setOpenVersion] = useState<ReportVersion | null>(null)
+  // Which stored document the panel below shows. null means "the newest one
+  // that has one" — a page opened cold should already be showing the last
+  // generated .docx, not an empty frame with a picker.
+  const [shownDocx, setShownDocx] = useState<number | null>(null)
 
   // A freshly generated report replaces the buffer — but only when the model's
   // text itself changes. Keying on `corps` rather than on mount is what lets
@@ -71,6 +90,8 @@ export function ReportEditor({
 
   const versions = history.data?.versions ?? []
   const latest = versions[0] ?? null
+  const docxVersion =
+    versions.find((v) => v.id === shownDocx) ?? versions.find((v) => v.has_docx) ?? null
   // Compared against the last save when there is one, and against the model's
   // own text when there is not: the first edit of the day should still show
   // what it changed.
@@ -83,7 +104,7 @@ export function ReportEditor({
     setBusy(true)
     setError(null)
     try {
-      await saveReportVersion({ kind, period, objet: title, corps: draft })
+      await saveReportVersion({ kind, period, objet: title, corps: draft, manager_id: managerId })
       history.reload()
       setSaved(true)
       setEditing(false)
@@ -224,6 +245,8 @@ export function ReportEditor({
           versions={versions}
           counts={counts}
           dirty={dirty}
+          shownDocx={docxVersion?.id ?? null}
+          onShowDocx={setShownDocx}
           onOpen={setOpenVersion}
           onRestore={(v) => {
             setDraft(v.corps ?? '')
@@ -232,6 +255,8 @@ export function ReportEditor({
           }}
         />
       </div>
+
+      <DocxPanel version={docxVersion} />
 
       <AnimatePresence>
         {openVersion && (
@@ -362,12 +387,16 @@ function VersionList({
   versions,
   counts,
   dirty,
+  shownDocx,
+  onShowDocx,
   onOpen,
   onRestore,
 }: {
   readonly versions: ReportVersion[]
   readonly counts: { added: number; removed: number }
   readonly dirty: boolean
+  readonly shownDocx: number | null
+  readonly onShowDocx: (id: number) => void
   readonly onOpen: (v: ReportVersion) => void
   readonly onRestore: (v: ReportVersion) => void
 }) {
@@ -413,6 +442,20 @@ function VersionList({
                   {v.created_at.slice(0, 16).replace('T', ' ')}
                 </span>
               </button>
+              {v.has_docx && (
+                <button
+                  type="button"
+                  onClick={() => onShowDocx(v.id)}
+                  aria-pressed={shownDocx === v.id}
+                  aria-label={t('editor.showDocx', { version: v.version })}
+                  className={cn(
+                    'focus-visible:ring-accent cursor-pointer rounded p-1 transition-colors outline-none focus-visible:ring-2',
+                    shownDocx === v.id ? 'text-accent' : 'text-ink-faint hover:text-ink',
+                  )}
+                >
+                  <FileDocIcon size={13} />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onRestore(v)}
@@ -472,5 +515,46 @@ function VersionModal({
         {version.corps}
       </p>
     </dialog>
+  )
+}
+
+/**
+ * The document, below the text it came from.
+ *
+ * A report is read in the dashboard and *sent* as a .docx, and until this panel
+ * the two were only claimed to be the same file — the operator saw a styled
+ * paragraph and the director opened a Word document with tables, flags and a
+ * provenance line nobody had ever previewed. These are the stored bytes of the
+ * version named in the header, so what is on screen is literally what was sent.
+ *
+ * Nothing is rendered at all when no version carries a document: an empty
+ * frame under a report reads as a broken preview, while its absence plus the
+ * Export button above reads as "not generated yet", which is the truth.
+ */
+function DocxPanel({ version }: { readonly version: ReportVersion | null }) {
+  const { t } = useI18n()
+  if (!version?.has_docx) return null
+
+  return (
+    <section className="border-line mt-6 flex flex-col gap-3 border-t pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-ink-faint flex items-center gap-2 text-[0.6875rem] tracking-wide uppercase">
+          <FileDocIcon size={13} />
+          {t('editor.docxOf', { version: version.version, author: version.author })}
+        </h3>
+        {/* A plain link, not a fetch-and-blob: the API already answers this URL
+            with a download disposition, and the browser's own downloader
+            handles a large file better than anything built here would. */}
+        <a
+          href={reportVersionDocxUrl(version.id, true)}
+          download
+          className="border-line text-ink-muted hover:text-ink focus-visible:ring-accent flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors outline-none focus-visible:ring-2"
+        >
+          <DownloadSimpleIcon size={13} />
+          {t('editor.downloadDocx')}
+        </a>
+      </div>
+      <DocxView src={reportVersionDocxUrl(version.id)} />
+    </section>
   )
 }

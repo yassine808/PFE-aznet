@@ -203,3 +203,20 @@ def test_single_site_skips_the_per_chantier_table():
 )
 def test_slug(title, expected):
     assert docx_report.slug(title) == expected
+
+
+def test_an_edited_report_says_who_changed_it():
+    """"établi par" and "modifié par" are different claims about the same name.
+
+    A corrected report that still says "établi par" hides the fact a reader
+    needs most: the pipeline's wording was changed, and by whom.
+    """
+    from docx import Document
+
+    blob = docx_report.build(
+        "Rapport", "Texte", "Rapport journalier", "2026-08-21", [],
+        author="Yassine", edited=True,
+    )
+    text = "\n".join(p.text for p in Document(io.BytesIO(blob)).paragraphs)
+    assert "modifié par Yassine" in text
+    assert "établi par" not in text

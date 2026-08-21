@@ -519,6 +519,7 @@ def _report_mail(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ))
     except Exception as exc:  # noqa: BLE001
+        blob = None
         print(f"[report] .docx non joint ({exc}) — le corps du mail reste complet")
     try:
         sent = mailer.send(
@@ -534,6 +535,10 @@ def _report_mail(
         "rows": len(rows), "sent_to": sent, "subject": content.objet,
         "generated_by": "automatique", "objet": content.objet, "corps": content.corps,
         "mail_error": mail_error,
+        # Travels so the caller can file it as version 1: the document a chef
+        # received by mail is the one their history has to start from, and
+        # re-rendering it later would produce different figures.
+        "docx": blob,
     }
 
 
@@ -575,6 +580,29 @@ def _report_html(period: str, content, rows: int) -> str:
     )
 
 
+def _file_version(kind: str, label: str, result: dict, manager_id: int) -> None:
+    """File a scheduled report as version 1 of its own history, document and all.
+
+    Without this the version list started at whatever a human first corrected,
+    so the one thing every history needs — what the machine actually wrote,
+    before anybody touched it — was the one thing missing from it. Best-effort:
+    a report that was generated and mailed is not worth losing to a log store
+    that happens to be down.
+    """
+    try:
+        logs.save_report_version(
+            kind=kind,
+            period=label,
+            objet=result["objet"],
+            corps=result["corps"],
+            author=result.get("generated_by") or "automatique",
+            manager_id=manager_id,
+            docx=result.get("docx"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[report] version non archivée ({exc}) — le rapport lui-même est envoyé")
+
+
 def _period_report(label: str, rows: List[dict], kind: str) -> dict:
     """One company digest to the director(s) + one team digest per chef.
 
@@ -596,6 +624,8 @@ def _period_report(label: str, rows: List[dict], kind: str) -> dict:
     ]
     director_rcpts = [p["email"] for p in directors] or _report_recipients()
     company = _report_mail(director_rcpts, label, rows)
+    if company.get("rows"):
+        _file_version(kind, label, company, 0)
 
     sent_all = set(company["sent_to"])
     manager_reports = []
@@ -617,6 +647,7 @@ def _period_report(label: str, rows: List[dict], kind: str) -> dict:
             logs.save_manager_report(
                 manager_id, label, result["objet"], result["corps"], result["generated_by"], kind
             )
+            _file_version(kind, label, result, manager_id)
 
     return {
         "rows": len(rows),

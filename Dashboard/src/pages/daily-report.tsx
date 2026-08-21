@@ -8,6 +8,7 @@ import {
   type DailyReportContent,
 } from '@/lib/api'
 import { parseISODay, toISODate, todayISO } from '@/lib/metrics'
+import { useAuth } from '@/lib/auth'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -21,6 +22,7 @@ import { computeReportStats } from '@/lib/report-stats'
 
 export function DailyReportPage({ initialDate }: { readonly initialDate?: string }) {
   const { t, locale } = useI18n()
+  const { user } = useAuth()
   const reports = useApi('reports', api.reports)
 
   // `#/daily?date=2026-08-05` — the target of the report mail's button. Only
@@ -185,6 +187,12 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
           objet={content.objet}
           corps={content.corps}
           generatedBy={content.generated_by}
+          // The history is keyed by whoever the report belongs to, and a run
+          // started from this page is filed under the account that started it
+          // — the same id `POST /daily-report` writes. Passing 0 here would
+          // show an empty version list beside a report this page just
+          // generated and archived.
+          managerId={user?.id ?? 0}
         />
       )}
     </motion.div>

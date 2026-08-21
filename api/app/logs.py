@@ -323,6 +323,33 @@ CREATE TABLE IF NOT EXISTS report_versions (
 CREATE INDEX IF NOT EXISTS report_versions_doc_idx
     ON report_versions (kind, period, version DESC);
 
+-- Whose report this version belongs to, and the document it produced.
+--
+-- `manager_id` is 0 for the company-wide daily/weekly report the Daily and
+-- Weekly pages edit, and a person id for a chef's own team report — the
+-- Reports page lists one row per (manager, period), so without this column two
+-- chefs correcting the same day would append into one shared history and each
+-- would see the other's wording as their own previous version. Zero rather
+-- than NULL, and no foreign key: the numbering below is `per (kind, period,
+-- manager_id)` and a UNIQUE index treats every NULL as distinct, which is
+-- exactly the race the numbering exists to close. A deleted chef keeps their
+-- reports for the same reason `manager_reports` keeps theirs.
+--
+-- `docx` is the rendered Word document for this version, stored rather than
+-- re-rendered on demand. The renderer derives its figures and tables from the
+-- rows the period covers, and those rows keep changing — a late report, a
+-- corrected quantity — so re-rendering an old version produces a document that
+-- never existed. A version is meant to reproduce what was signed off, which is
+-- the same reason `image` is stored per version. NULL when the render failed:
+-- a document that will not build must not cost the operator their text.
+DO $$ BEGIN
+    ALTER TABLE report_versions ADD COLUMN IF NOT EXISTS manager_id BIGINT NOT NULL DEFAULT 0;
+    ALTER TABLE report_versions ADD COLUMN IF NOT EXISTS docx BYTEA;
+    ALTER TABLE report_versions DROP CONSTRAINT IF EXISTS report_versions_kind_period_version_key;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS report_versions_number_idx
+    ON report_versions (kind, period, manager_id, version);
+
 -- Media archive: every voice note / photo /document the pipeline receives,
 -- copied into Postgres while it is still downloadable. Telegram file_ids and
 -- WhatsApp media ids are tickets, not URLs — Meta's media URLs expire within
@@ -1787,26 +1814,50 @@ def resolve_write(write_id: int, ok: bool, error: Optional[str] = None,
 # there is no update and no delete, because the point of the table is that an
 # earlier wording can always be recovered.
 
-def list_report_versions(kind: str, period: str, with_body: bool = True) -> List[dict]:
+def list_report_versions(
+    kind: str, period: str, with_body: bool = True, manager_id: int = 0
+) -> List[dict]:
     """Every saved version for one report, newest first.
 
     `with_body=False` returns the index alone — id, version, author, timestamp.
     A version list beside an editor is opened far more often than any single old
     version is read, and shipping every stored body (plus its embedded image) to
     draw a list of dates is how a small feature becomes a slow page.
+
+    The stored `docx` is *never* selected here whatever `with_body` says — it is
+    a document per row, and a list of ten of them would be megabytes of base64
+    on a page that only wants to draw ten dates. `has_docx` says which rows have
+    one; `report_version_docx` serves the bytes for the single one that is
+    opened.
     """
     columns = (
-        "id, kind, period, version, objet, corps, image, author, note, created_at"
+        "id, kind, period, manager_id, version, objet, corps, image, author, note, created_at"
         if with_body
-        else "id, kind, period, version, objet, author, note, created_at"
+        else "id, kind, period, manager_id, version, objet, author, note, created_at"
     )
     with _cursor() as cur:
         cur.execute(
-            "SELECT {} FROM report_versions WHERE kind = %s AND period = %s "
+            "SELECT {}, (docx IS NOT NULL) AS has_docx FROM report_versions "
+            "WHERE kind = %s AND period = %s AND manager_id = %s "
             "ORDER BY version DESC".format(columns),
-            (kind, period),
+            (kind, period, manager_id),
         )
         return [_iso(dict(r)) for r in cur.fetchall()]
+
+
+def report_version_docx(version_id: int) -> Optional[tuple]:
+    """One stored document: `(objet, bytes)`, or None when there is none.
+
+    Returns None both for a version that does not exist and for one whose
+    render failed, because the caller answers the same 404 to either — the
+    browser asked for a document it cannot have.
+    """
+    with _cursor() as cur:
+        cur.execute("SELECT objet, docx FROM report_versions WHERE id = %s", (version_id,))
+        row = _one(cur)
+    if not row or row["docx"] is None:
+        return None
+    return (row["objet"], bytes(row["docx"]))
 
 
 def save_report_version(
@@ -1817,6 +1868,8 @@ def save_report_version(
     image: Optional[str] = None,
     author: str = "inconnu",
     note: Optional[str] = None,
+    manager_id: int = 0,
+    docx: Optional[bytes] = None,
 ) -> dict:
     """Append one version, numbering it from whatever is already stored.
 
@@ -1827,18 +1880,24 @@ def save_report_version(
     UNIQUE constraint make the race a retryable error at worst, never a
     silently lost edit.
     """
+    from psycopg2 import Binary  # lazy: tests run with no DB
     with _cursor() as cur:
         cur.execute(
             """
-            INSERT INTO report_versions (kind, period, version, objet, corps, image, author, note)
+            INSERT INTO report_versions
+                (kind, period, manager_id, version, objet, corps, image, author, note, docx)
             VALUES (
-                %s, %s,
-                (SELECT COALESCE(MAX(version), 0) + 1 FROM report_versions WHERE kind = %s AND period = %s),
-                %s, %s, %s, %s, %s
+                %s, %s, %s,
+                (SELECT COALESCE(MAX(version), 0) + 1 FROM report_versions
+                  WHERE kind = %s AND period = %s AND manager_id = %s),
+                %s, %s, %s, %s, %s, %s
             )
-            RETURNING id, kind, period, version, objet, corps, image, author, note, created_at
+            RETURNING id, kind, period, manager_id, version, objet, corps, image,
+                      author, note, created_at, (docx IS NOT NULL) AS has_docx
             """,
-            (kind, period, kind, period, objet, corps, image, author, note),
+            (kind, period, manager_id, kind, period, manager_id,
+             objet, corps, image, author, note,
+             Binary(docx) if docx else None),
         )
         return _iso(dict(_one(cur) or {}))
 
