@@ -7,7 +7,7 @@ import {
   useApi,
   type DailyReportContent,
 } from '@/lib/api'
-import { isFlagged, num, parseISODay, toISODate, todayISO } from '@/lib/metrics'
+import { parseISODay, toISODate, todayISO } from '@/lib/metrics'
 import { useI18n, intlLocaleOf } from '@/lib/i18n'
 import { useHeaderAction } from '@/lib/page-header'
 import { EmptyState, ErrorState, Skeleton } from '@/components/states'
@@ -16,6 +16,8 @@ import { GenerateButton } from '@/components/generate-button'
 import { NextRun } from '@/components/next-run'
 import { PeriodPicker } from '@/components/period-picker'
 import { ReportEditor } from '@/components/report-editor'
+import { ReportPerTech, ReportTotals } from '@/components/report-panels'
+import { computeReportStats } from '@/lib/report-stats'
 
 export function DailyReportPage({ initialDate }: { readonly initialDate?: string }) {
   const { t, locale } = useI18n()
@@ -75,34 +77,7 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
 
   // Same aggregates as the weekly page, for the one chosen day — arithmetic,
   // not prose, so the model call stays reserved for the report itself.
-  const stats = useMemo(() => {
-    const totals = rows.reduce(
-      (a, r) => ({
-        goulottes: a.goulottes + num(r.goulottes_m),
-        cables: a.cables + num(r.cables_m),
-        bureaux: a.bureaux + num(r.bureaux_termines),
-        panneaux: a.panneaux + num(r.panneaux_raccordes),
-      }),
-      { goulottes: 0, cables: 0, bureaux: 0, panneaux: 0 },
-    )
-    const byTech = new Map<string, { count: number; goulottes: number; flagged: number }>()
-    for (const r of rows) {
-      const k = (r.technicien ?? '').trim() || '—'
-      const p = byTech.get(k) ?? { count: 0, goulottes: 0, flagged: 0 }
-      byTech.set(k, {
-        count: p.count + 1,
-        goulottes: p.goulottes + num(r.goulottes_m),
-        flagged: p.flagged + (isFlagged(r.flag_review) ? 1 : 0),
-      })
-    }
-    return {
-      totals,
-      byTech: [...byTech.entries()].sort((a, b) => b[1].count - a[1].count),
-      flagged: rows.filter((r) => isFlagged(r.flag_review)).length,
-      techniciens: new Set(rows.map((r) => (r.technicien ?? '').trim()).filter(Boolean)).size,
-      chantiers: new Set(rows.map((r) => (r.chantier ?? '').trim()).filter(Boolean)).size,
-    }
-  }, [rows])
+  const stats = useMemo(() => computeReportStats(rows), [rows])
 
   const generate = async () => {
     setBusy(true)
@@ -197,47 +172,9 @@ export function DailyReportPage({ initialDate }: { readonly initialDate?: string
             ))}
           </div>
 
-          <section className="flex flex-col gap-4">
-            <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
-              {t('panel.productionToday')}
-            </h2>
-            <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-              {[
-                [fmt.format(stats.totals.goulottes), t('metric.goulottes'), 'm'],
-                [fmt.format(stats.totals.cables), t('metric.cables'), 'm'],
-                [fmt.format(stats.totals.bureaux), t('metric.bureaux'), ''],
-                [fmt.format(stats.totals.panneaux), t('metric.panneaux'), ''],
-              ].map(([v, l, u]) => (
-                <div key={l}>
-                  <p className="tabular text-ink text-2xl leading-none font-medium">
-                    {v}
-                    {u && <span className="text-ink-faint ms-1 text-xs">{u}</span>}
-                  </p>
-                  <p className="text-ink-faint mt-2 text-xs">{l}</p>
-                </div>
-              ))}
-            </div>
-          </section>
+          <ReportTotals totals={stats.totals} />
 
-          <section className="flex flex-col gap-4">
-            <h2 className="text-ink-faint border-line border-b pb-2 text-[0.6875rem] font-medium tracking-wide uppercase">
-              {t('weekly.perTech')}
-            </h2>
-            <ul className="divide-line flex flex-col divide-y">
-              {stats.byTech.map(([name, v]) => (
-                <li key={name} className="flex items-baseline gap-4 py-2.5 first:pt-0 last:pb-0">
-                  <span className="text-ink min-w-0 flex-1 truncate text-sm">{name}</span>
-                  <span className="tabular text-ink-muted text-sm">{fmt.format(v.count)}</span>
-                  <span className="tabular text-ink-faint w-20 text-end text-xs">
-                    {fmt.format(v.goulottes)} m
-                  </span>
-                  <span className="tabular text-status-warn w-8 text-end text-xs">
-                    {v.flagged || ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
+          <ReportPerTech byTech={stats.byTech} />
         </>
       )}
 
