@@ -69,6 +69,13 @@ FOOTER_Y = 6.92
 
 FOOTER_TEXT = "AZnet — Automatisation des rapports journaliers de chantier par IA"
 
+# The two figures the deck repeats in more than one place. Measured, not
+# remembered: TESTS is `pytest --collect-only -q`, NCLOC is what SonarCloud
+# reports for api/app + Dashboard/src. Both are stated on three slides, and
+# three literals drift apart the first time one of them is refreshed alone.
+TESTS = 860
+SONAR_COVERAGE = "80,7 %"
+
 # --- primitives ------------------------------------------------------------
 
 
@@ -249,7 +256,11 @@ def header(slide, kicker, title, accent=BLUE, on_dark=False):
 # How many numbered slides the parcours has, so the progress rule knows how far
 # through the defence a slide sits. Backup slides are past the end and simply
 # fill it.
-DECK_LENGTH = 24
+#
+# Filled by main() from the build sequence rather than typed: kept by hand it
+# read 24 for a 30-slide parcours, so every footer past the 24th printed
+# "26 / 24" -- a number that is worse than none, because it looks deliberate.
+DECK_LENGTH = 0
 
 
 def morph(slide, seconds=0.7):
@@ -457,6 +468,80 @@ def arrow(slide, x, y, w, h, right=True, color=None):
     return sh
 
 
+
+# --- the one chart drawn by hand -------------------------------------------
+
+
+def _fill_alpha(sh, pct):
+    """Translucency on a solid fill, which python-pptx does not expose."""
+    _alpha(sh.fill._xPr.find(qn("a:solidFill")), pct)
+
+
+def column_chart(slide, series, x, y, w, h, accent=BLUE, tick_every=7,
+                 axis_band=0.30, head_room=0.12, min_alpha=34):
+    """A daily column chart built from rectangles. No native chart object.
+
+    Three reasons it is drawn rather than inserted. A pptx chart carries its
+    own theme palette and its own fonts, so it argues with the two on the
+    cover. It renders a legend and a plot border nobody asked for. And it
+    silently drops the days whose value is zero -- which are the subject here:
+    the rhythm of the work is as much where it stops as where it peaks, and a
+    chart that closes the gaps would show a straighter line than the one that
+    was actually worked.
+
+    Depth comes from translucency, not from a second hue -- the same rule the
+    zellige follows. A quiet day is the same blue, thinner; the busiest days
+    are solid. `series` is [(YYYY-MM-DD, count)], gaps included.
+
+    `head_room` is taken off the TOP of the box, not off the plot: the tallest
+    column has its value printed above it, and that label has to land inside
+    the chart's own box rather than on whatever the slide wrote beside the
+    title. The baseline stays where the caller put it.
+    """
+    base = y + h - axis_band              # the axis, fixed by the caller's box
+    plot_h = (h - axis_band) * (1 - head_room)   # what the tallest column gets
+    top = max(v for _, v in series) or 1
+    slot = w / len(series)
+    bar_w = min(slot * 0.74, 0.34)
+    mean = sum(v for _, v in series) / len(series)
+
+    # The mean rule is drawn before the columns: over them it reads as a bar of
+    # its own at this width.
+    my = base - plot_h * (mean / top)
+    _rect(slide, x, my, w, 0.008, fill=MUTE)
+    # Left, not right: the tallest columns are in the last fortnight, and a
+    # caption at the end of the axis lands on top of them.
+    tf = _txbox(slide, x + 0.04, my - 0.21, 1.6, 0.20)
+    _run(_para(tf, first=True), ("moyenne %.1f / jour" % mean).replace(".", ","),
+         size=8, color=MUTE)
+
+    for i, (day, v) in enumerate(series):
+        cx = x + i * slot + (slot - bar_w) / 2
+        if not v:
+            # A day with no commit is a visible notch, not a missing slot.
+            _rect(slide, cx, base - 0.026, bar_w, 0.026, fill=LINE)
+            continue
+        bh = max(plot_h * (v / top), 0.035)
+        sh = _rect(slide, cx, base - bh, bar_w, bh, fill=accent)
+        _fill_alpha(sh, min_alpha + (100 - min_alpha) * (v / top))
+        if v == top:
+            tf = _txbox(slide, cx - 0.30, base - bh - 0.235, bar_w + 0.60, 0.22)
+            p_ = _para(tf, first=True)
+            p_.alignment = PP_ALIGN.CENTER
+            _run(p_, str(v), size=9.5, bold=True, color=accent)
+
+    _rect(slide, x, base, w, 0.012, fill=RGBColor(0xC3, 0xC7, 0xC9))
+
+    for i, (day, _v) in enumerate(series):
+        if i % tick_every:
+            continue
+        cx = x + i * slot + (slot - bar_w) / 2
+        tf = _txbox(slide, cx - 0.34, base + 0.07, bar_w + 0.68, 0.22)
+        p_ = _para(tf, first=True)
+        p_.alignment = PP_ALIGN.CENTER
+        _run(p_, "%s/%s" % (day[8:10], day[5:7]), size=8.5, color=MUTE)
+
+
 # --- slides ----------------------------------------------------------------
 
 
@@ -488,7 +573,7 @@ def s01_cover(prs):
 
     tf = _txbox(slide, MARGIN, 5.30, 6.4, 1.3)
     for i, (k, v) in enumerate([
-        ("Réalisé par", "Yassine [À COMPLÉTER — NOM]"),
+        ("Réalisé par", "Mohammed Yassine MAGRI"),
         ("Encadrant académique", "[À COMPLÉTER]"),
         ("Encadrant industriel", "[À COMPLÉTER]"),
     ]):
@@ -701,7 +786,7 @@ def s08_architecture(prs, n):
         ("Terrain", "Technicien\nnote vocale en darija,\nphoto ou texte", GREY),
         ("Réception", "Telegram Bot API\nWhatsApp Cloud API", GREEN),
         ("Orchestration", "n8n — 64 nœuds\nréception, déduplication,\nautorisation, réponses", GREEN),
-        ("Service applicatif", "FastAPI — 82 routes\nSTT, extraction, journal,\nordonnanceur, comptes", BLUE),
+        ("Service applicatif", "FastAPI — 85 routes\nSTT, extraction, journal,\nordonnanceur, comptes", BLUE),
         ("Persistance", "PostgreSQL — 26 tables\nGoogle Sheets\nun onglet par chantier", BLUE),
     ]
     x = MARGIN
@@ -1137,23 +1222,74 @@ def s15b_extraction(prs, n):
     footer(slide, n)
 
 
+# Commits per day, 15 July -- 21 August 2026, gaps included. Produced by
+#   git log --pretty=format:%ad --date=short | sort | uniq -c
+# and pasted here rather than shelled out at build time: the deck must build
+# identically from a clean checkout, and a figure that changes silently
+# between two builds is a figure nobody can check against the report.
+COMMITS = [
+    ("2026-07-15", 2), ("2026-07-16", 3), ("2026-07-17", 6), ("2026-07-18", 0),
+    ("2026-07-19", 0), ("2026-07-20", 1), ("2026-07-21", 1), ("2026-07-22", 4),
+    ("2026-07-23", 23), ("2026-07-24", 2), ("2026-07-25", 5), ("2026-07-26", 6),
+    ("2026-07-27", 9), ("2026-07-28", 0), ("2026-07-29", 13), ("2026-07-30", 13),
+    ("2026-07-31", 28), ("2026-08-01", 16), ("2026-08-02", 13), ("2026-08-03", 9),
+    ("2026-08-04", 14), ("2026-08-05", 7), ("2026-08-06", 2), ("2026-08-07", 5),
+    ("2026-08-08", 2), ("2026-08-09", 10), ("2026-08-10", 5), ("2026-08-11", 18),
+    ("2026-08-12", 13), ("2026-08-13", 2), ("2026-08-14", 0), ("2026-08-15", 34),
+    ("2026-08-16", 23), ("2026-08-17", 1), ("2026-08-18", 19), ("2026-08-19", 10),
+    ("2026-08-20", 29), ("2026-08-21", 28),
+]
+
+
+def s18a_activite(prs, n):
+    """The work itself, measured -- and the two gates it had to pass.
+
+    A defence deck states what was built; this one states how it was built,
+    because the jury has no other way to see the rhythm. The chart is not
+    decoration: it shows a project worked in bursts against fixed deadlines,
+    four days at zero, and a last fortnight that is the densest of the whole
+    repository. Putting the two automatic verdicts beside it is the point --
+    a commit count on its own measures typing, not engineering.
+    """
+    slide = new_slide(prs)
+    header(slide, "5 — Qualité", "Le rythme réel du développement, et ce qui le contrôle")
+    stats(slide, [("376", "commits\nsur 38 jours"),
+                  ("+117 339", "lignes ajoutées\n45 454 retirées"),
+                  ("%d" % TESTS, "tests automatisés\n810 sans base, 50 d'intégration"),
+                  ("6 / 6", "conditions du portail\nSonarCloud satisfaites")],
+          y=BODY_TOP - 0.07, h=1.48)
+
+    tf = _txbox(slide, MARGIN, 3.60, CONTENT_W * 0.62, 0.28)
+    _run(_para(tf, first=True), "Commits par jour", size=13.5, bold=True, color=BLUE)
+    tf = _txbox(slide, MARGIN + CONTENT_W * 0.62, 3.625, CONTENT_W * 0.38, 0.26)
+    p = _para(tf, first=True)
+    p.alignment = PP_ALIGN.RIGHT
+    _run(p, "15 juillet – 21 août 2026  ·  l'opacité suit l'intensité", size=10, color=MUTE)
+
+    column_chart(slide, COMMITS, MARGIN, 3.94, CONTENT_W, 2.02)
+
+    note(slide, "Le dépôt ne couvre que les phases de réalisation : les phases 0 à 2 — cadrage, état de l'art, conception — sont antérieures à son initialisation. Les quatre jours à zéro sont laissés visibles, et la moyenne est tirée vers le haut par la dernière quinzaine, la plus dense du projet.",
+         y=6.16, accent=BLUE, size=11.5, h=0.60)
+    footer(slide, n)
+
+
 def s18b_sonar(prs, n):
-    """SonarCloud: the gate passes now, and the deck never said so."""
+    """SonarCloud: the gate was red, then argued with, then actually passed."""
     slide = new_slide(prs)
     header(slide, "5 — Qualité", "L'analyse statique externe : SonarCloud")
-    stats(slide, [("0", "bogue"),
-                  ("0", "vulnérabilité"),
+    stats(slide, [("0", "bogue · vulnérabilité\npoint sensible · code smell"),
                   ("A / A / A", "fiabilité · sécurité\nmaintenabilité"),
-                  ("63,1 %", "de couverture\nmesurée (service Python)")],
+                  ("0 min", "de dette technique\n0,0 % de duplication"),
+                  (SONAR_COVERAGE, "de couverture mesurée\n(service Python)")],
           y=BODY_TOP - 0.05, h=1.48)
 
     bullets(slide, [
-        ("Fiabilité, sécurité et maintenabilité : A.", "La première analyse rendait E et C : une image de conteneur qui s'exécutait en root et installait depuis des sources non épinglées. Trois défauts réels corrigés, un faux positif réfuté, un refus motivé et consigné."),
-        ("Un signalement a été refusé, motif consigné.", "Verrouiller les empreintes des dépendances du service GPU tirerait la variante processeur de torch et casserait silencieusement l'inférence — la dépendance vient de l'image CUDA."),
-        ("Un vrai bogue de test a été débusqué.", "Un test dépendait du fichier .env local : il passait sur la machine de développement et échouait en intégration continue. À lui seul, il maintenait la chaîne au rouge à chaque exécution."),
+        ("Le portail était rouge ; il passe aujourd'hui ses six conditions. ", "La première analyse rendait fiabilité E et sécurité C : une image de conteneur qui s'exécutait en root et installait depuis des sources non épinglées. Trois défauts réels corrigés, un faux positif réfuté, un refus motivé et consigné."),
+        ("La sixième condition a été satisfaite, pas contournée. ", "Elle exige 80 % de couverture sur le code nouveau. J'ai d'abord soutenu que le seuil n'était pas pertinent pour une suite hors ligne — puis j'ai écrit les tests manquants : 80,2 %. Écrire les tests est plus court à défendre que l'argument."),
+        ("Un vrai bogue de test a été débusqué au passage. ", "Un test dépendait du fichier .env local : il passait sur ma machine et échouait en intégration continue. À lui seul, il maintenait la chaîne au rouge à chaque exécution."),
     ], y=3.72, size=13, gap=10)
-    note(slide, "Cinq conditions du portail sur six sont satisfaites. La sixième exige 80 % de couverture sur le code nouveau : le projet en présente 66,6 %, et une suite hors ligne par construction ne franchira pas ce seuil — le seuil n'est donc pas bloquant en intégration continue.",
-         y=6.16, accent=MUTE, size=12.5, h=0.58)
+    note(slide, "Une note A obtenue en désactivant les règles gênantes ne mesurerait plus rien : les trois seules issues honnêtes devant un analyseur externe sont corriger, réfuter avec la preuve, ou refuser en écrivant le motif dans l'outil. Les trois ont servi ici.",
+         y=6.16, accent=GREEN, size=12.5, h=0.58)
     footer(slide, n)
 
 
@@ -1329,7 +1465,7 @@ def s18_devops(prs, n):
     header(slide, "5 — Qualité", "La chaîne d'intégration continue")
     stats(slide, [("6 mois", "de développement\n(2 mars – 31 août 2026)"),
                   ("18", "contrôles automatiques\nà chaque push"),
-                  ("475", "tests, sans aucune\nclé d'API ni base"),
+                  ("%d" % TESTS, "tests automatisés\n810 sans clé d'API ni base"),
                   ("38", "demandes Dependabot\nsur 5 écosystèmes")],
           y=BODY_TOP - 0.05, h=1.48)
 
@@ -1337,7 +1473,7 @@ def s18_devops(prs, n):
     tf = _txbox(slide, MARGIN, y, CONTENT_W, 0.3)
     _run(_para(tf, first=True), "Les 18 contrôles, par famille", size=14.5, bold=True, color=BLUE)
     fams = [
-        ("Correction", GREEN, "API — ruff, types, 475 tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales"),
+        ("Correction", GREEN, "API — ruff, types, %d tests  ·  Dashboard — tsc, oxlint, build  ·  workflow n8n  ·  Docker compose  ·  parité des locales" % TESTS),
         ("Sécurité du code", BLUE, "CodeQL (python)  ·  CodeQL (javascript-typescript)  ·  Semgrep OWASP Top 10  ·  Bandit"),
         ("Dépendances et secrets", RGBColor(0x8E, 0x44, 0xAD), "Trivy filesystem  ·  Trivy config  ·  pip-audit  ·  npm audit  ·  gitleaks + check_secrets.py"),
         ("Conformité des fichiers", GREY, "Hadolint (api)  ·  Hadolint (Dashboard)  ·  actionlint"),
@@ -1448,6 +1584,13 @@ def s22_merci(prs):
     p = _para(tf, first=True)
     p.alignment = PP_ALIGN.CENTER
     _run(p, "Questions", size=18, color=BLUE)
+    tf = _txbox(slide, MARGIN, 4.62, CONTENT_W, 0.4)
+    p = _para(tf, first=True)
+    p.alignment = PP_ALIGN.CENTER
+    _run(p, "Mohammed Yassine MAGRI", size=13, bold=True, color=GREY)
+    p = _para(tf)
+    p.alignment = PP_ALIGN.CENTER
+    _run(p, "Ingénierie Informatique et Réseaux  ·  EMSI Rabat  ·  AZNET", size=11, color=MUTE)
     slide.shapes.add_picture(str(ASSETS / "logo-emsi.png"), Inches(MARGIN), Inches(6.30), height=Inches(0.55))
     ai = Image.open(ASSETS / "logo-aznet.png")
     ah = 0.60
@@ -1612,11 +1755,20 @@ NOTES = {
 → Honnêteté : Dependabot ouvre, rien n'est encore fusionné.
 """,
     "s18b_sonar": """
-0:45 · 0 bogue, 0 vulnérabilité, A/A/A, dette de 25 minutes.
+0:45 · 0 bogue, 0 vulnérabilité, 0 code smell, 0 minute de dette, A/A/A.
+→ Le portail passe ses SIX conditions. Dire qu'il ne les passait pas au départ.
 → Raconter le vrai bogue : un test qui dépendait du .env local.
-→ Si on demande le portail : cinq conditions sur six. La sixième veut 80 % de
-  couverture sur le code nouveau, seuil du référentiel par défaut, que je récuse
-  pour une suite hors ligne — et je le dis avant qu'on me le demande.
+→ Sur la 6e condition : j'ai d'abord soutenu que 80 % de couverture n'avait pas
+  de sens pour une suite hors ligne. Puis j'ai écrit les tests. C'est plus court
+  à défendre qu'un argument.
+""",
+    "s18a_activite": """
+1:00 · Le rythme, pas le total. Montrer les quatre jours à zéro et la dernière
+  quinzaine, la plus dense du dépôt.
+→ Honnêteté : le dépôt commence le 15 juillet. Les phases 0 à 2 sont antérieures
+  — le graphique mesure la réalisation, pas les six mois.
+→ Enchaîner : un nombre de commits mesure de la frappe. Les deux verdicts
+  au-dessus — le portail et la suite de tests — mesurent autre chose.
 """,
     "s19_demo": """
 3:00 · DÉMO. Note vocale → ⏳ → ✅ → Sheet → boîte de réception.
@@ -1644,6 +1796,10 @@ DESIGN_NOTE = {
     "s01_cover": "Khatam (étoile à 8 branches, zellige) en trait, hors-cadre. "
                  "Il se déplace de diapo en diapo — morph, pas une coupure.",
     "s19_demo": "Fond sombre : le trait passe au bleu clair pour rester lisible.",
+    "s18a_activite": "Le graphique est dessiné en rectangles, pas inséré : un "
+                     "graphique natif impose sa palette et supprime les jours à "
+                     "zéro. L'opacité porte l'intensité — un seul bleu, comme "
+                     "partout ailleurs.",
     "s22_merci": "Le khatam au centre, plein format. Dernière image.",
 }
 DESIGN_DEFAULT = ("Un seul bleu, celui du logo AZNET. Un seul motif, le khatam, "
@@ -1674,6 +1830,19 @@ def _annotate(prs, name):
     speaker_notes(prs.slides[-1], text.strip() + "\n\n— Design : " + design)
 
 
+# Every numbered slide, in order of appearance. Named here rather than inline in
+# main() so DECK_LENGTH can be read off it -- inserting a slide is one edit, and
+# the footer's denominator follows on its own.
+SEQUENCE = (
+    s02_plan, s03_quote, s03_contexte, s04_problematique, s05_besoins,
+    s05b_planning, s06_etat_art_stt, s07_etat_art_llm, s08_architecture,
+    s09_frontiere, s10_flux, s11_journal, s11b_colonnes, s12_banc_protocole,
+    s13_banc_api, s14_banc_local, s15_moteur_retenu, s15b_extraction,
+    s15c_ia_lecture, s16_perimetre, s17_dashboard, s17b_usage, s17c_alertes,
+    s18_devops, s18b_sonar, s18a_activite, s19_demo, s20_bilan, s21_perspectives,
+)
+
+
 def main():
     prs = Presentation()
     prs.slide_width = Inches(SLIDE_W)
@@ -1685,13 +1854,9 @@ def main():
     _dress(prs, "s01_cover")
     _annotate(prs, "s01_cover")
     n = 1
-    for build in (s02_plan, s03_quote, s03_contexte, s04_problematique, s05_besoins,
-                  s05b_planning, s06_etat_art_stt, s07_etat_art_llm, s08_architecture,
-                  s09_frontiere, s10_flux, s11_journal, s11b_colonnes, s12_banc_protocole, s13_banc_api,
-                  s14_banc_local, s15_moteur_retenu, s15b_extraction, s15c_ia_lecture,
-                  s16_perimetre, s17_dashboard, s17b_usage, s17c_alertes,
-                  s18_devops, s18b_sonar, s19_demo, s20_bilan,
-                  s21_perspectives):
+    global DECK_LENGTH
+    DECK_LENGTH = 1 + len(SEQUENCE)
+    for build in SEQUENCE:
         n += 1
         build(prs, n)
         _dress(prs, build.__name__)
