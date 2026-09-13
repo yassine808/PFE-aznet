@@ -1,0 +1,114 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+\usepackage{geometry}
+\geometry{top=1.6cm,bottom=1.6cm,left=2.2cm,right=2.2cm}
+
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{setspace}
+
+% --- Couleurs proches de ta page ---
+\definecolor{barGreen}{RGB}{0,150,80}
+\definecolor{barBordeaux}{RGB}{145,0,55}
+\definecolor{titleBlue}{RGB}{50,65,85}
+
+\pagestyle{empty}
+
+\begin{document}
+
+% ================== DECOR (barre gauche + petit rectangle bas) ==================
+\begin{tikzpicture}[remember picture,overlay]
+  % Barre verte (à gauche)
+  \fill[barGreen]
+    ([xshift=1.2cm,yshift=-2.6cm]current page.north west)
+    rectangle
+    ([xshift=1.55cm,yshift=2.2cm]current page.south west);
+
+  % Petit rectangle bordeaux (en bas à gauche)
+  \fill[barBordeaux]
+    ([xshift=1.2cm,yshift=2.1cm]current page.south west)
+    rectangle
+    ([xshift=1.55cm,yshift=1.5cm]current page.south west);
+\end{tikzpicture}
+
+% ================== LOGOS (3 logos en haut) ==================
+\begin{center}
+  \vspace*{-0.2cm}
+  \noindent
+  \begin{minipage}[c]{0.32\textwidth}
+    \centering
+    % --- LOGO 1 (EMSI) ---
+    \includegraphics[height=1.35cm]{emsi.png}
+  \end{minipage}\hfill
+  \begin{minipage}[c]{0.32\textwidth}
+    \centering
+    % --- LOGO 2 (HONORIS) ---
+    \includegraphics[height=4cm]{honoris.png}
+  \end{minipage}\hfill
+  \begin{minipage}[c]{0.32\textwidth}
+    \centering
+    % --- LOGO 3 (SOREC) ---
+    \includegraphics[height=3.5cm]{entre.png}
+  \end{minipage}
+\end{center}
+
+\vspace{1.6cm}
+
+% ================== TITRES CENTRAUX ==================
+\begin{center}
+  {\Large\bfseries\color{titleBlue} Projet de fin d’étude}\\[2pt]
+  {\bfseries\color{titleBlue} 5ème année}\\[4pt]
+  {\bfseries\color{titleBlue} Méthodes informatiques appliquées à la gestion des}\\
+  {\bfseries\color{titleBlue} entreprises (MIAGE)}\\[16pt]
+
+  {\itshape Sous le thème}\\[6pt]
+  \rule{8cm}{0.4pt}\\[22pt]
+
+  {\LARGE\bfseries SUJET}\\[4pt]
+  {\LARGE\bfseries DIALK}\\[4pt]
+  {\LARGE\bfseries HNA}\\[26pt]
+
+  
+  {\bfseries\color{titleBlue} PERIODE DE STAGE}\\[-2pt]
+  \rule{6cm}{0.4pt}\\[10pt]
+
+  {\small\bfseries \textbf{DU 02 FEVRIER 2026 AU 02 JUILLET 2026}}\\[26pt]
+\end{center}
+
+% ================== BLOC GAUCHE (Réalisé par / Encadré par) ==================
+\noindent
+\begin{minipage}[t]{0.55\textwidth}
+  \vspace{0pt}
+  \textit{Réalisé par}\\
+  \textbf{BENTOUMI Mohamed Amine}\\[14pt]
+
+  \textit{Encadré par}\\[6pt]
+  Tuteur de l’école \ \ Pr.\ Lyazidi\\[6pt]
+  Tuteur de stage \ \ M.\ ..
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.40\textwidth}
+  \vspace{0pt}
+\end{minipage}
+
+\vspace{18pt}
+
+% ================== ENTREPRISE + ADRESSE ==================
+\begin{center}
+  \bfseries\\
+  \ \ ADRESS DIAL ENTRE DIALK HNA 
+\end{center}
+
+\vfill
+
+% ================== FOOTER ==================
+\begin{center}
+  \bfseries ANNEE UNIVERSITAIRE \ \ 2025 - 2026
+\end{center}
+
+\end{document}
