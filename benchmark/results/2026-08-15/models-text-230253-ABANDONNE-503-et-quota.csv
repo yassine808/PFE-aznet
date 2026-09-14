@@ -1,0 +1,25 @@
+model,case,accuracy,latency_s,invented,expected_nulls,wrong_fields,error
+gemini-3.7-flash,t01_plain_french,0.8,3.93,0,0,cables_installes_m,
+gemini-3.7-flash,t02_darija_numbers_words,1.0,3.54,0,2,,
+gemini-3.7-flash,t03_self_correction,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t04_hallucination_trap,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t05_observations,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t06_mixed_code_switch,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t07_arabic_script,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t08_no_quantities_at_all,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t09_units_confusion,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t10_noisy_transcription,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t11_articles_cuivre_clean,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t12_delivered_not_posed,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t13_variant_confusion,1.0,3.76,0,4,,
+gemini-3.7-flash,t14_cross_vocabulary_cable,1.0,3.47,0,3,,
+gemini-3.7-flash,t15_electricite,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t16_fusion_vs_pigtail,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.7-flash,t17_article_explicit_zero,1.0,4.52,0,2,,
+gemini-3.7-flash,t18_actif_modules,1.0,3.87,0,1,,
+gemini-3.7-flash,t19_articles_hallucination_trap,1.0,4.08,0,7,,
+gemini-3.7-flash,t20_arret_et_stock,,,,,,"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+gemini-3.6-flash,t01_plain_french,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t02_darija_numbers_words,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t03_self_correction,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t04_hallucination_trap,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "

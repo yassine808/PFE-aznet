@@ -1,0 +1,50 @@
+[
+  {
+    "vendor": "gemini",
+    "model": "gemini-3.1-flash-image",
+    "verdict": "QUOTA",
+    "erreur": "gemini/gemini-3.1-flash-image: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/gene"
+  },
+  {
+    "vendor": "gemini",
+    "model": "nano-banana-pro-preview",
+    "verdict": "QUOTA",
+    "erreur": "gemini/nano-banana-pro-preview: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/gen"
+  },
+  {
+    "vendor": "gemini",
+    "model": "gemini-3-pro-image",
+    "verdict": "QUOTA",
+    "erreur": "gemini/gemini-3-pro-image: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate"
+  },
+  {
+    "vendor": "pollinations",
+    "model": "flux",
+    "verdict": "AUTH",
+    "erreur": "HTTP Error 403: Forbidden"
+  },
+  {
+    "vendor": "pollinations",
+    "model": "turbo",
+    "verdict": "AUTH",
+    "erreur": "HTTP Error 403: Forbidden"
+  },
+  {
+    "vendor": "hf",
+    "model": "black-forest-labs/FLUX.1-schnell",
+    "verdict": "AUTH",
+    "erreur": "no key: HF_TOKEN"
+  },
+  {
+    "vendor": "hf",
+    "model": "stabilityai/stable-diffusion-xl-base-1.0",
+    "verdict": "AUTH",
+    "erreur": "no key: HF_TOKEN"
+  },
+  {
+    "vendor": "cloudflare",
+    "model": "@cf/black-forest-labs/flux-1-schnell",
+    "verdict": "AUTH",
+    "erreur": "no key: CF_ACCOUNT_ID / CF_API_TOKEN"
+  }
+]

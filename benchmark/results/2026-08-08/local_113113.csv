@@ -1,0 +1,12 @@
+﻿file,provider,latency_s,confidence,chars,transcript,error
+WhatsApp Audio 2026-07-22 at 10.24.37 PM.ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 832, features: 832"
+WhatsApp Audio 2026-07-22 at 3.40.50 AM (1).ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 351, features: 351"
+WhatsApp Audio 2026-07-22 at 3.40.50 AM (2).ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 676, features: 676"
+WhatsApp Audio 2026-07-22 at 3.40.50 AM.ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 507, features: 507"
+WhatsApp Audio 2026-07-22 at 3.43.06 AM.ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 715, features: 715"
+WhatsApp Audio 2026-07-22 at 3.43.07 AM.ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 1469, features: 1469"
+WhatsApp Audio 2026-07-23 at 2.34.05 AM.ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 1495, features: 1495"
+WhatsApp Audio 2026-07-25 at 5.09.25 PM (1).ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 169, features: 169"
+WhatsApp Audio 2026-07-25 at 5.09.25 PM (2).ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 260, features: 260"
+WhatsApp Audio 2026-07-25 at 5.09.25 PM.ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 949, features: 949"
+WhatsApp Audio 2026-07-25 at 5.11.10 PM.ogg,Qwen__Qwen3-ASR-1.7B,,,,,"ValueError: Audio features and audio tokens do not match, tokens: 494, features: 494"

@@ -1,0 +1,312 @@
+[
+  {
+    "model": "gemini-3.6-flash",
+    "case": "p01_cercle_bloc_est",
+    "latence_s": 6.23,
+    "reponse": {
+      "zones": [
+        "Secteur sud-est (bloc comprenant RECEP, DOUCHE et les espaces adjacents à la salle de réunion)"
+      ],
+      "annotations": "Un large cercle tracé au feutre vert fluo entoure tout l'ensemble de pièces situé en bas à droite du plan.",
+      "description": "Ce cerclage vert met en évidence un secteur bien précis du bâtiment, regroupant la zone de réception secondaire (RECEP), les douches et les locaux voisins. Il sert vraisemblablement à délimiter la zone de travail ou de câblage attribuée à l'équipe."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "bloc est (RECEP / douches)"
+    ],
+    "manque": [],
+    "hallucine": [
+      "salle de réunion"
+    ],
+    "n_zones": 1
+  },
+  {
+    "model": "gemini-3.6-flash",
+    "case": "p02_points_bleus_seuls",
+    "latence_s": 19.45,
+    "reponse": {
+      "zones": [
+        "cour centrale sous les chambres 1017 à 1039",
+        "bordure nord du Restaurant",
+        "bordure nord de la salle de réunion",
+        "passage menant au bloc RECEP / DOUCHE"
+      ],
+      "annotations": "Plusieurs points bleus sont dessinés dans l'espace extérieur de la cour et le long des coursives.",
+      "description": "Ces marques bleues semblent représenter l'emplacement de points d'accès réseau extérieurs (bornes Wi-Fi, caméras ou boîtiers de raccordement). Elles sont positionnées aux endroits stratégiques de passage et autour du jardin central relié au restaurant et aux chambres."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "rangée de chambres nord",
+      "couloir sud (restaurant / salle de réunion)",
+      "bloc est (RECEP)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 4
+  },
+  {
+    "model": "gemini-3.6-flash",
+    "case": "p03_complet_vert_bleu_rose",
+    "latence_s": 14.44,
+    "reponse": {
+      "zones": [
+        "Couloir des chambres 1017 à 1035",
+        "Bar (angle nord-est)",
+        "Cour intérieure / jardin central",
+        "Secteur RECEP et bloc sanitaire (sud-est)"
+      ],
+      "annotations": "Le plan présente un tracé rose reliant le couloir supérieur au bloc sud-est, un cercle bleu à un croisement, une ligne et des coches vertes, ainsi que plusieurs points bleus disséminés le long de la cour et des bâtiments.",
+      "description": "Ces tracés et symboles semblent matérialiser un parcours de câblage ou de passage de réseau reliant différentes ailes du bâtiment. Les points bleus et les repères verts indiquent vraisemblablement les emplacements des prises, des bornes Wi-Fi ou des coffrets techniques à installer."
+    },
+    "rappel": 0.75,
+    "trouve": [
+      "rangée de chambres nord",
+      "BAR nord-est",
+      "liaison verticale façade est"
+    ],
+    "manque": [
+      "couloir sud (restaurant / salle de réunion)"
+    ],
+    "hallucine": [],
+    "n_zones": 4
+  },
+  {
+    "model": "gemini-3.5-flash-lite",
+    "case": "p01_cercle_bloc_est",
+    "latence_s": 1.33,
+    "reponse": {
+      "zones": [
+        "bloc RECEP de l'aile sud-est"
+      ],
+      "annotations": "Un cercle manuscrit de couleur verte entoure la partie sud-est du plan contenant les salles de bains et la réception de cette aile.",
+      "description": "Le cercle vert dessiné par les techniciens sert à délimiter visuellement la zone sud-est du complexe où des interventions de câblage réseau ont lieu. Cette zone regroupe notamment la réception secondaire (RECEP), les douches et les locaux annexes de cette aile."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "bloc est (RECEP / douches)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 1
+  },
+  {
+    "model": "gemini-3.5-flash-lite",
+    "case": "p02_points_bleus_seuls",
+    "latence_s": 1.27,
+    "reponse": {
+      "zones": [
+        "chambres 1007 à 1039",
+        "jardin central",
+        "zone sud-est (près de RECEPT, DOUCHE et bar nord-est)"
+      ],
+      "annotations": "Des points bleus tracés à la main ont été disposés le long du bloc des chambres, dans le jardin central et dans la zone sud-est.",
+      "description": "Ces points bleus signalent l'emplacement des interventions ou du passage des techniciens réseau, en particulier le long des ailes de chambres et dans la cour intérieure."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "rangée de chambres nord",
+      "couloir sud (restaurant / salle de réunion)",
+      "bloc est (RECEP)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 3
+  },
+  {
+    "model": "gemini-3.5-flash-lite",
+    "case": "p03_complet_vert_bleu_rose",
+    "latence_s": 1.25,
+    "reponse": {
+      "zones": [
+        "chambres 1017-1035",
+        "BAR nord-est",
+        "bloc RECEP"
+      ],
+      "annotations": "Traits continus de couleur rose et verte, accompagnés de points bleus et d'entourages verts manuscrits.",
+      "description": "Les annotations tracent des chemins et positionnent des points sur les plans, suggérant le cheminement de câbles ou de fibres optiques le long des couloirs de chambres vers la zone du bar et le bloc de réception."
+    },
+    "rappel": 0.75,
+    "trouve": [
+      "rangée de chambres nord",
+      "BAR nord-est",
+      "liaison verticale façade est"
+    ],
+    "manque": [
+      "couloir sud (restaurant / salle de réunion)"
+    ],
+    "hallucine": [],
+    "n_zones": 3
+  },
+  {
+    "model": "gemini-3.1-flash-lite",
+    "case": "p01_cercle_bloc_est",
+    "latence_s": 1.45,
+    "reponse": {
+      "zones": [
+        "bloc RECEP",
+        "chambres 1017-1035",
+        "BAR"
+      ],
+      "annotations": "Il y a des traits, des points et des marquages réalisés manuellement au feutre rouge et noir sur certaines zones du plan.",
+      "description": "Les annotations semblent délimiter des points de passage ou de raccordement pour le câblage réseau. Les marques se concentrent spécifiquement sur le bloc RECEP, les couloirs adjacents aux chambres 1017-1035 et l'espace du BAR."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "bloc est (RECEP / douches)"
+    ],
+    "manque": [],
+    "hallucine": [
+      "chambres",
+      "1017",
+      "1035",
+      "bar"
+    ],
+    "n_zones": 3
+  },
+  {
+    "model": "gemini-3.1-flash-lite",
+    "case": "p02_points_bleus_seuls",
+    "latence_s": 1.54,
+    "reponse": {
+      "zones": [
+        "couloir des chambres 1017-1035",
+        "extérieur nord-est près du BAR",
+        "zone centrale près des arbres",
+        "secteur sud-est près du bloc DOUCHE et RECEP"
+      ],
+      "annotations": "Des points bleus sont dessinés sur le plan, principalement répartis dans le couloir des chambres, les espaces extérieurs et près de la zone de réception sud-est.",
+      "description": "Ces annotations manuscrites marquent probablement l'emplacement des points d'accès réseau ou des bornes Wi-Fi à installer ou à maintenir. La répartition suggère une volonté d'assurer une couverture réseau homogène à travers les zones de circulation et les espaces publics de l'établissement."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "rangée de chambres nord",
+      "couloir sud (restaurant / salle de réunion)",
+      "bloc est (RECEP)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 4
+  },
+  {
+    "model": "gemini-3.1-flash-lite",
+    "case": "p03_complet_vert_bleu_rose",
+    "latence_s": 1.6,
+    "reponse": {
+      "zones": [
+        "couloir des chambres 1017-1035",
+        "zone de circulation extérieure entre le bloc chambres et le bloc restaurant",
+        "secteur extérieur proche du bloc RECEP/DOUCHE et BAR nord-est"
+      ],
+      "annotations": "Il y a des points bleus dispersés, des traits verts discontinus le long des circulations et un tracé continu rose reliant le couloir des chambres à la zone sud-est.",
+      "description": "Les annotations indiquent probablement un cheminement de câblage réseau traversant les zones communes et les couloirs. Les points bleus et les traits verts semblent marquer des points de passage ou des boîtes de dérivation, tandis que le tracé rose matérialise une liaison principale entre deux sections du bâtiment."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "rangée de chambres nord",
+      "BAR nord-est",
+      "liaison verticale façade est",
+      "couloir sud (restaurant / salle de réunion)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 3
+  },
+  {
+    "model": "gemini-flash-lite-latest",
+    "case": "p01_cercle_bloc_est",
+    "latence_s": 1.8,
+    "reponse": {
+      "zones": [
+        "bloc RECEP"
+      ],
+      "annotations": "Un cercle vert a été tracé à la main pour entourer la zone sud-est du complexe.",
+      "description": "L'annotation manuscrite verte entoure la section sud-est du plan contenant notamment le bloc RECEP, des douches et des espaces extérieurs. Elle sert probablement à délimiter la zone d'intervention actuelle ou à planifier le câblage réseau spécifique à cette aile."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "bloc est (RECEP / douches)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 1
+  },
+  {
+    "model": "gemini-flash-lite-latest",
+    "case": "p02_points_bleus_seuls",
+    "latence_s": 1.29,
+    "reponse": {
+      "zones": [
+        "chambres alignées au nord",
+        "grand patio central",
+        "zone de la piscine",
+        "bloc RECEP"
+      ],
+      "annotations": "Des points bleus tracés à la main ont été disposés le long des chambres, au milieu du patio, près de la piscine et dans la zone sud-est.",
+      "description": "Ces points bleus annotés par les techniciens indiquent probablement l'emplacement des futurs points d'accès réseau, bornes Wi-Fi ou prises RJ45 à installer dans les couloirs extérieurs, les espaces de circulation et les patios."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "rangée de chambres nord",
+      "couloir sud (restaurant / salle de réunion)",
+      "bloc est (RECEP)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 4
+  },
+  {
+    "model": "gemini-flash-lite-latest",
+    "case": "p03_complet_vert_bleu_rose",
+    "latence_s": 1.17,
+    "reponse": {
+      "zones": [
+        "couloir des chambres 1017-1035",
+        "bar nord-est",
+        "zone extérieure est près des douches"
+      ],
+      "annotations": "Lignes tracées en vert et rose, accompagnées de points bleus sur les tracés et l'entourage vert de certains secteurs.",
+      "description": "Les marquages manuscrits en couleur indiquent un parcours ou un cheminement de câblage réseau. Le tracé longe le couloir des chambres, passe par le bar nord-est et descend vers la zone est du plan en passant par les sanitaires/douches."
+    },
+    "rappel": 0.75,
+    "trouve": [
+      "rangée de chambres nord",
+      "BAR nord-est",
+      "liaison verticale façade est"
+    ],
+    "manque": [
+      "couloir sud (restaurant / salle de réunion)"
+    ],
+    "hallucine": [],
+    "n_zones": 3
+  },
+  {
+    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+    "case": "p01_cercle_bloc_est",
+    "erreur": "Error code: 404 - {'error': {'message': 'The model `meta-llama/llama-4-scout-17b-16e-instruct` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
+  },
+  {
+    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+    "case": "p02_points_bleus_seuls",
+    "erreur": "Error code: 404 - {'error': {'message': 'The model `meta-llama/llama-4-scout-17b-16e-instruct` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
+  },
+  {
+    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+    "case": "p03_complet_vert_bleu_rose",
+    "erreur": "Error code: 404 - {'error': {'message': 'The model `meta-llama/llama-4-scout-17b-16e-instruct` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
+  },
+  {
+    "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "case": "p01_cercle_bloc_est",
+    "erreur": "Error code: 404 - {'error': {'message': 'The model `meta-llama/llama-4-maverick-17b-128e-instruct` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
+  },
+  {
+    "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "case": "p02_points_bleus_seuls",
+    "erreur": "Error code: 404 - {'error': {'message': 'The model `meta-llama/llama-4-maverick-17b-128e-instruct` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
+  },
+  {
+    "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "case": "p03_complet_vert_bleu_rose",
+    "erreur": "Error code: 404 - {'error': {'message': 'The model `meta-llama/llama-4-maverick-17b-128e-instruct` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
+  }
+]

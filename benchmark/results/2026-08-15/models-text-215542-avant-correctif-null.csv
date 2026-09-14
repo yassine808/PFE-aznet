@@ -1,0 +1,292 @@
+model,case,accuracy,latency_s,invented,expected_nulls,wrong_fields,error
+gemini-3.6-flash,t01_plain_french,0.8,6.78,0,0,cables_installes_m,
+gemini-3.6-flash,t02_darija_numbers_words,1.0,9.7,0,2,,
+gemini-3.6-flash,t03_self_correction,1.0,6.94,0,0,,
+gemini-3.6-flash,t04_hallucination_trap,1.0,7.66,0,9,,
+gemini-3.6-flash,t05_observations,1.0,8.89,0,5,,
+gemini-3.6-flash,t06_mixed_code_switch,1.0,7.39,0,0,,
+gemini-3.6-flash,t07_arabic_script,1.0,8.69,0,1,,
+gemini-3.6-flash,t08_no_quantities_at_all,1.0,6.91,0,7,,
+gemini-3.6-flash,t09_units_confusion,1.0,9.94,0,1,,
+gemini-3.6-flash,t10_noisy_transcription,1.0,8.91,0,0,,
+gemini-3.6-flash,t11_articles_cuivre_clean,1.0,8.02,0,1,,
+gemini-3.6-flash,t12_delivered_not_posed,1.0,7.09,0,5,,
+gemini-3.6-flash,t13_variant_confusion,1.0,6.45,0,4,,
+gemini-3.6-flash,t14_cross_vocabulary_cable,1.0,9.91,0,3,,
+gemini-3.6-flash,t15_electricite,1.0,10.14,0,1,,
+gemini-3.6-flash,t16_fusion_vs_pigtail,1.0,10.85,0,1,,
+gemini-3.6-flash,t17_article_explicit_zero,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t18_actif_modules,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t19_articles_hallucination_trap,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t20_arret_et_stock,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.5-flash-lite,t01_plain_french,1.0,1.59,0,0,,
+gemini-3.5-flash-lite,t02_darija_numbers_words,1.0,2.74,0,2,,
+gemini-3.5-flash-lite,t03_self_correction,1.0,2.19,0,0,,
+gemini-3.5-flash-lite,t04_hallucination_trap,1.0,1.23,0,9,,
+gemini-3.5-flash-lite,t05_observations,1.0,2.42,0,5,,
+gemini-3.5-flash-lite,t06_mixed_code_switch,1.0,1.74,0,0,,
+gemini-3.5-flash-lite,t07_arabic_script,1.0,2.26,0,1,,
+gemini-3.5-flash-lite,t08_no_quantities_at_all,1.0,2.04,0,7,,
+gemini-3.5-flash-lite,t09_units_confusion,1.0,2.41,0,1,,
+gemini-3.5-flash-lite,t10_noisy_transcription,1.0,2.3,0,0,,
+gemini-3.5-flash-lite,t11_articles_cuivre_clean,0.8,2.55,0,1,etages,
+gemini-3.5-flash-lite,t12_delivered_not_posed,1.0,2.35,0,5,,
+gemini-3.5-flash-lite,t13_variant_confusion,1.0,2.39,0,4,,
+gemini-3.5-flash-lite,t14_cross_vocabulary_cable,1.0,2.4,0,3,,
+gemini-3.5-flash-lite,t15_electricite,1.0,2.26,0,1,,
+gemini-3.5-flash-lite,t16_fusion_vs_pigtail,1.0,2.46,0,1,,
+gemini-3.5-flash-lite,t17_article_explicit_zero,1.0,2.38,0,2,,
+gemini-3.5-flash-lite,t18_actif_modules,1.0,2.15,0,1,,
+gemini-3.5-flash-lite,t19_articles_hallucination_trap,1.0,2.02,0,7,,
+gemini-3.5-flash-lite,t20_arret_et_stock,1.0,2.15,0,2,,
+gemini-3.1-flash-lite,t01_plain_french,0.8,2.59,0,0,cables_installes_m,
+gemini-3.1-flash-lite,t02_darija_numbers_words,1.0,1.48,0,2,,
+gemini-3.1-flash-lite,t03_self_correction,1.0,2.05,0,0,,
+gemini-3.1-flash-lite,t04_hallucination_trap,1.0,1.79,0,9,,
+gemini-3.1-flash-lite,t05_observations,1.0,2.56,0,5,,
+gemini-3.1-flash-lite,t06_mixed_code_switch,1.0,2.06,0,0,,
+gemini-3.1-flash-lite,t07_arabic_script,1.0,1.46,0,1,,
+gemini-3.1-flash-lite,t08_no_quantities_at_all,1.0,5.43,0,7,,
+gemini-3.1-flash-lite,t09_units_confusion,1.0,1.55,0,1,,
+gemini-3.1-flash-lite,t10_noisy_transcription,1.0,1.62,0,0,,
+gemini-3.1-flash-lite,t11_articles_cuivre_clean,1.0,2.43,0,1,,
+gemini-3.1-flash-lite,t12_delivered_not_posed,1.0,2.48,0,5,,
+gemini-3.1-flash-lite,t13_variant_confusion,1.0,2.25,0,4,,
+gemini-3.1-flash-lite,t14_cross_vocabulary_cable,1.0,1.84,0,3,,
+gemini-3.1-flash-lite,t15_electricite,1.0,1.52,0,1,,
+gemini-3.1-flash-lite,t16_fusion_vs_pigtail,0.8,1.49,0,1,pigtail_sc_u,
+gemini-3.1-flash-lite,t17_article_explicit_zero,0.5,1.36,0,2,coffret_12u_u|point_acces_ap_u|locaux_techniques,
+gemini-3.1-flash-lite,t18_actif_modules,1.0,1.91,0,1,,
+gemini-3.1-flash-lite,t19_articles_hallucination_trap,1.0,1.38,0,7,,
+gemini-3.1-flash-lite,t20_arret_et_stock,1.0,1.51,0,2,,
+gemini-flash-lite-latest,t01_plain_french,1.0,2.38,0,0,,
+gemini-flash-lite-latest,t02_darija_numbers_words,0.8,1.31,0,2,cables_installes_m,
+gemini-flash-lite-latest,t03_self_correction,1.0,2.05,0,0,,
+gemini-flash-lite-latest,t04_hallucination_trap,1.0,2.3,0,9,,
+gemini-flash-lite-latest,t05_observations,1.0,2.47,0,5,,
+gemini-flash-lite-latest,t06_mixed_code_switch,1.0,1.88,0,0,,
+gemini-flash-lite-latest,t07_arabic_script,1.0,2.47,0,1,,
+gemini-flash-lite-latest,t08_no_quantities_at_all,1.0,2.33,0,7,,
+gemini-flash-lite-latest,t09_units_confusion,1.0,2.37,0,1,,
+gemini-flash-lite-latest,t10_noisy_transcription,1.0,1.44,0,0,,
+gemini-flash-lite-latest,t11_articles_cuivre_clean,1.0,2.44,0,1,,
+gemini-flash-lite-latest,t12_delivered_not_posed,1.0,2.63,0,5,,
+gemini-flash-lite-latest,t13_variant_confusion,1.0,2.18,0,4,,
+gemini-flash-lite-latest,t14_cross_vocabulary_cable,1.0,2.28,0,3,,
+gemini-flash-lite-latest,t15_electricite,1.0,2.05,0,1,,
+gemini-flash-lite-latest,t16_fusion_vs_pigtail,1.0,2.3,0,1,,
+gemini-flash-lite-latest,t17_article_explicit_zero,1.0,2.12,0,2,,
+gemini-flash-lite-latest,t18_actif_modules,1.0,2.09,0,1,,
+gemini-flash-lite-latest,t19_articles_hallucination_trap,1.0,2.26,0,7,,
+gemini-flash-lite-latest,t20_arret_et_stock,1.0,2.43,0,2,,
+openai/gpt-oss-120b,t01_plain_french,0.8,3.86,0,0,cables_installes_m,
+openai/gpt-oss-120b,t02_darija_numbers_words,1.0,3.23,0,2,,
+openai/gpt-oss-120b,t03_self_correction,1.0,35.72,0,0,,
+openai/gpt-oss-120b,t04_hallucination_trap,1.0,31.61,0,9,,
+openai/gpt-oss-120b,t05_observations,1.0,29.45,0,5,,
+openai/gpt-oss-120b,t06_mixed_code_switch,0.833,29.17,0,0,cables_installes_m,
+openai/gpt-oss-120b,t07_arabic_script,1.0,33.06,0,1,,
+openai/gpt-oss-120b,t08_no_quantities_at_all,1.0,32.25,0,7,,
+openai/gpt-oss-120b,t09_units_confusion,1.0,6.39,0,1,,
+openai/gpt-oss-120b,t10_noisy_transcription,1.0,38.03,0,0,,
+openai/gpt-oss-120b,t11_articles_cuivre_clean,1.0,33.88,0,1,,
+openai/gpt-oss-120b,t12_delivered_not_posed,0.6,35.56,2,5,connexions_optiques_brins|fibre_m,
+openai/gpt-oss-120b,t13_variant_confusion,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+openai/gpt-oss-120b,t14_cross_vocabulary_cable,1.0,29.74,0,3,,
+openai/gpt-oss-120b,t15_electricite,0.8,30.62,0,1,bandeau_elec_12p_u,
+openai/gpt-oss-120b,t16_fusion_vs_pigtail,,,,,,"2 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+openai/gpt-oss-120b,t17_article_explicit_zero,,,,,,"2 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+openai/gpt-oss-120b,t18_actif_modules,1.0,8.1,0,1,,
+openai/gpt-oss-120b,t19_articles_hallucination_trap,1.0,30.35,0,7,,
+openai/gpt-oss-120b,t20_arret_et_stock,1.0,9.6,0,2,,
+qwen/qwen3.6-27b,t01_plain_french,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t02_darija_numbers_words,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t03_self_correction,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t04_hallucination_trap,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t05_observations,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t06_mixed_code_switch,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t07_arabic_script,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t08_no_quantities_at_all,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t09_units_confusion,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t10_noisy_transcription,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t11_articles_cuivre_clean,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t12_delivered_not_posed,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t13_variant_confusion,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t14_cross_vocabulary_cable,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t15_electricite,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t16_fusion_vs_pigtail,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t17_article_explicit_zero,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t18_actif_modules,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t19_articles_hallucination_trap,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t20_arret_et_stock,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+llama-3.3-70b-versatile,t01_plain_french,,,,,,"2 validation errors for ExtractedReport
+ailes
+  Value error, aile inconnu: 'null' (attendu: Droite, Gauche) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+locaux_techniques
+  Value error, local technique inconnu"
+llama-3.3-70b-versatile,t02_darija_numbers_words,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.3-70b-versatile,t03_self_correction,1.0,1.36,0,0,,
+llama-3.3-70b-versatile,t04_hallucination_trap,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.3-70b-versatile,t05_observations,1.0,16.68,0,5,,
+llama-3.3-70b-versatile,t06_mixed_code_switch,,,,,,"1 validation error for ExtractedReport
+ailes
+  Value error, aile inconnu: 'null' (attendu: Droite, Gauche) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+llama-3.3-70b-versatile,t07_arabic_script,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.3-70b-versatile,t08_no_quantities_at_all,1.0,18.51,0,7,,
+llama-3.3-70b-versatile,t09_units_confusion,,,,,,"2 validation errors for ExtractedReport
+ailes
+  Value error, aile inconnu: 'null' (attendu: Droite, Gauche) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+locaux_techniques
+  Value error, local technique inconnu"
+llama-3.3-70b-versatile,t10_noisy_transcription,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.3-70b-versatile,t11_articles_cuivre_clean,1.0,17.46,0,1,,
+llama-3.3-70b-versatile,t12_delivered_not_posed,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.3-70b-versatile,t13_variant_confusion,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.3-70b-versatile,t14_cross_vocabulary_cable,,,,,,"1 validation error for ExtractedReport
+locaux_techniques
+  Value error, local technique inconnu: 'null' (attendu: RG, SR1, SR2, SR3, SR4, SR5, SR6, SR7, SR8, SR9, SR10) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_e"
+llama-3.3-70b-versatile,t15_electricite,1.0,17.54,0,1,,
+llama-3.3-70b-versatile,t16_fusion_vs_pigtail,1.0,16.58,0,1,,
+llama-3.3-70b-versatile,t17_article_explicit_zero,,,,,,"2 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.3-70b-versatile,t18_actif_modules,1.0,17.55,0,1,,
+llama-3.3-70b-versatile,t19_articles_hallucination_trap,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.3-70b-versatile,t20_arret_et_stock,,,,,,"2 validation errors for ExtractedReport
+ailes
+  Value error, aile inconnu: 'null' (attendu: Droite, Gauche) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+locaux_techniques
+  Value error, local technique inconnu"
+llama-3.1-8b-instant,t01_plain_french,1.0,0.66,0,0,,
+llama-3.1-8b-instant,t02_darija_numbers_words,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.1-8b-instant,t03_self_correction,,,,,,"1 validation error for ExtractedReport
+resume
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+llama-3.1-8b-instant,t04_hallucination_trap,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.1-8b-instant,t05_observations,0.8,37.19,1,5,temps_arret_min,
+llama-3.1-8b-instant,t06_mixed_code_switch,,,,,,"1 validation error for ExtractedReport
+resume
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_type"
+llama-3.1-8b-instant,t07_arabic_script,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.1-8b-instant,t08_no_quantities_at_all,,,,,,"3 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.1-8b-instant,t09_units_confusion,,,,,,"2 validation errors for ExtractedReport
+ailes
+  Value error, aile inconnu: 'inconnue' (attendu: Droite, Gauche) [type=value_error, input_value='inconnue', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+locaux_techniques
+  Value error, local technique"
+llama-3.1-8b-instant,t10_noisy_transcription,,,,,,"4 validation errors for ExtractedReport
+cables_installes_m
+  Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='khamsa miya metr', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/float_parsing
+goulotte_m
+  Input s"
+llama-3.1-8b-instant,t11_articles_cuivre_clean,,,,,,"1 validation error for ExtractedReport
+cables_installes_m
+  Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='12+3+0 = 15m', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/float_parsing"
+llama-3.1-8b-instant,t12_delivered_not_posed,0.6,39.14,2,5,pigtail_sc_u|tiroir_optique_24_u,
+llama-3.1-8b-instant,t13_variant_confusion,1.0,3.16,0,4,,
+llama-3.1-8b-instant,t14_cross_vocabulary_cable,,,,,,"1 validation error for ExtractedReport
+locaux_techniques
+  Value error, local technique inconnu: 'E2' (attendu: RG, SR1, SR2, SR3, SR4, SR5, SR6, SR7, SR8, SR9, SR10) [type=value_error, input_value='E2,SR', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_er"
+llama-3.1-8b-instant,t15_electricite,,,,,,"1 validation error for ExtractedReport
+resume
+  Field required [type=missing, input_value={'cable_elec_3x2_5_m': '7...andeau_elec_12p_u': '1'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing"
+llama-3.1-8b-instant,t16_fusion_vs_pigtail,0.8,13.93,0,1,locaux_techniques,
+llama-3.1-8b-instant,t17_article_explicit_zero,,,,,,"2 validation errors for ExtractedReport
+etages
+  Value error, étage inconnu: 'null' (attendu: RDC, E1, E2, E3, E4) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+ailes
+  Value error, aile inconnu: 'null' (attend"
+llama-3.1-8b-instant,t18_actif_modules,0.714,34.91,1,1,switch_acces_u|module_sfp_u,
+llama-3.1-8b-instant,t19_articles_hallucination_trap,1.0,41.05,0,7,,
+llama-3.1-8b-instant,t20_arret_et_stock,,,,,,"2 validation errors for ExtractedReport
+ailes
+  Value error, aile inconnu: 'null' (attendu: Droite, Gauche) [type=value_error, input_value='null', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+locaux_techniques
+  Value error, local technique inconnu"

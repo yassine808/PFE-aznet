@@ -1,0 +1,94 @@
+model,case,accuracy,latency_s,invented,expected_nulls,wrong_fields,error
+gemini-3.6-flash,t01_plain_french,1.0,5.29,0,0,,
+gemini-3.6-flash,t02_darija_numbers_words,1.0,4.44,0,1,,
+gemini-3.6-flash,t03_self_correction,1.0,5.66,0,0,,
+gemini-3.6-flash,t04_hallucination_trap,1.0,4.54,0,4,,
+gemini-3.6-flash,t05_observations,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t06_mixed_code_switch,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t07_arabic_script,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t08_no_quantities_at_all,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t09_units_confusion,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t10_noisy_transcription,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.5-flash-lite,t01_plain_french,1.0,1.02,0,0,,
+gemini-3.5-flash-lite,t02_darija_numbers_words,1.0,0.97,0,1,,
+gemini-3.5-flash-lite,t03_self_correction,1.0,0.97,0,0,,
+gemini-3.5-flash-lite,t04_hallucination_trap,1.0,1.05,0,4,,
+gemini-3.5-flash-lite,t05_observations,1.0,1.04,0,4,,
+gemini-3.5-flash-lite,t06_mixed_code_switch,1.0,1.04,0,0,,
+gemini-3.5-flash-lite,t07_arabic_script,1.0,0.97,0,1,,
+gemini-3.5-flash-lite,t08_no_quantities_at_all,1.0,1.02,0,4,,
+gemini-3.5-flash-lite,t09_units_confusion,0.8,0.91,1,1,goulottes_m,
+gemini-3.5-flash-lite,t10_noisy_transcription,1.0,0.97,0,0,,
+gemini-3.1-flash-lite,t01_plain_french,1.0,3.86,0,0,,
+gemini-3.1-flash-lite,t02_darija_numbers_words,1.0,3.01,0,1,,
+gemini-3.1-flash-lite,t03_self_correction,1.0,2.72,0,0,,
+gemini-3.1-flash-lite,t04_hallucination_trap,1.0,2.79,0,4,,
+gemini-3.1-flash-lite,t05_observations,1.0,2.02,0,4,,
+gemini-3.1-flash-lite,t06_mixed_code_switch,1.0,2.62,0,0,,
+gemini-3.1-flash-lite,t07_arabic_script,1.0,2.22,0,1,,
+gemini-3.1-flash-lite,t08_no_quantities_at_all,1.0,4.44,0,4,,
+gemini-3.1-flash-lite,t09_units_confusion,0.8,1.61,1,1,goulottes_m,
+gemini-3.1-flash-lite,t10_noisy_transcription,1.0,1.84,0,0,,
+gemini-flash-lite-latest,t01_plain_french,1.0,1.0,0,0,,
+gemini-flash-lite-latest,t02_darija_numbers_words,1.0,0.99,0,1,,
+gemini-flash-lite-latest,t03_self_correction,1.0,1.02,0,0,,
+gemini-flash-lite-latest,t04_hallucination_trap,1.0,0.98,0,4,,
+gemini-flash-lite-latest,t05_observations,1.0,1.21,0,4,,
+gemini-flash-lite-latest,t06_mixed_code_switch,1.0,1.02,0,0,,
+gemini-flash-lite-latest,t07_arabic_script,1.0,1.0,0,1,,
+gemini-flash-lite-latest,t08_no_quantities_at_all,1.0,1.22,0,4,,
+gemini-flash-lite-latest,t09_units_confusion,0.8,1.01,1,1,goulottes_m,
+gemini-flash-lite-latest,t10_noisy_transcription,1.0,1.0,0,0,,
+openai/gpt-oss-120b,t01_plain_french,1.0,1.38,0,0,,
+openai/gpt-oss-120b,t02_darija_numbers_words,1.0,1.7,0,1,,
+openai/gpt-oss-120b,t03_self_correction,1.0,1.25,0,0,,
+openai/gpt-oss-120b,t04_hallucination_trap,1.0,1.34,0,4,,
+openai/gpt-oss-120b,t05_observations,1.0,1.91,0,4,,
+openai/gpt-oss-120b,t06_mixed_code_switch,1.0,1.62,0,0,,
+openai/gpt-oss-120b,t07_arabic_script,1.0,1.55,0,1,,
+openai/gpt-oss-120b,t08_no_quantities_at_all,1.0,2.44,0,4,,
+openai/gpt-oss-120b,t09_units_confusion,1.0,1.63,0,1,,
+openai/gpt-oss-120b,t10_noisy_transcription,1.0,2.39,0,0,,
+qwen/qwen3.6-27b,t01_plain_french,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t02_darija_numbers_words,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t03_self_correction,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t04_hallucination_trap,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t05_observations,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t06_mixed_code_switch,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t07_arabic_script,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t08_no_quantities_at_all,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t09_units_confusion,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+qwen/qwen3.6-27b,t10_noisy_transcription,,,,,,"Error code: 400 - {'error': {'message': ""Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details."", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': ''}}"
+llama-3.3-70b-versatile,t01_plain_french,1.0,0.58,0,0,,
+llama-3.3-70b-versatile,t02_darija_numbers_words,0.667,0.57,0,1,goulottes_m|cables_m,
+llama-3.3-70b-versatile,t03_self_correction,1.0,0.66,0,0,,
+llama-3.3-70b-versatile,t04_hallucination_trap,1.0,0.63,0,4,,
+llama-3.3-70b-versatile,t05_observations,1.0,0.8,0,4,,
+llama-3.3-70b-versatile,t06_mixed_code_switch,1.0,0.67,0,0,,
+llama-3.3-70b-versatile,t07_arabic_script,1.0,0.72,0,1,,
+llama-3.3-70b-versatile,t08_no_quantities_at_all,1.0,0.85,0,4,,
+llama-3.3-70b-versatile,t09_units_confusion,0.8,0.75,1,1,goulottes_m,
+llama-3.3-70b-versatile,t10_noisy_transcription,0.75,0.64,0,0,goulottes_m,
+llama-3.1-8b-instant,t01_plain_french,1.0,0.39,0,0,,
+llama-3.1-8b-instant,t02_darija_numbers_words,,,,,,"2 validation errors for ExtractedReport
+goulottes_m
+  Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='50 metres', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/float_parsing
+cables_m
+  Input should be a valid"
+llama-3.1-8b-instant,t03_self_correction,1.0,0.46,0,0,,
+llama-3.1-8b-instant,t04_hallucination_trap,0.333,0.37,4,4,client|goulottes_m|bureaux_termines|panneaux_raccordes,
+llama-3.1-8b-instant,t05_observations,1.0,0.68,0,4,,
+llama-3.1-8b-instant,t06_mixed_code_switch,,,,,,"1 validation error for ExtractedReport
+goulottes_m
+  Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='45,5', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/float_parsing"
+llama-3.1-8b-instant,t07_arabic_script,1.0,0.39,0,1,,
+llama-3.1-8b-instant,t08_no_quantities_at_all,1.0,0.8,0,4,,
+llama-3.1-8b-instant,t09_units_confusion,0.8,0.43,1,1,goulottes_m,
+llama-3.1-8b-instant,t10_noisy_transcription,,,,,,"2 validation errors for ExtractedReport
+goulottes_m
+  Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='5 mètres', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/float_parsing
+cables_m
+  Input should be a valid "

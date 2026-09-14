@@ -1,0 +1,41 @@
+model,case,accuracy,latency_s,invented,expected_nulls,wrong_fields,error
+gemini-3.6-flash,t01_plain_french,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t02_darija_numbers_words,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t03_self_correction,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t04_hallucination_trap,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t05_observations,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t06_mixed_code_switch,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t07_arabic_script,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t08_no_quantities_at_all,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t09_units_confusion,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.6-flash,t10_noisy_transcription,,,,,,"429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. "
+gemini-3.5-flash-lite,t01_plain_french,1.0,1.72,0,0,,
+gemini-3.5-flash-lite,t02_darija_numbers_words,0.833,1.49,0,1,cables_m,
+gemini-3.5-flash-lite,t03_self_correction,1.0,1.48,0,0,,
+gemini-3.5-flash-lite,t04_hallucination_trap,1.0,1.5,0,4,,
+gemini-3.5-flash-lite,t05_observations,1.0,1.6,0,4,,
+gemini-3.5-flash-lite,t06_mixed_code_switch,1.0,1.58,0,0,,
+gemini-3.5-flash-lite,t07_arabic_script,1.0,1.69,0,1,,
+gemini-3.5-flash-lite,t08_no_quantities_at_all,1.0,1.45,0,4,,
+gemini-3.5-flash-lite,t09_units_confusion,1.0,1.66,0,1,,
+gemini-3.5-flash-lite,t10_noisy_transcription,1.0,1.46,0,0,,
+gemini-3.1-flash-lite,t01_plain_french,1.0,3.09,0,0,,
+gemini-3.1-flash-lite,t02_darija_numbers_words,0.833,10.84,0,1,cables_m,
+gemini-3.1-flash-lite,t03_self_correction,1.0,3.77,0,0,,
+gemini-3.1-flash-lite,t04_hallucination_trap,1.0,4.73,0,4,,
+gemini-3.1-flash-lite,t05_observations,1.0,5.09,0,4,,
+gemini-3.1-flash-lite,t06_mixed_code_switch,1.0,4.17,0,0,,
+gemini-3.1-flash-lite,t07_arabic_script,1.0,1.51,0,1,,
+gemini-3.1-flash-lite,t08_no_quantities_at_all,1.0,2.6,0,4,,
+gemini-3.1-flash-lite,t09_units_confusion,0.8,4.5,1,1,goulottes_m,
+gemini-3.1-flash-lite,t10_noisy_transcription,1.0,2.84,0,0,,
+gemini-flash-lite-latest,t01_plain_french,1.0,1.03,0,0,,
+gemini-flash-lite-latest,t02_darija_numbers_words,0.833,2.13,0,1,cables_m,
+gemini-flash-lite-latest,t03_self_correction,1.0,1.06,0,0,,
+gemini-flash-lite-latest,t04_hallucination_trap,1.0,0.99,0,4,,
+gemini-flash-lite-latest,t05_observations,1.0,1.39,0,4,,
+gemini-flash-lite-latest,t06_mixed_code_switch,1.0,1.12,0,0,,
+gemini-flash-lite-latest,t07_arabic_script,1.0,1.39,0,1,,
+gemini-flash-lite-latest,t08_no_quantities_at_all,1.0,1.03,0,4,,
+gemini-flash-lite-latest,t09_units_confusion,1.0,1.13,0,1,,
+gemini-flash-lite-latest,t10_noisy_transcription,1.0,1.26,0,0,,

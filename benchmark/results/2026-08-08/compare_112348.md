@@ -1,0 +1,154 @@
+# STT comparison — listen to each clip, judge the transcripts
+
+## WhatsApp Audio 2026-07-22 at 10.24.37 PM.ogg
+
+- **gemini** — 6.66s · confidence n/a · 765 chars
+
+  > السلام عليكم بالنسبة للخدمة ديال اليوم في نوفيك خدمت أنا وعبد الحق دخلنا مع التسعود خرجنا مع الأربعة كملنا دوك الجبيرويات لي بقاو في l'éclairage déconnectينا 40 كابل ديال système dali و protégiناهوم بال dominos حيدنا 8 ديال les panneaux éclairage و déplacina 12 panneau éclairage على حساب بلايس فين بغاو هما بوسينا 6 متر ديال câble 3x1.5 la liaison ما بين panneau éclairage و connectiناهوم و خدمناهوم مع l'interrupteur باش ولاو يشعلو l'interrupteur طفاو l'interrupteur و installina جوج ديال les interrupteurs عندهم علاقة بال prises ديال التلفازات. ملي سالينا هادشي كامل عيطنا على سي عزيز دار معانا شاف معانا داكشي كلشي الامور كلها مزيان الحمد لله و خدمنا في troisième étage déplacina واحد جوج ديال les prises électriques واحد normal واحد ondulé و واحد informatique.
+
+- **groq** — 6.85s · confidence 0.475 · 825 chars
+
+  > Assalamu alaikum, bn nisib lkhedma dyal liyuma f Novik, khedm ts'ana w Abdelhak, tkhanna mga Tsaoud, kharjna mga rba. Kmmalna dbouchbiyro yat li pkaw f l'ekleraj, dkonektina 40 câble dyal system dali, w protejina wm bd domino. Hayy dnese mniya dyal panno ekleraj, w diplasina 12 panno ekleraj, hl hsab lplais f fim bwa w homa. Pouzina ssimetro dyal câble 3w5, lala yuzume bin panel éclairage, w connectina homm. W kheddimna homm mga l'interruptor, bèch w lw yishaloum l'interruptor, etfam l'interruptor. W anstalina juj dyal l'interruptor, randoum mga l'acab l'iprise dyal telfazaz. M lisanina chi kammel, l'ayetna l'assi aziz, dhal ma'ana, chaf ma'ana daki chi koul chi, l'omor koulha mziya, l'hamdoulillah. W khatmina f 3O mietage, dplasina wahed 2 ddélipriz électrique, wahed normal, wahed ondélique, w wahed informatique.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-22 at 3.40.50 AM (1).ogg
+
+- **gemini** — 2.99s · confidence n/a · 192 chars
+
+  > بالنسبة لبارح 20/7/2026 وصلنا الصويرة مع وحدة. وفينا الشومان ديال هذا 27 كابل منين غايعدوزو خدينا الميتراج ديالهم. وقطعناها. وفينا الشومان ديال لا فيبر. وخدينا الميتراج ديالها. وخرجنا مع 7:00.
+
+- **groq** — 0.58s · confidence 0.612 · 253 chars
+
+  > Benisbal barah 20-07-2026, osmna ssoyra ma lwehta. Benisbal barah 20-07-2026, osmna ssoyra ma lwehta. Virefina shouman dyalat 27 câble nina ytouzo, khdina lmitraj dyalhum, w qtayna. Virefina shouman dyal la fiber, w khdina lmitraj dyalal, w khrjna ma 7.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-22 at 3.40.50 AM (2).ogg
+
+- **gemini** — 3.69s · confidence n/a · 349 chars
+
+  > بالنسبة اليوم 21 7 2026 فوزاو تسع الكابليات في البروميغ ايطاج كل كابل كيمشي من لاكي للشوومبر كيدار ليه بيرسمو اوكي ندير فيكسيبل وكيتشد بليزيتش في بلاطو. هذه العملية دارت بالنسبة للبرومي والوزيام طروازيام وصلوا ليتاهو الكابليات دياله تسعود ومحطوطين في ليغيين كيتسناو الفليكسيبل ويضربوا بليزيتش يدخلوا ليشوومبر. اليوم دخلنا مع تسعود خرجنا مع سبعه ونص.
+
+- **groq** — 1.09s · confidence 0.437 · 425 chars
+
+  > Ben nispe l'yom 21-07-2026, tpozaw tsu'ad l'kabliyat f l'prumier étage. Koula kabel ki bshim laki l'chomper, ki tderlih persmo, ki tderf fliksibel, ki tshed blizitash f l plafond. Hadl a amiriyat ddrt bn nisba l-promi, w l-douziyam, w l-trawaziayam, mounslo l-yiteghol câble ddiyawlo. Tsuad, w mhtotan f ligain, ki tsennaw l-flexible, w yi ddrbo blizitash yi yidkhlo l-li shombr. Liwm dkhanna ma tsuad, khirjna ma s-sibawans.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-22 at 3.40.50 AM.ogg
+
+- **gemini** — 3.53s · confidence n/a · 350 chars
+
+  > السلام عليكم ورحمة الله، بالنسبة للproject ديال الصويرة عندنا الخدمة في ذاك الطريف لي دورته عليه بالأخضر عندنا ثمانية ديال les chambres كاينين في premier étage ، ثمانية في deuxième étage و ثمانية في troisième étage. و كل étage فيه AP في couloir هي 27. و بالإضافة les outdoor هما لي حطيت بالأزرق كاينين ثمانية هما لي نقدروا ندوزوا دابا في هذه المشيات.
+
+- **groq** — 1.89s · confidence 0.541 · 381 chars
+
+  > Assalamu Alaikum Warahmatullahi Wabarakatuh. Binnisba l proje dya sawira, Adena lkhidma f tek tarif li dwarte aleyh b'lkhter. Adena tmnyadiyalli shounbarkina f lprumier étage, tmnyaf dduziam étage, w tmnyaf drouaziam étage. W kulla étage fihá api f l couloir, hiya sb'a wushirin. Liza w ttour, hommal li hattis w zaraq, kina tmnia, hommal li an qadron d'w zouda w f hadl mshihaati.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-22 at 3.43.06 AM.ogg
+
+- **gemini** — 5.8s · confidence n/a · 665 chars
+
+  > السلام عليكم. بالنسبة لـ Novic، البارح كنت أنا وعبد الحق، بوزينا 30 متر ديال الكابل 3x2.5 على حساب 3 ديال التيبارات، مشاو للتلفازات. بوزينا 6 متر ديال الكولوط. فيكسينا 5 ديال لي سيبور لوغرون. رجعنا الكابلات لي كنا حيدنا شحال هذي، لواحد جوج بيرويات، كابلات انفورماتيك وإليكتريك. حطيناهم في البوزيسيون لي بغاو هما. كونيكتيت 18 بريز، منهم Ondily ومنهم Normal. وركبنا الكاش ديال الكولوط في هذوك جوج ديال ليصال. هذا الشيء كامل في الكاطريام إطاج. وكان عندهم شي مشاكل ديال الريزو فشي بيرويات في الكاطريام إطاج وفي الدوزيام إطاج وفي البروميي إطاج. مشينا كنستيو معهم الكابلاج، واللي ما لقيناهش مضروب في السويتش كنضربوه في السويتش، واللي كان في السويتش HP رجعناه لـ Fortinet.
+
+- **groq** — 1.25s · confidence 0.458 · 742 chars
+
+  > Assalamu alaikum, bernسبa nna wik, lbarh kante anwa abd lhaq. Pouzeyna tlese metre dyal câble 3x2x5, alihisa 3 dyal tiparate, mchawl tlefazet. Pouzeyna tlese metre dyal goulotte, fiksina khamsa dyal lisey pour l'augro. Rjejjawna l câblage lik na hayyidna shali hadi lwahde 2x2, câblage informatique ou électrique, chattina w f l'pozitio l li bgaw homa. Konektet 18 prise, mnهم on-deling, mnهم normal. W rkibna l'cache dyal goulotte, fina na adeqjouj dyal d'yisar. Hedchi kammel f l'4eam étage. W kayn andihom chi mashakeel dyal réseau f chibirouyets, f l'4eam étage, f l'douziam étage, w f l'prouyem étage. Bichina kanti estima'am l'kablage, w lli marqina chmdro f switch, kandropo f switch, lli kandro f switch, ashperj, jaina hl l'fortinis.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-22 at 3.43.07 AM.ogg
+
+- **gemini** — 8.32s · confidence n/a · 1473 chars
+
+  > Salam aleykom.
+Bnisba lyouma khdmt ana w 3bdlhaq w lhussein f Novick min lkhdma dyal Novick. Lbareh khdmna jouj dyal lbiroyat w lyouma khdmna 3awtani jouj dyal lbiroyat mn nahiyat les prises informatiques, électrique w lgholout whta l'éclairage. 
+Posina 24 metro dyal l cable 3x2.5 l'echaîte mabine les prises électriques connectina 13 prise électrique w jouj informatiques posina 4 metro dyal lgholout.
+W drt wahd diagnostic 3la hasb systime dyal l'éclairage systime dali andhom wahd systime dali bghaw yhido had systime dali w ykhdmo les interrupteurs 3adiyin. Ya3ni bqaw ydkhlo lbiro ysch3lo b l'interrupteur machi b détecteur de mouvment. 3ndhom wahd systime fash kywqa3 shi mouchkil fshi bola ktsowlhom misag fhad systime hada. Bghaw ydisantalyw drt wahd diagnostic mn ba3d ma fhmt l cablage li jay mn systime dali w l cablage dyal liaisou mabine l boulat w départ.
+Disantaly 32 cable dyal had systime dali w protégithom b domino bsh tbqa circuit dayer bsh ybqw khdmin hit jiha akhra kibqw khdmin.
+Disantaly 5 dyal les panils w déplasit 5 dyal les panils.
+Posit 15 metro dyal 3x2.5 liaisou mabine had les panils li li déplasaw connectithom tabi3at lhal.
+W kholasa khdmt jouj dyal lbiro kolo ky sch3lo w ytfo b l'interrupteur w jouj dyal lbiro baqi mousslsh lihom hit baqa fihom khdma bzaf ya3ni ghda nhar kamil ghadi nh taj fihom hit taqriban dakshi ktir tmayan dyal les panils kyqsmo ytahyhdo kyn shi khsso ydéplasa.
+Ghda inshallah nqdmo nkmlou inshallah bi hawlilah.
+
+- **groq** — 2.53s · confidence 0.432 · 1485 chars
+
+  > Assalamu alaikum, bernesiba li yuma khdimta a noa bdil haqq w lhousi. F Nouvek, kmmalna lkhadma dyl Nouvek. Lbaa khdmna jujd dli birouyat, w li yuma khdmna a tjeni jujd dli birouyat mn na hayt li priz amformatik, électrique, w lgoulotte, w htta lklerage. Pozayna 24 mtr dyal câble 3x2x5, li shant miya bin li priz électrique. Konektina 13 prise électrique, w 2 informatique, pose 4 mètre dyal goulotte, w drt w 1 diagnostic ala hsèb system dyal éclairage, system dali, andou mw hsèb system dali. Bgha w hhidu hsèb system dali w ykhedmou les interruptors aadiens, yanni bqa w yedkhoulou l'bélou, yishalou l'interruptor mèche, w tédictor moumou. W andou mw hsèb system fèche ké w qa'a ché mouche ké fché bôla, kète wosl home message fète system aida. Bawey dizinstalew, dert wahet diagnostic, mnm nbaid me fahemt l kâblage l li jay mn system dali, w l kâblage dyal l yizoume bil goulottes w l depar. Dizinstalit 32 kâble gyalet system dali, w protejit hum b domino, bich tbqa s tirk w dyer, bich ybqa w khetdami, hich jy akhura ki ybqa w khetdami. Dizinstalit 5 dyal li paneel, w diplasit 5 dyal li paneel. Pouzet 15 m, gielt 4x2,5. Lali yuzuma bin hedl panel lé diplasaw. Connectation btabi'et lhal. Khoulasa, khedmt juj dyal bureaux. Kolo kishalou, w yedfaw blan tereptor. Juj dyal bureaux baka mouslch léhom. Baka fèm khedma bzaf, ghadda nhar kámel gadi nxajja fèm. Baka fèm dèk chi ktir, dél panel kaxe mithaidu, kénchil léhk tli diplasa. Kedron Kamiloun, insha Allah bihawili Allah.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-23 at 2.34.05 AM.ogg
+
+- **gemini** — 6.73s · confidence n/a · 1009 chars
+
+  > السلام عليكم ورحمة الله. بالنسبة لليوم كانت تامة ديال البوست ديال 9 ديال لي كابل ديال 3ème étage. حتى هما كيديروا في الفليكسيبل وكيتشدوا بلي زومباز والصماطي مع لافو كيوصلوا لبلايصهم. 
+وتباري الكابل ديال 8 ديال لي بوان داكسي او الدور. 5 وصلوا للبلايصهم. من بعد ما كيديروا في الفليكسيبل وكيديروا له زوج ديال لي بيرسمون في لي فوا وحدة كدخل لافو ديال لي شومبر باش كناخذوا الكابل. وحدة كتشوف في الجردة. ولا في بيسين كيديروا واحد البيرسمون طوطال باش كخرج الكابل يشوف في الجردة ولا في البيسين. 
+وه حتى هما دازوا بالفليكسيبل ارمي وبلي زومباز والصماطي. 5 هما اللي تكوشاو بالاخضر. وكيما كتوفوا بالسهم وحدة راها تحولت من بلاصتها مابقاتش بالجهه الاخرى ولات ولاو 4 كيشوفوا في 4. 
+و 3 خرجوا حتى هما من فو بلاطو وصلوا لي زارموار ديالهم. بقى خاصهم غير 30 متر ديال الفليكسيبل ويشدوا حتى هما بلي زومباز والصماطي ويخرجوا هما يشوفوا في الجرده وفي البيسين. 
+وتريكيبيرا الماتيريال من الغزالة. 
+وتپوزات لافايبر من ال أر جي حتى لس أر ديال 1ème étage وديال 2ème étage. و كلكوكسيو ديال 10 ديال لي بريس ديال 1ème étage. 1 في 2ème étage.
+
+- **groq** — 2.44s · confidence 0.494 · 1389 chars
+
+  > Assalamu alaikum wa rahmatullahi wa barakatuh. Benisba l yuma, kain ttima dyal pose dyal tsuit dyal li câble dyal 3o aziyam etage. Kante tima dyal pose dyal tsuit dyal li câble dyal 13o amitaj. Htahuma kit deru f flixible, w kit chitdou blizom bazo s'maati maal plafond, kioslo l blais hom. Htahuma kit deru f flixible, w kit chitdou blizom bazo s'maati maal plafond, kioslo l blais hom. W tprepara al câble dyal 8 dyal li point d'accès outdoor. W tprepara al câble dyal 8 dyal li point d'accès outdoor. Khamsa woslo l'plaison. Kall baed ma kit deru f l'flexible, w kit deru joj dyal l'persement f l'levoile. W ehta kat dkhul plafon dyal l'chambre bach kanna akhtu l'câble. W ehta kat tshouf f l'jarda, ou l'lef piscine. Kat deru ahl persement d'odal bach kat tkhurj l'câble y tshouf f l'jarda ou l'lef f l'piscine. Tema dyal zobr flixi bl armi, blizon bazos mati. Khmasa dyal tkurchao b lkhdr. Kibma kat choufou b ssem, w hddara hddahawolet mn blassa, m nabqatch b jial ghroulet, w law rabaa k choufou f rabaa. W tlata, kharjou tema mn f plafon, woslo l lézar mwar dyal homm. Pkax samayl w htlati l mitro dyal flixible, w itchittu htmma blisom basus mati, w ykhurjuk tmma ychufu jarda w f l-pici. W trikipira l materyal mn l ghazala, w tpozat la fiber. Mn l-RG htl l-SR dyal premier étage w dyal duzyam étage. Kalkonexio dyal achra dyal l'ipris, dyal premier étage, w ahed v tuziam étage.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-25 at 5.09.25 PM (1).ogg
+
+- **gemini** — 2.42s · confidence n/a · 123 chars
+
+  > بالإضافة لهذا الشيء كانت تتمة ديال البوست ديال ديال الثلاثة ديال لي كابل لي كانوا خاصهم الفليكسيبل حتى هما دازوا الحمد لله.
+
+- **groq** — 0.5s · confidence 0.377 · 130 chars
+
+  > Bil idhafa l hedchi, kant ttima dyal pos dyal, dyal, hâ ttlata dyal l câbles li kânu khassan f léksible. Htà mwadaz w hibdou illa.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-25 at 5.09.25 PM (2).ogg
+
+- **gemini** — 3.19s · confidence n/a · 157 chars
+
+  > بالنسبة للتايت ان شاء الله، باقي تستي لافايبر، و تشيكتاج ديال لي بريس كامليين. كل بريس أشمن شمبر مشاو؟ والفيليسيون ديال الكامس، و ديال السيليكون إن شاء الله.
+
+- **groq** — 0.55s · confidence 0.492 · 179 chars
+
+  > Pnispe lghatta in sha Allah, baqi test dyal la fiber, w tshiktash dyal li pris keamlin, kol le pris shmen shon barra msha, w lfinisio dyal le câbles, w dyal silicone in sha Allah.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-25 at 5.09.25 PM.ogg
+
+- **gemini** — 4.08s · confidence n/a · 524 chars
+
+  > السلام عليكم ورحمة الله، بالنسبة لليوما تدار الكونيكسيون ديال لافيبر 12 ليبر على مستوى ديال RJ و 6 في كل SR. تدار الكونيكسيون ديال 70 بريس، 35 على مستوى ديال لي بانو و 35 على مستوى ديال les AP. تريبّيراو جوج ديال ليزارموار من الغزالة وليزوندي لور، تيمونطاو ليزارموار، تفيْكساو، وتپوزاو جوج ديال لي ديبار إلكتريك اللي ألليمونطاو هاد جوج ديال ليزارموار وتپوزا، وتفيْكساو واحد 4 مترو ديال الكولو، وطراكاو لي بانو، ولي بوندو ولي پاس كابل على مستوى ديال لارموار، ودير تيست لهاد 35 بريس. وليوما دخلنا مع التسعود، خرجنا مع التسعود.
+
+- **groq** — 2.71s · confidence 0.598 · 740 chars
+
+  > Assalamu alaikum wa rahmatullahi wa barakatuh. Selam aleykum wa rahmatullahi wa barakatuh. Benisba l yuuma, dar l conexiu dyal la fiber, La fibre's connection kit, 12 libra unebu dyal RJ, 12 libra unebu dyal RJ, w sessa f coulo SR. 6 in each SR. Dar l conexiu dyal 70 bris, 70 brises' connection kit, 35 unebu dyal le pano, 35 unebu dyal le zabi, 35 unebu dyal le pano, 35 unebu dyal le zabi. Tricypirew juj dyal li zarmoir mle gazela, w li zondi lor. Tmontaw li zarmoir, tfixaw. W tpozaw juj dyal li dipar électrique li alimentawat juj dyal li zarmoir. W tfixas w 114 mtrou dyal goulotte. O traka w lippanou, w lippoundou, w lippas câble, w nivou dyal larmoar. O ddertist lhedda chemsotletin pris. O liom ala tkhinlamat söd, xarjnagat söd.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed
+
+## WhatsApp Audio 2026-07-25 at 5.11.10 PM.ogg
+
+- **gemini** — 5.28s · confidence n/a · 391 chars
+
+  > Salamo 3alaykom. 
+Euh, بالنسبة ليوم خدمةنا ف فقتيرا في Orange Wave, هانا واه بالحق. 
+Euh, كنا مع 9:00 في BizPark.
+Euh, testina واحد la fibre كاين ما بين SL1 و SL2. بما ما كانتش البيرو محلول المره اللي فاتت.
+O testina 5 ديال les prises informatique في جوج ديال les bureaux.
+O derna nettoyage l'armoire. 
+من بعدها هبطنا Nouveau Siège.
+Testina 73 prise في 20 bureau.
+هادشي اللي كاين هاد النهار.
+
+- **groq** — 0.96s · confidence 0.458 · 381 chars
+
+  > Assalamu alaikum, bim nisba l yuma, khadmina f Qnitra, f Oran Vag, ana Oran El Haq. Kinnam a tsaoud f park, testina wahad la fiber kainama bin SR1 w SR2, ma kentch l biru mchilu l mara li fased. W testina khamsa dyal li prise informatique f juj dyal li bureaux, w drinna ntwayaj l'armoire. Mn baedha, habatna ln nouveau siège, testina 73 prise f 20 bureaux. Hatchi likina d'ma aah.
+
+- **hf-darija** — ERROR: TranscriptionError: hf-darija: [Errno 11001] getaddrinfo failed

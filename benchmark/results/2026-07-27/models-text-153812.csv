@@ -1,0 +1,11 @@
+model,case,accuracy,latency_s,invented,expected_nulls,wrong_fields,error
+openai/gpt-oss-120b,t01_plain_french,1.0,1.42,0,0,,
+openai/gpt-oss-120b,t02_darija_numbers_words,1.0,1.82,0,1,,
+openai/gpt-oss-120b,t03_self_correction,0.8,2.02,0,0,bureaux_termines,
+openai/gpt-oss-120b,t04_hallucination_trap,1.0,1.98,0,4,,
+openai/gpt-oss-120b,t05_observations,1.0,1.78,0,4,,
+openai/gpt-oss-120b,t06_mixed_code_switch,1.0,17.66,0,0,,
+openai/gpt-oss-120b,t07_arabic_script,1.0,14.85,0,1,,
+openai/gpt-oss-120b,t08_no_quantities_at_all,1.0,13.89,0,4,,
+openai/gpt-oss-120b,t09_units_confusion,1.0,15.53,0,1,,
+openai/gpt-oss-120b,t10_noisy_transcription,0.75,12.59,0,0,goulottes_m,

@@ -1,0 +1,3 @@
+model,case,accuracy,latency_s,invented,expected_nulls,wrong_fields,error
+openai/gpt-oss-120b,t04_hallucination_trap,1.0,1.62,0,4,,
+openai/gpt-oss-120b,t08_no_quantities_at_all,1.0,1.78,0,4,,

@@ -1,0 +1,70 @@
+[
+  {
+    "model": "gemini-3.6-flash",
+    "case": "p01_cercle_bloc_est",
+    "latence_s": 7.91,
+    "reponse": {
+      "zones": [
+        "bloc RECEP / DOUCHE (coin sud-est)"
+      ],
+      "annotations": "Un grand cercle tracé au feutre vert fluo entoure tout le bloc de locaux situés dans le coin inférieur droit du plan.",
+      "description": "L'annotation manuscrite consiste en un large entourage vert qui isole le bâtiment sud-est, comprenant les espaces marqués RECEP et DOUCHE. Cette marque semble indiquer la zone spécifique du chantier où se déroule l'intervention."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "bloc est (RECEP / douches)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 1
+  },
+  {
+    "model": "gemini-3.6-flash",
+    "case": "p02_points_bleus_seuls",
+    "latence_s": 7.51,
+    "reponse": {
+      "zones": [
+        "cour centrale au sud de la rangée de chambres (chambres 1007 à 1039)",
+        "espace extérieur au-dessus du Restaurant et de la salle de réunion",
+        "allée extérieure à proximité du bloc DOUCHE / RECEP (zone est)"
+      ],
+      "annotations": "Des points bleus sont dessinés à la main à différents endroits des jardins et passages extérieurs.",
+      "description": "Ces marques bleues semblent positionner des points d'accès Wi-Fi extérieurs ou des prises réseau à déployer. Elles couvrent la cour intérieure bordée par l'aile des chambres, le bloc restaurant/réunion et les sanitaires à l'est."
+    },
+    "rappel": 1.0,
+    "trouve": [
+      "rangée de chambres nord",
+      "couloir sud (restaurant / salle de réunion)",
+      "bloc est (RECEP)"
+    ],
+    "manque": [],
+    "hallucine": [],
+    "n_zones": 3
+  },
+  {
+    "model": "gemini-3.6-flash",
+    "case": "p03_complet_vert_bleu_rose",
+    "latence_s": 22.76,
+    "reponse": {
+      "zones": [
+        "couloir des chambres 1017 à 1035",
+        "Bar nord-est",
+        "cour intérieure / jardin central",
+        "aile est (zone RECEP et douches)"
+      ],
+      "annotations": "Des lignes manuscrites vert fluo et magenta, un point de raccordement bleu, ainsi que plusieurs points bleus et cochets verts répartis sur le plan.",
+      "description": "Un tracé vert longe le couloir des chambres nord jusqu'à une jonction bleue près du Bar, d'où repart une ligne rose traversant la cour vers le bâtiment est. Des points bleus sont également positionnés le long des façades donnant sur la cour intérieure."
+    },
+    "rappel": 0.75,
+    "trouve": [
+      "rangée de chambres nord",
+      "BAR nord-est",
+      "liaison verticale façade est"
+    ],
+    "manque": [
+      "couloir sud (restaurant / salle de réunion)"
+    ],
+    "hallucine": [],
+    "n_zones": 4
+  }
+]
