@@ -34,7 +34,6 @@ benchmark/dataset/audio/
 # image fixtures are rendered from text_cases.json on every run, and results are
 # per-run artifacts — both regenerate, neither belongs in history
 benchmark/dataset/images/
-benchmark/results/
 # local STT experiment: ~25 GB of Hub weights and a torch+CUDA venv. The
 # catalogue that reproduces them lives in download_models.py, which IS in git —
 # ".venv/" above does not match ".venv-local/".
