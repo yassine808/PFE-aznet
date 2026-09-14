@@ -1,8 +1,5 @@
 flowchart TB
-    START(["depuis l accuse de reception<br/>figure 3.10"]) --> CMD{"Commande ?"}
-    CMD -- "/rapport" --> LAST["Get last report"] --> RC["Reponse"]
-    CMD -- "/modifier ou /supprimer" --> MOD["Modify command"] --> RM["Reponse"]
-    CMD -- non --> MED{"Media ou texte ?"}
+    START(["depuis l accuse de reception<br/>figure 3.10"]) --> MED{"Media ou texte ?"}
 
     MED -- texte --> P3["POST /process (text)"]
     MED -- media --> AI{"Audio ou image ?"}
@@ -16,7 +13,7 @@ flowchart TB
     OUT -- succes --> REPLY["Reponse du resume<br/>AU TECHNICIEN"]
 
     REPLY --> EXPL{"Rapport exploitable ?"}
-    EXPL -- non --> STOP["Fin - aucune ecriture"]
+    EXPL -- non --> EXCH["Record exchange<br/>POST /exchanges<br/>aucune ligne de journal"]
     EXPL -- oui --> JRN["POST /journal<br/>sans retry : l API se gare seule"]
     JRN -- echec --> JFAIL["Log journal failed"]
 

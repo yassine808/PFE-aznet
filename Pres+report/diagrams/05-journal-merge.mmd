@@ -1,36 +1,29 @@
 flowchart TD
     A["POST /journal"] --> B["Normaliser la date<br/>ISO / JJ-MM-AAAA / numero de serie"]
     B --> C{"date lisible ?"}
-    C -- non --> APP["Ligne ajoutee sans marque<br/>visible, plutot que rattachee<br/>a la mauvaise journee"]
+    C -- non --> APP["Ligne ajoutee sans marque visible"]
     C -- oui --> D{"journee (date, technicien)<br/>deja ouverte ?"}
 
     D -- non --> NEW["Nouvelle ligne"]
-    D -- oui --> ADD["Nouvelle ligne AUSSI<br/>jamais de reecriture"]
-
-    ADD --> M1["Quantites : celles du message<br/>affichees +80"]
-    ADD --> M2["Localisations et prose :<br/>celles du message"]
-    ADD --> M3["JH : calcule par ligne<br/>lu au maximum, jamais en somme"]
-    ADD --> M4["Stock : niveau, jamais +"]
-    ADD --> M5["Totaux : sommes de l onglet<br/>rien ne lit une ligne isolee"]
+    D -- oui --> ADD["Nouvelle ligne AUSSI<br/>une ligne par message, jamais reecriture"]
 
     NEW --> S["Reconciliation du stock"]
-    M4 --> S
+    ADD --> S
 
     S --> S1["Attendu = dernier stock connu<br/>moins quantite installee"]
     S1 --> S2{"chiffre rapporte ?"}
     S2 -- non --> S3["Attendu devient la reference"]
     S2 -- oui --> S4{"ecart avec l attendu ?"}
     S4 -- non --> S3
-    S4 -- oui --> S5["Le chiffre rapporte l emporte<br/>+ avertissement stock_ecart chiffre"]
+    S4 -- oui --> S5["Le chiffre rapporte l emporte<br/>+ stock_ecart"]
 
     S3 --> ART{"article hors bordereau ?"}
     S5 --> ART
-    ART -- oui --> COL["Slug normalise<br/>colonne creee dans l onglet<br/>+ inscription au registre"]
+    ART -- oui --> COL["Colonne creee + registre"]
     ART -- non --> W
     COL --> W["Ecriture onglet du chantier"]
-    COL -.-> CW["Echec de creation :<br/>avertissement article_column_failed<br/>la ligne est ecrite quand meme"]
 
-    W --> MIR["Miroir plat - onglet Rapports<br/>+ table d agregation report_rows<br/>best effort, n empeche jamais le journal"]
+    W --> MIR["Miroir plat - onglet Rapports<br/>best effort"]
 
     classDef warn fill:#fffaf0,stroke:#c05621
-    class S5,APP,CW warn
+    class S5,APP warn

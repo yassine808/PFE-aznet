@@ -22,7 +22,8 @@ stateDiagram-v2
     end note
 
     Repondu --> SansContenu : has_data() faux
-    SansContenu --> [*] : aucune ecriture
+    SansContenu --> Echange : archive dans exchanges
+    Echange --> [*]
 
     Repondu --> Journalise : une ligne dans l onglet du chantier
     Repondu --> EnAttente : Google Sheets indisponible
@@ -33,8 +34,3 @@ stateDiagram-v2
     Journalise --> Miroir : onglet Rapports
     Miroir --> [*]
     Journalise --> [*] : miroir en echec, best effort
-
-    Journalise --> Corrige : /modifier
-    Journalise --> Supprime : /supprimer
-    Corrige --> [*]
-    Supprime --> [*]
