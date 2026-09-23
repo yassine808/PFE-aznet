@@ -1,5 +1,5 @@
 # python:3.11-slim, pinned to digest (S8431 forbids tag+digest together)
-FROM python@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93
+FROM python@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
 
 WORKDIR /app
 
